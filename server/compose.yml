@@ -1,0 +1,74 @@
+# Local OpenDAOC test server for client development. Runs rootless under podman-compose
+# (docker compose should work too). Setup: ./setup.sh once, then ./up.sh.
+# Adapted from OpenDAoC-Core 2026.09.36 docker-compose.yml (f0aaa1e). Changes from upstream:
+#  - images pinned by digest; the game DB seed ships inside the server image, so the
+#    digest pins the world data too
+#  - DB seed extracted to ./initdb by setup.sh and bind-mounted read-only (upstream shares
+#    a named volume between both containers, which races on first start)
+#  - DB password and REGION_IP come from .env (written by setup.sh, not committed); the DB is
+#    published on localhost only. Host-specific extras (e.g. another DB binding) go in a
+#    git-ignored compose.override.yml.
+#  - REGION_IP is the address sent to clients in the region list (WorldMgr.GetRegionList),
+#    so it must be reachable from the client. DETECT_REGION_IP only matters with UPnP.
+
+name: opendaoc
+
+services:
+  db:
+    # mariadb:10.6 = 10.6.28
+    image: docker.io/library/mariadb@sha256:23616f0bd3aff922f4dea4130f1d0a09f3571d20b7b36c8f49840672dc309e8c
+    container_name: opendaoc-db
+    command: --default-authentication-plugin=mysql_native_password --lower_case_table_names=1 --character-set-server=utf8mb3 --collation-server=utf8mb3_general_ci --innodb_large_prefix=1 --innodb_file_format=Barracuda --innodb_file_per_table=1
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: opendaoc
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?run setup.sh first}
+    ports:
+      - "127.0.0.1:3306:3306/tcp"
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./initdb:/docker-entrypoint-initdb.d:ro,Z
+
+  gameserver:
+    # ghcr.io/opendaoc/opendaoc-core:2026.09.36
+    image: ghcr.io/opendaoc/opendaoc-core@sha256:89da37855ab3629273884652b646f3bc2a84398193926646d6721341a58d0d3e
+    container_name: opendaoc-server
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    ports:
+      - "10300:10300/tcp"
+      - "10400:10400/udp"
+    depends_on:
+      - db
+    environment:
+      UID: "1000"
+      GID: "1000"
+      AUTO_ACCOUNT_CREATION: "True"
+      CHEAT_LOGGER_NAME: "cheats"
+      CPU_USE: "8"
+      DB_AUTOSAVE: "True"
+      DB_AUTOSAVE_INTERVAL: "10"
+      DB_CONNECTION_STRING: "server=db;port=3306;database=opendaoc;userid=root;password=${DB_PASSWORD};treattinyasboolean=true"
+      DB_TYPE: "MYSQL"
+      DETECT_REGION_IP: "False"
+      ENABLE_COMPILATION: "True"
+      ENABLE_UPNP: "False"
+      GAME_TYPE: "Normal"
+      GM_ACTION_LOGGER_NAME: "gmactions"
+      INVALID_NAMES_FILE: "./config/invalidnames.txt"
+      LOG_CONFIG_FILE: "./config/logconfig.xml"
+      REGION_IP: "${REGION_IP:?set REGION_IP in .env (see setup.sh)}"
+      REGION_PORT: "10400"
+      SCRIPT_ASSEMBLIES: ""
+      SCRIPT_COMPILATION_TARGET: "./lib/GameServerScripts.dll"
+      SERVER_IP: "0.0.0.0"
+      SERVER_NAME: "OpenDAoC"
+      SERVER_NAME_SHORT: "OPENDAOC"
+      SERVER_PORT: "10300"
+      UDP_IP: "0.0.0.0"
+      UDP_PORT: "10400"
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "False"
+
+volumes:
+  db-data:

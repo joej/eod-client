@@ -1,0 +1,20 @@
+# Private notes and planning material: never commit (repo goes public at Gate 2)
+CLAUDE.local.md
+private/
+
+# .NET / Godot
+bin/
+obj/
+*.user
+.vs/
+.godot/
+mono_crash.*
+
+# Captures may contain account names and passwords (logins are plaintext on the wire)
+captures/
+*.pcap
+*.pcapng
+
+.DS_Store
+.env
+.env.*
