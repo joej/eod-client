@@ -318,15 +318,15 @@ Gate 0 — Before opening Godot (work happens in src/ + tests/):
     (done 2026-10-13 against the RustDAoC 1.127e capture; repeat with our own capture)
   ✓ (optional) tools/DaocCli logs in and lists characters headlessly
 
-Gate 1 — Scaffolding:
+Gate 1 — Scaffolding:                                      (done 2026-10-14)
   ✓ TCP connect + 0xF4 handshake
   ✓ Raw packet hex logger active
   ✓ Connects without crashing
 
-Gate 2 — Auth through character list:
+Gate 2 — Auth through character list:                      (done 2026-10-14)
   ✓ 0xA7 login layout (for the pinned client version) verified against capture
-  ✓ Character names display in Godot UI
-  → SHARE WITH COMMUNITY at this point (OpenDAOC Discord)
+  ✓ Character names display in Godot UI (seen by the owner in the editor's Run window)
+  → SHARE WITH COMMUNITY at this point (OpenDAOC Discord), once it's worth showing
 
 Gate 3 — MVC complete:
   ✓ Zone entry received
