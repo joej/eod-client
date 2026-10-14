@@ -30,6 +30,7 @@ that server; `RustDAoC capture` = the recorded 1.127e session in `tests/DaocProt
 | C8 | Race/gender byte 0x13 in the recorded overview: bit 0x10 isn't produced by OpenDAoC's encoding. | RustDAoC capture | Open. The recording's server may not be stock OpenDAoC. |
 | C9 | Login reports server type 7 ("all realms" in the server's comments), but the overview's all-realms flag is 0 and choosing a realm was saved on the account. | live | Open. Check which setting drives each. |
 | C10 | 0x10 CharacterSelectRequest with payload `00` is ignored; the server answers with 0x2A LoginGranted again plus 0x28. | OpenDAoC, live | Open. Why does the 1.127 client send it before the overview? |
+| C11 | On a server that allows characters in all realms, the chosen realm isn't saved on the account (it stays 0), and the delete handler computes `0 × 100 + slot + 10`, which can never match a stored slot (101+). Deletes there would silently do nothing. | OpenDAoC (reading only) | Open. Test with the all-realms setting on. |
 
 ## Login and session
 

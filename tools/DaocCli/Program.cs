@@ -14,6 +14,7 @@
 using System.Net.Sockets;
 using DaocProtocol.Net;
 using DaocProtocol.Packets;
+using DaocProtocol.Session;
 
 if (args.Length < 2)
 {
@@ -36,97 +37,30 @@ if (string.IsNullOrEmpty(password))
     return 1;
 }
 
-using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-using var tcp = new TcpClient();
-await tcp.ConnectAsync(host, port, timeout.Token);
-NetworkStream stream = tcp.GetStream();
-Console.WriteLine($"connected to {host}:{port}");
-
-var sequencer = new ClientPacketSequencer();
-var inbound = new List<byte>();
-var readBuffer = new byte[64 * 1024];
-
-async Task Send(byte code, byte[] payload)
-{
-    byte[] bytes = sequencer.Next(code, payload).ToBytes();
-    // Never log the login packet's bytes: the password is in plain text.
-    if (hex && code != LoginRequest.Code)
-        Console.WriteLine($"C→S [{code:X2}] {Convert.ToHexString(bytes)}");
-    else
-        Console.WriteLine($"C→S [{code:X2}] {bytes.Length} bytes");
-    await stream.WriteAsync(bytes, timeout.Token);
-}
-
-async Task<ServerPacket> Receive()
-{
-    while (true)
-    {
-        if (ServerPacket.TryRead(inbound.ToArray(), out ServerPacket? packet, out int consumed) == FrameResult.Complete)
-        {
-            inbound.RemoveRange(0, consumed);
-            Console.WriteLine(hex
-                ? $"S→C [{packet!.Code:X2}] {Convert.ToHexString(packet.ToBytes())}"
-                : $"S→C [{packet!.Code:X2}] {packet.Payload.Length} bytes");
-            return packet;
-        }
-
-        int read = await stream.ReadAsync(readBuffer, timeout.Token);
-        if (read == 0)
-            throw new IOException("server closed the connection");
-        inbound.AddRange(readBuffer.AsSpan(0, read).ToArray());
-    }
-}
-
-async Task<ServerPacket> ReceiveOneOf(params byte[] codes)
-{
-    while (true)
-    {
-        ServerPacket packet = await Receive();
-        if (codes.Contains(packet.Code))
-            return packet;
-    }
-}
+using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+await using var connection = new DaocConnection(new PacketLog(Console.WriteLine, hex));
+var session = new ClientSession(connection);
 
 try
 {
-    await Send(CryptKeyRequest.Code, CryptKeyRequest.Payload(ClientVersion.V1127e));
-    CryptKeyReply reply = CryptKeyReply.Parse((await ReceiveOneOf(CryptKeyReply.Code)).Payload);
-    Console.WriteLine($"server speaks {reply.Version}, encryption {(reply.KeyLength == 0 ? "off" : "on")}");
+    await connection.ConnectAsync(host, port, timeout.Token);
+    Console.WriteLine($"connected to {host}:{port}");
 
-    await Send(LoginRequest.Code, LoginRequest.Payload(account, password));
-    ServerPacket result = await ReceiveOneOf(LoginGranted.Code, LoginDenied.Code);
-    if (result.Code == LoginGranted.Code)
+    LoginResult login = await session.LoginAsync(account, password, timeout.Token);
+    if (!login.Success)
     {
-        LoginGranted granted = LoginGranted.Parse(result.Payload);
-        Console.WriteLine($"login granted: account {granted.AccountName} on {granted.ServerNameShort} (server type {granted.ServerType})");
-        await ListCharacters();
-        return 0;
+        Console.WriteLine($"login denied: {login.Error}");
+        return 2;
     }
+    Console.WriteLine($"login granted: account {login.Granted!.AccountName} on {login.Granted.ServerNameShort} (server type {login.Granted.ServerType})");
 
-    Console.WriteLine($"login denied: {LoginDenied.Parse(result.Payload).Error}");
-    return 2;
-}
-catch (Exception e) when (e is IOException or OperationCanceledException or SocketException or InvalidDataException or ArgumentException)
-{
-    Console.Error.WriteLine($"failed: {e.Message}");
-    return 1;
-}
-
-async Task ListCharacters()
-{
-    await Send(CharacterSelectRequest.Code, CharacterSelectRequest.Payload());
-    sequencer.SessionId = SessionId.Parse((await ReceiveOneOf(SessionId.Code)).Payload);
-    Console.WriteLine($"session id {sequencer.SessionId}");
-
-    await Send(CharacterOverviewRequest.Code, CharacterOverviewRequest.Payload(Realm.None));
-    Realm realm = RealmReply.Parse((await ReceiveOneOf(RealmReply.Code)).Payload);
-    Console.WriteLine($"account realm: {realm}");
+    Realm realm = await session.OpenCharacterScreenAsync(timeout.Token);
+    Console.WriteLine($"session id {connection.SessionId}, account realm: {realm}");
     if (realm == Realm.None)
         realm = realmChoice;
 
-    CharacterOverview overview = await Overview(realm);
-    if (createName is null && deleteSlot is null)
-        return;
+    CharacterOverview overview = await session.GetCharactersAsync(realm, timeout.Token);
+    Print(realm, overview);
 
     if (createName is not null)
     {
@@ -140,28 +74,25 @@ async Task ListCharacters()
         // Briton bases are 60 each; +10 STR, DEX and CON spend exactly the 30 bonus points.
         var character = new NewCharacter(createName, Realm.Albion, slot, ClassId: 2, Race: 1, Female: false, Model: 32,
             new CharacterStats(70, 70, 70, 60, 60, 60, 60, 60));
-        await Send(CharacterCreateRequest.Code, CharacterCreateRequest.CreatePayload(character));
+        Print(realm, await session.CreateCharacterAsync(character, timeout.Token));
     }
-    else
+    else if (deleteSlot is int slot)
     {
-        // The server stays silent for an empty slot, so don't ask.
-        if (!overview.Characters.Any(c => c.Slot == deleteSlot))
-            throw new ArgumentException($"Slot {deleteSlot} in {realm} is empty.");
-        await Send(CharacterCreateRequest.Code, CharacterCreateRequest.DeletePayload(realm, deleteSlot!.Value));
+        Print(realm, await session.DeleteCharacterAsync(realm, slot, timeout.Token));
     }
 
-    // The server answers any accepted change with 0x2A; a request it rejects gets the same answer
-    // (or nothing), so the new overview is the only real confirmation.
-    await ReceiveOneOf(LoginGranted.Code);
-    await Overview(realm);
+    return 0;
+}
+catch (Exception e) when (e is IOException or OperationCanceledException or TimeoutException or SocketException
+                              or InvalidDataException or ArgumentException or NotSupportedException)
+{
+    Console.Error.WriteLine($"failed: {e.Message}");
+    return 1;
 }
 
-async Task<CharacterOverview> Overview(Realm realm)
+static void Print(Realm realm, CharacterOverview overview)
 {
-    await Send(CharacterOverviewRequest.Code, CharacterOverviewRequest.Payload(realm));
-    CharacterOverview overview = CharacterOverview.Parse((await ReceiveOneOf(CharacterOverview.Code)).Payload);
     Console.WriteLine($"{realm}: {overview.Characters.Count} character(s), flags 0x{overview.Flags:X}");
     foreach (CharacterSummary c in overview.Characters)
         Console.WriteLine($"  slot {c.Slot}: {c.Name}, level {c.Level} {c.RaceName} {c.ClassName}, {c.Location}");
-    return overview;
 }

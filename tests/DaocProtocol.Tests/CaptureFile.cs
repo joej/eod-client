@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Buffers.Binary;
+using DaocProtocol.Net;
 
 namespace DaocProtocol.Tests;
 
@@ -46,4 +47,32 @@ internal sealed class CaptureFile
     }
 
     public static CaptureFile Login1127e() => Load("rustdaoc_login_20260714.bin");
+
+    public List<ClientPacket> ClientPackets()
+    {
+        var packets = new List<ClientPacket>();
+        for (int pos = 0; pos < ClientStream.Length;)
+        {
+            if (ClientPacket.TryRead(ClientStream.AsSpan(pos), out ClientPacket? p, out int n) != FrameResult.Complete)
+                throw new InvalidDataException($"client stream doesn't frame at offset {pos}");
+            packets.Add(p!);
+            pos += n;
+        }
+
+        return packets;
+    }
+
+    public List<ServerPacket> ServerPackets()
+    {
+        var packets = new List<ServerPacket>();
+        for (int pos = 0; pos < ServerStream.Length;)
+        {
+            if (ServerPacket.TryRead(ServerStream.AsSpan(pos), out ServerPacket? p, out int n) != FrameResult.Complete)
+                throw new InvalidDataException($"server stream doesn't frame at offset {pos}");
+            packets.Add(p!);
+            pos += n;
+        }
+
+        return packets;
+    }
 }

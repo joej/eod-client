@@ -10,31 +10,9 @@ public class CharacterPacketTests
 {
     private static readonly CaptureFile Capture = CaptureFile.Login1127e();
 
-    private static List<ClientPacket> Client()
-    {
-        var packets = new List<ClientPacket>();
-        for (int pos = 0; pos < Capture.ClientStream.Length;)
-        {
-            Assert.Equal(FrameResult.Complete, ClientPacket.TryRead(Capture.ClientStream.AsSpan(pos), out ClientPacket? p, out int n));
-            packets.Add(p!);
-            pos += n;
-        }
+    private static List<ClientPacket> Client() => Capture.ClientPackets();
 
-        return packets;
-    }
-
-    private static List<ServerPacket> Server()
-    {
-        var packets = new List<ServerPacket>();
-        for (int pos = 0; pos < Capture.ServerStream.Length;)
-        {
-            Assert.Equal(FrameResult.Complete, ServerPacket.TryRead(Capture.ServerStream.AsSpan(pos), out ServerPacket? p, out int n));
-            packets.Add(p!);
-            pos += n;
-        }
-
-        return packets;
-    }
+    private static List<ServerPacket> Server() => Capture.ServerPackets();
 
     [Fact]
     public void RequestsMatchRecordedClient()

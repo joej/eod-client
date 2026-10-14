@@ -234,19 +234,19 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │   │   ├── ClientPacket.cs        # ✓ C→S 10-byte header + checksum: TryRead / ToBytes
 │   │   ├── ServerPacket.cs        # ✓ S→C 3-byte header: TryRead / ToBytes
 │   │   ├── FrameResult.cs         # ✓ Complete / Incomplete / BadChecksum
-│   │   ├── DaocConnection.cs      # System.Net.Sockets TCP, background receive loop,
-│   │   │                          # raises packets onto a ConcurrentQueue
-│   │   ├── PacketReader.cs        # Typed big-endian reads, fixed-length strings
-│   │   └── PacketWriter.cs        # Build outbound packets
-│   ├── Packets/                   # ✓ ClientVersion, LoginPackets (0xF4/0xA7 builders;
-│   │                              #   0x22/0x2A/0x2C parsers), more per opcode to come
-│   ├── Session/
-│   │   ├── AuthState.cs           # State machine (see below)
-│   │   └── ClientSession.cs       # Login → char select → world; heartbeat timer
-│   └── PacketLog.cs               # Hex logger (direction, opcode, bytes)
+│   │   ├── PayloadReader.cs       # ✓ endian-explicit reads, int-length strings; throws on short data
+│   │   ├── PayloadWriter.cs       # ✓ the matching writer
+│   │   ├── DaocConnection.cs      # ✓ TCP + background receive loop → Channel; ReceiveAsync or
+│   │   │                          #   TryReceive (per-frame polling); serialised sends
+│   │   └── PacketLog.cs           # ✓ per-connection logger, Sink + Hex; never hex-logs 0xA7
+│   ├── Packets/                   # ✓ ClientVersion, LoginPackets, CharacterPackets (0x10, 0x28,
+│   │                              #   0xFC/0xFE overview, 0xFF create/delete), more per opcode
+│   └── Session/
+│       └── ClientSession.cs       # ✓ login → character screen → list/create/delete; reply timeout
 ├── tests/DaocProtocol.Tests/      # net10.0 xUnit; Fixtures/ holds the RustDAoC 1.127e capture
-│                                  # (GPL, provenance in Fixtures/README.md)
-├── tools/DaocCli/                 # ✓ headless login check: DAOC_PASSWORD=… dotnet run --project
+│                                  # (GPL, provenance in Fixtures/README.md). FakeServer: localhost
+│                                  # server replaying recorded replies, for ClientSession tests
+├── tools/DaocCli/                 # ✓ thin ClientSession front end: DAOC_PASSWORD=… dotnet run --project
 │                                  #   tools/DaocCli -- <host> <account> [--port N] [--realm R]
 │                                  #   [--create Name | --delete slot] [--hex]
 │                                  #   (exit 0 granted, 2 denied, 1 error; never hex-logs 0xA7)
@@ -267,91 +267,22 @@ something from the engine, it belongs in the Godot project instead.
 
 ---
 
-## Auth State Machine
+## Session and threading
 
-```csharp
-public enum AuthState {
-    Disconnected,
-    Connected,              // TCP up, waiting for 0xF4 session packet
-    SessionReceived,        // Sent 0xF4, got 0x22 CryptKey → send 0xA7 login
-    LoginSent,              // Awaiting 0x2A login result
-    LoggedIn,               // Success, send 0xFC character overview request (realm)
-    RealmSelected,          // Sent 0xFC, awaiting 0xFD character overview
-    CharacterListReceived,  // Display characters, await user selection
-    CharacterSelected,      // Sent 0x10, awaiting 0x28 → world init → 0x20
-    InWorld                 // Receiving position updates, heartbeat active
-}
-```
+`ClientSession.State` (`SessionState`) has the states that exist so far: Connected → LoggedIn →
+CharacterScreen. World states (character selected, in world, heartbeat) come with Gate 3. Each
+session method sends a request and awaits its reply, skipping unrelated packets (e.g. 0x29),
+and throws `TimeoutException` after `ReplyTimeout` (10 s): some server paths never answer.
 
----
+`DaocConnection` reads the socket on a background task and queues whole packets in a
+`System.Threading.Channels` channel. In Godot, awaiting the session from the main thread is
+fine (continuations return to it). Once in the world, unprompted packets (positions, chat) will
+be drained per frame with `TryReceive` and re-emitted as signals by `godot/scripts/NetworkBridge.cs`,
+the only place Godot meets the protocol. Sends are serialised, so a heartbeat timer may send
+while a session method waits.
 
-## Network Thread Pattern
-
-Socket I/O runs on a background thread in `DaocProtocol`. Packets cross to the
-game loop through a `ConcurrentQueue`. Godot's main thread drains the queue each frame.
-
-```csharp
-// src/DaocProtocol/Net/DaocConnection.cs — engine-agnostic
-public sealed class DaocConnection : IDisposable {
-    private readonly TcpClient _tcp = new();
-    private readonly ConcurrentQueue<ServerPacket> _inbound = new();
-    private CancellationTokenSource _cts = new();
-
-    public bool TryDequeue(out ServerPacket pkt) => _inbound.TryDequeue(out pkt);
-
-    public async Task ConnectAsync(string host, int port = 10300) {
-        await _tcp.ConnectAsync(host, port);
-        _ = Task.Run(() => ReceiveLoop(_tcp.GetStream(), _cts.Token));
-    }
-
-    private async Task ReceiveLoop(NetworkStream stream, CancellationToken ct) {
-        var header = new byte[3];
-        while (!ct.IsCancellationRequested) {
-            // S→C header: [u16 size, big-endian][u8 code]; size excludes the header
-            // (verified against the 1.127e capture).
-            await stream.ReadExactlyAsync(header, ct);
-            int size  = BinaryPrimitives.ReadUInt16BigEndian(header);
-            byte code = header[2];
-            var payload = new byte[size];
-            await stream.ReadExactlyAsync(payload, ct);   // handles partial reads
-            _inbound.Enqueue(new ServerPacket(code, payload));
-        }
-    }
-    // Send: ClientPacket.ToBytes() builds the 10-byte C→S header + payload + checksum.
-}
-
-// godot/scripts/NetworkBridge.cs — the only place Godot meets the protocol
-public partial class NetworkBridge : Node {
-    [Signal] public delegate void PacketReceivedEventHandler(byte code, byte[] payload);
-    public DaocConnection Connection { get; } = new();
-
-    public override void _Process(double delta) {
-        while (Connection.TryDequeue(out var pkt))
-            EmitSignal(SignalName.PacketReceived, pkt.Code, pkt.Payload);
-    }
-}
-```
-
----
-
-## Raw Packet Logger — Add Immediately, Before Any Other Logic
-
-```csharp
-// Lives in DaocProtocol (no GD.Print there). The Godot side sets
-// PacketLog.Sink = GD.Print; tests and the CLI set it to Console.WriteLine.
-public static Action<string> Sink = Console.WriteLine;
-
-public static void LogPacket(byte[] raw, string direction) {
-    var hex = BitConverter.ToString(raw).Replace("-", " ");
-    // Opcode offset: byte 2 for S→C (3-byte header), byte 9 for C→S (10-byte header)
-    byte code = direction == "S→C" ? raw[2] : raw[9];
-    Sink($"{direction} [{code:X2}] len={raw.Length}: {hex}");
-}
-```
-
-Every inbound and outbound packet gets hex-logged before processing. Compare
-against PacketLogConverter captures byte-for-byte when debugging. Wrap in a
-`[Export] public bool DebugPackets = true;` toggle so it can be disabled.
+Logging: `new DaocConnection(new PacketLog(sink, hex))` logs every packet both ways. Godot
+passes `GD.Print`, the CLI `Console.WriteLine`; expose `Hex` as the debug-packet toggle.
 
 ---
 
