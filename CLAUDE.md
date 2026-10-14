@@ -113,8 +113,14 @@ required. No animations. A stable session for 5+ minutes without dropout.
 [2: checksum]   PacketProcessor.CalculateChecksum over all preceding bytes;
                 a mismatch makes the server disconnect immediately
 ```
-Port `CalculateChecksum` exactly. A wrong checksum is the most likely cause of
-"server drops me right after connect".
+Header values in the 1.127e capture (all 171 client packets): sequence starts at 0 and goes up
+by exactly 1; session id is 0 until 0x28 SessionID, then the assigned id; parameter is mostly
+0xFFFF, sometimes 0xFFFE or 0 (ClientSimulator always sends 0); the packet id's high byte is
+usually 0 but not always (e.g. the first 0xF4 is `01 F4`). The server ignores the high byte;
+`ClientPacket` keeps it so real packets rebuild byte for byte.
+Ported in `src/DaocProtocol/Net/Checksum.cs` (byte-wrapping accumulators, int arithmetic
+before the final ushort truncation). The capture tests catch a port without byte wrap; the two
+RustDAoC hand vectors alone do not.
 
 ### Encryption
 
@@ -176,13 +182,15 @@ disconnections shortly after zone entry are most likely this.
 ## Project Structure
 
 ```
-DaocClient.sln
-├── src/DaocProtocol/              # net8.0+ class library — NO Godot references
+eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warnings as errors
+├── src/DaocProtocol/              # net8.0 class library (Godot-compatible) — NO Godot references
 │   ├── Net/
+│   │   ├── Checksum.cs            # ✓ port of PacketProcessor.CalculateChecksum
+│   │   ├── ClientPacket.cs        # ✓ C→S 10-byte header + checksum: TryRead / ToBytes
+│   │   ├── ServerPacket.cs        # ✓ S→C 3-byte header: TryRead / ToBytes
+│   │   ├── FrameResult.cs         # ✓ Complete / Incomplete / BadChecksum
 │   │   ├── DaocConnection.cs      # System.Net.Sockets TCP, background receive loop,
 │   │   │                          # raises packets onto a ConcurrentQueue
-│   │   ├── PacketFramer.cs        # S→C 3-byte header / C→S 10-byte header + checksum
-│   │   ├── Checksum.cs            # Port of PacketProcessor.CalculateChecksum
 │   │   ├── PacketReader.cs        # Typed big-endian reads, fixed-length strings
 │   │   └── PacketWriter.cs        # Build outbound packets
 │   ├── Packets/                   # One type per opcode (CryptKey, LoginGranted, …)
@@ -190,7 +198,8 @@ DaocClient.sln
 │   │   ├── AuthState.cs           # State machine (see below)
 │   │   └── ClientSession.cs       # Login → char select → world; heartbeat timer
 │   └── PacketLog.cs               # Hex logger (direction, opcode, bytes)
-├── tests/DaocProtocol.Tests/      # xUnit; replays captured bytes (Gate 0 lives here)
+├── tests/DaocProtocol.Tests/      # net10.0 xUnit; Fixtures/ holds the RustDAoC 1.127e capture
+│                                  # (GPL, provenance in Fixtures/README.md)
 ├── tools/DaocCli/                 # Optional headless client: login + list chars from terminal
 └── godot/                         # Godot 4 .NET project; references DaocProtocol
     ├── scripts/
@@ -259,7 +268,7 @@ public sealed class DaocConnection : IDisposable {
             _inbound.Enqueue(new ServerPacket(code, payload));
         }
     }
-    // Send: PacketFramer builds the 10-byte C→S header + payload + checksum.
+    // Send: ClientPacket.ToBytes() builds the 10-byte C→S header + payload + checksum.
 }
 
 // godot/scripts/NetworkBridge.cs — the only place Godot meets the protocol
@@ -325,6 +334,7 @@ Gate 0 — Before opening Godot (work happens in src/ + tests/):
   ✓ Original DAOC client completes login → zone entry
   ✓ PacketLogConverter + Wireshark captures saved and annotated
   ✓ DaocProtocol.Tests: checksum + framer pass against captured bytes
+    (done 2026-10-13 against the RustDAoC 1.127e capture; repeat with our own capture)
   ✓ (optional) tools/DaocCli logs in and lists characters headlessly
 
 Gate 1 — Scaffolding:
@@ -357,7 +367,7 @@ Gate 4 — Publish:
 - **OpenDAOC Core**: https://github.com/OpenDAoC/OpenDAoC-Core
 - **DOLSharp (original)**: https://github.com/Dawn-of-Light/DOLSharp
 
-### Packet Reference (DOLSharp source — read as spec, do not copy verbatim)
+### Packet Reference (DOLSharp / OpenDAoC source: GPL, so port with attribution in the file header)
 ```
 GameServer/packets/Server/IPacketLib.cs                   → all opcode enums
 GameServer/packets/Client/168/LoginRequestHandler.cs       → 0xA7 layout (per-version branches)

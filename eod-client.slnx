@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DaocProtocol/DaocProtocol.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DaocProtocol.Tests/DaocProtocol.Tests.csproj" />
+  </Folder>
+</Solution>
