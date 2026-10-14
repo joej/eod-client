@@ -3,9 +3,11 @@
 // Headless login + character list against a DAoC server (client protocol 1.127).
 //
 //   DAOC_PASSWORD=... dotnet run --project tools/DaocCli -- <host> <account>
-//       [--port 10300] [--realm albion|midgard|hibernia] [--hex]
+//       [--port 10300] [--realm albion|midgard|hibernia] [--create <Name> | --delete <slot>] [--hex]
 //
 // --realm is used when the account has no realm yet (or may use all realms); default albion.
+// --create makes a level 1 Briton Armsman (Albion only) in the first free slot; --delete removes
+// the character in a slot (0-9) of the account's realm. Both list the characters again afterwards.
 // The password is read from DAOC_PASSWORD so it stays out of command lines and shell history.
 // Exit codes: 0 login granted, 2 login denied, 1 any other failure.
 
@@ -15,7 +17,7 @@ using DaocProtocol.Packets;
 
 if (args.Length < 2)
 {
-    Console.Error.WriteLine("usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--hex]");
+    Console.Error.WriteLine("usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--create <Name> | --delete <slot>] [--hex]");
     return 1;
 }
 
@@ -25,6 +27,8 @@ int port = args.SkipWhile(a => a != "--port").Skip(1).Select(int.Parse).DefaultI
 bool hex = args.Contains("--hex");
 Realm realmChoice = args.SkipWhile(a => a != "--realm").Skip(1)
     .Select(r => Enum.Parse<Realm>(r, ignoreCase: true)).DefaultIfEmpty(Realm.Albion).First();
+string? createName = args.SkipWhile(a => a != "--create").Skip(1).FirstOrDefault();
+int? deleteSlot = args.SkipWhile(a => a != "--delete").Skip(1).Select(int.Parse).Cast<int?>().FirstOrDefault();
 string? password = Environment.GetEnvironmentVariable("DAOC_PASSWORD");
 if (string.IsNullOrEmpty(password))
 {
@@ -102,7 +106,7 @@ try
     Console.WriteLine($"login denied: {LoginDenied.Parse(result.Payload).Error}");
     return 2;
 }
-catch (Exception e) when (e is IOException or OperationCanceledException or SocketException or InvalidDataException)
+catch (Exception e) when (e is IOException or OperationCanceledException or SocketException or InvalidDataException or ArgumentException)
 {
     Console.Error.WriteLine($"failed: {e.Message}");
     return 1;
@@ -120,9 +124,44 @@ async Task ListCharacters()
     if (realm == Realm.None)
         realm = realmChoice;
 
+    CharacterOverview overview = await Overview(realm);
+    if (createName is null && deleteSlot is null)
+        return;
+
+    if (createName is not null)
+    {
+        if (realm != Realm.Albion)
+            throw new ArgumentException("--create only knows an Albion character (Briton Armsman).");
+        int slot = Enumerable.Range(0, CharacterOverview.SlotsPerRealm)
+            .Except(overview.Characters.Select(c => c.Slot))
+            .DefaultIfEmpty(-1).First();
+        if (slot < 0)
+            throw new ArgumentException("No free slot in Albion.");
+        // Briton bases are 60 each; +10 STR, DEX and CON spend exactly the 30 bonus points.
+        var character = new NewCharacter(createName, Realm.Albion, slot, ClassId: 2, Race: 1, Female: false, Model: 32,
+            new CharacterStats(70, 70, 70, 60, 60, 60, 60, 60));
+        await Send(CharacterCreateRequest.Code, CharacterCreateRequest.CreatePayload(character));
+    }
+    else
+    {
+        // The server stays silent for an empty slot, so don't ask.
+        if (!overview.Characters.Any(c => c.Slot == deleteSlot))
+            throw new ArgumentException($"Slot {deleteSlot} in {realm} is empty.");
+        await Send(CharacterCreateRequest.Code, CharacterCreateRequest.DeletePayload(realm, deleteSlot!.Value));
+    }
+
+    // The server answers any accepted change with 0x2A; a request it rejects gets the same answer
+    // (or nothing), so the new overview is the only real confirmation.
+    await ReceiveOneOf(LoginGranted.Code);
+    await Overview(realm);
+}
+
+async Task<CharacterOverview> Overview(Realm realm)
+{
     await Send(CharacterOverviewRequest.Code, CharacterOverviewRequest.Payload(realm));
     CharacterOverview overview = CharacterOverview.Parse((await ReceiveOneOf(CharacterOverview.Code)).Payload);
     Console.WriteLine($"{realm}: {overview.Characters.Count} character(s), flags 0x{overview.Flags:X}");
     foreach (CharacterSummary c in overview.Characters)
         Console.WriteLine($"  slot {c.Slot}: {c.Name}, level {c.Level} {c.RaceName} {c.ClassName}, {c.Location}");
+    return overview;
 }

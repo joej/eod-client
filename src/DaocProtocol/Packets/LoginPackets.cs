@@ -7,6 +7,7 @@
 
 using System.Buffers.Binary;
 using System.Text;
+using DaocProtocol.Net;
 
 namespace DaocProtocol.Packets;
 
@@ -34,27 +35,8 @@ public static class LoginRequest
     /// as-is: the recorded client sends 13 more bytes (<c>2a 08 00 00 00</c> + 8 bytes) that the
     /// server does not read.
     /// </summary>
-    public static byte[] Payload(string username, string password, ReadOnlySpan<byte> trailer = default)
-    {
-        var bytes = new List<byte>();
-        AppendString(bytes, username);
-        AppendString(bytes, password);
-        bytes.AddRange(trailer.ToArray());
-        return [.. bytes];
-    }
-
-    private static void AppendString(List<byte> bytes, string value)
-    {
-        if (value.Contains('\0'))
-            throw new ArgumentException("Login strings cannot contain a zero byte.", nameof(value));
-
-        byte[] text = Encoding.Latin1.GetBytes(value);
-        Span<byte> length = stackalloc byte[4];
-        BinaryPrimitives.WriteUInt32LittleEndian(length, (uint)text.Length + 1);
-        bytes.AddRange(length.ToArray());
-        bytes.AddRange(text);
-        bytes.Add(0);
-    }
+    public static byte[] Payload(string username, string password, ReadOnlySpan<byte> trailer = default) =>
+        new PayloadWriter().StringIntLE(username).StringIntLE(password).Bytes(trailer).ToArray();
 }
 
 /// <summary>0x22: the server's answer to 0xF4.</summary>

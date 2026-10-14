@@ -123,3 +123,103 @@ public sealed record CharacterOverview(uint Flags, IReadOnlyList<CharacterSummar
         return new CharacterSummary(slot, level, name, location, className, raceName, model, region, classId, realm, race, female);
     }
 }
+
+/// <summary>Starting stats in the order the create packet carries them.</summary>
+public readonly record struct CharacterStats(
+    byte Strength, byte Dexterity, byte Constitution, byte Quickness,
+    byte Intelligence, byte Piety, byte Empathy, byte Charisma);
+
+/// <summary>A character to create. The server checks class, race, gender and stats and silently ignores an invalid request.</summary>
+/// <param name="Slot">0–9 within the realm's page.</param>
+/// <param name="ClassId">eCharacterClass, e.g. 2 = Armsman.</param>
+/// <param name="Race">eRace, e.g. 1 = Briton.</param>
+/// <param name="Model">eLivingModel for the race and gender, e.g. 32 = Briton male.</param>
+/// <param name="Stats">Race base stats plus 30 bonus points (CharacterStatValidator: each point
+/// above base costs 1, above +10 costs 2, above +15 costs 3).</param>
+public sealed record NewCharacter(
+    string Name, Realm Realm, int Slot, byte ClassId, byte Race, bool Female, ushort Model, CharacterStats Stats);
+
+/// <summary>
+/// 0xFF: create or delete a character (the server also handles customisation, not built here).
+/// 1.126+ layout read by CharacterCreateRequestHandler.CreationCharacterData. The server answers
+/// a change with 0x2A LoginGranted; the client then asks for the overview again.
+/// </summary>
+public static class CharacterCreateRequest
+{
+    public const byte Code = 0xFF;
+
+    private const byte OperationCreate = 1;
+    private const byte OperationDelete = 3;
+
+    /// <summary>
+    /// Throws <see cref="ArgumentException"/> for a name a player account may not use: the server
+    /// disconnects (and with BAN_HACKERS on, bans) a player sending a non-empty name that is
+    /// shorter than 3 or doesn't start with an upper-case then a lower- or upper-case letter.
+    /// We also reject anything but ASCII letters, which is stricter than the server.
+    /// </summary>
+    public static byte[] CreatePayload(NewCharacter character)
+    {
+        string name = character.Name;
+        if (name.Length < 3 || !char.IsAsciiLetterUpper(name[0]) || !name.All(char.IsAsciiLetter))
+            throw new ArgumentException($"Name '{name}' must be 3+ ASCII letters starting with a capital.", nameof(character));
+        if (character.Realm == Realm.None)
+            throw new ArgumentException("A character needs a realm.", nameof(character));
+        CheckSlot(character.Slot);
+
+        CharacterStats s = character.Stats;
+        return Body(WireSlot(character.Realm, character.Slot), name, OperationCreate)
+            .U8(character.ClassId)
+            .U8((byte)character.Realm)
+            .U8((byte)((character.Race & 0x1F) | (character.Female ? 0x80 : 0)))
+            .U16LE(character.Model)
+            .U8(s.Strength).U8(s.Dexterity).U8(s.Constitution).U8(s.Quickness)
+            .U8(s.Intelligence).U8(s.Piety).U8(s.Empathy).U8(s.Charisma)
+            .Zeros(43)
+            .U8(s.Constitution) // "new constitution": only read when customising stats
+            .U8(0)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Deletes the character in <paramref name="slot"/> of the account's realm page. The realm
+    /// byte stays 0: the server converts the slot with the account's realm, and a realm byte
+    /// would make it subtract the realm offset a second time: on Midgard/Hibernia the slot then
+    /// matches no character and nothing is deleted.
+    /// </summary>
+    public static byte[] DeletePayload(Realm accountRealm, int slot)
+    {
+        if (accountRealm == Realm.None)
+            throw new ArgumentException("The account's realm is needed to address the slot.", nameof(accountRealm));
+        CheckSlot(slot);
+
+        return Body(WireSlot(accountRealm, slot), string.Empty, OperationDelete)
+            .Zeros(1 + 1 + 1 + 2 + 8 + 43 + 1 + 1) // class, realm, race, model, stats, fill, new con, end
+            .ToArray();
+    }
+
+    /// <summary>The client numbers slots across realms: Albion 0–9, Midgard 10–19, Hibernia 20–29.</summary>
+    private static byte WireSlot(Realm realm, int slot) => (byte)(((byte)realm - 1) * CharacterOverview.SlotsPerRealm + slot);
+
+    private static void CheckSlot(int slot)
+    {
+        if (slot is < 0 or >= CharacterOverview.SlotsPerRealm)
+            throw new ArgumentOutOfRangeException(nameof(slot), slot, "Slot must be 0–9.");
+    }
+
+    private static PayloadWriter Body(byte wireSlot, string name, byte operation) =>
+        new PayloadWriter()
+            .U8(wireSlot)
+            .StringIntLE(name)
+            .U32LE(0x18)          // constant the server skips
+            .U8(0)                // custom mode 0: no face customisation, the server ignores the next six bytes
+            .Zeros(6)             // eye size, lip size, eye colour, hair colour, face type, hair style
+            .Zeros(3)
+            .U8(0)                // mood
+            .Zeros(9)
+            .U8(operation)
+            .U8(0)                // customise type (face/attributes), only for customisation
+            .Zeros(2)
+            .StringIntLE(string.Empty)  // location, class name, race name: skipped by the server
+            .StringIntLE(string.Empty)
+            .StringIntLE(string.Empty);
+}

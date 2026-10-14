@@ -102,6 +102,27 @@ IncorrectPassword; the server log showed version 1127 detected. Our 0xF4 client-
 - Recorded overview's race/gender byte is 0x13: bit 0x10 isn't produced by OpenDAoC's encoding
   `((race & 0x10) << 2) + (race & 0x0F) | gender << 7` (the recording's server may differ).
 
+**Character create/delete (1.127, verified live 2026-10-14; `CharacterCreateRequest` in
+`Packets/CharacterPackets.cs`):** C→S 0xFF, one character per packet on 1.125+
+(`CharacterCreateRequestHandler.CreationCharacterData`). No recording has one; tests decode our
+payloads with a port of the server's reader.
+- Slot byte is numbered across realms (Alb 0–9, Mid 10–19, Hib 20–29); DB `AccountSlot` = realm × 100 + slot.
+- Operation byte: 1 create, 2 customise, 3 delete. Race/gender byte: `race & 0x1F | female << 7`.
+- After the 8 stat bytes: 43 skipped bytes, "new constitution", trailing 0. RustDAoC instead
+  writes a region byte at +40 and new-con at +44; OpenDAoC doesn't read region on 1.126+.
+- Delete: send realm 0. The server converts the slot with the account's saved realm, and a
+  non-zero realm byte makes it subtract the realm offset twice: on Mid/Hib the slot then matches
+  no character, so nothing is deleted and nothing is answered.
+- The server answers an accepted change with 0x2A LoginGranted; the client re-requests 0xFC.
+  An invalid create also gets 0x2A (silently ignored); deleting an empty slot gets nothing.
+- A bad name (< 3 chars, or not `^[A-Z][a-zA-Z]`) disconnects a player and, with BAN_HACKERS,
+  bans the account. Our builder refuses such names.
+- Stats must be race bases + exactly 30 points (`CharacterStatValidator`: +1 per point, +2
+  above +10, +3 above +15). Briton Armsman requested → stored as Fighter (class 14): OpenDAoC's
+  StartAsBaseClass script, consistent with 1.65 rules. Start location: Prydwen Keep.
+- Choosing a realm with 0xFC saves it on the account (unless all realms are allowed), so later
+  0xFE replies return it.
+
 The source comments show each modern opcode as `old ^ 0xA8` (e.g. 0xA9 = 0x01 ^ 168).
 That is why the original plan's 0x01 and 0x40 were wrong: they are the pre-remap values.
 
@@ -226,7 +247,8 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 ├── tests/DaocProtocol.Tests/      # net10.0 xUnit; Fixtures/ holds the RustDAoC 1.127e capture
 │                                  # (GPL, provenance in Fixtures/README.md)
 ├── tools/DaocCli/                 # ✓ headless login check: DAOC_PASSWORD=… dotnet run --project
-│                                  #   tools/DaocCli -- <host> <account> [--port N] [--hex]
+│                                  #   tools/DaocCli -- <host> <account> [--port N] [--realm R]
+│                                  #   [--create Name | --delete slot] [--hex]
 │                                  #   (exit 0 granted, 2 denied, 1 error; never hex-logs 0xA7)
 └── godot/                         # Godot 4 .NET project; references DaocProtocol
     ├── scripts/
@@ -565,6 +587,11 @@ point that any developer familiar with the existing ecosystem can contribute to.
   dgVoodoo2 already works. RTX Remix / ReShade are the low-effort options.
 
 ---
+
+## Open questions
+
+`docs/open-questions.md` lists oddities and unconfirmed behaviour (OpenDAoC vs retail, conflicting
+references). Add an entry whenever something surprises us; close it with the evidence.
 
 ## Private notes
 
