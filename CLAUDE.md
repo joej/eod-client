@@ -224,9 +224,10 @@ disconnections shortly after zone entry are most likely this.
 
 ## Project Structure
 
-.NET SDK 10 via Homebrew (`brew install dotnet`, no sudo). Its native app launchers need
-`DOTNET_ROOT=/opt/homebrew/opt/dotnet/libexec`; without it run `dotnet <app>.dll` or
-`dotnet run`. Godot's .NET editor will need DOTNET_ROOT too.
+.NET: Microsoft's SDK 10 in `/usr/local/share/dotnet` (Homebrew cask `dotnet-sdk`, pulled in by
+`godot-mono`). Godot and .NET app launchers find it there without `DOTNET_ROOT`.
+Godot: 4.7.2 .NET build (`brew install --cask godot-mono`, needs a real terminal for sudo).
+Its editor tooling targets net8.0 but runs on the .NET 10 runtime (verified 2026-10-14).
 
 ```
 eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warnings as errors
@@ -252,16 +253,14 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │                                  #   tools/DaocCli -- <host> <account> [--port N] [--realm R]
 │                                  #   [--create Name | --delete slot] [--hex]
 │                                  #   (exit 0 granted, 2 denied, 1 error; never hex-logs 0xA7)
-└── godot/                         # Godot 4 .NET project; references DaocProtocol
-    ├── scripts/
-    │   ├── NetworkBridge.cs       # Node: drains the protocol queue in _Process,
-    │   │                          # re-emits as Godot signals
-    │   └── GameState.cs           # Autoload singleton: auth state, character, position
-    ├── scenes/
-    │   ├── UI/LoginScreen.tscn
-    │   ├── UI/CharacterSelect.tscn
-    │   └── World.tscn             # Plane + capsule + camera
-    └── Main.tscn
+└── godot/                         # ✓ Godot 4.7.2 .NET project (EodClient.csproj, net8.0, in the
+    │                              #   solution); references DaocProtocol
+    ├── project.godot              # main scene: scenes/Main.tscn
+    ├── scenes/Main.tscn           # ✓ root Control with CharacterScreen.cs
+    └── scripts/
+        └── CharacterScreen.cs     # ✓ Gate 2 UI built in code: login form, realm, character list,
+                                   #   hex-log toggle. Headless check: DAOC_PASSWORD=… Godot
+                                   #   --headless --path godot -- --autologin <host> <account> [port]
 ```
 
 Rule: nothing under `src/` may reference `GodotSharp`. If protocol code needs

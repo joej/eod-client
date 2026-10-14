@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/godot/">
+    <Project Path="godot/EodClient.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/DaocProtocol/DaocProtocol.csproj" />
   </Folder>

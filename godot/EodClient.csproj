@@ -1,0 +1,14 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+  <!-- Matches the template Godot 4.7.2 writes for a new C# project. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework Condition=" '$(GodotTargetPlatform)' == 'android' ">net9.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>EodClient</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\DaocProtocol\DaocProtocol.csproj" />
+  </ItemGroup>
+</Project>
