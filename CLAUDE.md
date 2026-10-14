@@ -90,6 +90,18 @@ In that capture 0x10 CharacterSelectRequest and 0xFC CharacterOverviewRequest ca
 IncorrectPassword; the server log showed version 1127 detected. Our 0xF4 client-type byte 0x36
 (copied from the capture) is logged as type LabyrinthOfTheMinotaur plus add-on bits.
 
+**Character screen (1.127, verified live 2026-10-13; parser in `Packets/CharacterPackets.cs`):**
+- 0x10 payload `00`. OpenDAoC ignores it and answers 0x2A LoginGranted (again) + 0x28 SessionID.
+- 0x28 payload: session id as u16 **little-endian** (the C→S header field is big-endian).
+- 0xFC request payload: one realm byte. 0 → server answers 0xFE (realm byte + 12 zero bytes;
+  None = not chosen yet or all realms allowed). 1/2/3 (Alb/Mid/Hib) → 0xFC overview.
+- 0xFC overview (`PacketLib1126.SendCharacterOverview`): 4 × u32 LE header (u32[0] bit 0 =
+  realm switcher), then 10 slots; empty slot = `00`, occupied slot starts with level. An account
+  with no characters gets the 16-byte header only, no slots. Strings are u32 LE length (counting
+  a trailing NUL) + bytes + NUL; empty string = length 0.
+- Recorded overview's race/gender byte is 0x13: bit 0x10 isn't produced by OpenDAoC's encoding
+  `((race & 0x10) << 2) + (race & 0x0F) | gender << 7` (the recording's server may differ).
+
 The source comments show each modern opcode as `old ^ 0xA8` (e.g. 0xA9 = 0x01 ^ 168).
 That is why the original plan's 0x01 and 0x40 were wrong: they are the pre-remap values.
 

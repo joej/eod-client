@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Headless login check against a DAoC server (client protocol 1.127).
+// Headless login + character list against a DAoC server (client protocol 1.127).
 //
-//   DAOC_PASSWORD=... dotnet run --project tools/DaocCli -- <host> <account> [--port 10300] [--hex]
+//   DAOC_PASSWORD=... dotnet run --project tools/DaocCli -- <host> <account>
+//       [--port 10300] [--realm albion|midgard|hibernia] [--hex]
 //
+// --realm is used when the account has no realm yet (or may use all realms); default albion.
 // The password is read from DAOC_PASSWORD so it stays out of command lines and shell history.
 // Exit codes: 0 login granted, 2 login denied, 1 any other failure.
 
@@ -13,7 +15,7 @@ using DaocProtocol.Packets;
 
 if (args.Length < 2)
 {
-    Console.Error.WriteLine("usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--hex]");
+    Console.Error.WriteLine("usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--hex]");
     return 1;
 }
 
@@ -21,6 +23,8 @@ string host = args[0];
 string account = args[1];
 int port = args.SkipWhile(a => a != "--port").Skip(1).Select(int.Parse).DefaultIfEmpty(10300).First();
 bool hex = args.Contains("--hex");
+Realm realmChoice = args.SkipWhile(a => a != "--realm").Skip(1)
+    .Select(r => Enum.Parse<Realm>(r, ignoreCase: true)).DefaultIfEmpty(Realm.Albion).First();
 string? password = Environment.GetEnvironmentVariable("DAOC_PASSWORD");
 if (string.IsNullOrEmpty(password))
 {
@@ -91,14 +95,34 @@ try
     {
         LoginGranted granted = LoginGranted.Parse(result.Payload);
         Console.WriteLine($"login granted: account {granted.AccountName} on {granted.ServerNameShort} (server type {granted.ServerType})");
+        await ListCharacters();
         return 0;
     }
 
     Console.WriteLine($"login denied: {LoginDenied.Parse(result.Payload).Error}");
     return 2;
 }
-catch (Exception e) when (e is IOException or OperationCanceledException or SocketException)
+catch (Exception e) when (e is IOException or OperationCanceledException or SocketException or InvalidDataException)
 {
     Console.Error.WriteLine($"failed: {e.Message}");
     return 1;
+}
+
+async Task ListCharacters()
+{
+    await Send(CharacterSelectRequest.Code, CharacterSelectRequest.Payload());
+    sequencer.SessionId = SessionId.Parse((await ReceiveOneOf(SessionId.Code)).Payload);
+    Console.WriteLine($"session id {sequencer.SessionId}");
+
+    await Send(CharacterOverviewRequest.Code, CharacterOverviewRequest.Payload(Realm.None));
+    Realm realm = RealmReply.Parse((await ReceiveOneOf(RealmReply.Code)).Payload);
+    Console.WriteLine($"account realm: {realm}");
+    if (realm == Realm.None)
+        realm = realmChoice;
+
+    await Send(CharacterOverviewRequest.Code, CharacterOverviewRequest.Payload(realm));
+    CharacterOverview overview = CharacterOverview.Parse((await ReceiveOneOf(CharacterOverview.Code)).Payload);
+    Console.WriteLine($"{realm}: {overview.Characters.Count} character(s), flags 0x{overview.Flags:X}");
+    foreach (CharacterSummary c in overview.Characters)
+        Console.WriteLine($"  slot {c.Slot}: {c.Name}, level {c.Level} {c.RaceName} {c.ClassName}, {c.Location}");
 }
