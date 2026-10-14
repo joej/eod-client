@@ -5,14 +5,16 @@
 //
 //   DAOC_PASSWORD=... dotnet run --project tools/DaocCli -- <host> <account>
 //       [--port 10300] [--realm albion|midgard|hibernia]
-//       [--create <Name> | --delete <slot> | --enter <slot> [--stay <seconds>]] [--log | --hex]
+//       [--create <Name> | --delete <slot> | --enter <slot> [--stay <seconds>]]
+//       [--idle <seconds> [--no-keepalive]] [--log | --hex]
 //
 // --realm is used when the account has no realm yet (or may use all realms); default albion.
 // --create makes a level 1 Briton Armsman (Albion only) in the first free slot; --delete removes
 // the character in a slot (0-9) of the account's realm. Both list the characters again afterwards.
 // --enter puts the character in a slot into the world and keeps the session alive for --stay
 // seconds (default 10), reports what arrived, then logs out with /quit (about 20 s). --log prints every packet's code and length,
-// --hex the whole packet (never the login request).
+// --hex the whole packet (never the login request). --idle waits at the character screen first;
+// with --no-keepalive it sends no pings there (OpenDAoC disconnects after 150 s without one).
 // The password is read from DAOC_PASSWORD so it stays out of command lines and shell history.
 // Exit codes: 0 login granted, 2 login denied, 1 any other failure.
 
@@ -23,7 +25,7 @@ using DaocProtocol.Session;
 
 if (args.Length < 2)
 {
-    Console.Error.WriteLine("usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--create <Name> | --delete <slot> | --enter <slot> [--stay <seconds>]] [--log | --hex]");
+    Console.Error.WriteLine("usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--create <Name> | --delete <slot> | --enter <slot> [--stay <seconds>]] [--idle <seconds> [--no-keepalive]] [--log | --hex]");
     return 1;
 }
 
@@ -38,6 +40,8 @@ string? createName = args.SkipWhile(a => a != "--create").Skip(1).FirstOrDefault
 int? deleteSlot = args.SkipWhile(a => a != "--delete").Skip(1).Select(int.Parse).Cast<int?>().FirstOrDefault();
 int? enterSlot = args.SkipWhile(a => a != "--enter").Skip(1).Select(int.Parse).Cast<int?>().FirstOrDefault();
 int staySeconds = args.SkipWhile(a => a != "--stay").Skip(1).Select(int.Parse).DefaultIfEmpty(10).First();
+int idleSeconds = args.SkipWhile(a => a != "--idle").Skip(1).Select(int.Parse).DefaultIfEmpty(0).First();
+bool keepAliveOn = !args.Contains("--no-keepalive");
 string? password = Environment.GetEnvironmentVariable("DAOC_PASSWORD");
 if (string.IsNullOrEmpty(password))
 {
@@ -45,16 +49,19 @@ if (string.IsNullOrEmpty(password))
     return 1;
 }
 
-using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+// Each session step times out on its own (ClientSession.ReplyTimeout); only connecting needs a deadline here.
+using var connectTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 await using var connection = new DaocConnection(log ? new PacketLog(Console.WriteLine, hex) : null);
 var session = new ClientSession(connection);
+using var stopKeepAlive = new CancellationTokenSource();
+Task keepAlive = Task.CompletedTask;
 
 try
 {
-    await connection.ConnectAsync(host, port, timeout.Token);
+    await connection.ConnectAsync(host, port, connectTimeout.Token);
     Console.WriteLine($"connected to {host}:{port}");
 
-    LoginResult login = await session.LoginAsync(account, password, timeout.Token);
+    LoginResult login = await session.LoginAsync(account, password);
     if (!login.Success)
     {
         Console.WriteLine($"login denied: {login.Error}");
@@ -62,12 +69,16 @@ try
     }
     Console.WriteLine($"login granted: account {login.Granted!.AccountName} on {login.Granted.ServerNameShort} (server type {login.Granted.ServerType})");
 
-    Realm realm = await session.OpenCharacterScreenAsync(timeout.Token);
+    Realm realm = await session.OpenCharacterScreenAsync();
     Console.WriteLine($"session id {connection.SessionId}, account realm: {realm}");
+    if (keepAliveOn)
+        keepAlive = session.KeepAliveAsync(stopKeepAlive.Token);
+    if (idleSeconds > 0)
+        await Idle(TimeSpan.FromSeconds(idleSeconds));
     if (realm == Realm.None)
         realm = realmChoice;
 
-    CharacterOverview overview = await session.GetCharactersAsync(realm, timeout.Token);
+    CharacterOverview overview = await session.GetCharactersAsync(realm);
     Print(realm, overview);
 
     if (createName is not null)
@@ -82,15 +93,15 @@ try
         // Briton bases are 60 each; +10 STR, DEX and CON spend exactly the 30 bonus points.
         var character = new NewCharacter(createName, Realm.Albion, slot, ClassId: 2, Race: 1, Female: false, Model: 32,
             new CharacterStats(70, 70, 70, 60, 60, 60, 60, 60));
-        Print(realm, await session.CreateCharacterAsync(character, timeout.Token));
+        Print(realm, await session.CreateCharacterAsync(character));
     }
     else if (deleteSlot is int slot)
     {
-        Print(realm, await session.DeleteCharacterAsync(realm, slot, timeout.Token));
+        Print(realm, await session.DeleteCharacterAsync(realm, slot));
     }
     else if (enterSlot is int enter)
     {
-        WorldPosition world = await session.EnterWorldAsync(realm, enter, timeout.Token);
+        WorldPosition world = await session.EnterWorldAsync(realm, enter);
         PositionAndObjectId p = world.Position;
         Console.WriteLine($"in world: object id {p.ObjectId}, region {p.RegionId}, zone {world.Zone.Id} ({world.Zone.Name}), " +
                           $"x {p.X} y {p.Y} z {p.Z}, heading {p.Heading}");
@@ -105,13 +116,28 @@ catch (Exception e) when (e is IOException or OperationCanceledException or Time
     Console.Error.WriteLine($"failed: {e.Message}");
     return 1;
 }
+finally
+{
+    stopKeepAlive.Cancel();
+    // A keep-alive that failed (connection gone) has nothing more to report.
+    await keepAlive.ContinueWith(_ => { }, TaskScheduler.Default);
+}
 
-// Keeps the session alive and drains what the server sends, then quits cleanly; fails if the
+// Waits at the character screen without reading; fails if the server closes the connection.
+async Task Idle(TimeSpan idle)
+{
+    Console.WriteLine($"idling {idle.TotalSeconds:0} s at the character screen, {(keepAliveOn ? "with" : "without")} pings…");
+    var started = DateTime.UtcNow;
+    Task finished = await Task.WhenAny(connection.Completion, Task.Delay(idle));
+    if (finished == connection.Completion)
+        throw new IOException($"disconnected after {(DateTime.UtcNow - started).TotalSeconds:0} s at the character screen");
+    Console.WriteLine("  still connected");
+}
+
+// Drains what the server sends while the keep-alive runs, then quits cleanly; fails if the
 // connection drops.
 async Task StayInWorld(TimeSpan stay)
 {
-    using var stopKeepAlive = new CancellationTokenSource();
-    Task keepAlive = session.KeepAliveAsync(stopKeepAlive.Token);
     using var stop = new CancellationTokenSource(stay);
     var counts = new Dictionary<byte, int>();
     var started = DateTime.UtcNow;
@@ -142,8 +168,6 @@ async Task StayInWorld(TimeSpan stay)
     var quitStarted = DateTime.UtcNow;
     Console.WriteLine("quitting (/quit)…");
     CharacterOverview? back = await session.QuitAsync();
-    stopKeepAlive.Cancel();
-    await keepAlive;
     Console.WriteLine($"quit after {(DateTime.UtcNow - quitStarted).TotalSeconds:0} s; " +
                       (back is null ? "the server ended the game" : $"back at the character screen ({back.Characters.Count} character(s))"));
 }

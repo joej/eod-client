@@ -141,7 +141,9 @@ payloads with a port of the server's reader.
   character screen; we look it up in `World/zones.tsv` (OpenDAoC-Database, GPL).
 - 0xA3 ping: 4 skipped bytes, u32 BE timestamp, 4 zero. 0x29 reply echoes it, then sequence + 1.
 - Timeouts (OpenDAoC source): link death after 5 s without 0xA9, disconnect after 150 s without
-  0xA3. `KeepAliveAsync` sends 0xA9 every 1 s and 0xA3 every 10 s (our choice; retail rates unknown).
+  0xA3, in every state including the character screen (verified live: idle there without pings
+  → disconnected at exactly 150 s). `KeepAliveAsync` runs from the character screen on: 0xA3
+  every 10 s, plus 0xA9 every 1 s in the world (our choice; retail rates unknown).
   Live 2026-10-14 (`DaocCli --enter 0 --stay 330`): 330 s in world, 31/31 pings answered, ~23
   packets/s received (mostly 0xA1 NPC updates), no link death until we closed the socket.
 - Leaving (verified live 2026-10-14; `ClientSession.QuitAsync`): send `&quit` as 0xAF

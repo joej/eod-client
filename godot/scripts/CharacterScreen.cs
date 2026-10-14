@@ -34,6 +34,7 @@ public partial class CharacterScreen : Control
     private Realm _listedRealm;
     private readonly List<CharacterSummary> _listed = [];
     private WorldView? _world;
+    private CancellationTokenSource? _keepAlive;
 
     public override void _Ready()
     {
@@ -184,6 +185,10 @@ public partial class CharacterScreen : Control
 
             _session = session;
             _listedRealm = realm;
+            // Pings from here on (OpenDAoC drops a client after 150 s without one, even at the
+            // character screen); position updates are added while in the world.
+            _keepAlive = new CancellationTokenSource();
+            _ = KeepAlive(session, _keepAlive.Token);
             _status.Text = $"{account} on {login.Granted!.ServerNameShort}: {overview.Characters.Count} character(s) in {realm}." +
                            (overview.Characters.Count > 0 ? " Select one and press Enter world." : "");
             return true;
@@ -214,8 +219,9 @@ public partial class CharacterScreen : Control
             WorldPosition world = await _session.EnterWorldAsync(_listedRealm, slot);
 
             _world = new WorldView();
-            _world.Init(_connection, _session, world);
+            _world.Init(_connection, world);
             _world.QuitPressed += () => _ = LeaveWorld();
+            _world.BackToLoginPressed += () => _ = BackToLogin("Disconnected.");
             GetTree().Root.AddChild(_world);
             Visible = false;
             return true;
@@ -255,14 +261,50 @@ public partial class CharacterScreen : Control
         finally
         {
             _world = null;
-            world.QueueFree(); // stops its keep-alive
+            world.QueueFree();
             Visible = true;
             _enter.Disabled = _session?.State != SessionState.CharacterScreen;
         }
     }
 
+    /// <summary>Drops the connection and shows the login form with a message.</summary>
+    private async Task BackToLogin(string message)
+    {
+        await Disconnect();
+        _characters.Clear();
+        _listed.Clear();
+        Visible = true;
+        _enter.Disabled = true;
+        _connect.Disabled = false;
+        _status.Text = message;
+    }
+
+    private async Task KeepAlive(ClientSession session, CancellationToken token)
+    {
+        try
+        {
+            await session.KeepAliveAsync(token);
+        }
+        catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or ObjectDisposedException)
+        {
+            // The connection is gone; _Process notices and says so.
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        // At the character screen nothing else is reading, so notice a closed connection here.
+        if (_world is null && _connection is not null && _connection.Completion.IsCompleted)
+        {
+            string reason = _connection.Completion.Exception?.InnerException?.Message ?? "connection closed";
+            _ = BackToLogin($"Disconnected: {reason}");
+        }
+    }
+
     private async Task Disconnect()
     {
+        _keepAlive?.Cancel();
+        _keepAlive = null;
         _session = null;
         if (_world is not null)
         {

@@ -244,6 +244,39 @@ public class ClientSessionTests
     }
 
     [Fact]
+    public async Task KeepAlivePingsFromTheCharacterScreenAndFollowsIntoTheWorld()
+    {
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => session.KeepAliveAsync(CancellationToken.None));
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+
+            session.PositionInterval = TimeSpan.FromMilliseconds(50);
+            session.PingInterval = TimeSpan.FromMilliseconds(100);
+            using var stop = new CancellationTokenSource();
+            Task keepAlive = session.KeepAliveAsync(stop.Token);
+
+            await Task.Delay(300); // character screen: pings only
+            int beforeWorld = server.Received.Count;
+            await session.GetCharactersAsync(Realm.Albion); // ping replies arriving meanwhile are skipped
+            await session.EnterWorldAsync(Realm.Albion, slot: 0);
+            await Task.Delay(300); // world: positions and pings
+            stop.Cancel();
+            await keepAlive;
+
+            List<ClientPacket> early = server.Received.Take(beforeWorld).ToList();
+            Assert.True(early.Count(p => p.Code == PingRequest.Code) >= 2);
+            Assert.DoesNotContain(early, p => p.Code == PositionUpdate.Code);
+            Assert.True(server.Received.Skip(beforeWorld).Count(p => p.Code == PositionUpdate.Code) >= 3);
+        }
+
+        Assert.Null(server.Error);
+    }
+
+    [Fact]
     public async Task EnterWorldNeedsTheRealmListedLast()
     {
         await using var server = new FakeServer(Recording());
@@ -255,7 +288,6 @@ public class ClientSessionTests
             await session.GetCharactersAsync(Realm.Albion);
             await Assert.ThrowsAsync<ArgumentException>(() => session.EnterWorldAsync(Realm.Albion, slot: 4));   // empty
             await Assert.ThrowsAsync<ArgumentException>(() => session.EnterWorldAsync(Realm.Midgard, slot: 0));  // not listed
-            await Assert.ThrowsAsync<InvalidOperationException>(() => session.KeepAliveAsync(CancellationToken.None));
         }
 
         Assert.DoesNotContain(server.Received, p => p.Code == RegionListRequest.Code);

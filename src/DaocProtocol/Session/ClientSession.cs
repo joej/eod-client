@@ -12,9 +12,9 @@ public enum SessionState
     Connected,
     /// <summary>Login granted; the character screen isn't open yet.</summary>
     LoggedIn,
-    /// <summary>Session id assigned; characters can be listed, created and deleted.</summary>
+    /// <summary>Session id assigned; characters can be listed, created and deleted. Keep alive with <see cref="ClientSession.KeepAliveAsync"/> from here on.</summary>
     CharacterScreen,
-    /// <summary>A character is in the world; keep the session alive with <see cref="ClientSession.KeepAliveAsync"/>.</summary>
+    /// <summary>A character is in the world.</summary>
     InWorld,
     /// <summary>The server ended the game (0xA4 with "leave the game"); close the connection.</summary>
     LoggedOut,
@@ -168,30 +168,40 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     }
 
     /// <summary>
-    /// Sends 0xA9 (standing still at the entry position) every <see cref="PositionInterval"/> and
-    /// 0xA3 every <see cref="PingInterval"/> until cancelled. It only sends: the caller keeps
-    /// draining incoming packets (<see cref="DaocConnection.TryReceive"/> or ReceiveAsync).
+    /// Keeps the session alive until cancelled: 0xA3 every <see cref="PingInterval"/> from the
+    /// character screen on (OpenDAoC's 150 s ping timeout applies there too), plus 0xA9 (standing
+    /// still at the entry position) every <see cref="PositionInterval"/> while in the world. Start
+    /// it once after <see cref="OpenCharacterScreenAsync"/>; it follows the session into and out
+    /// of the world. It only sends: replies are skipped by the session's own waits, and in the
+    /// world the caller drains incoming packets.
     /// </summary>
     public async Task KeepAliveAsync(CancellationToken cancellationToken)
     {
-        Require(SessionState.InWorld);
-        WorldPosition world = World!;
-        PositionAndObjectId p = world.Position;
-        byte[] position = PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, world.Zone.Id, p.Heading);
+        if (State is not (SessionState.CharacterScreen or SessionState.InWorld))
+            throw new InvalidOperationException($"Session is {State}; keep-alive needs the character screen or the world.");
+
         DateTime nextPing = DateTime.UtcNow;
         using var timer = new PeriodicTimer(PositionInterval);
         try
         {
             do
             {
-                await connection.SendAsync(PositionUpdate.Code, position, cancellationToken).ConfigureAwait(false);
+                if (State == SessionState.InWorld && World is WorldPosition world)
+                {
+                    PositionAndObjectId p = world.Position;
+                    await connection.SendAsync(PositionUpdate.Code,
+                        PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, world.Zone.Id, p.Heading),
+                        cancellationToken).ConfigureAwait(false);
+                }
+
                 if (DateTime.UtcNow >= nextPing)
                 {
                     await connection.SendAsync(PingRequest.Code, PingRequest.Payload((uint)Environment.TickCount), cancellationToken).ConfigureAwait(false);
                     nextPing = DateTime.UtcNow + PingInterval;
                 }
             }
-            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false));
+            while (State is SessionState.CharacterScreen or SessionState.InWorld
+                   && await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

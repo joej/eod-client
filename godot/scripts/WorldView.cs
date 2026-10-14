@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Gate 3 view: a capsule where the server put the character, on a plain ground, plus a status
-// overlay. The session is kept alive by ClientSession.KeepAliveAsync; this node drains incoming
-// packets once per frame and notices when the connection closes.
+// overlay. CharacterScreen keeps the session alive (ClientSession.KeepAliveAsync); this node
+// drains incoming packets once per frame and notices when the connection closes.
 
 using DaocProtocol.Net;
 using DaocProtocol.Packets;
 using DaocProtocol.Session;
 using Godot;
+
 
 namespace EodClient;
 
@@ -18,8 +19,8 @@ public partial class WorldView : Node3D
 
     private DaocConnection _connection = null!;
     private WorldPosition _world = null!;
-    private readonly CancellationTokenSource _stop = new();
     private Label _status = null!;
+    private Button _button = null!;
     private int _packets;
     private int _pings;
     private double _seconds;
@@ -27,8 +28,11 @@ public partial class WorldView : Node3D
     private bool _draining = true;
     private string _note = "";
 
-    /// <summary>Raised when the player presses Quit.</summary>
+    /// <summary>Raised when the player presses Quit (connected).</summary>
     public event Action? QuitPressed;
+
+    /// <summary>Raised when the player presses Back to login (after the connection closed).</summary>
+    public event Action? BackToLoginPressed;
 
     public int Packets => _packets;
     public int Pings => _pings;
@@ -45,11 +49,10 @@ public partial class WorldView : Node3D
     }
 
     /// <summary>Call before adding to the tree.</summary>
-    public void Init(DaocConnection connection, ClientSession session, WorldPosition world)
+    public void Init(DaocConnection connection, WorldPosition world)
     {
         _connection = connection;
         _world = world;
-        _ = KeepAlive(session);
     }
 
     /// <summary>
@@ -107,13 +110,16 @@ public partial class WorldView : Node3D
         var overlay = new CanvasLayer();
         _status = new Label { Position = new Vector2(16, 16) };
         overlay.AddChild(_status);
-        var quit = new Button { Text = "Quit to character screen", Position = new Vector2(16, 72) };
-        quit.Pressed += () =>
+        _button = new Button { Text = "Quit to character screen", Position = new Vector2(16, 72) };
+        _button.Pressed += () =>
         {
-            quit.Disabled = true;
-            QuitPressed?.Invoke();
+            _button.Disabled = true;
+            if (_closedReason is null)
+                QuitPressed?.Invoke();
+            else
+                BackToLoginPressed?.Invoke();
         };
-        overlay.AddChild(quit);
+        overlay.AddChild(_button);
         AddChild(overlay);
     }
 
@@ -128,26 +134,17 @@ public partial class WorldView : Node3D
         }
 
         if (_closedReason is null && _connection.Completion.IsCompleted)
+        {
             _closedReason = _connection.Completion.Exception?.InnerException?.Message ?? "connection closed";
+            _note = "";
+            _button.Text = "Back to login";
+            _button.Disabled = false;
+        }
 
         PositionAndObjectId p = _world.Position;
         _status.Text =
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
             $"{_seconds:0} s in world   {_packets} packets   {_pings} ping replies   " +
             (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note;
-    }
-
-    public override void _ExitTree() => _stop.Cancel();
-
-    private async Task KeepAlive(ClientSession session)
-    {
-        try
-        {
-            await session.KeepAliveAsync(_stop.Token);
-        }
-        catch (Exception e) when (e is IOException or System.Net.Sockets.SocketException or ObjectDisposedException)
-        {
-            _closedReason ??= e.Message;
-        }
     }
 }
