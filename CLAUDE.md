@@ -20,6 +20,23 @@ community can build on.
   so their code and fixtures can be reused with attribution.
 - Site posts (eveofdarkness.org): CC BY 4.0.
 
+## Game client and assets (decided 2026-10-14)
+
+1. **No proprietary content** in this repo or anything we distribute: no client files, no
+   extracted or converted assets, no data generated from client files. Packet captures stay
+   private (logins are plaintext); only findings are published.
+2. **Extraction tooling is fine:** tools that legitimate owners run on their own installation to
+   produce local files our client uses (UI, character creation, scenes, game elements). The
+   tools are ours; their output never enters the repo or a release.
+3. **No decompiling or disassembling the Windows client** in this project. Where client internals
+   are needed, use information others have published (check its license; attribute it).
+4. **Behaviour and packet analysis** uses the owner's purchased client against our OpenDAoC server
+   and the official servers. Findings go to `docs/open-questions.md` and the protocol docs.
+5. The zone table (`World/zones.tsv`) comes from OpenDAoC-Database (GPL), not from client files.
+
+Client for testing: OpenDAoC's docs (https://www.opendaoc.com/docs/client) accept any client with
+`game.dll` 1.127 and offer a modified official client installer; install on Windows only.
+
 ## Stack Decisions
 
 - **Engine**: Godot 4 (.NET variant — must download the .NET build, not Standard)
