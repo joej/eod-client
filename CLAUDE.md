@@ -36,6 +36,14 @@ community can build on.
 
 Client for testing: OpenDAoC's docs (https://www.opendaoc.com/docs/client) accept any client with
 `game.dll` 1.127 and offer a modified official client installer; install on Windows only.
+Checked 2026-10-14: that installer is a **full client** (no separate official download), a modified
+official client with custom splash screens, classic towns/capitals/Darkness Falls and Old Frontiers;
+it uses its own settings folder (`%AppData%\Electronic Arts\Dark Age of Camelot\OpenDAoC`) and does
+not work on the official servers. Author and contents unstated (Mega/Mediafire, `OpenDAoCInstaller-1.0.0.zip`).
+OpenDAoC-Launcher (C#, no license, from Atlas freeshard, last push 2023-04) shows the older pattern:
+patch files from a patch list, then `connect.exe game1127.dll <host> <user> <password> [char realm]`
+(password on the command line). Eden instead has players install the official client from
+`downloads.eamythic.com`, let it patch to current, and use its own launcher.
 
 ## Stack Decisions
 
@@ -485,7 +493,7 @@ Auto account creation is on. ~400 ERR lines at startup are data/code content mis
 |---|---|---|---|
 | OpenDAOC | C# | Active | ECS architecture, game loop, 1.65 focus |
 | DOLSharp | C# | Slow | Event-driven, broader patch coverage |
-| Eve of Darkness (server) | Elixir | Last commit 2019-09 (repo touched 2023-01) | Packet DSL with tests; homepage was eveofdarkness.org |
+| Eve of Darkness (server) | Elixir | Last commit 2019-09 (repo touched 2023-01) | Ben Falk's packet DSL with tests; homepage was eveofdarkness.org. It inspired this project and lent the site its name |
 | catastrophic-impact | C# (OpenDAOC fork) | Active | Linux-native, AI bots |
 
 ### Community Locations
@@ -582,11 +590,17 @@ loads from a local folder. Output never enters the repo or a release (see "Game 
    (GPL-3.0; describes DAoC NIF 4.1.0.12, 4.2.1.0, 4.2.2.0, 10.1.0.0; 2.3/3.03/3.1 unsupported).
    NifSkope for checking files by hand.
 3. **Use:** the Godot client loads models and textures from the user's extracted folder.
-Unverified: whether the Niftools addon imports DAoC's 4.x files cleanly. Prior art: Bifrost's
-private NIF → UE5 pipeline (people notes in CLAUDE.local.md). First proof: one character model
+Unverified: whether the Niftools addon imports DAoC's 4.x files cleanly. Prior art and inspiration:
+BifrostTitan's NIF → UE5 pipeline (not published; notes in CLAUDE.local.md). First proof: one character model
 from the owner's install, opened in Godot.
 
 ---
+
+## Protocol reference
+
+`docs/protocol.md` is the outside-reader reference for what is verified (framing, login,
+character screen, world entry, keep-alive, logout). Update it when a layout is verified or
+changes; this file keeps working notes.
 
 ## Open questions
 
