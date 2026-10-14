@@ -101,6 +101,23 @@ public class WorldPacketTests
     }
 
     [Fact]
+    public void CommandMatchesRecordedClient()
+    {
+        ClientPacket recorded = Client[15];
+        Assert.Equal(CommandRequest.Code, recorded.Code);
+        Assert.Equal(recorded.Payload, CommandRequest.Payload("&gc info 1"));
+        Assert.Throws<ArgumentException>(() => CommandRequest.Payload("/quit"));
+    }
+
+    [Fact]
+    public void QuitReplySaysWhereTheClientGoes()
+    {
+        // PacketLib168.SendPlayerQuit: totalOut, level.
+        Assert.False(QuitReply.LeavesGame([0x00, 0x01]));
+        Assert.True(QuitReply.LeavesGame([0x01, 0x32]));
+    }
+
+    [Fact]
     public void SlotsAreCheckedBeforeSending()
     {
         Assert.Equal(13, WorldInitRequest.Payload(Realm.Midgard, 3)[0]);

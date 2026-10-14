@@ -16,6 +16,8 @@ public enum SessionState
     CharacterScreen,
     /// <summary>A character is in the world; keep the session alive with <see cref="ClientSession.KeepAliveAsync"/>.</summary>
     InWorld,
+    /// <summary>The server ended the game (0xA4 with "leave the game"); close the connection.</summary>
+    LoggedOut,
 }
 
 /// <summary>Where a character entered the world.</summary>
@@ -173,8 +175,9 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     public async Task KeepAliveAsync(CancellationToken cancellationToken)
     {
         Require(SessionState.InWorld);
-        PositionAndObjectId p = World!.Position;
-        byte[] position = PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, World.Zone.Id, p.Heading);
+        WorldPosition world = World!;
+        PositionAndObjectId p = world.Position;
+        byte[] position = PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, world.Zone.Id, p.Heading);
         DateTime nextPing = DateTime.UtcNow;
         using var timer = new PeriodicTimer(PositionInterval);
         try
@@ -195,16 +198,49 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         }
     }
 
+    /// <summary>
+    /// Logs out cleanly: sends "&amp;quit" and waits for 0xA4, which OpenDAoC sends when its quit
+    /// timer runs out (20 s, up to 60 s after combat; immediate for GMs or with
+    /// disable_quit_timer). Then, like a client returning to the character screen, lists the
+    /// realm again: that moves the server's connection state from "playing" to the character
+    /// screen. Closing the socket while it still says "playing" (even after 0xA4) makes the
+    /// server run link death: 60 s during which logins are refused.
+    /// Keep <see cref="KeepAliveAsync"/> running until this returns, and stop draining packets
+    /// elsewhere: this method must see the 0xA4. Returns the fresh listing, or null if the server
+    /// ended the game instead.
+    /// </summary>
+    public async Task<CharacterOverview?> QuitAsync(CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        await connection.SendAsync(CommandRequest.Code, CommandRequest.Payload("&quit"), cancellationToken).ConfigureAwait(false);
+        ServerPacket reply = await ExpectAsync(cancellationToken, QuitTimeout, QuitReply.Code).ConfigureAwait(false);
+        World = null;
+        if (QuitReply.LeavesGame(reply.Payload))
+        {
+            State = SessionState.LoggedOut;
+            return null;
+        }
+
+        State = SessionState.CharacterScreen;
+        return await GetCharactersAsync(_lastListedRealm, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Longest quit timer (60 s after combat) plus slack.</summary>
+    public static readonly TimeSpan QuitTimeout = TimeSpan.FromSeconds(75);
+
     private void Require(SessionState state)
     {
         if (State != state)
             throw new InvalidOperationException($"Session is {State}; this needs {state}.");
     }
 
-    private async Task<ServerPacket> ExpectAsync(CancellationToken cancellationToken, params byte[] codes)
+    private Task<ServerPacket> ExpectAsync(CancellationToken cancellationToken, params byte[] codes) =>
+        ExpectAsync(cancellationToken, ReplyTimeout, codes);
+
+    private async Task<ServerPacket> ExpectAsync(CancellationToken cancellationToken, TimeSpan replyTimeout, params byte[] codes)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(ReplyTimeout);
+        timeout.CancelAfter(replyTimeout);
         try
         {
             while (true)
@@ -216,7 +252,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new TimeoutException($"No {string.Join(" or ", codes.Select(c => $"0x{c:X2}"))} within {ReplyTimeout.TotalSeconds:0.#} s.");
+            throw new TimeoutException($"No {string.Join(" or ", codes.Select(c => $"0x{c:X2}"))} within {replyTimeout.TotalSeconds:0.#} s.");
         }
     }
 }

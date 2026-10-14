@@ -37,6 +37,8 @@ public partial class CharacterScreen : Control
 
     public override void _Ready()
     {
+        // Closing the window while in the world quits cleanly first (see _Notification).
+        GetTree().AutoAcceptQuit = false;
         BuildUi();
         LoadSettings();
 
@@ -57,6 +59,20 @@ public partial class CharacterScreen : Control
     }
 
     public override void _ExitTree() => _ = Disconnect();
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationWMCloseRequest)
+            _ = CloseWindow();
+    }
+
+    private async Task CloseWindow()
+    {
+        if (_world is not null && _world.ClosedReason is null)
+            await LeaveWorld();
+        await Disconnect();
+        GetTree().Quit();
+    }
 
     private void BuildUi()
     {
@@ -199,6 +215,7 @@ public partial class CharacterScreen : Control
 
             _world = new WorldView();
             _world.Init(_connection, _session, world);
+            _world.QuitPressed += () => _ = LeaveWorld();
             GetTree().Root.AddChild(_world);
             Visible = false;
             return true;
@@ -208,6 +225,39 @@ public partial class CharacterScreen : Control
             _status.Text = $"Failed to enter the world: {e.Message}";
             _connect.Disabled = false;
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Quits cleanly (/quit, about 20 s) and returns to the character screen. Closing the
+    /// connection instead leaves the character link-dead and the account locked for 60 s.
+    /// </summary>
+    private async Task<bool> LeaveWorld()
+    {
+        if (_world is null || _session is null)
+            return false;
+
+        WorldView world = _world;
+        world.BeginQuit();
+        try
+        {
+            CharacterOverview? back = await _session.QuitAsync();
+            _status.Text = back is null
+                ? "The server ended the game."
+                : $"Back at the character screen: {back.Characters.Count} character(s) in {_listedRealm}.";
+            return true;
+        }
+        catch (Exception e) when (e is IOException or TimeoutException or InvalidOperationException)
+        {
+            _status.Text = $"Quit failed: {e.Message}";
+            return false;
+        }
+        finally
+        {
+            _world = null;
+            world.QueueFree(); // stops its keep-alive
+            Visible = true;
+            _enter.Disabled = _session?.State != SessionState.CharacterScreen;
         }
     }
 
@@ -247,6 +297,12 @@ public partial class CharacterScreen : Control
             ok = _world.ClosedReason is null;
             GD.Print($"in world {staySeconds} s: {_world.Packets} packets, {_world.Pings} ping replies, " +
                      (ok ? "still connected" : $"disconnected: {_world.ClosedReason}"));
+            if (ok)
+            {
+                GD.Print("quitting (/quit)…");
+                ok = await LeaveWorld();
+                GD.Print(_status.Text);
+            }
         }
 
         await Disconnect();

@@ -44,6 +44,7 @@ that server; `RustDAoC capture` = the recorded 1.127e session in `tests/DaocProt
 | L6 | 0x9D RegionListRequest: the recorded client sends the slot plus 28 bytes (`01 66 4c 21 5f 40 1e 1e 00 ff ff ff ff 0f 03 77 23 01 70 de 10 00 00 05 2d 00 00 08`); the server reads only the slot. | RustDAoC capture | Open. Machine or client info? We send the slot alone. |
 | L7 | 0xA9 from the recorded client: object ID always 0 (the server skips it), heading sometimes has bit 0x1000 set, and the action byte is 0x80 (the server's enum calls it "torch"). | RustDAoC capture | Open. Retail client capture. |
 | L8 | 0x10 is never sent with a character name on 1.127; the character is chosen by slot in 0x9D and 0xD4 (which the server converts with the account's current realm, like delete). | RustDAoC capture, OpenDAoC | Noted. The original plan's "0x10 with the chosen name" was 1.124-era. |
+| L9 | After /quit's 0xA4 the server has already removed the character, but its connection state stays "playing" until the client asks for the character list. A client that disconnects right after 0xA4 triggers link death on a character no longer in the world, and the account is locked for 60 s (AccountIsInLogoutProcedure). | live 2026-10-14 | Open. We follow 0xA4 with a 0xFC listing, presumably as a real client returning to the character screen does; confirm with a retail client capture. Worth an OpenDAoC issue? |
 
 ## Not yet documented anywhere we've found
 

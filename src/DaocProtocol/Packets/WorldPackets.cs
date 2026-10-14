@@ -144,3 +144,31 @@ public static class PositionUpdate
             .Zeros(4)        // trailing
             .ToArray();
 }
+
+/// <summary>
+/// 0xAF: a slash command, written with '&amp;' in place of '/' (the recorded client sends
+/// <c>00</c> "&amp;gc info 1" <c>00</c>). The 1.127 server skips one byte, then reads the text.
+/// </summary>
+public static class CommandRequest
+{
+    public const byte Code = 0xAF;
+
+    public static byte[] Payload(string command)
+    {
+        if (command.Length < 2 || command[0] != '&' || command.Contains('\0'))
+            throw new ArgumentException("Commands start with '&' (for '/') and contain no zero byte.", nameof(command));
+        return new PayloadWriter().U8(0).Bytes(System.Text.Encoding.Latin1.GetBytes(command)).U8(0).ToArray();
+    }
+}
+
+/// <summary>
+/// 0xA4 (server → client): the quit timer started by "&amp;quit" has run out; the character has
+/// been saved and removed from the world. Payload: 1 = leave the game entirely, 0 = back to the
+/// character screen (what /quit sends), then the character's level.
+/// </summary>
+public static class QuitReply
+{
+    public const byte Code = 0xA4;
+
+    public static bool LeavesGame(ReadOnlySpan<byte> payload) => new PayloadReader(payload).U8() == 1;
+}

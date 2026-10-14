@@ -144,9 +144,13 @@ payloads with a port of the server's reader.
   0xA3. `KeepAliveAsync` sends 0xA9 every 1 s and 0xA3 every 10 s (our choice; retail rates unknown).
   Live 2026-10-14 (`DaocCli --enter 0 --stay 330`): 330 s in world, 31/31 pings answered, ~23
   packets/s received (mostly 0xA1 NPC updates), no link death until we closed the socket.
-- Leaving: closing the socket makes the character link-dead for 60 s, and logging in meanwhile
-  is refused with AccountIsInLogoutProcedure. A clean logout is the `/quit` command (0xAF), which
-  starts a server-side quit timer that ends with S→C 0xA4. Not implemented yet (Gate 4).
+- Leaving (verified live 2026-10-14; `ClientSession.QuitAsync`): send `&quit` as 0xAF
+  (`00` + text + `00`; the server skips one byte), keep sending 0xA9 through OpenDAoC's quit
+  timer (20 s, up to 60 s after combat; instant for GMs or with `disable_quit_timer`), receive
+  0xA4 (`00` = back to character screen, then level), then request 0xFC for the realm. That last
+  step moves the server's connection state to CharScreen; closing the socket while it still says
+  Playing (even after 0xA4) triggers link death: 60 s during which logins get
+  AccountIsInLogoutProcedure. With the full sequence, an immediate re-login works.
 
 The source comments show each modern opcode as `old ^ 0xA8` (e.g. 0xA9 = 0x01 ^ 168).
 That is why the original plan's 0x01 and 0x40 were wrong: they are the pre-remap values.

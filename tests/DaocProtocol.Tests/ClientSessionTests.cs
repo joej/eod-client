@@ -193,6 +193,57 @@ public class ClientSessionTests
     }
 
     [Fact]
+    public async Task QuitsWhileTheHeartbeatContinues()
+    {
+        // The server answers "&quit" only when its timer runs out: here, with the first
+        // position update at least 300 ms after the command.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        long quitAt = -1;
+        bool answered = false;
+        await using var server = new FakeServer(Recording(p =>
+        {
+            if (p.Code == CommandRequest.Code)
+            {
+                quitAt = clock.ElapsedMilliseconds;
+                return [];
+            }
+            if (p.Code == PositionUpdate.Code && quitAt >= 0 && !answered && clock.ElapsedMilliseconds - quitAt >= 300)
+            {
+                answered = true;
+                return [new ServerPacket(QuitReply.Code, [0x00, 0x01])];
+            }
+            return WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null);
+        }));
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await session.GetCharactersAsync(Realm.Albion);
+            await session.EnterWorldAsync(Realm.Albion, slot: 0);
+
+            session.PositionInterval = TimeSpan.FromMilliseconds(50);
+            using var stop = new CancellationTokenSource();
+            Task keepAlive = session.KeepAliveAsync(stop.Token);
+            CharacterOverview? back = await session.QuitAsync();
+            stop.Cancel();
+            await keepAlive;
+            Assert.Equal(SessionState.CharacterScreen, session.State);
+            Assert.Equal("Lilillyn", Assert.Single(back!.Characters).Name);
+        }
+
+        Assert.Null(server.Error);
+        Assert.True(answered);
+        int quit = server.Received.FindIndex(p => p.Code == CommandRequest.Code);
+        Assert.Equal(CommandRequest.Payload("&quit"), server.Received[quit].Payload);
+        // Position updates kept coming while the server's quit timer ran...
+        Assert.True(server.Received.Skip(quit).Count(p => p.Code == PositionUpdate.Code) >= 3);
+        // ...and after 0xA4 the client asked for the realm's characters (back to the character screen).
+        ClientPacket listing = server.Received.Skip(quit).First(p => p.Code == CharacterOverviewRequest.Code);
+        Assert.Equal(CharacterOverviewRequest.Payload(Realm.Albion), listing.Payload);
+    }
+
+    [Fact]
     public async Task EnterWorldNeedsTheRealmListedLast()
     {
         await using var server = new FakeServer(Recording());

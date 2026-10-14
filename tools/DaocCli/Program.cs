@@ -11,7 +11,7 @@
 // --create makes a level 1 Briton Armsman (Albion only) in the first free slot; --delete removes
 // the character in a slot (0-9) of the account's realm. Both list the characters again afterwards.
 // --enter puts the character in a slot into the world and keeps the session alive for --stay
-// seconds (default 10), then reports what arrived. --log prints every packet's code and length,
+// seconds (default 10), reports what arrived, then logs out with /quit (about 20 s). --log prints every packet's code and length,
 // --hex the whole packet (never the login request).
 // The password is read from DAOC_PASSWORD so it stays out of command lines and shell history.
 // Exit codes: 0 login granted, 2 login denied, 1 any other failure.
@@ -106,11 +106,13 @@ catch (Exception e) when (e is IOException or OperationCanceledException or Time
     return 1;
 }
 
-// Keeps the session alive and drains what the server sends; fails if the connection drops.
+// Keeps the session alive and drains what the server sends, then quits cleanly; fails if the
+// connection drops.
 async Task StayInWorld(TimeSpan stay)
 {
+    using var stopKeepAlive = new CancellationTokenSource();
+    Task keepAlive = session.KeepAliveAsync(stopKeepAlive.Token);
     using var stop = new CancellationTokenSource(stay);
-    Task keepAlive = session.KeepAliveAsync(stop.Token);
     var counts = new Dictionary<byte, int>();
     var started = DateTime.UtcNow;
     var nextReport = started.AddSeconds(30);
@@ -132,10 +134,18 @@ async Task StayInWorld(TimeSpan stay)
     {
     }
 
-    await keepAlive;
     Console.WriteLine($"stayed {stay.TotalSeconds:0} s: {counts.Values.Sum()} packets received, " +
                       $"{counts.GetValueOrDefault(PingRequest.ReplyCode)} ping replies; by code: " +
                       string.Join(" ", counts.OrderBy(c => c.Key).Select(c => $"{c.Key:X2}×{c.Value}")));
+
+    // The heartbeat keeps running through the server's quit timer.
+    var quitStarted = DateTime.UtcNow;
+    Console.WriteLine("quitting (/quit)…");
+    CharacterOverview? back = await session.QuitAsync();
+    stopKeepAlive.Cancel();
+    await keepAlive;
+    Console.WriteLine($"quit after {(DateTime.UtcNow - quitStarted).TotalSeconds:0} s; " +
+                      (back is null ? "the server ended the game" : $"back at the character screen ({back.Characters.Count} character(s))"));
 }
 
 static void Print(Realm realm, CharacterOverview overview)

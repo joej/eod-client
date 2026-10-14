@@ -24,10 +24,25 @@ public partial class WorldView : Node3D
     private int _pings;
     private double _seconds;
     private string? _closedReason;
+    private bool _draining = true;
+    private string _note = "";
+
+    /// <summary>Raised when the player presses Quit.</summary>
+    public event Action? QuitPressed;
 
     public int Packets => _packets;
     public int Pings => _pings;
     public string? ClosedReason => _closedReason;
+
+    /// <summary>
+    /// Stops draining incoming packets (ClientSession.QuitAsync must see the 0xA4) and shows a
+    /// note; the keep-alive keeps running until this node leaves the tree.
+    /// </summary>
+    public void BeginQuit()
+    {
+        _draining = false;
+        _note = "   quitting: the server's quit timer takes about 20 s…";
+    }
 
     /// <summary>Call before adding to the tree.</summary>
     public void Init(DaocConnection connection, ClientSession session, WorldPosition world)
@@ -92,13 +107,20 @@ public partial class WorldView : Node3D
         var overlay = new CanvasLayer();
         _status = new Label { Position = new Vector2(16, 16) };
         overlay.AddChild(_status);
+        var quit = new Button { Text = "Quit to character screen", Position = new Vector2(16, 72) };
+        quit.Pressed += () =>
+        {
+            quit.Disabled = true;
+            QuitPressed?.Invoke();
+        };
+        overlay.AddChild(quit);
         AddChild(overlay);
     }
 
     public override void _Process(double delta)
     {
         _seconds += delta;
-        while (_connection.TryReceive(out ServerPacket packet))
+        while (_draining && _connection.TryReceive(out ServerPacket packet))
         {
             _packets++;
             if (packet.Code == PingRequest.ReplyCode)
@@ -112,7 +134,7 @@ public partial class WorldView : Node3D
         _status.Text =
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
             $"{_seconds:0} s in world   {_packets} packets   {_pings} ping replies   " +
-            (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}");
+            (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note;
     }
 
     public override void _ExitTree() => _stop.Cancel();
