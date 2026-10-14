@@ -81,6 +81,14 @@ and 1886 S→C packets. Whether a retail client or RustDAoC's own client made it
 Its C→S order differs from the simulator's:
 `F4 F4 A7 A3 10 FC 10 FC 9D A3 10 D4 E8 BF …` (S→C: `22 2A 29 28 FE 28 FC B1 29 28 C5 20 …`),
 so 1.127 sends 0x9D and 0xE8 *before* 0xBF. Confirm against our own capture.
+In that capture 0x10 CharacterSelectRequest and 0xFC CharacterOverviewRequest carry a
+**single byte** (0x10: `00`; 0xFC: `00`, then `01`), not ClientSimulator's 1.124 fixed strings
+(28-byte name, 24-byte "<account>-S"). Check the server handlers before implementing them.
+
+**Login verified live (2026-10-13)** against our OpenDAoC 2026.09.36 with `tools/DaocCli`:
+0xF4 → 0x22 ("1.127", key length 0) → 0xA7 → 0x2A (new account auto-created) or 0x2C
+IncorrectPassword; the server log showed version 1127 detected. Our 0xF4 client-type byte 0x36
+(copied from the capture) is logged as type LabyrinthOfTheMinotaur plus add-on bits.
 
 The source comments show each modern opcode as `old ^ 0xA8` (e.g. 0xA9 = 0x01 ^ 168).
 That is why the original plan's 0x01 and 0x40 were wrong: they are the pre-remap values.
@@ -181,6 +189,10 @@ disconnections shortly after zone entry are most likely this.
 
 ## Project Structure
 
+.NET SDK 10 via Homebrew (`brew install dotnet`, no sudo). Its native app launchers need
+`DOTNET_ROOT=/opt/homebrew/opt/dotnet/libexec`; without it run `dotnet <app>.dll` or
+`dotnet run`. Godot's .NET editor will need DOTNET_ROOT too.
+
 ```
 eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warnings as errors
 ├── src/DaocProtocol/              # net8.0 class library (Godot-compatible) — NO Godot references
@@ -193,14 +205,17 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │   │   │                          # raises packets onto a ConcurrentQueue
 │   │   ├── PacketReader.cs        # Typed big-endian reads, fixed-length strings
 │   │   └── PacketWriter.cs        # Build outbound packets
-│   ├── Packets/                   # One type per opcode (CryptKey, LoginGranted, …)
+│   ├── Packets/                   # ✓ ClientVersion, LoginPackets (0xF4/0xA7 builders;
+│   │                              #   0x22/0x2A/0x2C parsers), more per opcode to come
 │   ├── Session/
 │   │   ├── AuthState.cs           # State machine (see below)
 │   │   └── ClientSession.cs       # Login → char select → world; heartbeat timer
 │   └── PacketLog.cs               # Hex logger (direction, opcode, bytes)
 ├── tests/DaocProtocol.Tests/      # net10.0 xUnit; Fixtures/ holds the RustDAoC 1.127e capture
 │                                  # (GPL, provenance in Fixtures/README.md)
-├── tools/DaocCli/                 # Optional headless client: login + list chars from terminal
+├── tools/DaocCli/                 # ✓ headless login check: DAOC_PASSWORD=… dotnet run --project
+│                                  #   tools/DaocCli -- <host> <account> [--port N] [--hex]
+│                                  #   (exit 0 granted, 2 denied, 1 error; never hex-logs 0xA7)
 └── godot/                         # Godot 4 .NET project; references DaocProtocol
     ├── scripts/
     │   ├── NetworkBridge.cs       # Node: drains the protocol queue in _Process,
