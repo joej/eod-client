@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="World\zones.tsv" LogicalName="DaocProtocol.World.zones.tsv" />
+  </ItemGroup>
+
 </Project>

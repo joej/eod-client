@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Gate 2 screen: log in and list the account's characters. All protocol work is in
-// DaocProtocol's ClientSession; this node only builds the UI and shows results.
+// Log in, list the account's characters, and enter the world with one (shown by WorldView).
+// All protocol work is in DaocProtocol's ClientSession; this node only builds the UI.
 //
-// Headless check (prints the character names and quits; exit code 0 on success):
+// Headless check (prints the result and quits; exit code 0 on success):
 //   DAOC_PASSWORD=... Godot --headless --path godot -- --autologin <host> <account> [port]
+//       [--enter <slot> [--stay <seconds>]]
 
 using DaocProtocol.Net;
 using DaocProtocol.Packets;
@@ -24,10 +25,15 @@ public partial class CharacterScreen : Control
     private OptionButton _realm = null!;
     private CheckBox _hexLog = null!;
     private Button _connect = null!;
+    private Button _enter = null!;
     private Label _status = null!;
     private ItemList _characters = null!;
 
     private DaocConnection? _connection;
+    private ClientSession? _session;
+    private Realm _listedRealm;
+    private readonly List<CharacterSummary> _listed = [];
+    private WorldView? _world;
 
     public override void _Ready()
     {
@@ -37,7 +43,17 @@ public partial class CharacterScreen : Control
         string[] args = OS.GetCmdlineUserArgs();
         int i = Array.IndexOf(args, "--autologin");
         if (i >= 0 && args.Length >= i + 3)
-            _ = AutoLogin(args[i + 1], args[i + 2], args.Length > i + 3 ? int.Parse(args[i + 3]) : 10300);
+        {
+            int port = args.Length > i + 3 && int.TryParse(args[i + 3], out int p) ? p : 10300;
+            int? enter = Option(args, "--enter");
+            _ = AutoLogin(args[i + 1], args[i + 2], port, enter, Option(args, "--stay") ?? 10);
+        }
+    }
+
+    private static int? Option(string[] args, string name)
+    {
+        int i = Array.IndexOf(args, name);
+        return i >= 0 && i + 1 < args.Length ? int.Parse(args[i + 1]) : null;
     }
 
     public override void _ExitTree() => _ = Disconnect();
@@ -71,6 +87,9 @@ public partial class CharacterScreen : Control
         _connect = new Button { Text = "Connect" };
         _connect.Pressed += () => _ = OnConnectPressed();
         buttons.AddChild(_connect);
+        _enter = new Button { Text = "Enter world", Disabled = true };
+        _enter.Pressed += () => _ = OnEnterPressed();
+        buttons.AddChild(_enter);
         _hexLog = new CheckBox { Text = "Log packets as hex (Output panel)" };
         buttons.AddChild(_hexLog);
 
@@ -78,6 +97,8 @@ public partial class CharacterScreen : Control
         column.AddChild(_status);
 
         _characters = new ItemList { SizeFlagsVertical = SizeFlags.ExpandFill };
+        _characters.ItemSelected += index => _enter.Disabled = _session is null;
+        _characters.ItemActivated += index => _ = OnEnterPressed();
         column.AddChild(_characters);
 
         _password.TextSubmitted += submitted => _ = OnConnectPressed();
@@ -97,6 +118,13 @@ public partial class CharacterScreen : Control
         await ListCharacters(_host.Text.Trim(), (int)_port.Value, _account.Text.Trim(), _password.Text);
     }
 
+    private async Task OnEnterPressed()
+    {
+        int[] selected = _characters.GetSelectedItems();
+        if (selected.Length == 1)
+            await EnterWorld(_listed[selected[0]].Slot);
+    }
+
     /// <summary>Connects, logs in and fills the list. Returns false on any failure (shown in the status line).</summary>
     private async Task<bool> ListCharacters(string host, int port, string account, string password)
     {
@@ -107,7 +135,9 @@ public partial class CharacterScreen : Control
         }
 
         _connect.Disabled = true;
+        _enter.Disabled = true;
         _characters.Clear();
+        _listed.Clear();
         await Disconnect();
         try
         {
@@ -131,9 +161,15 @@ public partial class CharacterScreen : Control
 
             CharacterOverview overview = await session.GetCharactersAsync(realm);
             foreach (CharacterSummary c in overview.Characters)
+            {
+                _listed.Add(c);
                 _characters.AddItem($"{c.Name}    level {c.Level} {c.RaceName} {c.ClassName}, {c.Location}");
+            }
 
-            _status.Text = $"{account} on {login.Granted!.ServerNameShort}: {overview.Characters.Count} character(s) in {realm}.";
+            _session = session;
+            _listedRealm = realm;
+            _status.Text = $"{account} on {login.Granted!.ServerNameShort}: {overview.Characters.Count} character(s) in {realm}." +
+                           (overview.Characters.Count > 0 ? " Select one and press Enter world." : "");
             return true;
         }
         catch (Exception e) when (e is IOException or TimeoutException or System.Net.Sockets.SocketException
@@ -148,8 +184,42 @@ public partial class CharacterScreen : Control
         }
     }
 
+    /// <summary>Enters the world with the character in <paramref name="slot"/> and switches to the 3D view.</summary>
+    private async Task<bool> EnterWorld(int slot)
+    {
+        if (_session is null || _connection is null)
+            return false;
+
+        _connect.Disabled = true;
+        _enter.Disabled = true;
+        try
+        {
+            _status.Text = "Entering the world…";
+            WorldPosition world = await _session.EnterWorldAsync(_listedRealm, slot);
+
+            _world = new WorldView();
+            _world.Init(_connection, _session, world);
+            GetTree().Root.AddChild(_world);
+            Visible = false;
+            return true;
+        }
+        catch (Exception e) when (e is IOException or TimeoutException or InvalidDataException or ArgumentException)
+        {
+            _status.Text = $"Failed to enter the world: {e.Message}";
+            _connect.Disabled = false;
+            return false;
+        }
+    }
+
     private async Task Disconnect()
     {
+        _session = null;
+        if (_world is not null)
+        {
+            _world.QueueFree();
+            _world = null;
+        }
+
         if (_connection is null)
             return;
         DaocConnection connection = _connection;
@@ -157,12 +227,28 @@ public partial class CharacterScreen : Control
         await connection.DisposeAsync();
     }
 
-    private async Task AutoLogin(string host, string account, int port)
+    private async Task AutoLogin(string host, string account, int port, int? enterSlot, int staySeconds)
     {
         bool ok = await ListCharacters(host, port, account, OS.GetEnvironment("DAOC_PASSWORD"));
         GD.Print(_status.Text);
         for (int i = 0; i < _characters.ItemCount; i++)
             GD.Print($"  {_characters.GetItemText(i)}");
+
+        if (ok && enterSlot is int slot)
+        {
+            ok = await EnterWorld(slot);
+            if (!ok)
+                GD.Print(_status.Text);
+        }
+
+        if (ok && _world is not null)
+        {
+            await ToSignal(GetTree().CreateTimer(staySeconds), SceneTreeTimer.SignalName.Timeout);
+            ok = _world.ClosedReason is null;
+            GD.Print($"in world {staySeconds} s: {_world.Packets} packets, {_world.Pings} ping replies, " +
+                     (ok ? "still connected" : $"disconnected: {_world.ClosedReason}"));
+        }
+
         await Disconnect();
         GetTree().Quit(ok ? 0 : 1);
     }

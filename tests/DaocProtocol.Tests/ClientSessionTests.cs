@@ -3,6 +3,7 @@
 using DaocProtocol.Net;
 using DaocProtocol.Packets;
 using DaocProtocol.Session;
+using DaocProtocol.World;
 
 namespace DaocProtocol.Tests;
 
@@ -147,6 +148,66 @@ public class ClientSessionTests
         }
 
         Assert.DoesNotContain(server.Received, p => p.Code == CharacterCreateRequest.Code);
+    }
+
+    /// <summary>Recorded world entry: 9D → B1 + 29, D4 → the burst from C5 to 4E (packets 10–36), BF → 2D (packet 237).</summary>
+    private static ServerPacket[]? WorldEntry(ClientPacket p) => p.Code switch
+    {
+        RegionListRequest.Code => [Recorded[7], Recorded[8]],
+        WorldInitRequest.Code => [.. Recorded[10..37]],
+        GameOpenRequest.Code => [Recorded[237]],
+        PingRequest.Code => [Ping],
+        _ => null,
+    };
+
+    [Fact]
+    public async Task EntersTheWorldAndKeepsTheSessionAlive()
+    {
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await session.GetCharactersAsync(Realm.Albion);
+
+            WorldPosition world = await session.EnterWorldAsync(Realm.Albion, slot: 0);
+            Assert.Equal(SessionState.InWorld, session.State);
+            Assert.Equal((560871f, 511685f, 2344f), (world.Position.X, world.Position.Y, world.Position.Z));
+            Assert.Equal("Camelot Hills", world.Zone.Name);
+
+            session.PositionInterval = TimeSpan.FromMilliseconds(50);
+            session.PingInterval = TimeSpan.FromMilliseconds(200);
+            using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(600));
+            await session.KeepAliveAsync(stop.Token);
+        }
+
+        Assert.Null(server.Error);
+        Assert.Equal(new byte[] { 0x9D, 0x10, 0xD4, 0xE8, 0xBF }, server.Received.Skip(5).Take(5).Select(p => p.Code));
+
+        byte[] expected = PositionUpdate.Payload(560871f, 511685f, 2344f, sessionId: 1, objectId: 0, zoneId: 0, heading: 1512);
+        List<ClientPacket> updates = server.Received.Where(p => p.Code == PositionUpdate.Code).ToList();
+        Assert.InRange(updates.Count, 5, 20);
+        Assert.All(updates, u => Assert.Equal(expected, u.Payload));
+        Assert.InRange(server.Received.Count(p => p.Code == PingRequest.Code), 2, 6);
+    }
+
+    [Fact]
+    public async Task EnterWorldNeedsTheRealmListedLast()
+    {
+        await using var server = new FakeServer(Recording());
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await session.GetCharactersAsync(Realm.Albion);
+            await Assert.ThrowsAsync<ArgumentException>(() => session.EnterWorldAsync(Realm.Albion, slot: 4));   // empty
+            await Assert.ThrowsAsync<ArgumentException>(() => session.EnterWorldAsync(Realm.Midgard, slot: 0));  // not listed
+            await Assert.ThrowsAsync<InvalidOperationException>(() => session.KeepAliveAsync(CancellationToken.None));
+        }
+
+        Assert.DoesNotContain(server.Received, p => p.Code == RegionListRequest.Code);
     }
 
     [Fact]

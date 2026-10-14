@@ -162,12 +162,8 @@ public static class CharacterCreateRequest
         string name = character.Name;
         if (name.Length < 3 || !char.IsAsciiLetterUpper(name[0]) || !name.All(char.IsAsciiLetter))
             throw new ArgumentException($"Name '{name}' must be 3+ ASCII letters starting with a capital.", nameof(character));
-        if (character.Realm == Realm.None)
-            throw new ArgumentException("A character needs a realm.", nameof(character));
-        CheckSlot(character.Slot);
-
         CharacterStats s = character.Stats;
-        return Body(WireSlot(character.Realm, character.Slot), name, OperationCreate)
+        return Body(CharacterSlot.ToWire(character.Realm, character.Slot), name, OperationCreate)
             .U8(character.ClassId)
             .U8((byte)character.Realm)
             .U8((byte)((character.Race & 0x1F) | (character.Female ? 0x80 : 0)))
@@ -189,22 +185,9 @@ public static class CharacterCreateRequest
     /// </summary>
     public static byte[] DeletePayload(Realm accountRealm, int slot)
     {
-        if (accountRealm == Realm.None)
-            throw new ArgumentException("The account's realm is needed to address the slot.", nameof(accountRealm));
-        CheckSlot(slot);
-
-        return Body(WireSlot(accountRealm, slot), string.Empty, OperationDelete)
+        return Body(CharacterSlot.ToWire(accountRealm, slot), string.Empty, OperationDelete)
             .Zeros(1 + 1 + 1 + 2 + 8 + 43 + 1 + 1) // class, realm, race, model, stats, fill, new con, end
             .ToArray();
-    }
-
-    /// <summary>The client numbers slots across realms: Albion 0–9, Midgard 10–19, Hibernia 20–29.</summary>
-    private static byte WireSlot(Realm realm, int slot) => (byte)(((byte)realm - 1) * CharacterOverview.SlotsPerRealm + slot);
-
-    private static void CheckSlot(int slot)
-    {
-        if (slot is < 0 or >= CharacterOverview.SlotsPerRealm)
-            throw new ArgumentOutOfRangeException(nameof(slot), slot, "Slot must be 0–9.");
     }
 
     private static PayloadWriter Body(byte wireSlot, string name, byte operation) =>

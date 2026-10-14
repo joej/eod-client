@@ -26,6 +26,27 @@ public sealed class PayloadWriter
         return Bytes(buffer);
     }
 
+    public PayloadWriter U16BE(ushort value)
+    {
+        Span<byte> buffer = stackalloc byte[2];
+        BinaryPrimitives.WriteUInt16BigEndian(buffer, value);
+        return Bytes(buffer);
+    }
+
+    public PayloadWriter U32BE(uint value)
+    {
+        Span<byte> buffer = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(buffer, value);
+        return Bytes(buffer);
+    }
+
+    public PayloadWriter F32LE(float value)
+    {
+        Span<byte> buffer = stackalloc byte[4];
+        BinaryPrimitives.WriteSingleLittleEndian(buffer, value);
+        return Bytes(buffer);
+    }
+
     public PayloadWriter U32LE(uint value)
     {
         Span<byte> buffer = stackalloc byte[4];

@@ -1,0 +1,484 @@
+# Zones from OpenDAoC-Database (GPL-3.0), opendaoc-db-core/zones.sql @ 98738ab (2026-09-29),
+# identical to the zones table in our pinned server image. Offsets and sizes are in units of
+# 8192 region coordinates. Columns: zone, region, offsetX, offsetY, width, height, name
+0	1	67	59	8	8	Camelot Hills
+1	1	67	67	8	8	Salisbury Plains
+2	1	59	53	8	8	Black Mtns. South
+3	1	59	45	8	8	Black Mtns. North
+4	1	43	85	8	8	Dartmoor
+6	1	43	77	8	8	Cornwall
+7	1	51	45	8	8	Llyn Barfog
+8	1	59	71	8	8	Campacorentin Forest
+9	1	51	75	8	8	Avalon Marsh
+10	1	35	77	8	8	Lyonesse
+11	1	69	51	8	8	Forest Sauvage
+12	1	61	37	8	8	Snowdonia
+14	1	69	43	8	8	Pennine Mountains
+15	1	73	35	8	8	Hadrian's Wall
+13	2	64	64	8	8	Caerwent
+16	2	64	72	8	8	Old Sarum
+17	2	64	56	8	8	Rilan
+18	2	56	64	8	8	Dalton
+20	2	56	56	8	8	Brisworthy
+64	2	56	72	8	8	Aylesbury
+260	2	48	64	8	8	Chiltern
+261	2	48	72	8	8	Sherborne
+262	2	48	56	8	8	Stoneleigh
+26	10	1	1	8	8	City of Camelot
+19	20	1	1	8	8	Stonehenge Barrows
+21	21	1	1	8	8	Tomb of Mithra
+22	22	1	1	8	8	Keltoi Fogou
+23	23	1	1	8	8	Catacombs of Cardova
+24	24	1	1	8	8	Tepok's Mine
+27	27	8	8	8	8	Constantine's Sound
+28	27	24	24	8	8	Grenlock's Sound
+29	27	40	40	8	8	Lamfhota's Sound
+30	30	32	64	8	8	Oceanus Hesperos
+31	30	40	64	8	8	Mesothalassa
+32	30	40	56	8	8	Oceanus Boreal
+33	30	40	72	8	8	Oceanus Notos
+34	30	48	64	8	8	Oceanus Anatole
+38	30	36	48	8	8	Stygian Delta
+39	30	28	48	8	8	Land of Atum
+41	30	56	64	8	8	Typhon's Reach
+42	30	64	64	8	8	Ashen Isles
+43	30	44	80	8	8	Green Glades
+44	30	52	80	8	8	Arbor Glen
+35	35	1	1	8	8	Cetus' Pit
+36	36	1	1	8	8	Sobekite Eternal
+37	37	1	1	8	8	Temple of Twilight
+40	40	1	1	8	8	Halls of Ma'ati
+45	45	1	1	8	8	the Great Pyramid of Stygia
+46	46	1	1	8	8	Deep Volcanus
+47	47	1	1	8	8	City of Aerus
+48	48	1	1	8	8	Unused Mine
+49	49	1	1	8	8	Rugnog's Haven
+50	50	1	1	8	8	Avalon City
+51	51	60	60	8	8	Isle of Glass
+52	51	52	54	8	8	Avalon Isle
+53	51	46	46	8	8	Dales of Devwy
+54	51	38	44	8	8	Caldey
+55	51	36	52	8	8	Gwyddneau
+56	51	44	58	8	8	Aldland
+57	51	28	52	8	8	Inishail Island
+58	58	1	1	8	8	Midgard's Underground Forest
+59	59	1	1	8	8	Albion's Glashtin Forges
+60	60	1	1	8	8	Caer Sidi
+61	61	1	1	8	8	Krondon
+62	62	1	1	8	8	Crystal Cave
+63	63	1	1	8	8	Roman Aqueducts
+65	65	1	1	8	8	Inconnu Crypt
+66	66	1	1	8	8	Albion's Underground Forest
+67	67	1	1	8	8	The Deadlands of Annwn
+68	68	1	1	8	8	Lower Crypt
+69	69	1	1	8	8	Albion's Darkspire
+70	70	64	64	8	8	Ruins of Atlantis
+71	71	64	64	8	8	Ruinerar av Atlantis
+72	72	64	64	8	8	Scrios de Atlantis
+73	73	32	64	8	8	Oceanus Hesperos
+74	73	40	64	8	8	Mesothalassa
+75	73	40	56	8	8	Oceanus Boreal
+76	73	40	72	8	8	Oceanus Notos
+77	73	48	64	8	8	Oceanus Anatole
+81	73	36	48	8	8	Stygian Delta
+82	73	28	48	8	8	Land of Atum
+84	73	56	64	8	8	Typhon's Reach
+85	73	64	64	8	8	Ashen Isles
+86	73	44	80	8	8	Green Glades
+87	73	52	80	8	8	Arbor Glen
+78	78	1	1	8	8	Cetus' Pit
+79	79	1	1	8	8	Sobekite Eternal
+80	80	1	1	8	8	Temple of Twilight
+83	83	1	1	8	8	Halls of Ma'ati
+88	88	1	1	8	8	the Great Pyramid of Stygia
+89	89	1	1	8	8	Deep Volcanus
+90	90	1	1	8	8	City of Aerus
+91	91	1	1	8	8	Celestius
+92	92	1	1	8	8	Veil Rift
+93	93	1	1	8	8	Shar Labyrinth
+94	94	1	1	8	8	The Queen's Labyrinth
+95	95	1	1	8	8	Hibernia's Frontlines
+96	96	1	1	8	8	Hibernia's Underground Forest
+97	97	1	1	8	8	Hibernia's Deadlands
+98	98	1	1	8	8	Hibernia's Darkspire
+99	99	1	1	8	8	Hibernia's Glashtin Forge
+100	100	92	82	8	8	Vale of Mularn
+101	100	88	90	8	8	East Svealand
+102	100	80	90	8	8	West Svealand
+103	100	88	98	8	8	Gotar
+104	100	100	78	8	8	Muspelheim
+105	100	92	106	8	8	Myrkwood Forest
+106	100	84	110	8	8	Skona Ravine
+107	100	76	106	8	8	Vanern Swamp
+108	100	72	90	8	8	Raumarik
+111	100	88	74	8	8	Uppland
+112	100	80	82	8	8	Yggdra Forest
+113	100	80	74	8	8	Jamtland Mountains
+115	100	72	70	8	8	Odin's Gate
+116	100	84	118	8	8	Malmohus
+120	101	1	1	8	8	Jordheim
+114	102	64	64	8	8	Erikstaad
+117	102	64	56	8	8	Arothi
+118	102	72	64	8	8	Carlingford
+119	102	64	72	8	8	Wyndham
+121	102	72	72	8	8	Frisia
+122	102	72	56	8	8	Kaupang
+266	102	80	64	8	8	Holmestrand
+267	102	80	72	8	8	Nittedal
+268	102	80	56	8	8	Stavgaard
+109	109	1	1	8	8	Albion's Frontlines
+123	123	1	1	8	8	Aphophian
+124	124	1	1	8	8	Hephaestian
+125	125	1	1	8	8	Spindelhalla
+126	126	1	1	8	8	Vendo Caverns
+127	127	1	1	8	8	Varulvhamn
+128	128	1	1	8	8	Cursed Tomb
+129	129	1	1	8	8	Nisse's Lair
+130	130	32	64	8	8	Oceanus Hesperos
+131	130	40	64	8	8	Mesothalassa
+132	130	40	56	8	8	Oceanus Boreal
+133	130	40	72	8	8	Oceanus Notos
+134	130	48	64	8	8	Oceanus Anatole
+138	130	36	48	8	8	Stygian Delta
+139	130	28	48	8	8	Land of Atum
+141	130	56	64	8	8	Typhon's Reach
+142	130	64	64	8	8	Ashen Isles
+143	130	44	80	8	8	Green Glades
+144	130	52	80	8	8	Arbor Glen
+157	130	34	22	8	8	Dummy Zone
+135	135	1	1	8	8	Cetus' Pit
+136	136	1	1	8	8	Sobekite Eternal
+137	137	1	1	8	8	Temple of Twilight
+140	140	1	1	8	8	Halls of Ma'ati
+145	145	1	1	8	8	the Great Pyramid of Stygia
+146	146	1	1	8	8	Deep Volcanus
+147	147	1	1	8	8	City of Aerus
+148	148	1	1	8	8	The Frontlines
+149	149	1	1	8	8	Nyttheim
+150	150	1	1	8	8	Trollheim
+151	151	30	38	8	8	Aegir's Landing
+152	151	34	30	8	8	Gripklosa Mountains
+153	151	42	32	8	8	Delling Crater
+154	151	44	40	8	8	Faraheim
+155	151	36	46	8	8	Munin Sound
+156	151	48	48	8	8	Iarnwood
+158	151	52	40	8	8	Modernagrav
+160	160	1	1	8	8	Tuscaran Glacier
+161	161	1	1	8	8	Iarnvidiur's Lair
+162	162	1	1	8	8	Midgard's Deadlands
+163	163	60	52	8	8	Agramon
+164	163	60	60	8	8	Irish Sea
+166	163	68	52	8	8	Unamed Sea 2
+167	163	64	44	8	8	Odin's Gate
+168	163	72	44	8	8	Jamtland Mountains
+169	163	80	44	8	8	Yggdra Forest
+170	163	72	36	8	8	Uppland
+171	163	52	60	8	8	Emain Macha
+172	163	52	68	8	8	Breifine
+173	163	44	68	8	8	Cruachan Gorge
+174	163	52	76	8	8	Mount Collory
+175	163	68	76	8	8	Snowdonia
+176	163	76	68	8	8	Forest Sauvage
+177	163	68	68	8	8	Pennine Mountains
+178	163	68	60	8	8	Hadrian's Wall
+165	165	64	64	8	8	Cathal Valley
+180	180	1	1	8	8	Fomor
+181	181	48	48	8	8	Domnann
+182	181	40	44	8	8	Caillte Garran
+183	181	32	40	8	8	Vale of Balor
+184	181	34	32	8	8	Cothrom Gorge
+185	181	42	28	8	8	World's End
+186	181	46	36	8	8	Vigilant Rock
+187	181	42	20	8	8	Allta Fearann
+188	188	1	1	8	8	Midgard's Darkspire
+189	189	1	1	8	8	Midgard's Glashtin Forges
+190	190	1	1	8	8	Tur Suil
+191	191	1	1	8	8	Galladoria
+192	192	1	1	8	8	Le Sanctuaire Du Haut Consule
+193	193	1	1	8	8	Le Sanctuaire Du Haut Consule
+194	194	1	1	8	8	Le Sanctuaire Du Haut Consule
+195	195	1	1	8	8	Midgard's Otherworld
+196	196	1	1	8	8	Albion's Otherworld
+197	197	1	1	8	8	The Otherworld
+198	198	1	1	8	8	Shaitan
+199	199	1	1	8	8	Volurgon
+200	200	39	59	8	8	Lough Derg
+201	200	39	67	8	8	Silvermine Mts.
+202	200	35	75	8	8	Shannon Estuary
+203	200	27	51	8	8	Cliffs of Moher
+204	200	35	83	8	8	Lough Gur
+205	200	43	87	8	8	Bog of Cullen
+206	200	47	59	8	8	Valley of Bri Leith
+207	200	35	51	8	8	Connacht
+208	200	55	59	8	8	Cursed Forest
+210	200	47	51	8	8	Mount Collory
+211	200	39	43	8	8	Cruachan Gorge
+212	200	47	43	8	8	Breifine
+214	200	51	35	8	8	Emain Macha
+216	200	43	79	8	8	Sheeroe Hills
+209	201	1	1	8	8	Tir na Nog
+213	202	64	64	8	8	Meath
+215	202	56	64	8	8	Dunshire
+217	202	64	72	8	8	Torrylin
+218	202	72	64	8	8	Kilcullen
+219	202	56	72	8	8	Saeranthal
+225	202	72	72	8	8	Aberillan
+272	202	64	80	8	8	Tullamore
+273	202	56	80	8	8	Moycullen
+274	202	72	80	8	8	Broughshane
+220	220	1	1	8	8	Coruscating Mine
+221	221	1	1	8	8	Muire Tomb
+222	222	1	1	8	8	Spraggon Den
+223	223	1	1	8	8	Koalinth Caverns
+224	224	1	1	8	8	Treibh Caillte
+226	226	1	1	8	8	Midgard's Abandoned Mines
+227	227	1	1	8	8	Albion's Abandoned Mines
+228	228	1	1	8	8	Hibernia's Abandoned Mines
+229	229	1	1	8	8	Burial Grounds
+231	231	80	80	8	8	ArtOutside
+232	232	1	1	8	8	ArtInside
+234	234	64	64	8	8	The Proving Grounds
+235	235	64	64	8	8	The Lions Den
+236	236	64	64	8	8	The Hills of Claret
+237	237	64	64	8	8	Killaloe
+238	238	64	64	8	8	Thidranki
+239	239	64	64	8	8	Braemar
+240	240	64	64	8	8	Wilton
+241	241	64	64	8	8	Molvik
+242	242	64	64	8	8	TestBG
+254	242	32	32	8	8	Leirvik
+243	243	1	1	8	8	Kobold Undercity
+244	244	1	1	8	8	Passage of Conflict
+245	245	1	1	8	8	Hall of the Corrupt
+246	246	1	1	8	8	Dodens Gruva
+247	247	1	1	8	8	Marfach Caverns
+248	248	1	1	8	8	Summoner's Hall
+249	249	1	1	8	8	Darkness Falls
+250	250	1	1	8	8	Caledon
+251	251	1	1	8	8	Murdaigean
+252	252	1	1	8	8	Thidranki
+253	253	1	1	8	8	Abermenai
+256	256	1	1	8	8	Forgotten Mines
+257	257	1	1	8	8	Forgotten Mines
+258	258	1	1	8	8	Forgotten Mines
+276	276	1	1	8	8	Marfach Cavern
+277	277	1	1	8	8	Hall of the Corrupt
+278	278	1	1	8	8	Damp Cavern
+279	279	1	1	8	8	Damp Cavern
+280	280	1	1	8	8	Damp Cavern
+281	281	1	1	8	8	Forgotten Sepulchre
+282	282	1	1	8	8	Forgotten Sepulchre
+283	283	1	1	8	8	Forgotten Sepulchre
+284	284	1	1	8	8	Concealed Guardhouse
+285	285	1	1	8	8	Concealed Guardhouse
+286	286	1	1	8	8	Concealed Guardhouse
+287	287	1	1	8	8	The Gossamer Grotto
+288	288	1	1	8	8	The Gossamer Grotto
+289	289	1	1	8	8	The Gossamer Grotto
+290	290	1	1	8	8	Underground Tunnel
+291	291	1	1	8	8	Underground Tunnel
+292	292	1	1	8	8	Underground Tunnel
+293	293	1	1	8	8	Burial Tomb
+294	294	1	1	8	8	Burial Tomb
+295	295	1	1	8	8	Burial Tomb
+296	296	1	1	8	8	Desecrated Grounds
+297	297	1	1	8	8	Desecrated Grounds
+298	298	1	1	8	8	Desecrated Grounds
+300	300	1	1	8	8	Damp Cavern
+301	301	1	1	8	8	Damp Cavern
+302	302	1	1	8	8	Damp Cavern
+303	303	1	1	8	8	Damp Cavern
+304	304	1	1	8	8	Damp Cavern
+305	305	1	1	8	8	Forgotten Sepulchre
+306	306	1	1	8	8	Forgotten Sepulchre
+307	307	1	1	8	8	Forgotten Sepulchre
+308	308	1	1	8	8	Forgotten Sepulchre
+309	309	1	1	8	8	Forgotten Sepulchre
+310	310	1	1	8	8	Concealed Guardhouse
+311	311	1	1	8	8	Concealed Guardhouse
+312	312	1	1	8	8	Concealed Guardhouse
+313	313	1	1	8	8	Concealed Guardhouse
+314	314	1	1	8	8	Concealed Guardhouse
+315	315	1	1	8	8	The Gossamer Grotto
+316	316	1	1	8	8	The Gossamer Grotto
+317	317	1	1	8	8	The Gossamer Grotto
+318	318	1	1	8	8	The Gossamer Grotto
+319	319	1	1	8	8	The Gossamer Grotto
+320	320	1	1	8	8	Underground Tunnel
+321	321	1	1	8	8	Underground Tunnel
+322	322	1	1	8	8	Underground Tunnel
+323	323	1	1	8	8	Underground Tunnel
+324	324	1	1	8	8	Underground Tunnel
+325	325	1	1	8	8	Hib 30 Dungeon
+326	326	1	1	8	8	Alb 30 Dungeon
+327	327	1	1	8	8	Caverns of Madness
+328	328	1	1	8	8	Mid 30 Dungeon
+329	329	1	1	8	8	Jarlsberg's Hideout
+330	330	1	1	8	8	Albion Event
+331	331	1	1	8	8	Thieves Den
+332	332	1	1	8	8	Rebel Half Orc Lair
+333	333	1	1	8	8	The Haunted Halls
+334	334	1	1	8	8	Midgard Event
+335	335	1	1	8	8	Hibernia Event
+336	336	1	1	8	8	Demonic Prison
+337	337	1	1	8	8	Demonic Prison
+338	338	1	1	8	8	Demonic Prison
+339	339	1	1	8	8	Brimstone Caverns
+340	340	1	1	8	8	Halls of Helgardh
+341	341	1	1	8	8	Cave of Cruachan
+342	342	1	1	8	8	Mid Launch 2
+343	343	1	1	8	8	Alb Launch 2
+344	344	1	1	8	8	Hib Launch 2
+345	345	1	1	8	8	Tomte Prison
+346	346	1	1	8	8	Nisse's Retreat
+347	347	1	1	8	8	Lair of the Demon Lord
+348	348	1	1	8	8	The Baron's Gaol
+349	349	1	1	8	8	Lios's Eternal Rest
+350	350	1	1	8	8	Liche's Unrest
+351	351	1	1	8	8	Nephraal's Gaol
+352	352	1	1	8	8	Morfesa's Gaol
+353	353	1	1	8	8	Den of Bones
+354	354	1	1	8	8	The Lost Burrow
+355	355	1	1	8	8	Hib 45 Dungeon
+356	356	1	1	8	8	Alb 45 Dungeon
+357	357	1	1	8	8	The Cursed Lair
+358	358	1	1	8	8	The Burrow
+359	359	1	1	8	8	Mid 45 Dungeon
+360	360	1	1	8	8	King Eirik's Throne Room
+361	361	1	1	8	8	Arachnid's Labyrinth
+362	362	1	1	8	8	The Master's Lair
+363	363	1	1	8	8	Anataeus' Sanctuary
+364	364	1	1	8	8	Keeper Iraeda's Sanctuary
+365	365	1	1	8	8	Bandit Lair
+366	366	1	1	8	8	Gnoll Lair
+367	367	1	1	8	8	Vandr's Bane
+368	368	1	1	8	8	Past and Present
+369	369	1	1	8	8	Half-Orc Camp
+370	370	1	1	8	8	Brutal Realization
+371	371	1	1	8	8	History Repeats Itself
+372	372	1	1	8	8	Hounds of Arawn
+373	373	1	1	8	8	Passage of Echoes
+374	374	1	1	8	8	Unrestful Tomb
+375	375	1	1	8	8	Lost Passages
+376	376	1	1	8	8	Goblin's Cookery
+377	377	1	1	8	8	The Beastmaster's Den
+378	378	1	1	8	8	Keeper Garran's Sanctuary
+379	379	1	1	8	8	The Funerary Hall
+380	380	1	1	8	8	Lair of Doom
+381	381	1	1	8	8	The Arena
+382	382	1	1	8	8	The Funerary Hall
+383	383	1	1	8	8	The Funerary Hall
+384	384	1	1	8	8	The Ritual Hall
+385	385	1	1	8	8	The Betrayer's Den
+386	386	1	1	8	8	the Sundered Tombs
+387	387	1	1	8	8	the Sundered Tombs
+388	388	1	1	8	8	the Sundered Tombs
+389	389	1	1	8	8	Shafts of the Tenebrae
+390	390	1	1	8	8	Lair of the Exiled
+391	391	1	1	8	8	La Tour des Arcanes ALB
+392	392	1	1	8	8	The Hall of Reawakening
+393	393	1	1	8	8	The Hidden Crypt
+394	394	1	1	8	8	King Constantine's Throne Room
+395	395	1	1	8	8	King Lamfhotas' Throne Room
+396	396	1	1	8	8	Depths of Despair
+397	397	1	1	8	8	the Realm of the Damned
+398	398	1	1	8	8	La Tour des Arcanes MID
+399	399	1	1	8	8	La Tour des Arcanes HIB
+400	400	1	1	8	8	Burial Tomb
+401	401	1	1	8	8	Burial Tomb
+402	402	1	1	8	8	Burial Tomb
+403	403	1	1	8	8	Burial Tomb
+404	404	1	1	8	8	Burial Tomb
+405	405	1	1	8	8	Desecrated Grounds
+406	406	1	1	8	8	Desecrated Grounds
+407	407	1	1	8	8	Desecrated Grounds
+408	408	1	1	8	8	Desecrated Grounds
+409	409	1	1	8	8	Desecrated Grounds
+410	410	1	1	8	8	Forgotten Mines
+411	411	1	1	8	8	Forgotten Mines
+412	412	1	1	8	8	Forgotten Mines
+413	413	1	1	8	8	Forgotten Mines
+414	414	1	1	8	8	Forgotten Mines
+415	415	1	1	8	8	The Funerary Hall
+416	416	1	1	8	8	The Funerary Hall
+417	417	1	1	8	8	The Funerary Hall
+418	418	1	1	8	8	The Funerary Hall
+419	419	1	1	8	8	The Funerary Hall
+420	420	1	1	8	8	the Sundered Tombs
+421	421	1	1	8	8	the Sundered Tombs
+422	422	1	1	8	8	the Sundered Tombs
+423	423	1	1	8	8	the Sundered Tombs
+424	424	1	1	8	8	the Sundered Tombs
+425	425	1	1	8	8	The Lost Wing
+426	426	1	1	8	8	Deliah's Sanctuary
+427	427	1	1	8	8	The Cursed Barrow
+428	428	1	1	8	8	The Cursed Barrow
+429	429	1	1	8	8	Snyblem's Lair
+430	430	1	1	8	8	the Plutonian Shore
+431	431	1	1	8	8	The Cursed Barrow
+432	432	1	1	8	8	Dismal Grotto
+433	433	1	1	8	8	Snarg's Grotto
+434	434	1	1	8	8	Maze of Tribulation
+435	435	1	1	8	8	The Smelting Pot
+436	436	1	1	8	8	Forges of Flame
+437	437	1	1	8	8	Hammer Hugak's Smithy
+438	438	1	1	8	8	the Goblin Workshop
+439	439	1	1	8	8	Wolak's Crucible
+440	440	1	1	8	8	Marik's Workroom
+441	441	1	1	8	8	Dismal Grotto
+442	442	1	1	8	8	The Steward's Crypt
+443	443	1	1	8	8	Serf's Folly
+444	444	1	1	8	8	Dismal Grotto
+445	445	1	1	8	8	Dark Cavern
+446	446	1	1	8	8	Blathnait's Refuge
+447	447	1	1	8	8	Broken Mirrors
+448	448	1	1	8	8	Dark Cavern
+449	449	1	1	8	8	Dark Cavern
+450	450	1	1	8	8	The Cursed Barrow
+451	451	1	1	8	8	The Cursed Barrow
+452	452	1	1	8	8	The Cursed Barrow
+453	453	1	1	8	8	The Cursed Barrow
+454	454	1	1	8	8	The Cursed Barrow
+455	455	1	1	8	8	Dismal Grotto
+456	456	1	1	8	8	Dismal Grotto
+457	457	1	1	8	8	Dismal Grotto
+458	458	1	1	8	8	Dismal Grotto
+459	459	1	1	8	8	Dismal Grotto
+460	460	1	1	8	8	The Accursed Caves
+461	461	1	1	8	8	The Accursed Caves
+462	462	1	1	8	8	The Accursed Caves
+463	463	1	1	8	8	The Accursed Caves
+464	464	1	1	8	8	The Accursed Caves
+465	465	1	1	8	8	Dark Cavern
+466	466	1	1	8	8	Dark Cavern
+467	467	1	1	8	8	Dark Cavern
+468	468	1	1	8	8	Dark Cavern
+469	469	1	1	8	8	Dark Cavern
+470	470	1	1	8	8	Half Orc Command Post
+471	471	1	1	8	8	Unused Mine
+472	472	1	1	8	8	Unused Mine
+473	473	1	1	8	8	Unused Mine
+474	474	1	1	8	8	Unused Mine
+475	475	1	1	8	8	Rise of the Spraggons
+476	476	1	1	8	8	The Warrens
+477	477	1	1	8	8	The Accursed Caves
+478	478	1	1	8	8	The Accursed Caves
+479	479	1	1	8	8	The Ancient's Retreat
+480	480	1	1	8	8	The Shaman's Inner Sanctum
+481	481	1	1	8	8	The Accursed Caves
+482	482	1	1	8	8	Unused Mine
+483	483	1	1	8	8	The Brawler's Den
+484	484	1	1	8	8	Felena's Sorrow
+485	485	1	1	8	8	Unused Mine
+486	486	1	1	8	8	Unused Mine
+487	487	1	1	8	8	The Pit of Despair
+488	488	1	1	8	8	The Forgotten Vein
+489	489	1	1	8	8	Demons breach
+491	491	1	1	8	8	Maze of Madness
+492	492	1	1	8	8	the Shattered Lands
+494	494	1	1	8	8	the Gnolls Den
+495	495	1	1	8	8	Inner Sanctum
+496	496	1	1	8	8	the Deep
+497	497	1	1	8	8	Mid Launch
+498	498	1	1	8	8	Alb Launch
+499	499	1	1	8	8	Hib Launch

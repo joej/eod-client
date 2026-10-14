@@ -2,6 +2,7 @@
 
 using DaocProtocol.Net;
 using DaocProtocol.Packets;
+using DaocProtocol.World;
 
 namespace DaocProtocol.Session;
 
@@ -13,7 +14,12 @@ public enum SessionState
     LoggedIn,
     /// <summary>Session id assigned; characters can be listed, created and deleted.</summary>
     CharacterScreen,
+    /// <summary>A character is in the world; keep the session alive with <see cref="ClientSession.KeepAliveAsync"/>.</summary>
+    InWorld,
 }
+
+/// <summary>Where a character entered the world.</summary>
+public sealed record WorldPosition(PositionAndObjectId Position, Zone Zone);
 
 /// <param name="Granted">Set when the server accepted the login.</param>
 /// <param name="Error">Set when it refused.</param>
@@ -31,11 +37,21 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
 {
     private readonly ClientVersion _version = version ?? ClientVersion.V1127e;
     private readonly Dictionary<Realm, CharacterOverview> _overviews = [];
+    private Realm _lastListedRealm;
 
     /// <summary>How long to wait for each reply before throwing <see cref="TimeoutException"/>.</summary>
     public TimeSpan ReplyTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
     public SessionState State { get; private set; } = SessionState.Connected;
+
+    /// <summary>Set by <see cref="EnterWorldAsync"/>.</summary>
+    public WorldPosition? World { get; private set; }
+
+    /// <summary>How often <see cref="KeepAliveAsync"/> sends 0xA9. The server marks a player link-dead after 5 s without one.</summary>
+    public TimeSpan PositionInterval { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>How often <see cref="KeepAliveAsync"/> sends 0xA3. The server disconnects after 150 s without one.</summary>
+    public TimeSpan PingInterval { get; set; } = TimeSpan.FromSeconds(10);
 
     /// <summary>The account's realm from the last 0xFE; <see cref="Realm.None"/> = not chosen yet or all realms allowed.</summary>
     public Realm AccountRealm { get; private set; }
@@ -82,6 +98,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         await connection.SendAsync(CharacterOverviewRequest.Code, CharacterOverviewRequest.Payload(realm), cancellationToken).ConfigureAwait(false);
         CharacterOverview overview = CharacterOverview.Parse((await ExpectAsync(cancellationToken, CharacterOverview.Code).ConfigureAwait(false)).Payload);
         _overviews[realm] = overview;
+        _lastListedRealm = realm;
         if (AccountRealm == Realm.None)
             AccountRealm = realm;
         return overview;
@@ -113,6 +130,69 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         await connection.SendAsync(CharacterCreateRequest.Code, CharacterCreateRequest.DeletePayload(realm, slot), cancellationToken).ConfigureAwait(false);
         await ExpectAsync(cancellationToken, LoginGranted.Code).ConfigureAwait(false);
         return await GetCharactersAsync(realm, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Enters the world with the character in <paramref name="slot"/>: 0x9D → 0xB1, 0x10 → 0x28,
+    /// 0xD4 → burst with 0x20 … 0x4E, then 0xE8 and 0xBF → 0x2D. The realm must be the one listed
+    /// last: the server converts the slot with the account's current realm, which that listing set.
+    /// </summary>
+    public async Task<WorldPosition> EnterWorldAsync(Realm realm, int slot, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.CharacterScreen);
+        if (realm != _lastListedRealm || !_overviews[realm].Characters.Any(c => c.Slot == slot))
+            throw new ArgumentException($"Slot {slot} in {realm} is empty, or {realm} wasn't the realm listed last.", nameof(slot));
+
+        await connection.SendAsync(RegionListRequest.Code, RegionListRequest.Payload(realm, slot), cancellationToken).ConfigureAwait(false);
+        await ExpectAsync(cancellationToken, RegionListRequest.ReplyCode).ConfigureAwait(false);
+
+        await connection.SendAsync(CharacterSelectRequest.Code, CharacterSelectRequest.Payload(), cancellationToken).ConfigureAwait(false);
+        await ExpectAsync(cancellationToken, SessionId.Code).ConfigureAwait(false);
+
+        await connection.SendAsync(WorldInitRequest.Code, WorldInitRequest.Payload(realm, slot), cancellationToken).ConfigureAwait(false);
+        PositionAndObjectId position = PositionAndObjectId.Parse((await ExpectAsync(cancellationToken, PositionAndObjectId.Code).ConfigureAwait(false)).Payload);
+        await ExpectAsync(cancellationToken, WorldInitRequest.EndOfBurstCode).ConfigureAwait(false);
+
+        await connection.SendAsync(PlayerInitRequest.Code, PlayerInitRequest.Payload(), cancellationToken).ConfigureAwait(false);
+        await connection.SendAsync(GameOpenRequest.Code, GameOpenRequest.Payload(), cancellationToken).ConfigureAwait(false);
+        await ExpectAsync(cancellationToken, GameOpenRequest.ReplyCode).ConfigureAwait(false);
+
+        // Position updates must name a zone the server knows, or it kicks the player.
+        Zone zone = Zones.Find(position.RegionId, position.X, position.Y)
+            ?? throw new InvalidDataException($"No zone in region {position.RegionId} contains ({position.X}, {position.Y}).");
+        World = new WorldPosition(position, zone);
+        State = SessionState.InWorld;
+        return World;
+    }
+
+    /// <summary>
+    /// Sends 0xA9 (standing still at the entry position) every <see cref="PositionInterval"/> and
+    /// 0xA3 every <see cref="PingInterval"/> until cancelled. It only sends: the caller keeps
+    /// draining incoming packets (<see cref="DaocConnection.TryReceive"/> or ReceiveAsync).
+    /// </summary>
+    public async Task KeepAliveAsync(CancellationToken cancellationToken)
+    {
+        Require(SessionState.InWorld);
+        PositionAndObjectId p = World!.Position;
+        byte[] position = PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, World.Zone.Id, p.Heading);
+        DateTime nextPing = DateTime.UtcNow;
+        using var timer = new PeriodicTimer(PositionInterval);
+        try
+        {
+            do
+            {
+                await connection.SendAsync(PositionUpdate.Code, position, cancellationToken).ConfigureAwait(false);
+                if (DateTime.UtcNow >= nextPing)
+                {
+                    await connection.SendAsync(PingRequest.Code, PingRequest.Payload((uint)Environment.TickCount), cancellationToken).ConfigureAwait(false);
+                    nextPing = DateTime.UtcNow + PingInterval;
+                }
+            }
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
     }
 
     private void Require(SessionState state)

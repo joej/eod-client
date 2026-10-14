@@ -125,6 +125,29 @@ payloads with a port of the server's reader.
 - Login 0x2A server type: 1 when `allow_all_realms` is on (or GM/admin), otherwise 7 (1.127's
   replacement for 0; see open question C9). Overview flag bit 0 = all realms allowed.
 
+**World entry (1.127, verified live 2026-10-14; `Packets/WorldPackets.cs`, `ClientSession.EnterWorldAsync`):**
+- 0x10 never carries a name on 1.127. The character is chosen by slot (cross-realm numbering, as
+  for create) in 0x9D RegionListRequest (→ 0xB1; server reads only the slot byte) and 0xD4
+  WorldInitRequest. 0xD4 converts the slot with the account's current realm, so list that realm last.
+- Our order: 9D → B1, 10 → 28, D4 → burst containing 0x20 PositionAndObjectID and ending with
+  0x4E ControlledHorse, then E8 PlayerInit and BF GameOpen → 0x2D. (The recorded client sent E8
+  and BF right after D4; OpenDAoC's 0xD4 handler is async, so we wait for the burst.)
+- 0x20 (1.124+): x, y, z f32 LE, object id u16 BE, heading u16 BE, dungeon offsets 2 × u16,
+  region (skin) u16, flags u8 (0x80 diving), then 5 bytes. Live: Eodarms at (574797, 530161, 2896),
+  region 1, heading 3116 = DB Direction 7212 & 0x0FFF.
+- 0xA9 (1.127, 40 bytes): x, y, z, speed, vertical speed f32 LE; session, object id, zone u16 BE;
+  state flags, unknown; falling damage, heading u16 BE; action flags; 2 unknown; health %; 4 zero.
+  All 92 recorded 0xA9 rebuild byte for byte. The zone must exist or the server kicks to the
+  character screen; we look it up in `World/zones.tsv` (OpenDAoC-Database, GPL).
+- 0xA3 ping: 4 skipped bytes, u32 BE timestamp, 4 zero. 0x29 reply echoes it, then sequence + 1.
+- Timeouts (OpenDAoC source): link death after 5 s without 0xA9, disconnect after 150 s without
+  0xA3. `KeepAliveAsync` sends 0xA9 every 1 s and 0xA3 every 10 s (our choice; retail rates unknown).
+  Live 2026-10-14 (`DaocCli --enter 0 --stay 330`): 330 s in world, 31/31 pings answered, ~23
+  packets/s received (mostly 0xA1 NPC updates), no link death until we closed the socket.
+- Leaving: closing the socket makes the character link-dead for 60 s, and logging in meanwhile
+  is refused with AccountIsInLogoutProcedure. A clean logout is the `/quit` command (0xAF), which
+  starts a server-side quit timer that ends with S→C 0xA4. Not implemented yet (Gate 4).
+
 The source comments show each modern opcode as `old ^ 0xA8` (e.g. 0xA9 = 0x01 ^ 168).
 That is why the original plan's 0x01 and 0x40 were wrong: they are the pre-remap values.
 
@@ -213,12 +236,9 @@ float headingRadians = (heading / 4096f) * 2f * Mathf.Pi;
 For MVC: scale region-global coords down (e.g. /100) for Godot units. Tune from there.
 
 ### Position Heartbeat
-Send 0xA9 PositionUpdate regularly even when idle. The original plan's ~30s
-disconnect figure is unverified; find the actual timeout in OpenDAOC
-(link-death / client timeout settings).
-Implement a timer sending this packet even when the character is not moving.
-This must be one of the first things implemented after zone entry — mysterious
-disconnections shortly after zone entry are most likely this.
+Implemented (`ClientSession.KeepAliveAsync`): 0xA9 every 1 s even when idle, 0xA3 every 10 s.
+OpenDAoC marks a player link-dead after 5 s without 0xA9 and disconnects after 150 s without
+0xA3 (see World entry above).
 
 ---
 
@@ -243,9 +263,12 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │   │   │                          #   TryReceive (per-frame polling); serialised sends
 │   │   └── PacketLog.cs           # ✓ per-connection logger, Sink + Hex; never hex-logs 0xA7
 │   ├── Packets/                   # ✓ ClientVersion, LoginPackets, CharacterPackets (0x10, 0x28,
-│   │                              #   0xFC/0xFE overview, 0xFF create/delete), more per opcode
+│   │                              #   0xFC/0xFE overview, 0xFF create/delete), WorldPackets
+│   │                              #   (0x9D, 0xD4, 0xE8, 0xBF, 0x20, 0xA9, 0xA3/0x29)
+│   ├── World/                     # ✓ Zones.cs + zones.tsv (embedded; OpenDAoC-Database, GPL)
 │   └── Session/
-│       └── ClientSession.cs       # ✓ login → character screen → list/create/delete; reply timeout
+│       └── ClientSession.cs       # ✓ login → character screen → list/create/delete → world;
+│                                  #   KeepAliveAsync; reply timeout
 ├── tests/DaocProtocol.Tests/      # net10.0 xUnit; Fixtures/ holds the RustDAoC 1.127e capture
 │                                  # (GPL, provenance in Fixtures/README.md). FakeServer: localhost
 │                                  # server replaying recorded replies, for ClientSession tests
@@ -258,9 +281,12 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
     ├── project.godot              # main scene: scenes/Main.tscn
     ├── scenes/Main.tscn           # ✓ root Control with CharacterScreen.cs
     └── scripts/
-        └── CharacterScreen.cs     # ✓ Gate 2 UI built in code: login form, realm, character list,
-                                   #   hex-log toggle. Headless check: DAOC_PASSWORD=… Godot
-                                   #   --headless --path godot -- --autologin <host> <account> [port]
+        ├── CharacterScreen.cs     # ✓ UI built in code: login form, realm, character list, Enter
+        │                          #   world, hex-log toggle. Headless check: DAOC_PASSWORD=… Godot
+        │                          #   --headless --path godot -- --autologin <host> <account> [port]
+        │                          #   [--enter <slot> [--stay <seconds>]]
+        └── WorldView.cs           # ✓ Gate 3: ground, light, camera, capsule at (X, Z, Y)/100 with a
+                                   #   heading nose; drains packets per frame; status overlay
 ```
 
 Rule: nothing under `src/` may reference `GodotSharp`. If protocol code needs
@@ -328,10 +354,10 @@ Gate 2 — Auth through character list:                      (done 2026-10-14)
   ✓ Character names display in Godot UI (seen by the owner in the editor's Run window)
   → SHARE WITH COMMUNITY at this point (OpenDAOC Discord), once it's worth showing
 
-Gate 3 — MVC complete:
-  ✓ Zone entry received
-  ✓ Capsule at correct coordinates
-  ✓ Session stable 5+ minutes (heartbeat working)
+Gate 3 — MVC complete:                                     (done 2026-10-14)
+  ✓ Zone entry received (0x20; Eodarms in Camelot Hills, region 1, zone 0)
+  ✓ Capsule at correct coordinates (seen by the owner in the Godot window)
+  ✓ Session stable 5+ minutes (330 s via DaocCli, 31/31 pings; heartbeat 0xA9 1 s, 0xA3 10 s)
 
 Gate 4 — Publish:
   ✓ Error handling (disconnect, auth failure, timeout)

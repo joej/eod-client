@@ -40,7 +40,10 @@ that server; `RustDAoC capture` = the recorded 1.127e session in `tests/DaocProt
 | L2 | The 1.127e client sends a second 0xF4 with a 256-byte key block; OpenDAoC ignores it. | RustDAoC capture | Open. |
 | L3 | 0xA7 has a 13-byte trailer (`2a`, u32 8, 8 bytes) the server doesn't read. Client id? | RustDAoC capture | Open. |
 | L4 | The 1.127 client sends 0x9D and 0xE8 before 0xBF; ClientSimulator (1.124) never sends 0x9D. | RustDAoC capture | Open. Confirm with our own capture. |
-| L5 | Idle/link-death timeout: the original plan's ~30 s figure is unverified. | plan | Open. Find in OpenDAoC; measure live. |
+| L5 | Idle/link-death timeout: the original plan's ~30 s figure is unverified. | plan | **Answered from source 2026-10-14** (OpenDAoC): no 0xA9 for 5 s → link death (`PlayerMovementComponent.SOFT_LINK_DEATH_THRESHOLD`); no 0xA3 for 150 s → disconnect (`ClientService.HARD_TIMEOUT`); idle kick to the character screen only if `kick_idle_player_status` is on (default off, 60 min). A link-dead character stays in the world 60 s, and logging in meanwhile is refused with AccountIsInLogoutProcedure (seen live). Retail values unknown. |
+| L6 | 0x9D RegionListRequest: the recorded client sends the slot plus 28 bytes (`01 66 4c 21 5f 40 1e 1e 00 ff ff ff ff 0f 03 77 23 01 70 de 10 00 00 05 2d 00 00 08`); the server reads only the slot. | RustDAoC capture | Open. Machine or client info? We send the slot alone. |
+| L7 | 0xA9 from the recorded client: object ID always 0 (the server skips it), heading sometimes has bit 0x1000 set, and the action byte is 0x80 (the server's enum calls it "torch"). | RustDAoC capture | Open. Retail client capture. |
+| L8 | 0x10 is never sent with a character name on 1.127; the character is chosen by slot in 0x9D and 0xD4 (which the server converts with the account's current realm, like delete). | RustDAoC capture, OpenDAoC | Noted. The original plan's "0x10 with the chosen name" was 1.124-era. |
 
 ## Not yet documented anywhere we've found
 

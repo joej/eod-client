@@ -25,6 +25,10 @@ public ref struct PayloadReader(ReadOnlySpan<byte> payload)
 
     public uint U32LE() => BinaryPrimitives.ReadUInt32LittleEndian(Take(4));
 
+    public uint U32BE() => BinaryPrimitives.ReadUInt32BigEndian(Take(4));
+
+    public float F32LE() => BinaryPrimitives.ReadSingleLittleEndian(Take(4));
+
     public void Skip(int count) => Take(count);
 
     /// <summary>
