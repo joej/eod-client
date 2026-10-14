@@ -567,6 +567,25 @@ point that any developer familiar with the existing ecosystem can contribute to.
   converter is step 1. Open question: does the target `game.dll` import d3d8 or d3d9?
   dgVoodoo2 already works. RTX Remix / ReShade are the low-effort options.
 
+## Asset pipeline plan (noted 2026-10-14; after going public)
+
+Owner-run tools under `tools/` that turn the user's own DAoC install into files the Godot client
+loads from a local folder. Output never enters the repo or a release (see "Game client and assets").
+1. **Extract:** C# tool on **DaocClientLib** (dol-leodagan, MIT, C#, last push 2016) unpacks `.mpk`
+   archives: `.nif` meshes, `.kf` animations, `.dds` textures, zone data. Sort static objects
+   (decorations, weapons) apart from skinned ones (characters, monsters): different workflows.
+   DOL's `daoc-mpk-loader` (Java, no license) is reference only.
+2. **Convert to glTF** (Godot imports glTF natively; Godot is meters, Y up — not UE5's cm/FBX):
+   first by driving Blender headless with the **Blender Niftools Addon** (license NOASSERTION:
+   check before depending on it) and a script that triangulates, fixes scale and applies
+   transforms; later maybe a native C# NIF → glTF converter from niftools **`nif.xml`**
+   (GPL-3.0; describes DAoC NIF 4.1.0.12, 4.2.1.0, 4.2.2.0, 10.1.0.0; 2.3/3.03/3.1 unsupported).
+   NifSkope for checking files by hand.
+3. **Use:** the Godot client loads models and textures from the user's extracted folder.
+Unverified: whether the Niftools addon imports DAoC's 4.x files cleanly. Prior art: Bifrost's
+private NIF → UE5 pipeline (people notes in CLAUDE.local.md). First proof: one character model
+from the owner's install, opened in Godot.
+
 ---
 
 ## Open questions

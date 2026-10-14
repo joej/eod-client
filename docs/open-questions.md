@@ -46,6 +46,13 @@ that server; `RustDAoC capture` = the recorded 1.127e session in `tests/DaocProt
 | L8 | 0x10 is never sent with a character name on 1.127; the character is chosen by slot in 0x9D and 0xD4 (which the server converts with the account's current realm, like delete). | RustDAoC capture, OpenDAoC | Noted. The original plan's "0x10 with the chosen name" was 1.124-era. |
 | L9 | After /quit's 0xA4 the server has already removed the character, but its connection state stays "playing" until the client asks for the character list. A client that disconnects right after 0xA4 triggers link death on a character no longer in the world, and the account is locked for 60 s (AccountIsInLogoutProcedure). | live 2026-10-14 | Open. We follow 0xA4 with a 0xFC listing, presumably as a real client returning to the character screen does; confirm with a retail client capture. Worth an OpenDAoC issue? |
 
+## World and assets
+
+| # | Oddity | Source | Status / next step |
+|---|---|---|---|
+| W1 | What is one DAoC world unit in metres? The Godot client divides region coordinates by 100 without knowing the real scale. | our client | Open. Measure a character model's height in NIF units once assets are extracted. |
+| W2 | Which way does heading 0 point? The capsule's facing is a guess. | our client | Open. Compare with a real client facing a known direction. |
+
 ## Not yet documented anywhere we've found
 
 - UDP (port 10400): framing, update rate, when the client uses it.
