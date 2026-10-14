@@ -44,6 +44,14 @@ OpenDAoC-Launcher (C#, no license, from Atlas freeshard, last push 2023-04) show
 patch files from a patch list, then `connect.exe game1127.dll <host> <user> <password> [char realm]`
 (password on the command line). Eden instead has players install the official client from
 `downloads.eamythic.com`, let it patch to current, and use its own launcher.
+Official installer (`DAoCSetup.exe`, checked 2026-10-14 without running it): a 2009 RAR self-extractor
+holding only setup.exe, the EA Mythic patcher (`camelot.exe`, `patch.cfg`), DirectX redistributables and
+help pages. The client itself comes from the patch servers on first run (plain HTTP,
+`patch.daoc.broadsword.com:1380`; live product launch file `login.dll`, last published 2026-09-10).
+**Live `game.dll` is 1.130** (version resource "1.130", PE timestamp 2026-09-10; fetched 2026-10-14 from the
+live patch CDN by the patcher's file-name hash scheme as published in andrezaiats/uo-patcher, MIT). OpenDAoC
+2026.09.36 stops at 1.129 (`GameClient.eClientVersion._LastVersion`), so a stock, fully patched official
+client cannot connect to our server: retail captures only (see open question L10).
 
 ## Stack Decisions
 
@@ -221,12 +229,29 @@ RustDAoC hand vectors alone do not.
 
 ### Encryption
 
-There is no rolling XOR cipher. History (from excalibar): a 12-byte XOR in
-2001–02, then RSA + a modified RC4 in later clients. DOLSharp/OpenDAOC run with
-encryption **off**: `PacketEncoding168` defaults to `NotEncrypted`, and
-`PacketLib1115` forces it off on the 0x22 reply ("to work with Portal").
-The real client needs a patched launcher (connect.exe / DAoC-Connect / daochook's
-`disable_encryption`). Our own client simply never enables it.
+There is no rolling XOR cipher. History (from excalibar): a 12-byte XOR in 2001–02, then RSA +
+a modified RC4 from 1.110 on. DOLSharp/OpenDAoC run with encryption **off**, and our client never
+enables it. Checked 2026-10-14 against OpenDAoC 2026.09.36:
+
+- **Cipher** (`PacketEncoding1110.cs`, GPL, credited there to DAoC Logger): a 256-byte "common
+  key" is expanded with the standard RC4 key schedule. Per packet, the S-box is copied fresh (the
+  keystream does not carry over between packets), the second half of the packet is processed
+  before the first, and each plaintext byte is added into `j`. Only the TCP payload after the
+  2-byte size is covered (+10 bytes of header and checksum on client packets).
+- **Key exchange:** retail 0x22 carries the server's RSA public key (u32 LE length + key);
+  OpenDAoC writes length 0 (matches what we saw live). The client then sends its random
+  256-byte session key in a **second 0xF4** (u32 LE 256 + key; the block in the RustDAoC
+  capture, open question L2), RSA-encrypted on retail. With `client_enable_encryption_rc4`
+  on, OpenDAoC takes that key in the clear (its comment: "you need a special launcher");
+  otherwise it ignores it. RSA itself lives in a native `CryptLib168.dll` (not in the source).
+- **No embedded secret:** the session key is random per connection and the RSA private key stays
+  on the server, so retail traffic cannot be decrypted from the wire alone. Historic sniffers
+  (DAoC Logger, excalibar) and daochook read the session key from the running client's memory.
+  That is a hook on the official client: others' tools only (see "Game client and assets"),
+  and the owner decides if and when.
+- **Clients for OpenDAoC:** a launcher or patched client turns encryption off and redirects the
+  client (`connect.exe game1127.dll <host> <user> <password>`; DAoC Portal for older DOL setups,
+  which swapped in a 1.109 `game.dll`). daochook's `disable_encryption` supports 1.113 and 1.127e.
 
 ### Version detection (first packet)
 

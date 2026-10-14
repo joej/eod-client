@@ -14,7 +14,7 @@ Each section says how it was verified. Unresolved details are tracked in
 [open-questions.md](open-questions.md) (referenced as C1, L5, …). Retail (Mythic, EA, Broadsword)
 servers may differ; we have not compared against them yet.
 
-Not covered: encryption (OpenDAoC runs without it), UDP (port 10400; we use TCP only), anything
+Not covered: encryption beyond the short note under Login (OpenDAoC runs without it), UDP (port 10400; we use TCP only), anything
 after entering the world besides keep-alive and logout.
 
 ## Conventions
@@ -108,6 +108,13 @@ u8  build high  u8 build low  recorded: 7F 05
 
 **0x22 CryptKey** (S→C, `PacketLib1126.SendVersionAndCryptKey`): u32 LE key length (0 = no
 encryption), 5-byte version text `"1.127"`, revision byte, build high, build low.
+
+**Second 0xF4** (C→S, recorded 1.127e): u32 LE 256 + a 256-byte block, the client's RC4 session key.
+On retail it is RSA-encrypted with the public key from 0x22; OpenDAoC ignores it unless
+`client_enable_encryption_rc4` is on, then uses it in the clear (`CryptKeyRequestHandler`). The
+cipher is a modified RC4 (`PacketEncoding1110`): standard key schedule, a fresh S-box copy per
+packet, second half of the packet before the first, and each plaintext byte added into `j`.
+We have not tested encryption.
 
 **0xA7 LoginRequest** (C→S, `LoginRequestHandler`, 1.126+ branch): account, then password, each an
 int-length string. **The password is plain text** on the wire; the server only hashes it for
