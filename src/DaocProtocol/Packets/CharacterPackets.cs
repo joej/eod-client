@@ -182,7 +182,8 @@ public static class CharacterCreateRequest
 
     /// <summary>
     /// Deletes the character in <paramref name="slot"/> of the account's realm page. The realm
-    /// byte stays 0: the server converts the slot with the account's realm, and a realm byte
+    /// byte stays 0: the server converts the slot with the account's realm (the realm last
+    /// requested with 0xFC), and a realm byte
     /// would make it subtract the realm offset a second time: on Midgard/Hibernia the slot then
     /// matches no character and nothing is deleted.
     /// </summary>

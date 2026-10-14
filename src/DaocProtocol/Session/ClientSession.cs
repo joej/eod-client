@@ -70,8 +70,8 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     }
 
     /// <summary>
-    /// 0xFC realm → 0xFC overview. On an account without a realm (and no all-realms rule) the
-    /// server saves this choice as the account's realm.
+    /// 0xFC realm → 0xFC overview. The server makes this the account's realm, which a later
+    /// delete uses to address its slot.
     /// </summary>
     public async Task<CharacterOverview> GetCharactersAsync(Realm realm, CancellationToken cancellationToken = default)
     {

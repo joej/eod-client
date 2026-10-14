@@ -120,8 +120,10 @@ payloads with a port of the server's reader.
 - Stats must be race bases + exactly 30 points (`CharacterStatValidator`: +1 per point, +2
   above +10, +3 above +15). Briton Armsman requested → stored as Fighter (class 14): OpenDAoC's
   StartAsBaseClass script, consistent with 1.65 rules. Start location: Prydwen Keep.
-- Choosing a realm with 0xFC saves it on the account (unless all realms are allowed), so later
-  0xFE replies return it.
+- 0xFC with a realm (1.124+ path) sets the account's realm to that page, all-realms or not; delete
+  converts its slot with it, and later 0xFE replies return it (when all realms aren't allowed).
+- Login 0x2A server type: 1 when `allow_all_realms` is on (or GM/admin), otherwise 7 (1.127's
+  replacement for 0; see open question C9). Overview flag bit 0 = all realms allowed.
 
 The source comments show each modern opcode as `old ^ 0xA8` (e.g. 0xA9 = 0x01 ^ 168).
 That is why the original plan's 0x01 and 0x40 were wrong: they are the pre-remap values.
