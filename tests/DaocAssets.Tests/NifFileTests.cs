@@ -3,6 +3,7 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using DaocAssets.Nif;
+using SharpGLTF.Schema2;
 
 namespace DaocAssets.Tests;
 
@@ -47,6 +48,28 @@ public sealed class NifFileTests
     public void RejectsNonNif()
     {
         Assert.Throws<NifFormatException>(() => NifFile.Read("not a nif at all"u8.ToArray()));
+    }
+
+    [Theory]
+    [MemberData(nameof(Bowsprit))]
+    public void ConvertsToAValidGlbWithYUpGeometry(string path)
+    {
+        NifModel model = NifFile.Read(File.ReadAllBytes(path));
+        var gltf = GltfExporter.BuildScene(model).ToGltf2();
+
+        // SharpGLTF throws on an invalid scene when building; assert the geometry survived.
+        var prim = Assert.Single(Assert.Single(gltf.LogicalMeshes).Primitives);
+        var positions = prim.GetVertexAccessor("POSITION").AsVector3Array();
+        Assert.Equal(22, positions.Count);
+        Assert.Equal(36, prim.GetIndices().Count); // 12 triangles
+        Assert.NotNull(prim.GetVertexAccessor("NORMAL"));
+        Assert.NotNull(prim.GetVertexAccessor("TEXCOORD_0"));
+
+        // The NIF's first vertex (0, -492.73, 56) maps Z-up -> Y-up as (x, z, -y) = (0, 56, 492.73).
+        var v0 = positions[0];
+        Assert.Equal(0f, v0.X, 0.01);
+        Assert.Equal(56f, v0.Y, 0.01);
+        Assert.Equal(492.73f, v0.Z, 0.01);
     }
 
     private static string VertHash(NifMesh m)

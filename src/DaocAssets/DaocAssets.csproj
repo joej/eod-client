@@ -8,6 +8,7 @@
 
   <!-- CRC32 for directory/member checksums; ZLibStream is in the BCL. -->
   <ItemGroup>
+    <PackageReference Include="SharpGLTF.Toolkit" Version="1.0.7" />
     <PackageReference Include="System.IO.Hashing" Version="8.0.0" />
   </ItemGroup>
 

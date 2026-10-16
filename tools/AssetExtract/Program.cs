@@ -5,6 +5,7 @@
 // never belong in this repo or a release (see CLAUDE.md, "Game client and assets").
 
 using DaocAssets.Mpk;
+using DaocAssets.Nif;
 
 return Cli.Run(args);
 
@@ -16,16 +17,19 @@ internal static class Cli
             return Usage();
 
         string command = args[0];
-        string archivePath = args[1];
-        if (!File.Exists(archivePath))
+        string inputPath = args[1];
+        if (!File.Exists(inputPath))
         {
-            Console.Error.WriteLine($"No such file: {archivePath}");
+            Console.Error.WriteLine($"No such file: {inputPath}");
             return 1;
         }
 
+        if (command == "convert")
+            return Convert(inputPath, args);
+
         try
         {
-            using var mpk = MpkArchive.Open(archivePath);
+            using var mpk = MpkArchive.Open(inputPath);
             return command switch
             {
                 "list" => List(mpk),
@@ -35,7 +39,36 @@ internal static class Cli
         }
         catch (MpkFormatException e)
         {
-            Console.Error.WriteLine($"{archivePath}: {e.Message}");
+            Console.Error.WriteLine($"{inputPath}: {e.Message}");
+            return 1;
+        }
+    }
+
+    private static int Convert(string nifPath, string[] args)
+    {
+        // convert <model.nif> [--out FILE.glb]
+        string outPath = Path.ChangeExtension(nifPath, ".glb");
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] == "--out" && i + 1 < args.Length)
+                outPath = args[++i];
+            else
+                return Usage();
+        }
+
+        try
+        {
+            NifModel model = NifFile.Read(File.ReadAllBytes(nifPath));
+            GltfExporter.SaveGlb(model, outPath);
+            int verts = model.Meshes.Sum(m => m.Vertices.Length);
+            int tris = model.Meshes.Sum(m => m.Triangles.Length);
+            Console.WriteLine($"Converted NIF {model.Version}: {model.Meshes.Count} mesh(es), " +
+                $"{verts} verts, {tris} tris -> {Path.GetFullPath(outPath)}");
+            return 0;
+        }
+        catch (NifFormatException e)
+        {
+            Console.Error.WriteLine($"{nifPath}: {e.Message}");
             return 1;
         }
     }
@@ -92,8 +125,10 @@ internal static class Cli
             Usage:
               mpk list    <archive.mpk>
               mpk extract <archive.mpk> [member] [--out DIR]
+              mpk convert <model.nif> [--out FILE.glb]
 
             With no member, extract writes every member. Default --out is the current directory.
+            convert writes a glTF binary next to the .nif unless --out is given.
             """);
         return 2;
     }
