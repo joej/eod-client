@@ -3,12 +3,16 @@
     <Project Path="godot/EodClient.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/DaocAssets/DaocAssets.csproj" />
     <Project Path="src/DaocProtocol/DaocProtocol.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/DaocAssets.Tests/DaocAssets.Tests.csproj" />
     <Project Path="tests/DaocProtocol.Tests/DaocProtocol.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/AssetExtract/AssetExtract.csproj" />
     <Project Path="tools/DaocCli/DaocCli.csproj" />
+    <Project Path="tools/Launcher/Launcher.csproj" />
   </Folder>
 </Solution>

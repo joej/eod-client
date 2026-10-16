@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DaocAssets\DaocAssets.csproj" />
+  </ItemGroup>
+
+  <!-- Real client archives are proprietary and never committed; they live in git-ignored
+       private/mpk-fixtures. Copy them to the output when present so the live tests can run;
+       the format and corruption tests build their own MPK bytes and always run. -->
+  <ItemGroup>
+    <None Include="..\..\private\mpk-fixtures\*.mpk" Link="live-mpk\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\private\mpk-fixtures')" />
+  </ItemGroup>
+
+</Project>
