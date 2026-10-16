@@ -28,6 +28,8 @@
   <ItemGroup>
     <None Include="..\..\private\mpk-fixtures\*.mpk" Link="live-mpk\%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\private\mpk-fixtures')" />
+    <None Include="..\..\private\nif-fixtures\*.nif" Link="live-nif\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\private\nif-fixtures')" />
   </ItemGroup>
 
 </Project>
