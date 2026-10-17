@@ -5,7 +5,9 @@
 //
 // Headless check (prints the result and quits; exit code 0 on success):
 //   DAOC_PASSWORD=... Godot --headless --path godot -- --autologin <host> <account> [port]
-//       [--enter <slot> [--stay <seconds>]]
+//       [--enter <slot> [--stay <seconds>]] [--model <abs.glb>]
+// --model loads a converted .glb as the character body (asset-pipeline stand-in); without it the
+// world shows the MVC capsule, so the client still runs with no assets.
 
 using DaocProtocol.Net;
 using DaocProtocol.Packets;
@@ -57,6 +59,12 @@ public partial class CharacterScreen : Control
     {
         int i = Array.IndexOf(args, name);
         return i >= 0 && i + 1 < args.Length ? int.Parse(args[i + 1]) : null;
+    }
+
+    private static string? StringOption(string[] args, string name)
+    {
+        int i = Array.IndexOf(args, name);
+        return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
     }
 
     public override void _ExitTree() => _ = Disconnect();
@@ -219,7 +227,7 @@ public partial class CharacterScreen : Control
             WorldPosition world = await _session.EnterWorldAsync(_listedRealm, slot);
 
             _world = new WorldView();
-            _world.Init(_connection, world);
+            _world.Init(_connection, world, StringOption(OS.GetCmdlineUserArgs(), "--model"));
             _world.QuitPressed += () => _ = LeaveWorld();
             _world.BackToLoginPressed += () => _ = BackToLogin("Disconnected.");
             GetTree().Root.AddChild(_world);

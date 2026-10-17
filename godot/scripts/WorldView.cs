@@ -17,8 +17,13 @@ public partial class WorldView : Node3D
     /// <summary>Region units per Godot unit.</summary>
     private const float RegionUnitsPerUnit = 100f;
 
+    /// <summary>Target height (Godot units) to scale a loaded placeholder model to, so an item mesh
+    /// in NIF units reads at roughly human scale next to the ground.</summary>
+    private const float ModelTargetHeight = 2f;
+
     private DaocConnection _connection = null!;
     private WorldPosition _world = null!;
+    private string? _modelPath;
     private Label _status = null!;
     private Button _button = null!;
     private int _packets;
@@ -48,11 +53,13 @@ public partial class WorldView : Node3D
         _note = "   quitting: the server's quit timer takes about 20 s…";
     }
 
-    /// <summary>Call before adding to the tree.</summary>
-    public void Init(DaocConnection connection, WorldPosition world)
+    /// <summary>Call before adding to the tree. <paramref name="modelPath"/> is an optional .glb to
+    /// stand in for the character; null or missing falls back to the capsule (MVC needs no assets).</summary>
+    public void Init(DaocConnection connection, WorldPosition world, string? modelPath = null)
     {
         _connection = connection;
         _world = world;
+        _modelPath = modelPath;
     }
 
     /// <summary>
@@ -88,14 +95,17 @@ public partial class WorldView : Node3D
             MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.35f, 0.5f, 0.3f) },
         });
 
-        // Character: a 2-unit capsule standing on its position, with a nose showing its heading.
+        // Character: at its world position, facing its heading, with a nose showing facing. The body
+        // is a loaded .glb when one was supplied (first meeting of the asset pipeline and the live
+        // world), otherwise the MVC capsule — the client still runs with no assets at all.
         var body = new Node3D { Position = at, Rotation = new Vector3(0, -HeadingRadians(p.Heading), 0) };
-        body.AddChild(new MeshInstance3D
-        {
-            Mesh = new CapsuleMesh { Radius = 0.4f, Height = 2f },
-            Position = new Vector3(0, 1, 0),
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.8f, 0.2f, 0.2f) },
-        });
+        if (!TryAddModel(body))
+            body.AddChild(new MeshInstance3D
+            {
+                Mesh = new CapsuleMesh { Radius = 0.4f, Height = 2f },
+                Position = new Vector3(0, 1, 0),
+                MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.8f, 0.2f, 0.2f) },
+            });
         body.AddChild(new MeshInstance3D
         {
             Mesh = new BoxMesh { Size = new Vector3(0.2f, 0.2f, 0.6f) },
@@ -121,6 +131,59 @@ public partial class WorldView : Node3D
         };
         overlay.AddChild(_button);
         AddChild(overlay);
+    }
+
+    // Loads the .glb at _modelPath as the character body: scaled to a human-ish height and seated on
+    // the ground (feet at the body origin). Returns false (keep the capsule) if no usable model.
+    private bool TryAddModel(Node3D body)
+    {
+        if (string.IsNullOrEmpty(_modelPath) || !Godot.FileAccess.FileExists(_modelPath))
+            return false;
+
+        var doc = new GltfDocument();
+        var state = new GltfState();
+        if (doc.AppendFromFile(_modelPath, state) != Error.Ok)
+        {
+            GD.PrintErr($"[world] could not load model {_modelPath}; using the capsule.");
+            return false;
+        }
+        Node scene = doc.GenerateScene(state);
+        if (scene is not Node3D model)
+            return false;
+
+        Aabb bounds = ModelBounds(model);
+        float height = Mathf.Max(bounds.Size.Y, 0.001f);
+        float scale = ModelTargetHeight / height;
+        model.Scale = new Vector3(scale, scale, scale);
+        // Recentre on X/Z and lift so the model's lowest point sits at y = 0 after scaling.
+        Vector3 centre = bounds.Position + bounds.Size / 2f;
+        model.Position = new Vector3(-centre.X * scale, -bounds.Position.Y * scale, -centre.Z * scale);
+        body.AddChild(model);
+        GD.Print($"[world] character model {System.IO.Path.GetFileName(_modelPath)} " +
+            $"(NIF bounds {bounds.Size.Y:0} u, scaled x{scale:0.###})");
+        return true;
+    }
+
+    private static Aabb ModelBounds(Node node)
+    {
+        Aabb total = default;
+        bool any = false;
+        foreach (MeshInstance3D mi in FindMeshes(node))
+        {
+            Aabb a = mi.Transform * mi.GetAabb();
+            total = any ? total.Merge(a) : a;
+            any = true;
+        }
+        return any ? total : new Aabb(Vector3.Zero, Vector3.One);
+    }
+
+    private static System.Collections.Generic.IEnumerable<MeshInstance3D> FindMeshes(Node node)
+    {
+        if (node is MeshInstance3D mi)
+            yield return mi;
+        foreach (Node child in node.GetChildren())
+            foreach (MeshInstance3D m in FindMeshes(child))
+                yield return m;
     }
 
     public override void _Process(double delta)
