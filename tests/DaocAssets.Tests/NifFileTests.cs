@@ -35,6 +35,8 @@ public sealed class NifFileTests
         Assert.Equal(12, mesh.Triangles.Length);
         Assert.NotNull(mesh.Normals);
         Assert.NotNull(mesh.TexCoords);
+        // The external base texture named by the NiSourceTexture block.
+        Assert.Equal("PSbeamLt_grey.dds", mesh.TextureFile);
         Assert.Equal((ushort)0, mesh.Triangles[0].A);
         Assert.Equal((ushort)2, mesh.Triangles[0].C);
         Assert.All(mesh.Triangles, t => Assert.True(t.A < 22 && t.B < 22 && t.C < 22));
@@ -70,6 +72,12 @@ public sealed class NifFileTests
         Assert.Equal(0f, v0.X, 0.01);
         Assert.Equal(56f, v0.Y, 0.01);
         Assert.Equal(492.73f, v0.Z, 0.01);
+
+        // The material is named for the texture (sans extension) so Godot can resolve <name>.dds from
+        // the owner's extracted folder, and NO texture bytes are embedded: the .glb stays a clean,
+        // distributable, geometry-only artifact (assets policy).
+        Assert.Equal("PSbeamLt_grey", Assert.Single(gltf.LogicalMaterials).Name);
+        Assert.Empty(gltf.LogicalImages);
     }
 
     private static string VertHash(NifMesh m)

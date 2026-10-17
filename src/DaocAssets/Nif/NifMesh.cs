@@ -6,7 +6,7 @@ namespace DaocAssets.Nif;
 
 /// <summary>Static geometry pulled from a NIF: one mesh per NiTriShape. Coordinates are in the
 /// NIF's own space (Z-up); the glTF emitter applies the axis/scale conversion to Godot.</summary>
-public sealed class NifMesh
+public sealed record NifMesh
 {
     public required string Name { get; init; }
     public required Vector3[] Vertices { get; init; }

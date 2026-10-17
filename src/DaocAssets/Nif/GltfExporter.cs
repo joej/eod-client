@@ -36,7 +36,15 @@ public static class GltfExporter
 
     private static IMeshBuilder<MaterialBuilder> BuildMesh(NifMesh m)
     {
-        var material = new MaterialBuilder(m.Name).WithMetallicRoughnessShader();
+        // Name the glTF material after the NIF's texture file (without extension) when there is one,
+        // so the Godot side can resolve it to <name>.dds in the owner's extracted-texture folder and
+        // bind it at load time. No texture bytes go into the .glb — it stays a distributable,
+        // geometry-only artifact; the client's pixels never leave the owner's machine.
+        string materialName = string.IsNullOrEmpty(m.TextureFile)
+            ? m.Name
+            : System.IO.Path.GetFileNameWithoutExtension(m.TextureFile);
+        var material = new MaterialBuilder(materialName).WithMetallicRoughnessShader();
+        material.WithMetallicRoughness(0f, 1f); // items read as diffuse; no PBR metalness
 
         bool hasNormals = m.Normals is not null && m.Normals.Length == m.Vertices.Length;
         bool hasUv = m.TexCoords is not null && m.TexCoords.Length == m.Vertices.Length;

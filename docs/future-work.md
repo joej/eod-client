@@ -27,12 +27,22 @@ never enters the repo or a release (CLAUDE.md, "Game client and assets").
   verifies the directory and per-member CRC-32, and is bounds-checked throughout. `tools/mpk`
   lists and extracts. Format reimplemented from public specs (DOLSharp, RustDAoC) and verified
   against real client archives; no third-party source copied.
-- **NIF → glTF — scoped, starting.** DAoC meshes are NIF; textures are DDS (Godot imports DDS
-  natively), so only geometry/materials need converting. Decision: build a **native C# reader in
-  `src/DaocAssets`** (same pattern as the MPK reader — ours, GPL-3.0, no external runtime,
-  byte-verified against real files), emitting glTF via **SharpGLTF** (MIT). Not Blender: the
-  Niftools addon would add a heavy runtime dependency and its old-NetImmerse import path is
-  unproven for our files.
+- **NIF → glTF — 4.2.x static path done.** `src/DaocAssets/Nif` reads NetImmerse 4.2.x NIFs
+  (`NiTriShapeData` geometry: vertices, normals, UVs, triangles; plus the external base-texture
+  name from `NiSourceTexture`) and `GltfExporter` emits a `.glb` via **SharpGLTF** (MIT), Z-up →
+  Y-up with winding flipped. `tools/mpk convert` runs it; `godot/scenes/ModelViewer.tscn` loads a
+  `.glb` at runtime and orbits it. Byte-verified against a real 4.2.2.0 item (golden hashes in the
+  tests). Not Blender: the Niftools addon would add a heavy runtime dependency and its
+  old-NetImmerse import path is unproven for our files.
+  - **Texturing — deferred to a Godot-side step (needs an extracted-`.dds` folder).** The `.glb`
+    deliberately embeds **no** texture bytes (keeps it a distributable, geometry-only artifact —
+    assets policy); instead the glTF material is named after the texture (e.g. `PSbeamLt_grey`).
+    glTF only sanctions PNG/JPEG and Godot's glTF importer won't follow a `.dds` satellite, so the
+    plan is to texture in `ModelViewer.cs`: after loading the `.glb`, read each material's name,
+    load `<name>.dds` from an owner-provided folder via Godot's native DDS support, and assign it.
+    Not yet written or verified — do it when a folder of extracted `.dds` is available to test
+    against. Converting the `.dds` to PNG and embedding it in the `.glb` is rejected: it would bake
+    client pixels into a derived artifact.
   - **Versions in this client (verified against the install):** 4.2.2.0 (majority, NetImmerse —
     items), 4.2.1.0, 10.1.0.0 (Gamebryo — creatures). Two different header layouts; the reader
     gates on version. All three are defined in niftools `nif.xml`.

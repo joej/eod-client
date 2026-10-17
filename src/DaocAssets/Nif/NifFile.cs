@@ -33,6 +33,7 @@ public static class NifFile
 
         int blockCount = checked((int)c.U32());
         var meshes = new List<NifMesh>();
+        string? textureFile = null;
 
         // Walk blocks. Each block in 4.2.x is a sized type-name string followed by its body. We
         // fully parse the blocks that carry geometry and read enough of the others to stay aligned;
@@ -50,6 +51,12 @@ public static class NifFile
                 case "NiTriShapeData":
                     meshes.Add(ReadTriShapeData(ref c, version, $"mesh{i}"));
                     break;
+                case "NiSourceTexture":
+                    textureFile ??= ReadSourceTextureFileName(ref c, bytes);
+                    // Fall through to resync: we read only the external file name, not the whole body.
+                    if (!ResyncToNextTypeString(ref c, bytes))
+                        i = blockCount;
+                    break;
                 default:
                     // Not a geometry-data block: resync to the next block's type string so the
                     // block count stays meaningful even though we don't model this body.
@@ -61,6 +68,13 @@ public static class NifFile
 
         if (meshes.Count == 0)
             throw new NifFormatException("No NiTriShapeData geometry found in NIF.");
+
+        // Item NIFs carry a single external texture; attach it to meshes that named none. We don't
+        // resolve the full block-reference graph (NiTriShape -> NiTexturingProperty ->
+        // NiSourceTexture), so this is a best effort that is unambiguous for single-material models.
+        if (textureFile is not null)
+            for (int m = 0; m < meshes.Count; m++)
+                meshes[m] = meshes[m] with { TextureFile = meshes[m].TextureFile ?? textureFile };
 
         return new NifModel { Version = version, Meshes = meshes };
     }
@@ -113,6 +127,29 @@ public static class NifFile
             TexCoords = texCoords,
             Triangles = triangles,
         };
+    }
+
+    // NiSourceTexture body (4.2.x), from here positioned just past the type string:
+    //   u32 unknown, 2x link ref (ignored), Use External (1-byte bool). If external, a sized-string
+    //   File Name follows. We read only the file name and let the caller resync past the rest.
+    private static string? ReadSourceTextureFileName(ref NifCursor c, ReadOnlySpan<byte> bytes)
+    {
+        try
+        {
+            c.U32();               // unknown/flags
+            c.U32(); c.U32();      // link refs (no parent here)
+            if (!c.Bool())         // Use External
+                return null;
+            string name = c.SizedString();
+            // Sanity: an external texture name is a short Latin-1 file name, not arbitrary bytes.
+            return name.Length is > 0 and < 256 && name.All(ch => ch is >= ' ' and < (char)127)
+                ? name
+                : null;
+        }
+        catch (NifFormatException)
+        {
+            return null;
+        }
     }
 
     private static Vector3[] ReadVec3Array(ref NifCursor c, int n)
