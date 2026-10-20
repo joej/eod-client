@@ -62,8 +62,10 @@ public sealed class NifFileTests
         Assert.Equal((ushort)2, mesh.Triangles[0].C);
         Assert.All(mesh.Triangles, t => Assert.True(t.A < 22 && t.B < 22 && t.C < 22));
 
-        // Byte-for-byte golden hashes from the verified hand-decode.
-        Assert.Equal("2d5b083725f5f978", VertHash(mesh));
+        // Byte-for-byte golden hashes from the verified hand-decode. Vertices have the model's node
+        // transform baked in (the bowsprit's root places the mesh near the origin); cross-checked
+        // against an independent walk of the node hierarchy.
+        Assert.Equal("99903e9b1748c619", VertHash(mesh));
         Assert.Equal("a29c9f18d2b00746", TriHash(mesh));
     }
 
@@ -131,7 +133,7 @@ public sealed class NifFileTests
         Assert.Equal(60, mesh.Triangles.Length);
         Assert.All(mesh.Triangles, t => Assert.True(t.A < 74 && t.B < 74 && t.C < 74));
         Assert.All(mesh.Triangles, t => Assert.True(t.A != t.B && t.B != t.C && t.A != t.C));
-        Assert.Equal("4be11ed97cecf228", VertHash(mesh));
+        Assert.Equal("5cba64a51818e6cc", VertHash(mesh));
         Assert.Equal("da58e35b38cf8ca7", TriHash(mesh));
     }
 
@@ -156,11 +158,12 @@ public sealed class NifFileTests
         Assert.NotNull(prim.GetVertexAccessor("NORMAL"));
         Assert.NotNull(prim.GetVertexAccessor("TEXCOORD_0"));
 
-        // The NIF's first vertex (0, -492.73, 56) maps Z-up -> Y-up as (x, z, -y) = (0, 56, 492.73).
+        // With the node transform baked in, the bowsprit's first vertex is (0, 17.08, 15.0) in NIF
+        // space; Z-up -> Y-up maps (x, z, -y) = (0, 15.0, -17.08).
         var v0 = positions[0];
         Assert.Equal(0f, v0.X, 0.01);
-        Assert.Equal(56f, v0.Y, 0.01);
-        Assert.Equal(492.73f, v0.Z, 0.01);
+        Assert.Equal(15.0f, v0.Y, 0.01);
+        Assert.Equal(-17.08f, v0.Z, 0.01);
 
         // The material is named for the texture (sans extension) so Godot can resolve <name>.dds from
         // the owner's extracted folder, and NO texture bytes are embedded: the .glb stays a clean,

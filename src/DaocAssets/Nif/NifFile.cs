@@ -37,54 +37,274 @@ public static class NifFile
             throw new NifFormatException($"NIF version {version} is older than supported (4.1.0.1+).");
 
         int blockCount = checked((int)c.U32());
-        var meshes = new List<NifMesh>();
-        string? textureFile = null;
+        return ReadNetImmerse4x(bytes, version, blockCount);
+    }
 
-        // Walk blocks. Each block in 4.2.x is a sized type-name string followed by its body. We
-        // fully parse the blocks that carry geometry and read enough of the others to stay aligned;
-        // where a body's length isn't known we rely on the geometry blocks being self-delimiting.
-        // The 4.2.x layout places NiTriShapeData bodies last and self-sized, so we parse each
-        // recognised block and skip forward over unrecognised ones to the next type string.
-        for (int i = 0; i < blockCount; i++)
+    // A rigid transform (rotation 3x3 + uniform scale + translation), applied to a point.
+    private readonly struct Xform(float[] rot, float scale, Vector3 trans)
+    {
+        public static readonly Xform Identity = new([1, 0, 0, 0, 1, 0, 0, 0, 1], 1f, Vector3.Zero);
+        public readonly float[] Rot = rot;
+        public readonly float Scale = scale;
+        public readonly Vector3 Trans = trans;
+
+        public Vector3 Apply(Vector3 v)
         {
-            string type;
-            try { type = c.SizedString(); }
-            catch (NifFormatException) { break; }
+            float x = (Rot[0] * v.X + Rot[1] * v.Y + Rot[2] * v.Z) * Scale;
+            float y = (Rot[3] * v.X + Rot[4] * v.Y + Rot[5] * v.Z) * Scale;
+            float z = (Rot[6] * v.X + Rot[7] * v.Y + Rot[8] * v.Z) * Scale;
+            return new Vector3(x + Trans.X, y + Trans.Y, z + Trans.Z);
+        }
 
-            switch (type)
+        // Rotate a direction (normals): rotation only, no translation, no scale.
+        public Vector3 ApplyDir(Vector3 v) => new(
+            Rot[0] * v.X + Rot[1] * v.Y + Rot[2] * v.Z,
+            Rot[3] * v.X + Rot[4] * v.Y + Rot[5] * v.Z,
+            Rot[6] * v.X + Rot[7] * v.Y + Rot[8] * v.Z);
+
+        // world = parent ∘ local.
+        public Xform Compose(Xform local)
+        {
+            float[] r = new float[9];
+            for (int row = 0; row < 3; row++)
+                for (int col = 0; col < 3; col++)
+                    r[row * 3 + col] =
+                        Rot[row * 3 + 0] * local.Rot[0 * 3 + col] +
+                        Rot[row * 3 + 1] * local.Rot[1 * 3 + col] +
+                        Rot[row * 3 + 2] * local.Rot[2 * 3 + col];
+            return new Xform(r, Scale * local.Scale, Apply(local.Trans));
+        }
+    }
+
+    // A parsed NiNode or NiTriShape: its local transform and either its children (node) or its
+    // geometry-data block index (shape). Other block types are recorded by type only.
+    private sealed class Block
+    {
+        public required string Type;
+        public required int Offset;
+        public Xform Local = Xform.Identity;
+        public int[] Children = [];
+        public int DataRef = -1;      // NiTriShape -> its NiTriShapeData/NiTriStripsData block
+        public string? TextureFile;   // for NiSourceTexture blocks
+    }
+
+    // NetImmerse 4.x. Blocks reference each other by index and carry transforms in a NiNode/NiTriShape
+    // hierarchy, so a multi-part model (a keep, a tree) only assembles correctly once each shape's
+    // accumulated world transform is baked into its vertices. We index every block by scanning for
+    // its type string (bodies aren't self-sized), parse the NiNode/NiTriShape transforms and refs,
+    // walk from the scene root composing transforms, and bake them into the geometry each shape
+    // points at. Verified against a 57-node/118-shape keep.
+    private static NifModel ReadNetImmerse4x(ReadOnlySpan<byte> bytes, NifVersion version, int blockCount)
+    {
+        Block[] blocks = IndexBlocks4x(bytes, blockCount);
+
+        // Parse the blocks we model (nodes, shapes, source textures). Geometry-data blocks are read
+        // later, only for shapes that reference them.
+        foreach (Block b in blocks)
+        {
+            var c = new NifCursor(bytes);
+            c.SeekTo(b.Offset);
+            try { c.SizedString(); } catch (NifFormatException) { continue; } // skip its type string
+            switch (b.Type)
             {
-                case "NiTriShapeData":
-                    meshes.Add(ReadTriShapeData(ref c, version, $"mesh{i}"));
+                case "NiNode":
+                case "NiLODNode":
+                    if (TryReadAvObject(ref c, out Xform nx))
+                    {
+                        b.Local = nx;
+                        int nch = (int)c.U32();
+                        var ch = new int[Math.Clamp(nch, 0, 100000)];
+                        for (int k = 0; k < ch.Length; k++) ch[k] = c.I32();
+                        b.Children = ch;
+                    }
                     break;
-                case "NiTriStripsData":
-                    meshes.Add(ReadTriStripsData4x(ref c, $"mesh{i}"));
+                case "NiTriShape":
+                case "NiTriStrips":
+                    if (TryReadAvObject(ref c, out Xform sx))
+                    {
+                        b.Local = sx;
+                        b.DataRef = c.I32();   // NiGeometry: Data ref (the geometry-data block)
+                    }
                     break;
                 case "NiSourceTexture":
-                    textureFile ??= ReadSourceTextureFileName(ref c, bytes);
-                    // Fall through to resync: we read only the external file name, not the whole body.
-                    if (!ResyncToNextTypeString(ref c, bytes))
-                        i = blockCount;
+                    b.TextureFile = ReadSourceTextureFileName(ref c, bytes);
                     break;
-                default:
-                    // Not a geometry-data block: resync to the next block's type string so the
-                    // block count stays meaningful even though we don't model this body.
-                    if (!ResyncToNextTypeString(ref c, bytes))
-                        i = blockCount; // nothing more recognisable; stop
-                    break;
+            }
+        }
+
+        // Walk from the scene root (block 0) composing transforms; bake each shape's world transform
+        // into the geometry it references.
+        var meshes = new List<NifMesh>();
+        string? firstTexture = null;
+        foreach (Block b in blocks)
+            if (b.TextureFile is not null) { firstTexture = b.TextureFile; break; }
+
+        var seen = new HashSet<int>();
+        Walk4x(bytes, blocks, 0, Xform.Identity, seen, meshes, firstTexture);
+
+        // Fallback: bake any shape not reached from the root (a file whose root isn't block 0, or a
+        // shape outside the hierarchy) at its own local transform, so we still get its geometry.
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            Block b = blocks[i];
+            if ((b.Type is "NiTriShape" or "NiTriStrips") && !seen.Contains(i))
+            {
+                NifMesh? geom = ReadGeometryAt(bytes, blocks, b.DataRef);
+                if (geom is not null)
+                    meshes.Add(BakeTransform(geom, b.Local, $"mesh{i}", firstTexture));
             }
         }
 
         if (meshes.Count == 0)
             throw new NifFormatException("No NiTriShapeData geometry found in NIF.");
 
-        // Item NIFs carry a single external texture; attach it to meshes that named none. We don't
-        // resolve the full block-reference graph (NiTriShape -> NiTexturingProperty ->
-        // NiSourceTexture), so this is a best effort that is unambiguous for single-material models.
-        if (textureFile is not null)
-            for (int m = 0; m < meshes.Count; m++)
-                meshes[m] = meshes[m] with { TextureFile = meshes[m].TextureFile ?? textureFile };
-
         return new NifModel { Version = version, Meshes = meshes };
+    }
+
+    // Recursively walks the node hierarchy, composing transforms and baking each reached shape's
+    // geometry at its world transform. A static method (not a local function) because `bytes` is a
+    // ref-like span that can't be captured in a closure.
+    private static void Walk4x(ReadOnlySpan<byte> bytes, Block[] blocks, int index, Xform world,
+        HashSet<int> seen, List<NifMesh> meshes, string? texture)
+    {
+        if (index < 0 || index >= blocks.Length || !seen.Add(index))
+            return;
+        Block b = blocks[index];
+        Xform w = world.Compose(b.Local);
+        if (b.Type is "NiNode" or "NiLODNode")
+        {
+            foreach (int child in b.Children)
+                Walk4x(bytes, blocks, child, w, seen, meshes, texture);
+        }
+        else if (b.Type is "NiTriShape" or "NiTriStrips")
+        {
+            NifMesh? geom = ReadGeometryAt(bytes, blocks, b.DataRef);
+            if (geom is not null)
+                meshes.Add(BakeTransform(geom, w, $"mesh{index}", texture));
+        }
+    }
+
+    // Bakes a world transform into a mesh's vertices and normals, attaching the texture name.
+    private static NifMesh BakeTransform(NifMesh mesh, Xform w, string name, string? texture)
+    {
+        var verts = new Vector3[mesh.Vertices.Length];
+        for (int i = 0; i < verts.Length; i++)
+            verts[i] = w.Apply(mesh.Vertices[i]);
+        Vector3[]? normals = null;
+        if (mesh.Normals is not null)
+        {
+            normals = new Vector3[mesh.Normals.Length];
+            for (int i = 0; i < normals.Length; i++)
+                normals[i] = w.ApplyDir(mesh.Normals[i]);
+        }
+        return mesh with
+        {
+            Name = name,
+            Vertices = verts,
+            Normals = normals,
+            TextureFile = mesh.TextureFile ?? texture,
+        };
+    }
+
+    // Reads the geometry-data block at `dataRef` (NiTriShapeData or NiTriStripsData), or null.
+    private static NifMesh? ReadGeometryAt(ReadOnlySpan<byte> bytes, Block[] blocks, int dataRef)
+    {
+        if (dataRef < 0 || dataRef >= blocks.Length)
+            return null;
+        Block d = blocks[dataRef];
+        var c = new NifCursor(bytes);
+        c.SeekTo(d.Offset);
+        try
+        {
+            c.SizedString(); // skip the type string
+            return d.Type switch
+            {
+                "NiTriShapeData" => ReadTriShapeData(ref c, default, "geom"),
+                "NiTriStripsData" => ReadTriStripsData4x(ref c, "geom"),
+                _ => null,
+            };
+        }
+        catch (NifFormatException)
+        {
+            return null;
+        }
+    }
+
+    // Builds the block index by scanning for each block's type string: bodies aren't self-sized, so
+    // a block ends where the next "Ni*" sized type string begins. Returns blocks[index] = (type,
+    // offset-of-type-string). Verified to recover all blocks on real files.
+    private static Block[] IndexBlocks4x(ReadOnlySpan<byte> bytes, int blockCount)
+    {
+        var list = new List<Block>(blockCount);
+        int q = FindFirstTypeString(bytes);
+        while (list.Count < blockCount && q >= 0 && q < bytes.Length)
+        {
+            string? type = TypeStringAt(bytes, q);
+            if (type is null)
+                break;
+            list.Add(new Block { Type = type, Offset = q });
+            int after = q + 4 + type.Length;
+            q = NextTypeString(bytes, after);
+        }
+        return [.. list];
+    }
+
+    private static int FindFirstTypeString(ReadOnlySpan<byte> bytes)
+    {
+        // After the header line + version u32 + block-count u32, the first block's type string begins.
+        int nl = bytes.IndexOf((byte)0x0A);
+        if (nl < 0 || nl + 1 + 8 > bytes.Length)
+            return -1;
+        return nl + 1 + 8;
+    }
+
+    private static int NextTypeString(ReadOnlySpan<byte> bytes, int from)
+    {
+        for (int q = from; q + 6 <= bytes.Length; q++)
+            if (TypeStringAt(bytes, q) is not null)
+                return q;
+        return -1;
+    }
+
+    // A valid block type string at q: u32 length in [3,40], then that many printable bytes starting "Ni".
+    private static string? TypeStringAt(ReadOnlySpan<byte> bytes, int q)
+    {
+        if (q + 6 > bytes.Length)
+            return null;
+        uint len = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(q, 4));
+        if (len is < 3 or > 40 || q + 4 + (int)len > bytes.Length)
+            return null;
+        if (bytes[q + 4] != (byte)'N' || bytes[q + 5] != (byte)'i')
+            return null;
+        ReadOnlySpan<byte> s = bytes.Slice(q + 4, (int)len);
+        foreach (byte ch in s)
+            if (ch is < 0x20 or > 0x7E)
+                return null;
+        return System.Text.Encoding.Latin1.GetString(s);
+    }
+
+    // NiObjectNET + NiAVObject prefix shared by NiNode and NiTriShape at 4.x. Reads through the
+    // transform and leaves the cursor at the first subclass field (children for NiNode, Data for
+    // NiTriShape). Returns false if a bounding volume is present (we don't decode it) — the caller
+    // then leaves the block's transform at identity rather than misparse.
+    private static bool TryReadAvObject(ref NifCursor c, out Xform xform)
+    {
+        xform = Xform.Identity;
+        c.SizedString();           // NiObjectNET.Name
+        c.I32();                   // Extra Data ref (single, until 4.2.2.0)
+        c.I32();                   // Controller ref
+        c.U16();                   // NiAVObject.Flags (ushort at <= 4.2.2.0)
+        Vector3 trans = c.Vec3();
+        float[] rot = new float[9];
+        for (int i = 0; i < 9; i++) rot[i] = c.F32();
+        float scale = c.F32();
+        c.Vec3();                  // Velocity (until 4.2.2.0)
+        int numProps = (int)c.U32();
+        for (int i = 0; i < numProps; i++) c.I32();   // Property refs
+        if (c.Bool())              // Has Bounding Volume (until 4.2.2.0)
+            return false;          // present only rarely; bail to identity rather than misparse
+        xform = new Xform(rot, scale, trans);
+        return true;
     }
 
     // Gamebryo 10.1.0.0 (creatures). The header after the Version u32 is: User Version u32,
