@@ -22,6 +22,11 @@ to pursue.
 The owner-run track that turns a client install into files the Godot client can load. Output
 never enters the repo or a release (CLAUDE.md, "Game client and assets").
 
+The whole sequence is captured in **`tools/pipeline.sh <client-dir> <model.nif|dir> <out-dir>`**:
+it builds the `mpk` tool, converts each model to `.glb`, and gathers the `.dds` those models
+reference (loose on disk or extracted from the right `.mpk`) into the same folder, which the Godot
+client loads from. The individual stages are the `mpk` subcommands below (`convert`, `textures`).
+
 - **MPK/NPK archive reader — done.** `src/DaocAssets` (`MpkArchive`) reads the `MPAK` container
   with random access (parses only the directory on open, inflates one member on demand),
   verifies the directory and per-member CRC-32, and is bounds-checked throughout. `tools/mpk`
