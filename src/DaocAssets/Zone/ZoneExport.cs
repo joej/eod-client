@@ -7,29 +7,25 @@
 
 using System.Globalization;
 using System.Text;
+using DaocAssets.Library;
 using DaocAssets.Mpk;
-using DaocAssets.Nif;
 
 namespace DaocAssets.Zone;
 
-/// <summary>Writes a zone's objects (.glb + textures) and a placement manifest to an output folder.</summary>
+/// <summary>Writes a zone placement manifest, populating the shared asset library with its objects.</summary>
 public static class ZoneExport
 {
     /// <summary>
-    /// Reads zone &lt;id&gt;'s fixtures/nifs CSVs from <paramref name="zoneDatMpk"/>, converts each
-    /// referenced model found under <paramref name="clientDir"/> to a .glb, gathers its textures,
-    /// and writes <c>zone.csv</c> (the placement manifest) into <paramref name="outDir"/>. Returns a
+    /// Reads the zone's fixtures/nifs CSVs from <paramref name="zoneDatMpk"/>, ensures each referenced
+    /// model is in the <paramref name="library"/> (converting it once, override-aware), and writes
+    /// <c>zone.csv</c> (the placement manifest) into <paramref name="outDir"/>. The manifest names
+    /// models by their library glb name; the client resolves them against the library. Returns a
     /// short report. <paramref name="offsetX"/>/<paramref name="offsetY"/> are the zone's region
     /// offset (from the zone table), in region units.
     /// </summary>
     public static ZoneExportReport Export(
-        string clientDir, string zoneDatMpk, int offsetX, int offsetY, string outDir, string? searchDir = null)
+        AssetLibrary library, string zoneDatMpk, int offsetX, int offsetY, string outDir)
     {
-        // Zone fixture models (packed one-per-archive) and their loose textures live under the zone's
-        // Nifs directory; search there by default rather than walking the whole install, which is slow
-        // over a mounted drive. Fall back to the client root when no Nifs dir is found.
-        string assetDir = searchDir ?? FindAssetDir(zoneDatMpk, clientDir);
-
         string nifsCsv, fixturesCsv;
         using (MpkArchive dat = MpkArchive.Open(zoneDatMpk))
         {
@@ -40,39 +36,21 @@ public static class ZoneExport
         ZoneLayout layout = ZoneLayout.Parse(nifsCsv, fixturesCsv, offsetX, offsetY);
         Directory.CreateDirectory(outDir);
 
-        // Resolve + convert each distinct model once. Model files are packed one-per-archive under
-        // the install (e.g. zones/Nifs/keep.npk); textures are gathered beside the .glb.
-        var resolver = new TextureResolver(assetDir);
-        var modelIndex = new ModelLocator(assetDir);
+        // Ensure each distinct model is in the library (converted once, or an override); the library
+        // also gathers each model's textures. Lookups are index-backed — no install scan.
         var glbByNif = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         int converted = 0, missingModel = 0, failed = 0;
 
         foreach (string nif in layout.Models)
         {
-            string stem = Path.GetFileNameWithoutExtension(nif);
-            string glbName = stem + ".glb";
-            string glbPath = Path.Combine(outDir, glbName);
-
-            byte[]? nifBytes = modelIndex.Read(nif);
-            if (nifBytes is null)
+            ModelResult r = library.GetModel(nif);
+            if (r.GlbPath is null)
             {
                 missingModel++;
                 continue;
             }
-            try
-            {
-                NifModel model = NifFile.Read(nifBytes);
-                GltfExporter.SaveGlb(model, glbPath);
-                glbByNif[nif] = glbName;
-                converted++;
-                foreach (NifMesh mesh in model.Meshes)
-                    if (!string.IsNullOrEmpty(mesh.TextureFile))
-                        resolver.Resolve(mesh.TextureFile!, outDir);
-            }
-            catch (NifFormatException)
-            {
-                failed++;
-            }
+            glbByNif[nif] = Path.GetFileName(r.GlbPath);
+            converted++;
         }
 
         // Manifest: one line per placement, "glb,x,y,z,angleDeg,scale". Only fixtures whose model
@@ -95,23 +73,6 @@ public static class ZoneExport
         File.WriteAllText(Path.Combine(outDir, "zone.csv"), sb.ToString());
 
         return new ZoneExportReport(layout.Fixtures.Count, layout.Models.Count, converted, missingModel, failed, placed);
-    }
-
-    // The zone's dat mpk sits at zones/<ZoneNNN>/datNNN.mpk; fixture models and their loose textures
-    // live at zones/Nifs. Prefer that Nifs dir (small, fast to index); fall back to the client root.
-    private static string FindAssetDir(string zoneDatMpk, string clientDir)
-    {
-        string? zoneDir = Path.GetDirectoryName(Path.GetFullPath(zoneDatMpk)); // zones/ZoneNNN
-        string? zonesDir = zoneDir is null ? null : Path.GetDirectoryName(zoneDir); // zones/
-        foreach (string? candidate in new[] { zonesDir, zoneDir })
-        {
-            if (candidate is null)
-                continue;
-            string nifs = Path.Combine(candidate, "Nifs");
-            if (Directory.Exists(nifs))
-                return nifs;
-        }
-        return clientDir;
     }
 
     private static string ReadMember(MpkArchive mpk, string name)

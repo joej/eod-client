@@ -214,44 +214,43 @@ internal static class Cli
 
     private static int ZoneCmd(string[] args)
     {
-        // zone <client-dir> <dat<NNN>.mpk> --offset X Y --out DIR
-        if (args.Length < 3)
+        // zone <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR
+        if (args.Length < 2)
             return Usage();
-        string clientDir = args[1];
-        string datMpk = args[2];
+        string datMpk = args[1];
         int? offX = null, offY = null;
-        string? outDir = null;
-        for (int i = 3; i < args.Length; i++)
+        string? outDir = null, indexPath = null, libDir = null;
+        for (int i = 2; i < args.Length; i++)
         {
-            if (args[i] == "--out" && i + 1 < args.Length)
-                outDir = args[++i];
+            if (args[i] == "--out" && i + 1 < args.Length) outDir = args[++i];
+            else if (args[i] == "--index" && i + 1 < args.Length) indexPath = args[++i];
+            else if (args[i] == "--library" && i + 1 < args.Length) libDir = args[++i];
             else if (args[i] == "--offset" && i + 2 < args.Length
                      && int.TryParse(args[i + 1], out int ox) && int.TryParse(args[i + 2], out int oy))
             { offX = ox; offY = oy; i += 2; }
             else
                 return Usage();
         }
-        if (outDir is null || offX is null || offY is null)
+        if (outDir is null || libDir is null || indexPath is null || offX is null || offY is null)
         {
-            Console.Error.WriteLine("zone: --offset X Y and --out DIR are required " +
-                "(offset = the zone's region offsetX/offsetY in region units, i.e. zones.tsv value x 8192).");
+            Console.Error.WriteLine("zone: --index index.json, --library LIBDIR, --offset X Y and " +
+                "--out DIR are required (offset = the zone's region offsetX/offsetY, i.e. zones.tsv x 8192).");
             return 2;
         }
-        if (!File.Exists(datMpk))
-        {
-            Console.Error.WriteLine($"No such zone archive: {datMpk}");
-            return 1;
-        }
+        if (!File.Exists(datMpk)) { Console.Error.WriteLine($"No such zone archive: {datMpk}"); return 1; }
+        if (!File.Exists(indexPath)) { Console.Error.WriteLine($"No such index: {indexPath} (run `mpk index` first)."); return 1; }
 
         try
         {
-            ZoneExportReport r = ZoneExport.Export(clientDir, datMpk, offX.Value, offY.Value, outDir);
+            var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir);
+            ZoneExportReport r = ZoneExport.Export(library, datMpk, offX.Value, offY.Value, outDir);
             Console.WriteLine($"Zone: {r.Fixtures} fixtures, {r.Models} distinct models -> " +
-                $"{r.Converted} converted, {r.MissingModel} model(s) not found, {r.Failed} failed; " +
-                $"{r.Placed} placements written to {Path.GetFullPath(outDir)}/zone.csv");
+                $"{r.Converted} in library, {r.MissingModel} not found; " +
+                $"{r.Placed} placements written to {Path.GetFullPath(outDir)}/zone.csv " +
+                $"(library: {Path.GetFullPath(libDir)})");
             return 0;
         }
-        catch (Exception e) when (e is MpkFormatException or DirectoryNotFoundException)
+        catch (Exception e) when (e is MpkFormatException or DirectoryNotFoundException or InvalidDataException)
         {
             Console.Error.WriteLine($"zone: {e.Message}");
             return 1;
@@ -307,8 +306,8 @@ internal static class Cli
               mpk extract  <archive.mpk> [member] [--out DIR]
               mpk convert  <model.nif> [--out FILE.glb]
               mpk textures <client-dir> <model.nif | dir-of-nifs> --out DIR
-              mpk zone     <client-dir> <dat<NNN>.mpk> --offset X Y --out DIR
               mpk index    <client-dir> --out index.json
+              mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR
 
             With no member, extract writes every member. Default --out is the current directory.
             convert writes a glTF binary next to the .nif unless --out is given.

@@ -89,20 +89,26 @@ client loads from. The individual stages are the `mpk` subcommands below (`conve
   under `zones/Nifs/`, found by name) and writes `zone.csv` (a placement manifest). `WorldView`
   loads the manifest and instances each object around the character. Verified live: 1,536 Camelot
   Hills objects placed. No reverse engineering — the client ships this as CSV.
-  - **Next: convert-once asset library + install index + override layer** (decided 2026-10-20).
-    The converted **library** is the current goal: a shared set (`<lib>/models/<name>.glb`,
-    `<lib>/textures/<name>.dds`) the Godot client loads, built once from the owner's install via an
-    install index (name → loose path or archive+member, saved under `private/`, archives opened at
-    most once, doubling as documentation of the install). The library is **client-derived content**:
-    it stays owner-local under `private/`, git-ignored, never redistributed — it exists so we don't
-    infringe or ship the originals. Zones reference it by name (`zone.csv` already does).
-  - **The `overrides/` layer is the path to a redistributable, open asset set.** Unlike the derived
-    library, overrides are assets **we or contributors author** (original work, not converted from
-    the client), so they are cleanly distributable under their authors' license and can live in a
-    public repo. An override wins over the derived asset of the same name at load time. Over time the
-    project can populate overrides and invite contributions until a player needs no original game
-    files at all — and because a Godot client has no 32-bit ceiling (the 2001-era assets do),
-    overrides can be higher-res / remastered. This makes overrides a core direction, not just polish.
+  - **Convert-once asset library + install index + override layer — done** (decided & built
+    2026-10-20). `mpk index <client> --out index.json` walks the install once and records where every
+    `.nif`/`.dds` lives (loose path or archive+member) — archives opened at most once; the index is
+    saved under `private/` and doubles as documentation (26,303 assets on the real install). The
+    **library** (`AssetLibrary`) is backed by the index: `<lib>/models/<name>.glb` and
+    `<lib>/textures/<name>.dds` are produced once per asset, cached on disk, and reused — so a second
+    build or a second zone is instant (Camelot Hills went from a >110s whole-install scan to 1s). The
+    library is **client-derived content**: owner-local under `private/`, git-ignored, never
+    redistributed — it exists so the client loads from it instead of us shipping the originals.
+  - **`overrides/` is the path to a redistributable, open asset set.** Unlike the derived library,
+    overrides are assets **we or contributors author** (original work, not converted from the
+    client), so they are cleanly distributable under their authors' license and can live in a public
+    repo. An `overrides/<name>` wins over the converted asset at both build and load time (library
+    and Godot both resolve overrides first). Over time the project can populate overrides and invite
+    contributions until a player needs no original game files at all — and because a Godot client has
+    no 32-bit ceiling (the 2001-era assets do), overrides can be higher-res / remastered. Core
+    direction, not polish.
+  - `mpk zone` now takes `--index` + `--library` and references the library by name; `WorldView`
+    loads zone models from the library (overrides → models, textures from overrides → textures).
+    Verified live: Camelot Hills, 1,531 objects placed from the library, session healthy.
 
 ## Tooling
 

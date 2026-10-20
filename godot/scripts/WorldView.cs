@@ -25,6 +25,7 @@ public partial class WorldView : Node3D
     private WorldPosition _world = null!;
     private string? _modelPath;
     private string? _zonePath;
+    private string? _libraryPath;
     private Label _status = null!;
     private Button _button = null!;
     private int _packets;
@@ -58,12 +59,14 @@ public partial class WorldView : Node3D
     /// stand in for the character; null or missing falls back to the capsule (MVC needs no assets).
     /// <paramref name="zoneManifest"/> is an optional zone.csv (from `mpk zone`) whose static objects
     /// are placed around the character; null or missing just shows the flat ground.</summary>
-    public void Init(DaocConnection connection, WorldPosition world, string? modelPath = null, string? zoneManifest = null)
+    public void Init(DaocConnection connection, WorldPosition world,
+        string? modelPath = null, string? zoneManifest = null, string? libraryPath = null)
     {
         _connection = connection;
         _world = world;
         _modelPath = modelPath;
         _zonePath = zoneManifest;
+        _libraryPath = libraryPath;
     }
 
     /// <summary>
@@ -149,7 +152,11 @@ public partial class WorldView : Node3D
         if (string.IsNullOrEmpty(_zonePath) || !Godot.FileAccess.FileExists(_zonePath))
             return 0;
 
-        string dir = System.IO.Path.GetDirectoryName(_zonePath) ?? "";
+        // Models/textures come from the shared library (overrides/ win, then models/ + textures/);
+        // fall back to the manifest's own folder if no library was given.
+        string libraryDir = string.IsNullOrEmpty(_libraryPath)
+            ? System.IO.Path.GetDirectoryName(_zonePath) ?? ""
+            : _libraryPath;
         string[] lines = Godot.FileAccess.GetFileAsString(_zonePath).Split('\n');
         var loaded = new System.Collections.Generic.Dictionary<string, Node3D?>();
         var zoneRoot = new Node3D { Name = "Zone" };
@@ -167,7 +174,7 @@ public partial class WorldView : Node3D
                 || !float.TryParse(c[5], out float scale))
                 continue;
 
-            Node3D? template = LoadZoneModel(c[0], dir, loaded);
+            Node3D? template = LoadZoneModel(c[0], libraryDir, loaded);
             if (template is null)
                 continue;
 
@@ -185,21 +192,28 @@ public partial class WorldView : Node3D
         return placed;
     }
 
-    // Loads a zone .glb once (cached), textured from the manifest's folder; null if it can't load.
-    private Node3D? LoadZoneModel(string glb, string dir, System.Collections.Generic.Dictionary<string, Node3D?> cache)
+    // Loads a zone .glb once (cached). Resolves the library layout: an overrides/<glb> wins, else
+    // models/<glb>; a flat <lib>/<glb> is also accepted (manifest-folder fallback). Textures are
+    // applied from the same layers (overrides win over textures/). Null if it can't load.
+    private Node3D? LoadZoneModel(string glb, string libraryDir, System.Collections.Generic.Dictionary<string, Node3D?> cache)
     {
         if (cache.TryGetValue(glb, out Node3D? cached))
             return cached;
 
+        string? path = FirstExisting(
+            libraryDir.PathJoin("overrides").PathJoin(glb),
+            libraryDir.PathJoin("models").PathJoin(glb),
+            libraryDir.PathJoin(glb));
+
         Node3D? model = null;
-        string path = dir.PathJoin(glb);
-        if (Godot.FileAccess.FileExists(path))
+        if (path is not null)
         {
             var doc = new GltfDocument();
             var state = new GltfState();
             if (doc.AppendFromFile(path, state) == Error.Ok && doc.GenerateScene(state) is Node3D m)
             {
-                ModelTexturing.Apply(m, dir);
+                // Texture search dirs, in priority order: overrides, textures, library root.
+                ModelTexturing.Apply(m, libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir);
                 model = m;
             }
             else
@@ -209,6 +223,15 @@ public partial class WorldView : Node3D
         }
         cache[glb] = model;
         return model;
+    }
+
+    // First of the given paths that exists, or null.
+    private static string? FirstExisting(params string[] paths)
+    {
+        foreach (string p in paths)
+            if (Godot.FileAccess.FileExists(p))
+                return p;
+        return null;
     }
 
     // Loads the .glb at _modelPath as the character body: scaled to a human-ish height and seated on

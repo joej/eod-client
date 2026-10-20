@@ -241,7 +241,8 @@ public partial class CharacterScreen : Control
 
             _world = new WorldView();
             string[] a = OS.GetCmdlineUserArgs();
-            _world.Init(_connection, world, ResolvedPath(a, "--model"), ResolvedPath(a, "--zone"));
+            _world.Init(_connection, world, ResolvedPath(a, "--model"),
+                ResolvedPath(a, "--zone"), ResolvedPath(a, "--library"));
             _world.QuitPressed += () => _ = LeaveWorld();
             _world.BackToLoginPressed += () => _ = BackToLogin("Disconnected.");
             GetTree().Root.AddChild(_world);

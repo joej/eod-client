@@ -21,9 +21,14 @@ public static class ModelTexturing
     /// Materials whose texture is absent are left as-is. Returns how many surfaces were textured.
     /// Missing directory or a non-DDS file is tolerated (the model simply stays untextured).
     /// </summary>
-    public static int Apply(Node modelRoot, string textureDir)
+    public static int Apply(Node modelRoot, params string[] textureDirs)
     {
-        if (string.IsNullOrEmpty(textureDir) || !DirAccess.DirExistsAbsolute(textureDir))
+        // Keep only the dirs that exist, in the given priority order (e.g. overrides before models).
+        var dirs = new System.Collections.Generic.List<string>();
+        foreach (string d in textureDirs)
+            if (!string.IsNullOrEmpty(d) && DirAccess.DirExistsAbsolute(d))
+                dirs.Add(d);
+        if (dirs.Count == 0)
             return 0;
 
         var cache = new System.Collections.Generic.Dictionary<string, ImageTexture?>();
@@ -42,7 +47,7 @@ public static class ModelTexturing
                 if (string.IsNullOrEmpty(stem))
                     continue;
 
-                ImageTexture? tex = LoadTexture(textureDir, stem, cache);
+                ImageTexture? tex = LoadTexture(dirs, stem, cache);
                 if (tex is null)
                     continue;
 
@@ -56,39 +61,45 @@ public static class ModelTexturing
         return textured;
     }
 
-    // Loads <stem>.dds (then .tga/.bmp as fallbacks via Godot's own loaders) into an ImageTexture,
-    // caching by stem. Returns null when no readable texture file is found.
+    // Loads <stem>.dds (then .tga/.bmp/.png) into an ImageTexture, searching the dirs in order (so an
+    // overrides dir wins). Cached by stem. Returns null when no readable texture file is found.
     private static ImageTexture? LoadTexture(
-        string dir, string stem, System.Collections.Generic.Dictionary<string, ImageTexture?> cache)
+        System.Collections.Generic.List<string> dirs, string stem,
+        System.Collections.Generic.Dictionary<string, ImageTexture?> cache)
     {
         if (cache.TryGetValue(stem, out ImageTexture? cached))
             return cached;
 
         ImageTexture? result = null;
-        foreach (string ext in new[] { ".dds", ".tga", ".bmp", ".png" })
+        foreach (string dir in dirs)
         {
-            string path = dir.PathJoin(stem + ext);
-            if (!Godot.FileAccess.FileExists(path))
-                continue;
-
-            byte[] bytes = Godot.FileAccess.GetFileAsBytes(path);
-            if (bytes.Length == 0)
-                continue;
-
-            var img = new Image();
-            Error err = ext switch
+            foreach (string ext in new[] { ".dds", ".tga", ".bmp", ".png" })
             {
-                ".dds" => img.LoadDdsFromBuffer(bytes),
-                ".tga" => img.LoadTgaFromBuffer(bytes),
-                ".bmp" => img.LoadBmpFromBuffer(bytes),
-                _ => img.LoadPngFromBuffer(bytes),
-            };
-            if (err == Error.Ok)
-            {
-                result = ImageTexture.CreateFromImage(img);
-                break;
+                string path = dir.PathJoin(stem + ext);
+                if (!Godot.FileAccess.FileExists(path))
+                    continue;
+
+                byte[] bytes = Godot.FileAccess.GetFileAsBytes(path);
+                if (bytes.Length == 0)
+                    continue;
+
+                var img = new Image();
+                Error err = ext switch
+                {
+                    ".dds" => img.LoadDdsFromBuffer(bytes),
+                    ".tga" => img.LoadTgaFromBuffer(bytes),
+                    ".bmp" => img.LoadBmpFromBuffer(bytes),
+                    _ => img.LoadPngFromBuffer(bytes),
+                };
+                if (err == Error.Ok)
+                {
+                    result = ImageTexture.CreateFromImage(img);
+                    break;
+                }
+                GD.PrintErr($"[texture] {stem}{ext} failed to decode ({err}).");
             }
-            GD.PrintErr($"[texture] {stem}{ext} failed to decode ({err}).");
+            if (result is not null)
+                break;
         }
         cache[stem] = result;
         return result;
