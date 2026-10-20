@@ -32,10 +32,11 @@ client loads from. The individual stages are the `mpk` subcommands below (`conve
   verifies the directory and per-member CRC-32, and is bounds-checked throughout. `tools/mpk`
   lists and extracts. Format reimplemented from public specs (DOLSharp, RustDAoC) and verified
   against real client archives; no third-party source copied.
-- **NIF → glTF — static path done for both formats (4.2.x items + 10.1.0.0 creatures).**
-  `src/DaocAssets/Nif` reads `NiTriShapeData` geometry (vertices, normals, UVs, triangles; plus the
-  external base-texture name) from NetImmerse 4.2.x and Gamebryo 10.1.0.0 NIFs, and `GltfExporter`
-  emits a `.glb` via **SharpGLTF** (MIT), Z-up → Y-up with winding flipped. `tools/mpk convert` runs it; `godot/scenes/ModelViewer.tscn` loads a
+- **NIF → glTF — static path done (items + creatures, shapes + strips, multi-mesh).**
+  `src/DaocAssets/Nif` reads geometry (vertices, normals, UVs, triangles; plus the external
+  base-texture name) from NetImmerse 4.2.x and Gamebryo 10.1.0.0 NIFs — both `NiTriShapeData` and
+  `NiTriStripsData`, and NIFs with more than one mesh — and `GltfExporter` emits a `.glb` via
+  **SharpGLTF** (MIT), Z-up → Y-up with winding flipped. `tools/mpk convert` runs it; `godot/scenes/ModelViewer.tscn` loads a
   `.glb` at runtime and orbits it. Byte-verified against a real 4.2.2.0 item (golden hashes in the
   tests). Not Blender: the Niftools addon would add a heavy runtime dependency and its
   old-NetImmerse import path is unproven for our files.
@@ -60,10 +61,13 @@ client loads from. The individual stages are the `mpk` subcommands below (`conve
     locates each `NiTriShapeData` body by a strict self-validating scan (every field
     consistency-checked). 10.1.0.0 geometry adds Keep/Compress-flags bytes, a leading Data-Flags
     u16, a Consistency-Flags u16, and a Has-Triangles bool vs 4.2.x.
-  - **Remaining geometry — `NiTriStripsData` (~10%).** Some creatures (e.g. `Skel01.NIF`) store
-    triangle **strips**, not a flat list; those are correctly rejected today ("No NiTriShapeData
-    type"). Next geometry task: decode `NiTriStripsData` (strip arrays → triangles) for both header
-    layouts. Also pending: multi-mesh NIFs (more than one TriShape in a file).
+  - **`NiTriStripsData` — done (10.1.0.0).** Some creatures (e.g. `Skel01.NIF`) store triangle
+    **strips** rather than a flat list. The reader shares the `NiGeometryData`/`NiTriBasedGeomData`
+    read with `NiTriShapeData`, then parses `Num Strips`, `Strip Lengths`, `Has Points` and the
+    per-strip point arrays, converting each strip to triangles (winding flipped on odd triangles,
+    degenerate stitch triangles and the 0xFFFF restart sentinel dropped). **Multi-mesh** NIFs also
+    work (Skel01 has two body parts → two meshes). Byte-verified golden test. Still 10.1.0.0-only:
+    a 4.2.x `NiTriStripsData` path can be added if such files turn up (none seen in the sample).
   - **First proof — done.** 4.2.2.0 item (`bowsprit_alb_01`) and 10.1.0.0 creature
     (`ambrat_black`) both convert and render in Godot. No `.kf` files exist in the client, so no
     skeleton/skinning; creatures are internally rigged (`NiSkinInstance`/`Bip01`) but we take

@@ -29,6 +29,13 @@ public sealed class NifFileTests
             yield return [p];
     }
 
+    public static IEnumerable<object[]> StripsCreature()
+    {
+        string p = Path.Combine(AppContext.BaseDirectory, "live-nif", "sample-strips-1010.nif");
+        if (File.Exists(p))
+            yield return [p];
+    }
+
     [Theory]
     [MemberData(nameof(Bowsprit))]
     public void ReadsTheBowspritGoldenGeometry(string path)
@@ -75,6 +82,32 @@ public sealed class NifFileTests
         // Byte-for-byte golden hashes from the verified hand-decode.
         Assert.Equal("1adeba4b932bf670", VertHash(mesh));
         Assert.Equal("6178f8385ce0c558", TriHash(mesh));
+    }
+
+    [Theory]
+    [MemberData(nameof(StripsCreature))]
+    public void ReadsTheTriStripsGoldenGeometry(string path)
+    {
+        // figures/Skel01.NIF, Gamebryo 10.1.0.0, NiTriStripsData (triangle strips) and multi-mesh
+        // (two body parts). Strips are converted to a triangle list (winding flipped on odd
+        // triangles, degenerate stitch triangles dropped). Golden values from the verified decode.
+        NifModel model = NifFile.Read(File.ReadAllBytes(path));
+        Assert.Equal(new NifVersion(10, 1, 0, 0), model.Version);
+        Assert.Equal(2, model.Meshes.Count);
+
+        NifMesh m0 = model.Meshes[0];
+        Assert.Equal(31, m0.Vertices.Length);
+        Assert.Equal(29, m0.Triangles.Length);
+        Assert.All(m0.Triangles, t => Assert.True(t.A < 31 && t.B < 31 && t.C < 31));
+        Assert.All(m0.Triangles, t => Assert.True(t.A != t.B && t.B != t.C && t.A != t.C));
+        Assert.Equal("4f2a52863a6b49b1", VertHash(m0));
+        Assert.Equal("339d984541687ca0", TriHash(m0));
+
+        NifMesh m1 = model.Meshes[1];
+        Assert.Equal(503, m1.Vertices.Length);
+        Assert.Equal(652, m1.Triangles.Length);
+        Assert.Equal("b987c508e56915ab", VertHash(m1));
+        Assert.Equal("7273be65c279afb2", TriHash(m1));
     }
 
     [Fact]
