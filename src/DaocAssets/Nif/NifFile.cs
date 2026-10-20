@@ -56,6 +56,9 @@ public static class NifFile
                 case "NiTriShapeData":
                     meshes.Add(ReadTriShapeData(ref c, version, $"mesh{i}"));
                     break;
+                case "NiTriStripsData":
+                    meshes.Add(ReadTriStripsData4x(ref c, $"mesh{i}"));
+                    break;
                 case "NiSourceTexture":
                     textureFile ??= ReadSourceTextureFileName(ref c, bytes);
                     // Fall through to resync: we read only the external file name, not the whole body.
@@ -372,36 +375,47 @@ public static class NifFile
         return null;
     }
 
-    // NiGeometryData -> NiTriBasedGeomData -> NiTriShapeData, field order for 4.2.2.0 (verified).
-    private static NifMesh ReadTriShapeData(ref NifCursor c, NifVersion version, string name)
+    // The geometry data shared by NiTriShapeData and NiTriStripsData at 4.x (NiGeometryData ->
+    // NiTriBasedGeomData), read up to and including Num Triangles. Field order for 4.2.x (verified):
+    //   Num Vertices u16; Has Vertices bool(1) + Vertices; Has Normals bool(1) + Normals; Bounding
+    //   Sphere (centre+radius); Has Vertex Colors bool(1) + Color4s; Data Flags u16 (`until=4.2.2.0`,
+    //   low 6 bits = UV-set count); UV sets; Num Triangles u16. No Keep/Compress bytes and no
+    //   Consistency Flags (those are `since 10.x`); no Has-UV byte (that is `until=4.0.0.2`).
+    private static void ReadGeometryCommon4x(
+        ref NifCursor c, out int numVertices, out Vector3[] vertices,
+        out Vector3[]? normals, out Vector2[]? texCoords, out int numTriangles)
     {
-        int numVertices = c.U16();
-
-        Vector3[] vertices = c.Bool() ? ReadVec3Array(ref c, numVertices) : [];
-        Vector3[]? normals = c.Bool() ? ReadVec3Array(ref c, numVertices) : null;
-        // Bounding sphere: centre + radius.
-        c.Vec3();
-        c.F32();
-        if (c.Bool()) // vertex colours (Color4), read and discard
+        numVertices = c.U16();
+        vertices = c.Bool() ? ReadVec3Array(ref c, numVertices) : [];
+        normals = c.Bool() ? ReadVec3Array(ref c, numVertices) : null;
+        c.Vec3(); c.F32();           // Bounding sphere: centre + radius
+        if (c.Bool())                // vertex colours (Color4), read and discard
             for (int k = 0; k < numVertices * 4; k++)
                 c.F32();
 
-        // Data Flags (u16, field `until=4.2.2.0`): low 6 bits = UV-set count. No Has-UV byte here.
-        int uvSets = c.U16() & 0x3F;
-        Vector2[]? texCoords = null;
+        int uvSets = c.U16() & 0x3F; // Data Flags (until=4.2.2.0): low 6 bits = UV-set count
+        texCoords = null;
         for (int s = 0; s < uvSets; s++)
         {
             Vector2[] set = new Vector2[numVertices];
             for (int v = 0; v < numVertices; v++)
                 set[v] = new Vector2(c.F32(), c.F32());
-            texCoords ??= set; // keep the first UV set
+            texCoords ??= set;       // keep the first UV set
         }
 
-        int numTriangles = c.U16();          // NiTriBasedGeomData
-        uint numTrianglePoints = c.U32();     // NiTriShapeData
+        numTriangles = c.U16();      // NiTriBasedGeomData
+    }
+
+    // NiTriShapeData at 4.2.x. After the shared geometry: Num Triangle Points u32 (=3x), triangles.
+    // (`Has Triangles` is `since 10.1.0.0`, so at 4.2.x triangles follow directly.)
+    private static NifMesh ReadTriShapeData(ref NifCursor c, NifVersion version, string name)
+    {
+        ReadGeometryCommon4x(ref c, out int numVertices, out Vector3[] vertices,
+            out Vector3[]? normals, out Vector2[]? texCoords, out int numTriangles);
+
+        uint numTrianglePoints = c.U32();
         if (numTrianglePoints != (uint)numTriangles * 3)
             throw new NifFormatException($"Triangle point count {numTrianglePoints} != 3 x {numTriangles}.");
-        // `Has Triangles` is `since 10.1.0.0`, so at 4.2.x triangles follow directly.
 
         var triangles = new (ushort, ushort, ushort)[numTriangles];
         for (int t = 0; t < numTriangles; t++)
@@ -419,6 +433,44 @@ public static class NifFile
             Normals = normals,
             TexCoords = texCoords,
             Triangles = triangles,
+        };
+    }
+
+    // NiTriStripsData at 4.x. After the shared geometry: Num Strips u16; Strip Lengths u16 x strips;
+    // Points u16 (one array per strip). `Has Points` is `since 10.0.1.3`, so there is NO Has-Points
+    // byte at 4.x — points follow Strip Lengths directly. Strips are converted to a triangle list.
+    private static NifMesh ReadTriStripsData4x(ref NifCursor c, string name)
+    {
+        ReadGeometryCommon4x(ref c, out int numVertices, out Vector3[] vertices,
+            out Vector3[]? normals, out Vector2[]? texCoords, out int _);
+
+        int numStrips = c.U16();
+        var lengths = new int[numStrips];
+        for (int s = 0; s < numStrips; s++)
+            lengths[s] = c.U16();
+
+        var triangles = new List<(ushort, ushort, ushort)>();
+        for (int s = 0; s < numStrips; s++)
+        {
+            int len = lengths[s];
+            var strip = new ushort[len];
+            for (int i = 0; i < len; i++)
+            {
+                ushort idx = c.U16();
+                if (idx != 0xFFFF && idx >= numVertices)
+                    throw new NifFormatException($"Strip index {idx} past {numVertices} vertices.");
+                strip[i] = idx;
+            }
+            AppendStripTriangles(strip, triangles);
+        }
+
+        return new NifMesh
+        {
+            Name = name,
+            Vertices = vertices,
+            Normals = normals,
+            TexCoords = texCoords,
+            Triangles = triangles.ToArray(),
         };
     }
 

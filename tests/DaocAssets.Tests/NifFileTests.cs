@@ -36,6 +36,13 @@ public sealed class NifFileTests
             yield return [p];
     }
 
+    public static IEnumerable<object[]> Strips4x()
+    {
+        string p = Path.Combine(AppContext.BaseDirectory, "live-nif", "sample-strips-4x.nif");
+        if (File.Exists(p))
+            yield return [p];
+    }
+
     [Theory]
     [MemberData(nameof(Bowsprit))]
     public void ReadsTheBowspritGoldenGeometry(string path)
@@ -108,6 +115,24 @@ public sealed class NifFileTests
         Assert.Equal(652, m1.Triangles.Length);
         Assert.Equal("b987c508e56915ab", VertHash(m1));
         Assert.Equal("7273be65c279afb2", TriHash(m1));
+    }
+
+    [Theory]
+    [MemberData(nameof(Strips4x))]
+    public void ReadsThe4xTriStripsGoldenGeometry(string path)
+    {
+        // items/b_bo_shortbow01.nif, NetImmerse 4.1.0.12, NiTriStripsData. The 4.x strip layout has
+        // no Has-Points byte (that is `since 10.0.1.3`); points follow Strip Lengths directly.
+        NifModel model = NifFile.Read(File.ReadAllBytes(path));
+        Assert.Equal(new NifVersion(4, 1, 0, 12), model.Version);
+        NifMesh mesh = Assert.Single(model.Meshes);
+
+        Assert.Equal(74, mesh.Vertices.Length);
+        Assert.Equal(60, mesh.Triangles.Length);
+        Assert.All(mesh.Triangles, t => Assert.True(t.A < 74 && t.B < 74 && t.C < 74));
+        Assert.All(mesh.Triangles, t => Assert.True(t.A != t.B && t.B != t.C && t.A != t.C));
+        Assert.Equal("4be11ed97cecf228", VertHash(mesh));
+        Assert.Equal("da58e35b38cf8ca7", TriHash(mesh));
     }
 
     [Fact]

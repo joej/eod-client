@@ -61,13 +61,17 @@ client loads from. The individual stages are the `mpk` subcommands below (`conve
     locates each `NiTriShapeData` body by a strict self-validating scan (every field
     consistency-checked). 10.1.0.0 geometry adds Keep/Compress-flags bytes, a leading Data-Flags
     u16, a Consistency-Flags u16, and a Has-Triangles bool vs 4.2.x.
-  - **`NiTriStripsData` — done (10.1.0.0).** Some creatures (e.g. `Skel01.NIF`) store triangle
-    **strips** rather than a flat list. The reader shares the `NiGeometryData`/`NiTriBasedGeomData`
-    read with `NiTriShapeData`, then parses `Num Strips`, `Strip Lengths`, `Has Points` and the
-    per-strip point arrays, converting each strip to triangles (winding flipped on odd triangles,
-    degenerate stitch triangles and the 0xFFFF restart sentinel dropped). **Multi-mesh** NIFs also
-    work (Skel01 has two body parts → two meshes). Byte-verified golden test. Still 10.1.0.0-only:
-    a 4.2.x `NiTriStripsData` path can be added if such files turn up (none seen in the sample).
+  - **`NiTriStripsData` — done (both 4.x and 10.1.0.0).** Many items (weapons especially) and some
+    creatures store triangle **strips** rather than a flat list. Each header layout shares its
+    geometry-common read with its `NiTriShapeData`, then parses the strips (`Num Strips`, `Strip
+    Lengths`, per-strip points; 10.1.0.0 has a `Has Points` bool, 4.x does not — it is
+    `since 10.0.1.3`) and converts to triangles (winding flipped on odd triangles, degenerate stitch
+    triangles and the 0xFFFF restart sentinel dropped). **Multi-mesh** NIFs work (e.g. Zombie.NIF
+    yields 44 meshes). Byte-verified golden tests for 10.1.0.0 (Skel01) and 4.1.0.12 (a shortbow).
+  - **Coverage (measured across figures/items/effects, 4,620 NIFs):** versions 10.1.0.0 (2132),
+    4.2.2.0 (1577), 4.2.1.0 (662), 4.1.0.12 (249); all handled by the shape+strips paths. A full
+    end-to-end convert of all 617 `figures` NIFs: 614 ok, 3 correctly rejected (no triangle-geometry
+    block). The ~410 strips-only 4.x files that used to be rejected now convert.
   - **First proof — done.** 4.2.2.0 item (`bowsprit_alb_01`) and 10.1.0.0 creature
     (`ambrat_black`) both convert and render in Godot. No `.kf` files exist in the client, so no
     skeleton/skinning; creatures are internally rigged (`NiSkinInstance`/`Bip01`) but we take
