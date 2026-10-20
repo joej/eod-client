@@ -30,6 +30,8 @@
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\private\mpk-fixtures')" />
     <None Include="..\..\private\nif-fixtures\*.nif" Link="live-nif\%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\private\nif-fixtures')" />
+    <None Include="..\..\private\terrain-fixtures\*.*" Link="live-terrain\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\private\terrain-fixtures')" />
   </ItemGroup>
 
 </Project>

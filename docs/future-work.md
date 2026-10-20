@@ -109,6 +109,19 @@ client loads from. The individual stages are the `mpk` subcommands below (`conve
   - `mpk zone` now takes `--index` + `--library` and references the library by name; `WorldView`
     loads zone models from the library (overrides → models, textures from overrides → textures).
     Verified live: Camelot Hills, 1,531 objects placed from the library, session healthy.
+- **Zone terrain (ground geometry) — done.** A zone's heightmap is `terrain.pcx` + `offset.pcx`
+  (both 256×256 8-bit RLE PCX) in its `dat<NNN>.mpk`, with scale constants in `SECTOR.DAT` (INI:
+  `[terrain] scalefactor`, `offsetfactor`). The height formula, verified byte-for-byte against the
+  live spawn (Eodarms Z=2896 = terrain 162 × 8 + offset 50 × 32), is
+  `Z = terrain[cell] × scalefactor + offset[cell] × offsetfactor`. `Pcx` decodes the maps,
+  `ZoneTerrain` reads them + the constants and builds a grid mesh (one vertex per cell, UVs 0..1)
+  in region-global coordinates; `mpk terrain <dat.mpk> --offset X Y --out FILE.glb` emits it as a
+  .glb (256×256 → 65,536 verts, 130,050 tris). `WorldView` loads it via `--terrain`, at the origin
+  scaled 1/100 to match the scene, replacing the flat placeholder. Verified live: Camelot Hills
+  terrain + 1,531 objects + character, session healthy.
+  - **Next for terrain: the patch textures.** `ter<NNN>.mpk` holds `patchXXXX-YY.dds` tiles (the
+    painted ground surface). Not wired yet — the terrain renders as plain green. Mapping tiles to
+    the heightmap grid (and the grass/dense/shade maps in `dat`) is a later step.
 
 ## Tooling
 

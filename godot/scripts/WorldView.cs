@@ -26,6 +26,7 @@ public partial class WorldView : Node3D
     private string? _modelPath;
     private string? _zonePath;
     private string? _libraryPath;
+    private string? _terrainPath;
     private Label _status = null!;
     private Button _button = null!;
     private int _packets;
@@ -60,13 +61,14 @@ public partial class WorldView : Node3D
     /// <paramref name="zoneManifest"/> is an optional zone.csv (from `mpk zone`) whose static objects
     /// are placed around the character; null or missing just shows the flat ground.</summary>
     public void Init(DaocConnection connection, WorldPosition world,
-        string? modelPath = null, string? zoneManifest = null, string? libraryPath = null)
+        string? modelPath = null, string? zoneManifest = null, string? libraryPath = null, string? terrainPath = null)
     {
         _connection = connection;
         _world = world;
         _modelPath = modelPath;
         _zonePath = zoneManifest;
         _libraryPath = libraryPath;
+        _terrainPath = terrainPath;
     }
 
     /// <summary>
@@ -94,13 +96,15 @@ public partial class WorldView : Node3D
         });
         AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-50, 30, 0) });
 
-        // Ground: 1000 × 1000 units (100,000 region units) centred under the character.
-        AddChild(new MeshInstance3D
-        {
-            Mesh = new PlaneMesh { Size = new Vector2(1000, 1000) },
-            Position = new Vector3(at.X, at.Y, at.Z),
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.35f, 0.5f, 0.3f) },
-        });
+        // Ground: the zone's real terrain mesh if given (its vertices are absolute region coords, so
+        // it loads at the origin with the usual region→Godot scale), otherwise a flat placeholder.
+        if (!TryAddTerrain())
+            AddChild(new MeshInstance3D
+            {
+                Mesh = new PlaneMesh { Size = new Vector2(1000, 1000) },
+                Position = new Vector3(at.X, at.Y, at.Z),
+                MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.35f, 0.5f, 0.3f) },
+            });
 
         // Character: at its world position, facing its heading, with a nose showing facing. The body
         // is a loaded .glb when one was supplied (first meeting of the asset pipeline and the live
@@ -142,6 +146,35 @@ public partial class WorldView : Node3D
         };
         overlay.AddChild(_button);
         AddChild(overlay);
+    }
+
+    // Loads the zone terrain .glb if given. Its vertices are absolute region coordinates (already
+    // Y-up from the exporter), so it goes at the origin scaled by 1/RegionUnitsPerUnit to match the
+    // rest of the scene (which places everything via ToGodot, i.e. region units / 100). Returns false
+    // (use the flat placeholder) when no terrain was given or it can't load.
+    private bool TryAddTerrain()
+    {
+        if (string.IsNullOrEmpty(_terrainPath) || !Godot.FileAccess.FileExists(_terrainPath))
+            return false;
+
+        var doc = new GltfDocument();
+        var state = new GltfState();
+        if (doc.AppendFromFile(_terrainPath, state) != Error.Ok || doc.GenerateScene(state) is not Node3D terrain)
+        {
+            GD.PrintErr($"[world] terrain failed to load: {_terrainPath}");
+            return false;
+        }
+        terrain.Scale = new Vector3(1f / RegionUnitsPerUnit, 1f / RegionUnitsPerUnit, 1f / RegionUnitsPerUnit);
+        // A plain green ground material (terrain texturing from the patch tiles is a later step).
+        foreach (MeshInstance3D mi in FindMeshes(terrain))
+            mi.MaterialOverride = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.33f, 0.46f, 0.28f),
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled, // render both sides regardless of winding
+            };
+        AddChild(terrain);
+        GD.Print("[world] terrain loaded");
+        return true;
     }
 
     // Places the zone's static objects from a zone.csv manifest (from `mpk zone`): each row is

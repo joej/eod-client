@@ -30,6 +30,9 @@ internal static class Cli
         if (command == "index")
             return IndexCmd(args);
 
+        if (command == "terrain")
+            return TerrainCmd(args);
+
         string inputPath = args[1];
         if (!File.Exists(inputPath))
         {
@@ -257,6 +260,49 @@ internal static class Cli
         }
     }
 
+    private static int TerrainCmd(string[] args)
+    {
+        // terrain <dat<NNN>.mpk> --offset X Y --out FILE.glb
+        if (args.Length < 2)
+            return Usage();
+        string datMpk = args[1];
+        int? offX = null, offY = null;
+        string? outPath = null;
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] == "--out" && i + 1 < args.Length) outPath = args[++i];
+            else if (args[i] == "--offset" && i + 2 < args.Length
+                     && int.TryParse(args[i + 1], out int ox) && int.TryParse(args[i + 2], out int oy))
+            { offX = ox; offY = oy; i += 2; }
+            else
+                return Usage();
+        }
+        if (outPath is null || offX is null || offY is null)
+        {
+            Console.Error.WriteLine("terrain: --offset X Y and --out FILE.glb are required " +
+                "(offset = the zone's region offsetX/offsetY, i.e. zones.tsv x 8192).");
+            return 2;
+        }
+        if (!File.Exists(datMpk)) { Console.Error.WriteLine($"No such zone archive: {datMpk}"); return 1; }
+
+        try
+        {
+            ZoneTerrain terrain = ZoneTerrain.Read(datMpk);
+            NifMesh mesh = terrain.BuildMesh(offX.Value, offY.Value);
+            var model = new NifModel { Version = new NifVersion(0, 0, 0, 0), Meshes = [mesh] };
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outPath))!);
+            GltfExporter.SaveGlb(model, outPath);
+            Console.WriteLine($"Terrain: {terrain.Cells}x{terrain.Cells} heightmap, " +
+                $"{mesh.Vertices.Length} verts, {mesh.Triangles.Length} tris -> {Path.GetFullPath(outPath)}");
+            return 0;
+        }
+        catch (Exception e) when (e is MpkFormatException or FormatException)
+        {
+            Console.Error.WriteLine($"terrain: {e.Message}");
+            return 1;
+        }
+    }
+
     private static int IndexCmd(string[] args)
     {
         // index <client-dir> --out index.json
@@ -308,6 +354,7 @@ internal static class Cli
               mpk textures <client-dir> <model.nif | dir-of-nifs> --out DIR
               mpk index    <client-dir> --out index.json
               mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR
+              mpk terrain  <dat<NNN>.mpk> --offset X Y --out FILE.glb
 
             With no member, extract writes every member. Default --out is the current directory.
             convert writes a glTF binary next to the .nif unless --out is given.
