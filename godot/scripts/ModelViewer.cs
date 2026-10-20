@@ -4,8 +4,9 @@
 // orbit with the mouse. No network — this is the asset-pipeline proof (NIF -> glb -> Godot).
 //
 // Run it from the project directory, pointing at a converted model:
-//   Godot --path godot --scene scenes/ModelViewer.tscn -- --model /abs/path/to/bowsprit.glb
-// (or set the Model export in the editor). Left-drag orbits, wheel zooms.
+//   Godot --path godot --scene scenes/ModelViewer.tscn -- --model private/assets/x/model.glb
+// Run it from the repo root; the --model path may be relative to there, or absolute. (Or set the
+// Model export in the editor.) Left-drag orbits, wheel zooms.
 // --textures <dir> points at a folder of extracted .dds (defaults to the .glb's own folder, where
 // tools/pipeline.sh puts them); each material's <name>.dds is loaded and set as its albedo.
 
@@ -56,8 +57,8 @@ public partial class ModelViewer : Node3D
         LoadModel(path);
     }
 
-    private static string? ModelPathFromArgs() => ArgValue("--model");
-    private static string? TextureDirFromArgs() => ArgValue("--textures");
+    private static string? ModelPathFromArgs() => ResolvePath(ArgValue("--model"));
+    private static string? TextureDirFromArgs() => ResolvePath(ArgValue("--textures"));
 
     private static string? ArgValue(string name)
     {
@@ -66,6 +67,19 @@ public partial class ModelViewer : Node3D
             if (args[i] == name)
                 return args[i + 1];
         return null;
+    }
+
+    // Godot's process working directory is the project dir (set by --path), not the shell's, so a
+    // repo-relative path like "private/assets/x.glb" would resolve under godot/ and not be found.
+    // Resolve a relative path against PWD (the shell's directory at launch) so both relative (from
+    // wherever you ran the command) and absolute paths work.
+    private static string? ResolvePath(string? path)
+    {
+        if (string.IsNullOrEmpty(path) || System.IO.Path.IsPathRooted(path))
+            return path;
+        string cwd = OS.GetEnvironment("PWD");
+        string baseDir = string.IsNullOrEmpty(cwd) ? System.IO.Directory.GetCurrentDirectory() : cwd;
+        return System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDir, path));
     }
 
     private void LoadModel(string path)
@@ -79,6 +93,7 @@ public partial class ModelViewer : Node3D
         if (!Godot.FileAccess.FileExists(path))
         {
             _status.Text = $"Model not found:\n{path}";
+            GD.PrintErr($"[viewer] model not found: {path}");
             return;
         }
 
