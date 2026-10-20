@@ -4,6 +4,7 @@
 // at your own client install. The extracted files are the client's content, not ours; they
 // never belong in this repo or a release (see CLAUDE.md, "Game client and assets").
 
+using DaocAssets;
 using DaocAssets.Mpk;
 using DaocAssets.Nif;
 
@@ -17,6 +18,10 @@ internal static class Cli
             return Usage();
 
         string command = args[0];
+
+        if (command == "textures")
+            return Textures(args);
+
         string inputPath = args[1];
         if (!File.Exists(inputPath))
         {
@@ -119,16 +124,99 @@ internal static class Cli
         return 0;
     }
 
+    private static int Textures(string[] args)
+    {
+        // textures <client-dir> <model.nif | dir-of-nifs> --out DIR
+        if (args.Length < 3)
+            return Usage();
+        string clientDir = args[1];
+        string modelArg = args[2];
+        string? outDir = null;
+        for (int i = 3; i < args.Length; i++)
+        {
+            if (args[i] == "--out" && i + 1 < args.Length)
+                outDir = args[++i];
+            else
+                return Usage();
+        }
+        if (outDir is null)
+        {
+            Console.Error.WriteLine("textures: --out DIR is required.");
+            return 2;
+        }
+
+        string[] nifs =
+            Directory.Exists(modelArg)
+                ? Directory.GetFiles(modelArg, "*.nif", SearchOption.AllDirectories)
+                : File.Exists(modelArg) ? [modelArg]
+                : [];
+        if (nifs.Length == 0)
+        {
+            Console.Error.WriteLine($"No .nif model found at: {modelArg}");
+            return 1;
+        }
+
+        TextureResolver resolver;
+        try
+        {
+            resolver = new TextureResolver(clientDir);
+        }
+        catch (DirectoryNotFoundException e)
+        {
+            Console.Error.WriteLine(e.Message);
+            return 1;
+        }
+
+        // Collect the unique texture names across all models first (one model's skin is often shared).
+        var wanted = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string nif in nifs)
+        {
+            try
+            {
+                foreach (string name in TextureResolver.TextureNames(nif))
+                    wanted.Add(name);
+            }
+            catch (NifFormatException e)
+            {
+                Console.Error.WriteLine($"  (skipping {Path.GetFileName(nif)}: {e.Message})");
+            }
+        }
+
+        if (wanted.Count == 0)
+        {
+            Console.WriteLine("No texture names referenced by the model(s); nothing to gather.");
+            return 0;
+        }
+
+        int loose = 0, archived = 0, missing = 0;
+        foreach (string name in wanted)
+        {
+            TextureResult r = resolver.Resolve(name, outDir);
+            switch (r.Source)
+            {
+                case TextureSource.Loose: loose++; Console.WriteLine($"  loose    {r.Name}"); break;
+                case TextureSource.Archive: archived++; Console.WriteLine($"  archive  {r.Name}  ({Path.GetFileName(r.FoundIn)})"); break;
+                default: missing++; Console.WriteLine($"  MISSING  {r.Name}"); break;
+            }
+        }
+        Console.WriteLine($"Gathered {loose + archived} of {wanted.Count} texture(s) " +
+            $"({loose} loose, {archived} from archives, {missing} missing) -> {Path.GetFullPath(outDir)}");
+        return missing == 0 ? 0 : 1;
+    }
+
     private static int Usage()
     {
         Console.Error.WriteLine("""
             Usage:
-              mpk list    <archive.mpk>
-              mpk extract <archive.mpk> [member] [--out DIR]
-              mpk convert <model.nif> [--out FILE.glb]
+              mpk list     <archive.mpk>
+              mpk extract  <archive.mpk> [member] [--out DIR]
+              mpk convert  <model.nif> [--out FILE.glb]
+              mpk textures <client-dir> <model.nif | dir-of-nifs> --out DIR
 
             With no member, extract writes every member. Default --out is the current directory.
             convert writes a glTF binary next to the .nif unless --out is given.
+            textures gathers the .dds a model references (loose on disk or packed in an .mpk) into
+            one folder, for the Godot client to load. Owner-run: point it at your own install.
             """);
         return 2;
     }
