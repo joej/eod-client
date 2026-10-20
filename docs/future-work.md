@@ -39,15 +39,15 @@ client loads from. The individual stages are the `mpk` subcommands below (`conve
   `.glb` at runtime and orbits it. Byte-verified against a real 4.2.2.0 item (golden hashes in the
   tests). Not Blender: the Niftools addon would add a heavy runtime dependency and its
   old-NetImmerse import path is unproven for our files.
-  - **Texturing — deferred to a Godot-side step (needs an extracted-`.dds` folder).** The `.glb`
-    deliberately embeds **no** texture bytes (keeps it a distributable, geometry-only artifact —
-    assets policy); instead the glTF material is named after the texture (e.g. `PSbeamLt_grey`).
-    glTF only sanctions PNG/JPEG and Godot's glTF importer won't follow a `.dds` satellite, so the
-    plan is to texture in `ModelViewer.cs`: after loading the `.glb`, read each material's name,
-    load `<name>.dds` from an owner-provided folder via Godot's native DDS support, and assign it.
-    Not yet written or verified — do it when a folder of extracted `.dds` is available to test
-    against. Converting the `.dds` to PNG and embedding it in the `.glb` is rejected: it would bake
-    client pixels into a derived artifact.
+  - **Texturing — done (Godot-side).** The `.glb` embeds **no** texture bytes (stays a
+    distributable, geometry-only artifact — assets policy); the glTF material is named after the
+    texture (e.g. `PSbeamLt_grey`). `godot/scripts/ModelTexturing.cs` loads `<name>.dds` from the
+    folder beside the `.glb` (where `tools/pipeline.sh` gathers them) and assigns it as the albedo.
+    Godot's generic `Image.load()` doesn't recognise `.dds`, but `Image.LoadDdsFromBuffer()` does
+    (verified against real client textures), so we read the bytes and decode from the buffer. Both
+    the model viewer and the live `WorldView` texture their model; a missing/unknown texture leaves
+    the model untextured without error. `--textures <dir>` overrides the default folder. Embedding
+    the `.dds` as PNG in the `.glb` was rejected: it would bake client pixels into a derived artifact.
   - **Versions in this client (verified against the install):** 4.2.2.0 (majority, NetImmerse —
     items), 4.2.1.0, 10.1.0.0 (Gamebryo — creatures). Two different header layouts; the reader
     gates on version. Both `NiTriShapeData` paths are **done** (4.2.x and 10.1.0.0, each

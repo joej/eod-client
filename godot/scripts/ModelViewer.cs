@@ -6,6 +6,8 @@
 // Run it from the project directory, pointing at a converted model:
 //   Godot --path godot --scene scenes/ModelViewer.tscn -- --model /abs/path/to/bowsprit.glb
 // (or set the Model export in the editor). Left-drag orbits, wheel zooms.
+// --textures <dir> points at a folder of extracted .dds (defaults to the .glb's own folder, where
+// tools/pipeline.sh puts them); each material's <name>.dds is loaded and set as its albedo.
 
 using Godot;
 
@@ -54,11 +56,14 @@ public partial class ModelViewer : Node3D
         LoadModel(path);
     }
 
-    private static string? ModelPathFromArgs()
+    private static string? ModelPathFromArgs() => ArgValue("--model");
+    private static string? TextureDirFromArgs() => ArgValue("--textures");
+
+    private static string? ArgValue(string name)
     {
         string[] args = OS.GetCmdlineUserArgs();
         for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "--model")
+            if (args[i] == name)
                 return args[i + 1];
         return null;
     }
@@ -89,11 +94,17 @@ public partial class ModelViewer : Node3D
         Node scene = doc.GenerateScene(state);
         _pivot.AddChild(scene);
 
+        // Texture from a folder of extracted .dds. Default to the model's own folder, since the
+        // asset pipeline (tools/pipeline.sh) gathers textures beside the .glb; --textures overrides.
+        string textureDir = TextureDirFromArgs() ?? System.IO.Path.GetDirectoryName(path) ?? "";
+        int textured = ModelTexturing.Apply(scene, textureDir);
+
         Aabb bounds = ComputeBounds(scene);
         FrameBounds(bounds);
-        GD.Print($"[viewer] loaded {System.IO.Path.GetFileName(path)} bounds={bounds.Size}");
+        GD.Print($"[viewer] loaded {System.IO.Path.GetFileName(path)} bounds={bounds.Size} textured={textured}");
         _status.Text = $"{System.IO.Path.GetFileName(path)}\n" +
-            $"size {bounds.Size.X:F1} x {bounds.Size.Y:F1} x {bounds.Size.Z:F1}\n" +
+            $"size {bounds.Size.X:F1} x {bounds.Size.Y:F1} x {bounds.Size.Z:F1}" +
+            (textured > 0 ? $" · {textured} textured" : " · untextured") + "\n" +
             "left-drag orbit · wheel zoom";
     }
 

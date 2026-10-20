@@ -151,6 +151,10 @@ public partial class WorldView : Node3D
         if (scene is not Node3D model)
             return false;
 
+        // Texture from the extracted .dds beside the model (where tools/pipeline.sh puts them).
+        string textureDir = System.IO.Path.GetDirectoryName(_modelPath) ?? "";
+        int textured = ModelTexturing.Apply(model, textureDir);
+
         Aabb bounds = ModelBounds(model);
         float height = Mathf.Max(bounds.Size.Y, 0.001f);
         float scale = ModelTargetHeight / height;
@@ -160,7 +164,7 @@ public partial class WorldView : Node3D
         model.Position = new Vector3(-centre.X * scale, -bounds.Position.Y * scale, -centre.Z * scale);
         body.AddChild(model);
         GD.Print($"[world] character model {System.IO.Path.GetFileName(_modelPath)} " +
-            $"(NIF bounds {bounds.Size.Y:0} u, scaled x{scale:0.###})");
+            $"(NIF bounds {bounds.Size.Y:0} u, scaled x{scale:0.###}, textured {textured})");
         return true;
     }
 
