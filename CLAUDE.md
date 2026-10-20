@@ -460,6 +460,18 @@ GameServer/packets/Server/PacketProcessor.cs             → framing + Calculate
   (GPL-3.0: RC4 encoding for 1.110, says RC4 is needed for client UDP; MPK reader).
 - No Wireshark dissector for DAoC exists (searched 2026-10-13).
 - **DaocClientLib** (C#, for future asset reading): https://github.com/dol-leodagan/DaocClientLib
+- **DAOC_Navigator** (DigitalBox98, **GPL-3.0-or-later**, C#, active 2026): a cross-platform DAoC
+  world navigator + model viewer. Its `DAOC_Navigator_Core/NIFLib` is a complete per-block NIF
+  reader (~60 `objs/` block classes, full `NiObject`→`NiObjectNET`→`NiAVObject`→`NiGeometry`
+  graph resolved by ref id), with **skinning** (`SkinData`/`SkinWeight`/`SkinTransform`) and a
+  `Game/` layer that assembles monsters/characters from parts (`Monster`, `FigurePart`, `SkinSet`).
+  GPL-3.0 = compatible with us; adapt with attribution in the file header (like DOLSharp/OpenDAoC).
+  **How we use it (decided 2026-10-20, after evaluating):** keep our own small glTF-targeted reader
+  as primary; use NIFLib as the authoritative **reference** to validate layouts (already confirmed
+  our 4.x `NiAVObject` transform layout — their `UnkownShort1` is Bethesda-era gated, absent for
+  DAoC 4.2.2.0/10.1.0.0); and **adopt its approach (ported, attributed) for the unbuilt frontiers**:
+  skinning/animation and the real monster/player-figure assembly. Its header notes it reuses
+  Dawn-of-Light (GPL-2.0-or-later) code, redistributed as GPL-3.0.
 
 ### Local Test Server (offline, with bots)
 - **catastrophic-impact**: https://github.com/catastrophic-impact/daoc-offline-linux-server-bots
