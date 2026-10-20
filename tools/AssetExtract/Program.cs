@@ -5,6 +5,7 @@
 // never belong in this repo or a release (see CLAUDE.md, "Game client and assets").
 
 using DaocAssets;
+using DaocAssets.Library;
 using DaocAssets.Mpk;
 using DaocAssets.Nif;
 using DaocAssets.Zone;
@@ -25,6 +26,9 @@ internal static class Cli
 
         if (command == "zone")
             return ZoneCmd(args);
+
+        if (command == "index")
+            return IndexCmd(args);
 
         string inputPath = args[1];
         if (!File.Exists(inputPath))
@@ -254,6 +258,47 @@ internal static class Cli
         }
     }
 
+    private static int IndexCmd(string[] args)
+    {
+        // index <client-dir> --out index.json
+        if (args.Length < 2)
+            return Usage();
+        string clientDir = args[1];
+        string? outPath = null;
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] == "--out" && i + 1 < args.Length)
+                outPath = args[++i];
+            else
+                return Usage();
+        }
+        if (outPath is null)
+        {
+            Console.Error.WriteLine("index: --out index.json is required.");
+            return 2;
+        }
+
+        try
+        {
+            int last = 0;
+            AssetIndex index = AssetIndex.Build(clientDir, n =>
+            {
+                if (n - last >= 200) { Console.Error.Write($"\r  indexed {n} archives…"); last = n; }
+            });
+            Console.Error.WriteLine();
+            index.Save(outPath);
+            (int loose, int archived) = index.Breakdown();
+            Console.WriteLine($"Indexed {index.Count} assets ({loose} loose, {archived} in archives) " +
+                $"-> {Path.GetFullPath(outPath)}");
+            return 0;
+        }
+        catch (DirectoryNotFoundException e)
+        {
+            Console.Error.WriteLine($"index: {e.Message}");
+            return 1;
+        }
+    }
+
     private static int Usage()
     {
         Console.Error.WriteLine("""
@@ -263,6 +308,7 @@ internal static class Cli
               mpk convert  <model.nif> [--out FILE.glb]
               mpk textures <client-dir> <model.nif | dir-of-nifs> --out DIR
               mpk zone     <client-dir> <dat<NNN>.mpk> --offset X Y --out DIR
+              mpk index    <client-dir> --out index.json
 
             With no member, extract writes every member. Default --out is the current directory.
             convert writes a glTF binary next to the .nif unless --out is given.
@@ -270,6 +316,8 @@ internal static class Cli
             one folder, for the Godot client to load. Owner-run: point it at your own install.
             zone converts a zone's static objects and writes zone.csv (a placement manifest the
             Godot client loads). The offset is the zone's region offsetX/offsetY (zones.tsv x 8192).
+            index walks the install once and records where every .nif/.dds lives (loose path or
+            archive+member) to a JSON file, so later builds and lookups never re-scan.
             """);
         return 2;
     }
