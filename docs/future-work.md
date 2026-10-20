@@ -80,6 +80,29 @@ client loads from. The individual stages are the `mpk` subcommands below (`conve
     `dol-leodagan/niflib.net` (DAoC-proven C#, but **GPL-2.0** — version-incompatible to derive
     from) and `niftools/niflib` (NOASSERTION). `BifrostTitan/daoc-niflib` has **no license** —
     off-limits even as reference. SharpGLTF is MIT.
+- **Zone static objects — done (placement).** A zone's object placement is plain CSV inside its
+  `dat<NNN>.mpk`: `nifs.csv` (NIF index → model file) and `fixtures.csv` (per-object NIF index,
+  position, angle, scale, in zone-local coords). `ZoneLayout` joins them and applies the zone's
+  region offset (from the OpenDAoC zone table, units of 8192) so positions match a player-position
+  packet — verified: Camelot Hills' keep lands ~6 Godot units from Eodarms' spawn. `mpk zone
+  <client> <dat.mpk> --offset X Y --out DIR` converts the referenced models (packed one-per-archive
+  under `zones/Nifs/`, found by name) and writes `zone.csv` (a placement manifest). `WorldView`
+  loads the manifest and instances each object around the character. Verified live: 1,536 Camelot
+  Hills objects placed. No reverse engineering — the client ships this as CSV.
+  - **Next: convert-once asset library + install index + override layer** (decided 2026-10-20).
+    The converted **library** is the current goal: a shared set (`<lib>/models/<name>.glb`,
+    `<lib>/textures/<name>.dds`) the Godot client loads, built once from the owner's install via an
+    install index (name → loose path or archive+member, saved under `private/`, archives opened at
+    most once, doubling as documentation of the install). The library is **client-derived content**:
+    it stays owner-local under `private/`, git-ignored, never redistributed — it exists so we don't
+    infringe or ship the originals. Zones reference it by name (`zone.csv` already does).
+  - **The `overrides/` layer is the path to a redistributable, open asset set.** Unlike the derived
+    library, overrides are assets **we or contributors author** (original work, not converted from
+    the client), so they are cleanly distributable under their authors' license and can live in a
+    public repo. An override wins over the derived asset of the same name at load time. Over time the
+    project can populate overrides and invite contributions until a player needs no original game
+    files at all — and because a Godot client has no 32-bit ceiling (the 2001-era assets do),
+    overrides can be higher-res / remastered. This makes overrides a core direction, not just polish.
 
 ## Tooling
 

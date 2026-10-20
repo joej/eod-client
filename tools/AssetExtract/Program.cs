@@ -7,6 +7,7 @@
 using DaocAssets;
 using DaocAssets.Mpk;
 using DaocAssets.Nif;
+using DaocAssets.Zone;
 
 return Cli.Run(args);
 
@@ -21,6 +22,9 @@ internal static class Cli
 
         if (command == "textures")
             return Textures(args);
+
+        if (command == "zone")
+            return ZoneCmd(args);
 
         string inputPath = args[1];
         if (!File.Exists(inputPath))
@@ -204,6 +208,52 @@ internal static class Cli
         return missing == 0 ? 0 : 1;
     }
 
+    private static int ZoneCmd(string[] args)
+    {
+        // zone <client-dir> <dat<NNN>.mpk> --offset X Y --out DIR
+        if (args.Length < 3)
+            return Usage();
+        string clientDir = args[1];
+        string datMpk = args[2];
+        int? offX = null, offY = null;
+        string? outDir = null;
+        for (int i = 3; i < args.Length; i++)
+        {
+            if (args[i] == "--out" && i + 1 < args.Length)
+                outDir = args[++i];
+            else if (args[i] == "--offset" && i + 2 < args.Length
+                     && int.TryParse(args[i + 1], out int ox) && int.TryParse(args[i + 2], out int oy))
+            { offX = ox; offY = oy; i += 2; }
+            else
+                return Usage();
+        }
+        if (outDir is null || offX is null || offY is null)
+        {
+            Console.Error.WriteLine("zone: --offset X Y and --out DIR are required " +
+                "(offset = the zone's region offsetX/offsetY in region units, i.e. zones.tsv value x 8192).");
+            return 2;
+        }
+        if (!File.Exists(datMpk))
+        {
+            Console.Error.WriteLine($"No such zone archive: {datMpk}");
+            return 1;
+        }
+
+        try
+        {
+            ZoneExportReport r = ZoneExport.Export(clientDir, datMpk, offX.Value, offY.Value, outDir);
+            Console.WriteLine($"Zone: {r.Fixtures} fixtures, {r.Models} distinct models -> " +
+                $"{r.Converted} converted, {r.MissingModel} model(s) not found, {r.Failed} failed; " +
+                $"{r.Placed} placements written to {Path.GetFullPath(outDir)}/zone.csv");
+            return 0;
+        }
+        catch (Exception e) when (e is MpkFormatException or DirectoryNotFoundException)
+        {
+            Console.Error.WriteLine($"zone: {e.Message}");
+            return 1;
+        }
+    }
+
     private static int Usage()
     {
         Console.Error.WriteLine("""
@@ -212,11 +262,14 @@ internal static class Cli
               mpk extract  <archive.mpk> [member] [--out DIR]
               mpk convert  <model.nif> [--out FILE.glb]
               mpk textures <client-dir> <model.nif | dir-of-nifs> --out DIR
+              mpk zone     <client-dir> <dat<NNN>.mpk> --offset X Y --out DIR
 
             With no member, extract writes every member. Default --out is the current directory.
             convert writes a glTF binary next to the .nif unless --out is given.
             textures gathers the .dds a model references (loose on disk or packed in an .mpk) into
             one folder, for the Godot client to load. Owner-run: point it at your own install.
+            zone converts a zone's static objects and writes zone.csv (a placement manifest the
+            Godot client loads). The offset is the zone's region offsetX/offsetY (zones.tsv x 8192).
             """);
         return 2;
     }

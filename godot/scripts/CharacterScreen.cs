@@ -70,9 +70,9 @@ public partial class CharacterScreen : Control
     // Resolve a relative path against the shell's working directory (PWD); Godot's own working dir
     // is the project folder, so a repo-relative path would otherwise resolve under godot/. A model
     // path thus works whether given relative (from where the command was run) or absolute.
-    private static string? ResolvedModel(string[] args)
+    private static string? ResolvedPath(string[] args, string name)
     {
-        string? m = StringOption(args, "--model");
+        string? m = StringOption(args, name);
         if (string.IsNullOrEmpty(m) || System.IO.Path.IsPathRooted(m))
             return m;
         string cwd = OS.GetEnvironment("PWD");
@@ -240,7 +240,8 @@ public partial class CharacterScreen : Control
             WorldPosition world = await _session.EnterWorldAsync(_listedRealm, slot);
 
             _world = new WorldView();
-            _world.Init(_connection, world, ResolvedModel(OS.GetCmdlineUserArgs()));
+            string[] a = OS.GetCmdlineUserArgs();
+            _world.Init(_connection, world, ResolvedPath(a, "--model"), ResolvedPath(a, "--zone"));
             _world.QuitPressed += () => _ = LeaveWorld();
             _world.BackToLoginPressed += () => _ = BackToLogin("Disconnected.");
             GetTree().Root.AddChild(_world);

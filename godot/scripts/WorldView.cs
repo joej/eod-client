@@ -24,6 +24,7 @@ public partial class WorldView : Node3D
     private DaocConnection _connection = null!;
     private WorldPosition _world = null!;
     private string? _modelPath;
+    private string? _zonePath;
     private Label _status = null!;
     private Button _button = null!;
     private int _packets;
@@ -54,12 +55,15 @@ public partial class WorldView : Node3D
     }
 
     /// <summary>Call before adding to the tree. <paramref name="modelPath"/> is an optional .glb to
-    /// stand in for the character; null or missing falls back to the capsule (MVC needs no assets).</summary>
-    public void Init(DaocConnection connection, WorldPosition world, string? modelPath = null)
+    /// stand in for the character; null or missing falls back to the capsule (MVC needs no assets).
+    /// <paramref name="zoneManifest"/> is an optional zone.csv (from `mpk zone`) whose static objects
+    /// are placed around the character; null or missing just shows the flat ground.</summary>
+    public void Init(DaocConnection connection, WorldPosition world, string? modelPath = null, string? zoneManifest = null)
     {
         _connection = connection;
         _world = world;
         _modelPath = modelPath;
+        _zonePath = zoneManifest;
     }
 
     /// <summary>
@@ -113,6 +117,10 @@ public partial class WorldView : Node3D
         });
         AddChild(body);
 
+        int zoneObjects = BuildZone();
+        if (zoneObjects > 0)
+            GD.Print($"[world] placed {zoneObjects} zone object(s)");
+
         var camera = new Camera3D { Position = at + new Vector3(0, 5, 9) };
         AddChild(camera);
         camera.LookAt(at + new Vector3(0, 1, 0));
@@ -131,6 +139,76 @@ public partial class WorldView : Node3D
         };
         overlay.AddChild(_button);
         AddChild(overlay);
+    }
+
+    // Places the zone's static objects from a zone.csv manifest (from `mpk zone`): each row is
+    // "glb,x,y,z,angle,scale" in region-global coordinates. Each distinct .glb is loaded and textured
+    // once, then instanced per placement. Returns how many objects were placed. No manifest -> 0.
+    private int BuildZone()
+    {
+        if (string.IsNullOrEmpty(_zonePath) || !Godot.FileAccess.FileExists(_zonePath))
+            return 0;
+
+        string dir = System.IO.Path.GetDirectoryName(_zonePath) ?? "";
+        string[] lines = Godot.FileAccess.GetFileAsString(_zonePath).Split('\n');
+        var loaded = new System.Collections.Generic.Dictionary<string, Node3D?>();
+        var zoneRoot = new Node3D { Name = "Zone" };
+        int placed = 0;
+
+        foreach (string raw in lines)
+        {
+            string line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith("glb,")) // skip header/blank
+                continue;
+            string[] c = line.Split(',');
+            if (c.Length < 6
+                || !float.TryParse(c[1], out float x) || !float.TryParse(c[2], out float y)
+                || !float.TryParse(c[3], out float z) || !float.TryParse(c[4], out float angleDeg)
+                || !float.TryParse(c[5], out float scale))
+                continue;
+
+            Node3D? template = LoadZoneModel(c[0], dir, loaded);
+            if (template is null)
+                continue;
+
+            var inst = (Node3D)template.Duplicate();
+            inst.Position = ToGodot(x, y, z);
+            // DAoC angle is degrees about the vertical axis; negate for Godot's handedness (as heading).
+            inst.Rotation = new Vector3(0, -Mathf.DegToRad(angleDeg), 0);
+            inst.Scale = new Vector3(scale, scale, scale);
+            zoneRoot.AddChild(inst);
+            placed++;
+        }
+
+        if (placed > 0)
+            AddChild(zoneRoot);
+        return placed;
+    }
+
+    // Loads a zone .glb once (cached), textured from the manifest's folder; null if it can't load.
+    private Node3D? LoadZoneModel(string glb, string dir, System.Collections.Generic.Dictionary<string, Node3D?> cache)
+    {
+        if (cache.TryGetValue(glb, out Node3D? cached))
+            return cached;
+
+        Node3D? model = null;
+        string path = dir.PathJoin(glb);
+        if (Godot.FileAccess.FileExists(path))
+        {
+            var doc = new GltfDocument();
+            var state = new GltfState();
+            if (doc.AppendFromFile(path, state) == Error.Ok && doc.GenerateScene(state) is Node3D m)
+            {
+                ModelTexturing.Apply(m, dir);
+                model = m;
+            }
+            else
+            {
+                GD.PrintErr($"[world] zone model failed to load: {glb}");
+            }
+        }
+        cache[glb] = model;
+        return model;
     }
 
     // Loads the .glb at _modelPath as the character body: scaled to a human-ish height and seated on
