@@ -27,10 +27,10 @@ never enters the repo or a release (CLAUDE.md, "Game client and assets").
   verifies the directory and per-member CRC-32, and is bounds-checked throughout. `tools/mpk`
   lists and extracts. Format reimplemented from public specs (DOLSharp, RustDAoC) and verified
   against real client archives; no third-party source copied.
-- **NIF → glTF — 4.2.x static path done.** `src/DaocAssets/Nif` reads NetImmerse 4.2.x NIFs
-  (`NiTriShapeData` geometry: vertices, normals, UVs, triangles; plus the external base-texture
-  name from `NiSourceTexture`) and `GltfExporter` emits a `.glb` via **SharpGLTF** (MIT), Z-up →
-  Y-up with winding flipped. `tools/mpk convert` runs it; `godot/scenes/ModelViewer.tscn` loads a
+- **NIF → glTF — static path done for both formats (4.2.x items + 10.1.0.0 creatures).**
+  `src/DaocAssets/Nif` reads `NiTriShapeData` geometry (vertices, normals, UVs, triangles; plus the
+  external base-texture name) from NetImmerse 4.2.x and Gamebryo 10.1.0.0 NIFs, and `GltfExporter`
+  emits a `.glb` via **SharpGLTF** (MIT), Z-up → Y-up with winding flipped. `tools/mpk convert` runs it; `godot/scenes/ModelViewer.tscn` loads a
   `.glb` at runtime and orbits it. Byte-verified against a real 4.2.2.0 item (golden hashes in the
   tests). Not Blender: the Niftools addon would add a heavy runtime dependency and its
   old-NetImmerse import path is unproven for our files.
@@ -45,13 +45,24 @@ never enters the repo or a release (CLAUDE.md, "Game client and assets").
     client pixels into a derived artifact.
   - **Versions in this client (verified against the install):** 4.2.2.0 (majority, NetImmerse —
     items), 4.2.1.0, 10.1.0.0 (Gamebryo — creatures). Two different header layouts; the reader
-    gates on version. All three are defined in niftools `nif.xml`.
-  - **Geometry (300-file sample):** ~73% `NiTriShapeData`, ~10% `NiTriStripsData`, rest
-    node-only. Implement TriShape first, TriStrips second.
-  - **First proof:** one static item mesh (e.g. 4.2.2.0 `bowsprit_alb_01`, pure TriShape, no
-    skin) → glTF → rendered in Godot. No `.kf` files exist in the client, so no skeleton/skinning
-    is needed for the proof; creatures are internally rigged (`NiSkinInstance`/`Bip01`) but we
-    read bind-pose geometry and defer skin to later.
+    gates on version. Both `NiTriShapeData` paths are **done** (4.2.x and 10.1.0.0, each
+    byte-verified against a real file with golden-hash tests). All are defined in niftools `nif.xml`.
+  - **10.1.0.0 header (decoded, verified):** after the Version u32 — User Version u32, Num Blocks
+    u32, Num Block Types u16, [SizedString × types], Block Type Index (u16 × blocks). Unlike 4.2.x,
+    block bodies carry **no inline type string** (type comes from the index table), and the
+    intermediate blocks (NiNode, NiKeyframeController/Data, NiSkin*) have large version-gated
+    layouts. Since the goal is geometry, the reader reads the header to bound/validate the file then
+    locates each `NiTriShapeData` body by a strict self-validating scan (every field
+    consistency-checked). 10.1.0.0 geometry adds Keep/Compress-flags bytes, a leading Data-Flags
+    u16, a Consistency-Flags u16, and a Has-Triangles bool vs 4.2.x.
+  - **Remaining geometry — `NiTriStripsData` (~10%).** Some creatures (e.g. `Skel01.NIF`) store
+    triangle **strips**, not a flat list; those are correctly rejected today ("No NiTriShapeData
+    type"). Next geometry task: decode `NiTriStripsData` (strip arrays → triangles) for both header
+    layouts. Also pending: multi-mesh NIFs (more than one TriShape in a file).
+  - **First proof — done.** 4.2.2.0 item (`bowsprit_alb_01`) and 10.1.0.0 creature
+    (`ambrat_black`) both convert and render in Godot. No `.kf` files exist in the client, so no
+    skeleton/skinning; creatures are internally rigged (`NiSkinInstance`/`Bip01`) but we take
+    bind-pose geometry and defer skin to later.
   - **Licensing:** write from `nif.xml` (GPL-3.0, compatible). Reference only, do not port:
     `dol-leodagan/niflib.net` (DAoC-proven C#, but **GPL-2.0** — version-incompatible to derive
     from) and `niftools/niflib` (NOASSERTION). `BifrostTitan/daoc-niflib` has **no license** —

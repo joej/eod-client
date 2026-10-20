@@ -14,6 +14,7 @@ public static class NifFile
 {
     private static readonly NifVersion V4000 = new(4, 0, 0, 2);
     private static readonly NifVersion V1010 = new(10, 1, 0, 0);
+    private static readonly NifVersion V1020 = new(10, 2, 0, 0);
 
     public static NifModel Read(ReadOnlySpan<byte> bytes)
     {
@@ -22,12 +23,16 @@ public static class NifFile
         if (!header.Contains("File Format", StringComparison.Ordinal))
             throw new NifFormatException($"Not a NIF file (header: '{header}').");
 
-        // 4.2.x: version u32 then block count u32. 10.1.0.0 has a different header (endian byte +
-        // a block-type table) — out of scope here until decoded.
+        // Version u32 follows the header line in both layouts. The layout after it differs:
+        //  - 4.2.x: num-blocks u32, then each block is an inline sized type-name string + body.
+        //  - 10.1.0.0 (Gamebryo): user-version u32, num-blocks u32, a block-type table (count +
+        //    sized strings) and a per-block type index; block bodies carry NO inline type string.
         uint packed = c.U32();
         var version = new NifVersion((byte)(packed >> 24), (byte)(packed >> 16), (byte)(packed >> 8), (byte)packed);
+        if (version >= V1020)
+            throw new NifFormatException($"NIF version {version} is newer than supported (4.2.x and 10.1.0.0 only).");
         if (version >= V1010)
-            throw new NifFormatException($"NIF version {version} (Gamebryo 10.x) is not supported yet; only NetImmerse 4.x.");
+            return ReadGamebryo1010(bytes, c, version);
         if (version <= V4000)
             throw new NifFormatException($"NIF version {version} is older than supported (4.1.0.1+).");
 
@@ -77,6 +82,185 @@ public static class NifFile
                 meshes[m] = meshes[m] with { TextureFile = meshes[m].TextureFile ?? textureFile };
 
         return new NifModel { Version = version, Meshes = meshes };
+    }
+
+    // Gamebryo 10.1.0.0 (creatures). The header after the Version u32 is: User Version u32,
+    // Num Blocks u32, Num Block Types u16, [SizedString x Num Block Types], Block Type Index
+    // (u16 x Num Blocks). Block bodies carry no inline type string — the type comes from the index
+    // table — and the intermediate blocks (NiNode, NiKeyframeController/Data, NiSkin*) have large
+    // version-gated layouts we don't need. Since the goal is geometry, we read the header to bound
+    // and validate the file, then locate each NiTriShapeData body by a strict, self-validating scan
+    // (every field consistency-checked), mirroring the 4.2.x approach of finding geometry without
+    // modelling every intermediate block. Verified byte-for-byte against a real creature NIF.
+    private static NifModel ReadGamebryo1010(ReadOnlySpan<byte> bytes, NifCursor c, NifVersion version)
+    {
+        c.U32();                                  // User Version
+        int blockCount = checked((int)c.U32());   // Num Blocks
+        int numTypes = c.U16();                    // Num Block Types
+        if (blockCount is < 1 or > 100000 || numTypes is < 1 or > 10000)
+            throw new NifFormatException($"Implausible 10.1.0.0 header (blocks {blockCount}, types {numTypes}).");
+
+        var typeNames = new string[numTypes];
+        for (int t = 0; t < numTypes; t++)
+            typeNames[t] = c.SizedString();
+        bool hasTriShape = false;
+        for (int t = 0; t < numTypes && !hasTriShape; t++)
+            hasTriShape = typeNames[t] == "NiTriShapeData";
+        // Block Type Index (u16 per block) follows; skipping it lands the cursor at the first body.
+        for (int b = 0; b < blockCount; b++)
+            c.U16();
+        int bodiesStart = c.Pos;
+
+        if (!hasTriShape)
+            throw new NifFormatException("No NiTriShapeData type in 10.1.0.0 NIF (not a static-geometry model).");
+
+        var meshes = new List<NifMesh>();
+        int scan = bodiesStart;
+        while (scan < bytes.Length)
+        {
+            if (TryReadTriShapeData1010(bytes, scan, $"mesh{meshes.Count}", out NifMesh mesh, out int next))
+            {
+                meshes.Add(mesh);
+                scan = next;
+            }
+            else
+            {
+                scan++;
+            }
+        }
+
+        if (meshes.Count == 0)
+            throw new NifFormatException("No NiTriShapeData geometry decoded in 10.1.0.0 NIF.");
+
+        string? textureFile = FindFirstTextureName(bytes);
+        if (textureFile is not null)
+            for (int m = 0; m < meshes.Count; m++)
+                meshes[m] = meshes[m] with { TextureFile = meshes[m].TextureFile ?? textureFile };
+
+        return new NifModel { Version = version, Meshes = meshes };
+    }
+
+    // Attempts to parse a 10.1.0.0 NiTriShapeData body at `offset`. Returns false (not a match) on
+    // any inconsistency, so it can be used to scan for the block. Field order (NiGeometryData ->
+    // NiTriBasedGeomData -> NiTriShapeData, gates resolved for 10.1.0.0, verified against nif.xml):
+    //   Num Vertices u16; Keep Flags u8; Compress Flags u8; Has Vertices bool(1) + Vertices;
+    //   Data Flags u16 (low 6 bits = UV-set count, bit 4096 = tangents present); Has Normals bool(1)
+    //   + Normals [+ Tangents + Bitangents if bit 4096]; Bounding Sphere (centre+radius);
+    //   Has Vertex Colors bool(1) + Color4s; UV sets; Consistency Flags u16; Num Triangles u16;
+    //   Num Triangle Points u32 (=3x); Has Triangles bool(1) + Triangles; Num Match Groups u16.
+    private static bool TryReadTriShapeData1010(
+        ReadOnlySpan<byte> bytes, int offset, string name, out NifMesh mesh, out int next)
+    {
+        mesh = null!;
+        next = offset;
+        try
+        {
+            var c = new NifCursor(bytes);
+            c.SeekTo(offset);
+
+            int nv = c.U16();
+            if (nv is < 1 or > 65535)
+                return false;
+            c.U8();                      // Keep Flags
+            c.U8();                      // Compress Flags
+
+            if (!TryBool(ref c, out bool hasVerts)) return false;
+            Vector3[] vertices = hasVerts ? ReadVec3Array(ref c, nv) : [];
+            if (!hasVerts) return false; // geometry we can use always has vertices
+
+            int dataFlags = c.U16();
+            int uvSets = dataFlags & 0x3F;
+            bool hasTangents = (dataFlags & 0x1000) != 0;
+
+            if (!TryBool(ref c, out bool hasNormals)) return false;
+            Vector3[]? normals = hasNormals ? ReadVec3Array(ref c, nv) : null;
+            if (hasNormals && hasTangents)
+            {
+                for (int k = 0; k < nv; k++) { c.Vec3(); c.Vec3(); } // tangents + bitangents
+            }
+
+            c.Vec3(); c.F32();           // Bounding Sphere
+
+            if (!TryBool(ref c, out bool hasColors)) return false;
+            if (hasColors)
+                for (int k = 0; k < nv * 4; k++) c.F32();
+
+            Vector2[]? texCoords = null;
+            for (int s = 0; s < uvSets; s++)
+            {
+                var set = new Vector2[nv];
+                for (int v = 0; v < nv; v++)
+                    set[v] = new Vector2(c.F32(), c.F32());
+                texCoords ??= set;
+            }
+
+            c.U16();                     // Consistency Flags
+            int numTriangles = c.U16();
+            uint numTrianglePoints = c.U32();
+            if (numTriangles == 0 || numTrianglePoints != (uint)numTriangles * 3)
+                return false;
+            if (!TryBool(ref c, out bool hasTriangles) || !hasTriangles)
+                return false;
+
+            var triangles = new (ushort, ushort, ushort)[numTriangles];
+            for (int t = 0; t < numTriangles; t++)
+            {
+                ushort a = c.U16(), b = c.U16(), cc = c.U16();
+                if (a >= nv || b >= nv || cc >= nv)
+                    return false;
+                triangles[t] = (a, b, cc);
+            }
+            int matchGroups = c.U16();
+            if (matchGroups is < 0 or > 70000)
+                return false;
+
+            mesh = new NifMesh
+            {
+                Name = name,
+                Vertices = vertices,
+                Normals = normals,
+                TexCoords = texCoords,
+                Triangles = triangles,
+            };
+            next = c.Pos;
+            return true;
+        }
+        catch (NifFormatException)
+        {
+            return false;
+        }
+    }
+
+    // A 1-byte bool that must be exactly 0 or 1 (used to reject a wrong scan offset).
+    private static bool TryBool(ref NifCursor c, out bool value)
+    {
+        byte b = c.U8();
+        value = b != 0;
+        return b is 0 or 1;
+    }
+
+    // Scans for the first external texture file name (a sized string ending in a known image
+    // extension). Works for both the 4.2.x and 10.1.0.0 NiSourceTexture layouts.
+    private static string? FindFirstTextureName(ReadOnlySpan<byte> bytes)
+    {
+        for (int q = 0; q + 4 <= bytes.Length; q++)
+        {
+            uint len = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(q, 4));
+            if (len is < 5 or > 255 || q + 4 + (int)len > bytes.Length)
+                continue;
+            ReadOnlySpan<byte> s = bytes.Slice(q + 4, (int)len);
+            bool printable = true;
+            foreach (byte ch in s)
+                if (ch is < 0x20 or > 0x7E) { printable = false; break; }
+            if (!printable)
+                continue;
+            string str = System.Text.Encoding.Latin1.GetString(s);
+            if (str.EndsWith(".dds", StringComparison.OrdinalIgnoreCase)
+                || str.EndsWith(".tga", StringComparison.OrdinalIgnoreCase)
+                || str.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase))
+                return str;
+        }
+        return null;
     }
 
     // NiGeometryData -> NiTriBasedGeomData -> NiTriShapeData, field order for 4.2.2.0 (verified).

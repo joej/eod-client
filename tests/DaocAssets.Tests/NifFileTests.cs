@@ -22,6 +22,13 @@ public sealed class NifFileTests
             yield return [p];
     }
 
+    public static IEnumerable<object[]> Ambrat()
+    {
+        string p = Path.Combine(AppContext.BaseDirectory, "live-nif", "sample-1010.nif");
+        if (File.Exists(p))
+            yield return [p];
+    }
+
     [Theory]
     [MemberData(nameof(Bowsprit))]
     public void ReadsTheBowspritGoldenGeometry(string path)
@@ -44,6 +51,30 @@ public sealed class NifFileTests
         // Byte-for-byte golden hashes from the verified hand-decode.
         Assert.Equal("2d5b083725f5f978", VertHash(mesh));
         Assert.Equal("a29c9f18d2b00746", TriHash(mesh));
+    }
+
+    [Theory]
+    [MemberData(nameof(Ambrat))]
+    public void ReadsTheAmbratGamebryoGoldenGeometry(string path)
+    {
+        // figures/ambrat_black.nif, Gamebryo 10.1.0.0 (a rigged creature). We take its bind-pose
+        // geometry; no skinning/animation (there are no .kf files). Golden values from the verified
+        // hand-decode against nif.xml and the real file.
+        NifModel model = NifFile.Read(File.ReadAllBytes(path));
+        Assert.Equal(new NifVersion(10, 1, 0, 0), model.Version);
+        NifMesh mesh = Assert.Single(model.Meshes);
+
+        Assert.Equal(27, mesh.Vertices.Length);
+        Assert.Equal(30, mesh.Triangles.Length);
+        Assert.NotNull(mesh.Normals);
+        Assert.NotNull(mesh.TexCoords);
+        Assert.Equal("AmbientCreaturesTexture.dds", mesh.TextureFile);
+        Assert.Equal((12, 14, 15), (mesh.Triangles[0].A, mesh.Triangles[0].B, mesh.Triangles[0].C));
+        Assert.All(mesh.Triangles, t => Assert.True(t.A < 27 && t.B < 27 && t.C < 27));
+
+        // Byte-for-byte golden hashes from the verified hand-decode.
+        Assert.Equal("1adeba4b932bf670", VertHash(mesh));
+        Assert.Equal("6178f8385ce0c558", TriHash(mesh));
     }
 
     [Fact]
