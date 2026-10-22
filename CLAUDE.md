@@ -302,7 +302,10 @@ OpenDAoC marks a player link-dead after 5 s without 0xA9 and disconnects after 1
 
 .NET: Microsoft's SDK 10 in `/usr/local/share/dotnet` (Homebrew cask `dotnet-sdk`, pulled in by
 `godot-mono`). Godot and .NET app launchers find it there without `DOTNET_ROOT`.
-Godot: 4.7.2 .NET build (`brew install --cask godot-mono`, needs a real terminal for sudo).
+Godot: 4.7.2 .NET build (`brew install --cask godot-mono`, needs a real terminal for sudo). The
+binary on PATH is **`godot-mono`** (symlink `/opt/homebrew/bin/godot-mono`; app bundle
+`/Applications/Godot_mono.app`) — invoke it as `godot-mono`, not `Godot`. Drop `--headless` to open
+a window and actually see the client.
 Its editor tooling targets net8.0 but runs on the .NET 10 runtime (verified 2026-10-14).
 
 ```
@@ -338,7 +341,7 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
     ├── scenes/Main.tscn           # ✓ root Control with CharacterScreen.cs
     └── scripts/
         ├── CharacterScreen.cs     # ✓ UI built in code: login form, realm, character list, Enter
-        │                          #   world, hex-log toggle. Headless check: DAOC_PASSWORD=… Godot
+        │                          #   world, hex-log toggle. Headless check: DAOC_PASSWORD=… godot-mono
         │                          #   --headless --path godot -- --autologin <host> <account> [port]
         │                          #   [--enter <slot> [--stay <seconds>]]
         └── WorldView.cs           # ✓ Gate 3: ground, light, camera, capsule at (X, Z, Y)/100 with a
