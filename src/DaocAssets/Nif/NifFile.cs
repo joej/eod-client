@@ -85,6 +85,8 @@ public static class NifFile
         public Xform Local = Xform.Identity;
         public int[] Children = [];
         public int DataRef = -1;      // NiTriShape -> its NiTriShapeData/NiTriStripsData block
+        public int[] Props = [];      // NiTriShape -> its property refs (one is a NiTexturingProperty)
+        public int BaseTextureRef = -1; // NiTexturingProperty -> its base NiSourceTexture block
         public string? TextureFile;   // for NiSourceTexture blocks
     }
 
@@ -120,11 +122,15 @@ public static class NifFile
                     break;
                 case "NiTriShape":
                 case "NiTriStrips":
-                    if (TryReadAvObject(ref c, out Xform sx))
+                    if (TryReadAvObject(ref c, out Xform sx, out int[] props))
                     {
                         b.Local = sx;
+                        b.Props = props;
                         b.DataRef = c.I32();   // NiGeometry: Data ref (the geometry-data block)
                     }
+                    break;
+                case "NiTexturingProperty":
+                    b.BaseTextureRef = ReadTexturingPropertyBaseRef(ref c);
                     break;
                 case "NiSourceTexture":
                     b.TextureFile = ReadSourceTextureFileName(ref c, bytes);
@@ -151,7 +157,7 @@ public static class NifFile
             {
                 NifMesh? geom = ReadGeometryAt(bytes, blocks, b.DataRef);
                 if (geom is not null)
-                    meshes.Add(BakeTransform(geom, b.Local, $"mesh{i}", firstTexture));
+                    meshes.Add(BakeTransform(geom, b.Local, $"mesh{i}", ShapeTexture(blocks, b, firstTexture)));
             }
         }
 
@@ -180,8 +186,26 @@ public static class NifFile
         {
             NifMesh? geom = ReadGeometryAt(bytes, blocks, b.DataRef);
             if (geom is not null)
-                meshes.Add(BakeTransform(geom, w, $"mesh{index}", texture));
+                meshes.Add(BakeTransform(geom, w, $"mesh{index}", ShapeTexture(blocks, b, texture)));
         }
+    }
+
+    // Resolves a shape's own base texture: its property list holds a NiTexturingProperty whose base
+    // TexDesc points at a NiSourceTexture. This is what makes a multi-material model (a keep uses ten
+    // skins across its parts) wear the right texture on each shape, instead of one shared skin.
+    // Falls back to <paramref name="shared"/> (the model's first source texture) when a shape names
+    // none — e.g. a shape textured via a property on an ancestor we don't thread through.
+    private static string? ShapeTexture(Block[] blocks, Block shape, string? shared)
+    {
+        foreach (int p in shape.Props)
+        {
+            if (p < 0 || p >= blocks.Length || blocks[p].Type != "NiTexturingProperty")
+                continue;
+            int src = blocks[p].BaseTextureRef;
+            if (src >= 0 && src < blocks.Length && blocks[src].TextureFile is { } name)
+                return name;
+        }
+        return shared;
     }
 
     // Bakes a world transform into a mesh's vertices and normals, attaching the texture name.
@@ -287,9 +311,15 @@ public static class NifFile
     // transform and leaves the cursor at the first subclass field (children for NiNode, Data for
     // NiTriShape). Returns false if a bounding volume is present (we don't decode it) — the caller
     // then leaves the block's transform at identity rather than misparse.
-    private static bool TryReadAvObject(ref NifCursor c, out Xform xform)
+    private static bool TryReadAvObject(ref NifCursor c, out Xform xform) =>
+        TryReadAvObject(ref c, out xform, out _);
+
+    // Reads NiObjectNET + NiAVObject, yielding the local transform and the block's property refs
+    // (one of which, on a shape, is the NiTexturingProperty that names its base texture).
+    private static bool TryReadAvObject(ref NifCursor c, out Xform xform, out int[] props)
     {
         xform = Xform.Identity;
+        props = [];
         c.SizedString();           // NiObjectNET.Name
         c.I32();                   // Extra Data ref (single, until 4.2.2.0)
         c.I32();                   // Controller ref
@@ -300,11 +330,37 @@ public static class NifFile
         float scale = c.F32();
         c.Vec3();                  // Velocity (until 4.2.2.0)
         int numProps = (int)c.U32();
-        for (int i = 0; i < numProps; i++) c.I32();   // Property refs
+        int[] p = new int[Math.Clamp(numProps, 0, 100000)];
+        for (int i = 0; i < p.Length; i++) p[i] = c.I32();   // Property refs
         if (c.Bool())              // Has Bounding Volume (until 4.2.2.0)
             return false;          // present only rarely; bail to identity rather than misparse
         xform = new Xform(rot, scale, trans);
+        props = p;
         return true;
+    }
+
+    // NiTexturingProperty body (4.x), positioned just past the type string. Layout (verified by
+    // decode against a real multi-material building, cross-checked with nif.xml): NiObjectNET
+    // (Name + Extra Data ref + Controller ref), Flags u16, Apply Mode u32, Texture Count u32,
+    // then Has Base Texture (1-byte bool); if set, a base TexDesc whose first field is the Source
+    // ref (i32 -> a NiSourceTexture). We take only that base source ref (the shape's main skin).
+    private static int ReadTexturingPropertyBaseRef(ref NifCursor c)
+    {
+        try
+        {
+            c.SizedString();   // Name
+            c.I32(); c.I32();  // Extra Data ref, Controller ref
+            c.U16();           // Flags
+            c.U32();           // Apply Mode
+            c.U32();           // Texture Count
+            if (!c.Bool())     // Has Base Texture
+                return -1;
+            return c.I32();    // base TexDesc: Source ref
+        }
+        catch (NifFormatException)
+        {
+            return -1;
+        }
     }
 
     // Gamebryo 10.1.0.0 (creatures). The header after the Version u32 is: User Version u32,

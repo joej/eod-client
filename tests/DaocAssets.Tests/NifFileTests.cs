@@ -43,6 +43,13 @@ public sealed class NifFileTests
             yield return [p];
     }
 
+    public static IEnumerable<object[]> MultiMat4x()
+    {
+        string p = Path.Combine(AppContext.BaseDirectory, "live-nif", "sample-multimat-4x.nif");
+        if (File.Exists(p))
+            yield return [p];
+    }
+
     [Theory]
     [MemberData(nameof(Bowsprit))]
     public void ReadsTheBowspritGoldenGeometry(string path)
@@ -137,6 +144,32 @@ public sealed class NifFileTests
         Assert.Equal("da58e35b38cf8ca7", TriHash(mesh));
     }
 
+    [Theory]
+    [MemberData(nameof(MultiMat4x))]
+    public void ReadsPerShapeTexturesInAMultiMaterialModel(string path)
+    {
+        // zones/Nifs/WELL.NIF, NetImmerse 4.1.0.12: 5 NiTriStrips shapes sharing two skins via their
+        // own NiTexturingProperty -> NiSourceTexture. Before per-shape resolution every shape wore the
+        // model's first texture; now each wears its own, which is what stops a multi-material building
+        // (a keep uses ten skins across its parts) rendering in a single skin.
+        NifModel model = NifFile.Read(File.ReadAllBytes(path));
+        Assert.Equal(new NifVersion(4, 1, 0, 12), model.Version);
+        Assert.Equal(5, model.Meshes.Count);
+
+        // Exactly two distinct base textures across the shapes, each a stone/log skin (not all one).
+        // The names carry the NIF's own casing (STONE2-1.TGA) — the library gathers case-insensitively.
+        string?[] tex = model.Meshes.Select(m => m.TextureFile).ToArray();
+        Assert.All(tex, Assert.NotNull);
+        Assert.Equal(new[] { "STONE2-1.TGA", "britlog.tga" },
+            tex.Select(t => t!).Distinct().OrderByDescending(t => t).ToArray());
+        Assert.Equal(3, tex.Count(t => t == "STONE2-1.TGA"));
+        Assert.Equal(2, tex.Count(t => t == "britlog.tga"));
+
+        // Byte-for-byte golden: the shapes' geometry and their texture assignment together.
+        Assert.Equal("6698d641119541f7", ModelVertHash(model));
+        Assert.Equal("1489dcddaff90ab4", TextureMapHash(model));
+    }
+
     [Fact]
     public void RejectsNonNif()
     {
@@ -183,6 +216,33 @@ public sealed class NifFileTests
             BinaryPrimitives.WriteSingleLittleEndian(buf.AsSpan(o), v.Z); o += 4;
         }
         return Convert.ToHexStringLower(SHA256.HashData(buf))[..16];
+    }
+
+    // Hash of all vertices across all meshes in order (whole-model geometry).
+    private static string ModelVertHash(NifModel model)
+    {
+        var all = new List<byte>();
+        foreach (NifMesh m in model.Meshes)
+        {
+            byte[] buf = new byte[m.Vertices.Length * 12];
+            int o = 0;
+            foreach (var v in m.Vertices)
+            {
+                BinaryPrimitives.WriteSingleLittleEndian(buf.AsSpan(o), v.X); o += 4;
+                BinaryPrimitives.WriteSingleLittleEndian(buf.AsSpan(o), v.Y); o += 4;
+                BinaryPrimitives.WriteSingleLittleEndian(buf.AsSpan(o), v.Z); o += 4;
+            }
+            all.AddRange(buf);
+        }
+        return Convert.ToHexStringLower(SHA256.HashData(all.ToArray()))[..16];
+    }
+
+    // Hash binding each mesh's vertex count + texture name, in order: catches a texture reshuffled
+    // onto the wrong shape even when the geometry set is unchanged.
+    private static string TextureMapHash(NifModel model)
+    {
+        var s = string.Join("|", model.Meshes.Select(m => $"{m.Vertices.Length}:{m.TextureFile}"));
+        return Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(s)))[..16];
     }
 
     private static string TriHash(NifMesh m)

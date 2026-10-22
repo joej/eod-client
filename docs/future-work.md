@@ -54,15 +54,25 @@ client loads from. The individual stages are the `mpk` subcommands below (`conve
     live: Camelot Hills went from 13 to 30 gathered textures; 45 of 46 distinct zone models textured
     (526 surfaces), no case-mismatch warnings. The lone untextured model (`giant`) has no
     `NiSourceTexture` at all — correctly left untextured.
-    - **Known limitation (next):** the 4.x reader captures **one** texture per model (the first
-      `NiSourceTexture`) and applies it to every shape, so a multi-material building (the keep
-      references 10 textures: `keepSTONE`, `canvas1`, `Btudorwood`, …) shows only its first skin.
-      Per-shape material capture is the follow-up.
     Godot's generic `Image.load()` doesn't recognise `.dds`, but `Image.LoadDdsFromBuffer()` does
     (verified against real client textures), so we read the bytes and decode from the buffer. Both
     the model viewer and the live `WorldView` texture their model; a missing/unknown texture leaves
     the model untextured without error. `--textures <dir>` overrides the default folder. Embedding
     the `.dds` as PNG in the `.glb` was rejected: it would bake client pixels into a derived artifact.
+  - **Per-shape materials — done (4.x, 2026-10-22).** A multi-part 4.x model wears a different skin on
+    each part: the keep uses ten textures (`keepSTONE`, `canvas1`, `Btudorwood`, …) across its 59
+    shapes. Each `NiTriShape`/`NiTriStrips` carries a property list; one entry is a
+    `NiTexturingProperty` whose base `TexDesc` points at a `NiSourceTexture`. The reader resolves that
+    per shape (`ShapeTexture`) instead of applying the model's first texture to everything, falling
+    back to the first texture only when a shape names none. `NiTexturingProperty` layout (verified by
+    decode against the real keep, cross-checked with `nif.xml`): NiObjectNET, `Flags` u16, `Apply
+    Mode` u32, `Texture Count` u32, `Has Base Texture` (1-byte bool), then the base TexDesc whose first
+    field is the `Source` ref. The glTF exporter emits one material per distinct texture, so the keep's
+    `.glb` now has ten materials. Verified live: Camelot Hills gathered textures jumped 30 -> 119
+    (every per-shape skin across the zone's buildings), 45 of 46 distinct models textured, session
+    healthy. Golden test: `WELL.NIF` (4.1.0.12, NiTriStrips, two skins across five shapes). The
+    scan-based 10.1.0.0 (creature) path still takes one texture per model — creatures are single-skin
+    and the graph isn't modelled there; per-shape there is a later step if a multi-skin creature appears.
   - **Versions in this client (verified against the install):** 4.2.2.0 (majority, NetImmerse —
     items), 4.2.1.0, 10.1.0.0 (Gamebryo — creatures). Two different header layouts; the reader
     gates on version. Both `NiTriShapeData` paths are **done** (4.2.x and 10.1.0.0, each
