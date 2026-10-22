@@ -98,4 +98,42 @@ public sealed class AssetLibraryTests : IDisposable
         File.WriteAllBytes(Path.Combine(overrides, "skin.dds"), "authored"u8.ToArray());
         Assert.Equal(Path.Combine(overrides, "skin.dds"), library.GatherTexture("skin.dds"));
     }
+
+    [Fact]
+    public void ResolvesATextureAcrossExtensions()
+    {
+        // The real client's zone NIFs name a texture .tga that was re-saved to .dds on disk. A gather
+        // for "canvas1.tga" must find canvas1.dds and store it under its real name (so the stem-based
+        // Godot loader finds it). This is the bug that left zone buildings slate gray.
+        byte[] client = "the-dds-bytes"u8.ToArray();
+        var library = new AssetLibrary(IndexWith(("canvas1.dds", client)), _lib);
+
+        string gathered = library.GatherTexture("canvas1.tga")!;
+        Assert.Equal(Path.Combine(_lib, "textures", "canvas1.dds"), gathered);
+        Assert.Equal(client, File.ReadAllBytes(gathered));
+
+        // A second gather by either name is a cache hit on the same stored file (not re-read/rewritten).
+        DateTime written = File.GetLastWriteTimeUtc(gathered);
+        Assert.Equal(gathered, library.GatherTexture("canvas1.tga"));
+        Assert.Equal(gathered, library.GatherTexture("canvas1.dds"));
+        Assert.Equal(written, File.GetLastWriteTimeUtc(gathered));
+    }
+
+    [Fact]
+    public void AnOverrideWithADifferentExtensionStillWins()
+    {
+        var library = new AssetLibrary(IndexWith(("brick.dds", "client"u8.ToArray())), _lib);
+        string overrides = Path.Combine(_lib, "overrides");
+        Directory.CreateDirectory(overrides);
+        // Contributor authored a .png override; a NIF reference to brick.tga should resolve to it.
+        File.WriteAllBytes(Path.Combine(overrides, "brick.dds"), "authored"u8.ToArray());
+        Assert.Equal(Path.Combine(overrides, "brick.dds"), library.GatherTexture("brick.tga"));
+    }
+
+    [Fact]
+    public void AnUnknownTextureStemIsNull()
+    {
+        var library = new AssetLibrary(IndexWith(("present.dds", "x"u8.ToArray())), _lib);
+        Assert.Null(library.GatherTexture("absent.tga"));
+    }
 }

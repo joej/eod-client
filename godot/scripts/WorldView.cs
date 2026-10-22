@@ -27,6 +27,8 @@ public partial class WorldView : Node3D
     private string? _zonePath;
     private string? _libraryPath;
     private string? _terrainPath;
+    private int _zoneTexturedModels;
+    private int _zoneTexturedSurfaces;
     private Label _status = null!;
     private Button _button = null!;
     private int _packets;
@@ -222,6 +224,10 @@ public partial class WorldView : Node3D
 
         if (placed > 0)
             AddChild(zoneRoot);
+        int distinct = 0;
+        foreach (Node3D? m in loaded.Values) if (m is not null) distinct++;
+        GD.Print($"[world] zone: {placed} object(s), {distinct} distinct model(s), " +
+            $"{_zoneTexturedModels} textured ({_zoneTexturedSurfaces} surface(s))");
         return placed;
     }
 
@@ -246,7 +252,9 @@ public partial class WorldView : Node3D
             if (doc.AppendFromFile(path, state) == Error.Ok && doc.GenerateScene(state) is Node3D m)
             {
                 // Texture search dirs, in priority order: overrides, textures, library root.
-                ModelTexturing.Apply(m, libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir);
+                int t = ModelTexturing.Apply(m, libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir);
+                _zoneTexturedModels += t > 0 ? 1 : 0;
+                _zoneTexturedSurfaces += t;
                 model = m;
             }
             else

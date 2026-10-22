@@ -44,6 +44,20 @@ client loads from. The individual stages are the `mpk` subcommands below (`conve
     distributable, geometry-only artifact — assets policy); the glTF material is named after the
     texture (e.g. `PSbeamLt_grey`). `godot/scripts/ModelTexturing.cs` loads `<name>.dds` from the
     folder beside the `.glb` (where `tools/pipeline.sh` gathers them) and assigns it as the albedo.
+  - **Texture resolution crosses extensions and is case-insensitive (fixed 2026-10-22).** The
+    client's zone NIFs name a texture with a `.tga` that was later re-saved to `.dds` on disk (the
+    whole `zones/Nifs` surface was converted to DDS), so an exact-name lookup missed most of them and
+    zone buildings rendered slate gray. `AssetIndex.ReadTexture` now resolves a texture by **stem**
+    across `.dds`/`.tga`/`.bmp` (preferring `.dds`), and `AssetLibrary.GatherTexture` stores the file
+    under a **lower-cased** name so the stem-based Godot loader finds it on case-sensitive filesystems
+    too (the NIF reference, the on-disk file and the glTF material name disagree on case). Verified
+    live: Camelot Hills went from 13 to 30 gathered textures; 45 of 46 distinct zone models textured
+    (526 surfaces), no case-mismatch warnings. The lone untextured model (`giant`) has no
+    `NiSourceTexture` at all — correctly left untextured.
+    - **Known limitation (next):** the 4.x reader captures **one** texture per model (the first
+      `NiSourceTexture`) and applies it to every shape, so a multi-material building (the keep
+      references 10 textures: `keepSTONE`, `canvas1`, `Btudorwood`, …) shows only its first skin.
+      Per-shape material capture is the follow-up.
     Godot's generic `Image.load()` doesn't recognise `.dds`, but `Image.LoadDdsFromBuffer()` does
     (verified against real client textures), so we read the bytes and decode from the buffer. Both
     the model viewer and the live `WorldView` texture their model; a missing/unknown texture leaves

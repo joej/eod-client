@@ -30,6 +30,10 @@ public sealed class AssetIndex
     // Indexed extensions. Models and the texture formats the client ships / we can decode.
     private static readonly string[] IndexedExtensions = [".nif", ".dds", ".tga", ".bmp"];
     private static readonly string[] ArchiveExtensions = [".mpk", ".npk"];
+    // Texture extensions, in preferred resolve order. The client's zone NIFs often name a texture
+    // with a .tga that was later re-saved to .dds on disk (the whole zones/Nifs surface was converted
+    // to DDS), so a texture reference must resolve across these, not by exact file name.
+    private static readonly string[] TextureExtensions = [".dds", ".tga", ".bmp"];
 
     // Bare lower-case file name -> location. Loose files win over archived ones; among archives,
     // first seen wins (the install rarely duplicates, and the per-model archive is found by name).
@@ -115,6 +119,44 @@ public sealed class AssetIndex
 
     /// <summary>True if the index has an entry for this name.</summary>
     public bool Contains(string name) => _byName.ContainsKey(KeyFromAny(name));
+
+    /// <summary>
+    /// Resolves a texture reference to its bytes and the actual on-disk file name, trying the named
+    /// extension first and then the other texture extensions against the same stem. Returns null if no
+    /// texture with that stem is indexed. This is how a NIF's stale <c>.tga</c> reference finds the
+    /// <c>.dds</c> the client actually ships (see <see cref="TextureExtensions"/>).
+    /// </summary>
+    public (byte[] Bytes, string FileName)? ReadTexture(string name)
+    {
+        // Try the exact name first (covers a correct reference and an already-bare name with ext).
+        string exact = KeyFromAny(name);
+        if (Path.GetExtension(exact).Length > 0 && _byName.ContainsKey(exact))
+        {
+            byte[]? b = Read(exact);
+            if (b is not null)
+                return (b, BareName(name));
+        }
+
+        // Fall back by stem across the texture extensions, preferring .dds.
+        string stem = Path.GetFileNameWithoutExtension(exact);
+        foreach (string ext in TextureExtensions)
+        {
+            string candidate = stem + ext;
+            if (_byName.TryGetValue(candidate, out AssetLocation loc))
+            {
+                byte[]? b = Read(candidate);
+                if (b is not null)
+                {
+                    // Name the output by the real file (e.g. the .dds), so the stem-based loader finds it.
+                    string real = loc.LoosePath is not null
+                        ? Path.GetFileName(loc.LoosePath)
+                        : loc.Member is not null ? BareName(loc.Member) : candidate;
+                    return (b, real);
+                }
+            }
+        }
+        return null;
+    }
 
     // --- persistence (JSON under private/) ---
 

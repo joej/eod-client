@@ -70,12 +70,15 @@ public static class ModelTexturing
         if (cache.TryGetValue(stem, out ImageTexture? cached))
             return cached;
 
+        // The library stores textures under a lower-cased name (so the stem the glTF material carries
+        // resolves on case-sensitive filesystems, where the NIF's casing and the on-disk file differ).
+        string key = stem.ToLowerInvariant();
         ImageTexture? result = null;
         foreach (string dir in dirs)
         {
             foreach (string ext in new[] { ".dds", ".tga", ".bmp", ".png" })
             {
-                string path = dir.PathJoin(stem + ext);
+                string path = dir.PathJoin(key + ext);
                 if (!Godot.FileAccess.FileExists(path))
                     continue;
 

@@ -84,28 +84,46 @@ public sealed class AssetLibrary
 
     /// <summary>
     /// Ensures texture <paramref name="textureName"/> is in <c>textures/</c> (converted) unless an
-    /// override exists; returns the resolved path, or null if the index doesn't have it. Copies the
-    /// client's texture bytes verbatim (no transcode) so the client can load it.
+    /// override exists; returns the resolved path, or null if the index doesn't have it. The lookup
+    /// resolves across texture extensions (a NIF's stale <c>.tga</c> reference finds the shipped
+    /// <c>.dds</c>) and the file is written under its real on-disk name so the stem-based Godot loader
+    /// finds it. Copies the client's texture bytes verbatim (no transcode) so the client can load it.
     /// </summary>
     public string? GatherTexture(string textureName)
     {
-        string bare = BareName(textureName);
+        string stem = Path.GetFileNameWithoutExtension(BareName(textureName));
 
-        string overridePath = Path.Combine(_overrides, bare);
-        if (File.Exists(overridePath))
-            return overridePath;
+        // An override wins. Match by stem across texture extensions (the NIF reference may differ).
+        if (Directory.Exists(_overrides))
+            foreach (string ext in TextureExts)
+            {
+                string op = Path.Combine(_overrides, stem + ext);
+                if (File.Exists(op))
+                    return op;
+            }
 
-        string dest = Path.Combine(_textures, bare);
-        if (File.Exists(dest))
-            return dest;
+        // Already gathered? (match by stem — we store under the real on-disk name).
+        if (Directory.Exists(_textures))
+            foreach (string ext in TextureExts)
+            {
+                string ep = Path.Combine(_textures, stem + ext);
+                if (File.Exists(ep))
+                    return ep;
+            }
 
-        byte[]? bytes = _index.Read(textureName);
-        if (bytes is null)
+        (byte[] Bytes, string FileName)? found = _index.ReadTexture(textureName);
+        if (found is null)
             return null;
         Directory.CreateDirectory(_textures);
-        File.WriteAllBytes(dest, bytes);
+        // Store under a lower-cased name so the stem-based loader finds it on case-sensitive
+        // filesystems too (the NIF reference, the on-disk file and the glTF material name disagree on
+        // case; the loader lower-cases the stem it looks up, so we lower-case what we write).
+        string dest = Path.Combine(_textures, found.Value.FileName.ToLowerInvariant());
+        File.WriteAllBytes(dest, found.Value.Bytes);
         return dest;
     }
+
+    private static readonly string[] TextureExts = [".dds", ".tga", ".bmp"];
 
     /// <summary>The directory a loader should read assets from: the library root. Loaders resolve
     /// <c>overrides/</c> then <c>models/</c> / <c>textures/</c> themselves (see the Godot side).</summary>

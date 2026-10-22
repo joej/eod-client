@@ -83,6 +83,34 @@ public sealed class AssetIndexTests : IDisposable
     }
 
     [Fact]
+    public void ReadTextureResolvesAcrossExtensionsAndReturnsTheRealName()
+    {
+        Directory.CreateDirectory(_client);
+        File.WriteAllBytes(Path.Combine(_client, "BPALDOR1.dds"), "dds-bytes"u8.ToArray());
+        AssetIndex index = AssetIndex.Build(_client);
+
+        // A NIF names the texture .tga though only .dds ships: resolve to the .dds, by its real name.
+        var hit = index.ReadTexture("bpaldor1.tga");
+        Assert.NotNull(hit);
+        Assert.Equal("dds-bytes"u8.ToArray(), hit!.Value.Bytes);
+        Assert.Equal("BPALDOR1.dds", hit.Value.FileName); // on-disk casing, not the .tga reference
+
+        // Exact reference still works and keeps its name; unknown stem is null.
+        Assert.Equal("dds-bytes"u8.ToArray(), index.ReadTexture("bpaldor1.dds")!.Value.Bytes);
+        Assert.Null(index.ReadTexture("nosuch.tga"));
+    }
+
+    [Fact]
+    public void ReadTextureDoesNotTurnAModelIntoATexture()
+    {
+        Directory.CreateDirectory(_client);
+        // A stem that exists only as a .nif must not be returned as a texture.
+        File.WriteAllText(Path.Combine(_client, "thing.nif"), "nif");
+        AssetIndex index = AssetIndex.Build(_client);
+        Assert.Null(index.ReadTexture("thing.dds"));
+    }
+
+    [Fact]
     public void BuildThrowsOnMissingDirectory()
     {
         Assert.Throws<DirectoryNotFoundException>(
