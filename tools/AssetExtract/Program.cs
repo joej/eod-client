@@ -262,15 +262,19 @@ internal static class Cli
 
     private static int TerrainCmd(string[] args)
     {
-        // terrain <dat<NNN>.mpk> --offset X Y --out FILE.glb
+        // terrain <dat<NNN>.mpk> --offset X Y --out FILE.glb [--tiles N] [--index index.json --library LIBDIR]
         if (args.Length < 2)
             return Usage();
         string datMpk = args[1];
         int? offX = null, offY = null;
-        string? outPath = null;
+        int tiles = 8;  // the painted ground is an 8x8 grid of texRR-CC tiles (verified on the install).
+        string? outPath = null, indexPath = null, libDir = null;
         for (int i = 2; i < args.Length; i++)
         {
             if (args[i] == "--out" && i + 1 < args.Length) outPath = args[++i];
+            else if (args[i] == "--index" && i + 1 < args.Length) indexPath = args[++i];
+            else if (args[i] == "--library" && i + 1 < args.Length) libDir = args[++i];
+            else if (args[i] == "--tiles" && i + 1 < args.Length && int.TryParse(args[i + 1], out int tn)) { tiles = tn; i++; }
             else if (args[i] == "--offset" && i + 2 < args.Length
                      && int.TryParse(args[i + 1], out int ox) && int.TryParse(args[i + 2], out int oy))
             { offX = ox; offY = oy; i += 2; }
@@ -284,16 +288,36 @@ internal static class Cli
             return 2;
         }
         if (!File.Exists(datMpk)) { Console.Error.WriteLine($"No such zone archive: {datMpk}"); return 1; }
+        if ((indexPath is null) != (libDir is null))
+        {
+            Console.Error.WriteLine("terrain: pass --index and --library together to gather the ground tiles.");
+            return 2;
+        }
 
         try
         {
             ZoneTerrain terrain = ZoneTerrain.Read(datMpk);
-            NifMesh mesh = terrain.BuildMesh(offX.Value, offY.Value);
-            var model = new NifModel { Version = new NifVersion(0, 0, 0, 0), Meshes = [mesh] };
+            var meshes = terrain.BuildTiledMesh(offX.Value, offY.Value, tiles);
+            var model = new NifModel { Version = new NifVersion(0, 0, 0, 0), Meshes = [.. meshes] };
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outPath))!);
             GltfExporter.SaveGlb(model, outPath);
-            Console.WriteLine($"Terrain: {terrain.Cells}x{terrain.Cells} heightmap, " +
-                $"{mesh.Vertices.Length} verts, {mesh.Triangles.Length} tris -> {Path.GetFullPath(outPath)}");
+
+            int verts = 0, tris = 0;
+            foreach (NifMesh m in meshes) { verts += m.Vertices.Length; tris += m.Triangles.Length; }
+            Console.WriteLine($"Terrain: {terrain.Cells}x{terrain.Cells} heightmap, {meshes.Count} tile(s), " +
+                $"{verts} verts, {tris} tris -> {Path.GetFullPath(outPath)}");
+
+            // Gather the ground tiles into the library so the client textures the terrain like any model.
+            if (indexPath is not null && libDir is not null)
+            {
+                if (!File.Exists(indexPath)) { Console.Error.WriteLine($"No such index: {indexPath} (run `mpk index` first)."); return 1; }
+                var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir);
+                int got = 0, miss = 0;
+                foreach (NifMesh m in meshes)
+                    if (m.TextureFile is { } tf)
+                        if (library.GatherTexture(tf) is not null) got++; else miss++;
+                Console.WriteLine($"  tiles: {got} gathered, {miss} missing -> {Path.GetFullPath(libDir)}/textures");
+            }
             return 0;
         }
         catch (Exception e) when (e is MpkFormatException or FormatException)
@@ -354,7 +378,7 @@ internal static class Cli
               mpk textures <client-dir> <model.nif | dir-of-nifs> --out DIR
               mpk index    <client-dir> --out index.json
               mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR
-              mpk terrain  <dat<NNN>.mpk> --offset X Y --out FILE.glb
+              mpk terrain  <dat<NNN>.mpk> --offset X Y --out FILE.glb [--tiles N] [--index index.json --library LIBDIR]
 
             With no member, extract writes every member. Default --out is the current directory.
             convert writes a glTF binary next to the .nif unless --out is given.

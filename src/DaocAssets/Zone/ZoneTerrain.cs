@@ -58,6 +58,76 @@ public sealed class ZoneTerrain
         _terrain.At(cx, cy) * _scaleFactor + _offset.At(cx, cy) * _offsetFactor;
 
     /// <summary>
+    /// Builds the terrain as a grid of per-tile sub-meshes in region-global coordinates: the zone's
+    /// painted ground is an <paramref name="tiles"/>×<paramref name="tiles"/> grid of texture tiles
+    /// (<c>texRR-CC.dds</c> in the zone's tex archive), so each sub-mesh covers one tile's block of
+    /// cells, carries local UVs 0..1 and names its tile as its <see cref="Nif.NifMesh.TextureFile"/>.
+    /// The glTF exporter then emits one material per tile and the client textures each from the
+    /// gathered <c>texRR-CC.dds</c> — the same per-shape texturing path buildings use. Tiles share
+    /// their seam cells (vertices duplicated along tile edges) so each tile's UVs stay 0..1.
+    /// </summary>
+    public IReadOnlyList<Nif.NifMesh> BuildTiledMesh(int offsetX, int offsetY, int tiles)
+    {
+        int n = _terrain.Width;                  // cells per side (square), e.g. 256
+        if (tiles < 1 || n % tiles != 0)
+            // Fall back to a single mesh if the grid doesn't divide evenly (keeps a ground either way).
+            return [BuildMesh(offsetX, offsetY)];
+
+        int cellsPerTile = n / tiles;            // 256 / 8 = 32 cells (quads) per tile
+        float step = (float)RegionWidth / (n - 1); // region units between adjacent cells
+        var meshes = new List<Nif.NifMesh>(tiles * tiles);
+
+        for (int tr = 0; tr < tiles; tr++)       // tile row  (cell-Y block)
+        for (int tc = 0; tc < tiles; tc++)       // tile col  (cell-X block)
+        {
+            int cx0 = tc * cellsPerTile, cy0 = tr * cellsPerTile;
+            int side = cellsPerTile + 1;          // vertices per side of this tile (shares seam cells)
+            var verts = new System.Numerics.Vector3[side * side];
+            var uvs = new System.Numerics.Vector2[side * side];
+            for (int ly = 0; ly < side; ly++)
+            for (int lx = 0; lx < side; lx++)
+            {
+                int cx = cx0 + lx, cy = cy0 + ly;
+                int i = ly * side + lx;
+                verts[i] = new System.Numerics.Vector3(offsetX + cx * step, offsetY + cy * step, HeightAtCell(cx, cy));
+                uvs[i] = new System.Numerics.Vector2(lx / (float)cellsPerTile, ly / (float)cellsPerTile);
+            }
+
+            var tris = new (ushort, ushort, ushort)[cellsPerTile * cellsPerTile * 2];
+            int t = 0;
+            for (int ly = 0; ly < cellsPerTile; ly++)
+            for (int lx = 0; lx < cellsPerTile; lx++)
+            {
+                ushort a = (ushort)(ly * side + lx);
+                ushort b = (ushort)(ly * side + lx + 1);
+                ushort c = (ushort)((ly + 1) * side + lx);
+                ushort d = (ushort)((ly + 1) * side + lx + 1);
+                tris[t++] = (a, c, b);
+                tris[t++] = (b, c, d);
+            }
+
+            meshes.Add(new Nif.NifMesh
+            {
+                Name = $"tex{tr:00}-{tc:00}",
+                Vertices = verts,
+                Normals = null,
+                TexCoords = uvs,
+                Triangles = tris,
+                TextureFile = $"tex{tr:00}-{tc:00}.dds",
+            });
+        }
+        return meshes;
+    }
+
+    /// <summary>The tile names this terrain references (<c>texRR-CC.dds</c>), for a gather step.</summary>
+    public static IEnumerable<string> TileNames(int tiles)
+    {
+        for (int tr = 0; tr < tiles; tr++)
+        for (int tc = 0; tc < tiles; tc++)
+            yield return $"tex{tr:00}-{tc:00}.dds";
+    }
+
+    /// <summary>
     /// Builds the terrain as a grid mesh in region-global coordinates (the zone's offset added), so
     /// it sits in the same space as placed objects and the player. One vertex per heightmap cell,
     /// two triangles per cell quad. UVs span 0..1 across the zone (for a future terrain texture).

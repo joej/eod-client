@@ -143,9 +143,22 @@ client loads from. The individual stages are the `mpk` subcommands below (`conve
   .glb (256×256 → 65,536 verts, 130,050 tris). `WorldView` loads it via `--terrain`, at the origin
   scaled 1/100 to match the scene, replacing the flat placeholder. Verified live: Camelot Hills
   terrain + 1,531 objects + character, session healthy.
-  - **Next for terrain: the patch textures.** `ter<NNN>.mpk` holds `patchXXXX-YY.dds` tiles (the
-    painted ground surface). Not wired yet — the terrain renders as plain green. Mapping tiles to
-    the heightmap grid (and the grass/dense/shade maps in `dat`) is a later step.
+  - **Ground tile textures — done (2026-10-22).** The painted ground is an **8×8 grid of
+    `texRR-CC.dds` tiles** (512×512 DXT1) in the zone's `tex<NNN>.mpk` — verified: assembling the 64
+    tiles in `texRR-CC` order (RR=row, CC=col) yields a continuous surface whose roads flow across
+    tile seams. `ZoneTerrain.BuildTiledMesh` splits the 256×256 heightmap into one sub-mesh per tile
+    (32 cells each, seam cells shared so each tile's UVs stay 0..1) named for its tile, so the glTF
+    exporter emits one material per tile and the client textures each from the gathered tile — the
+    same per-shape texturing path buildings use. `mpk terrain … --index --library` gathers the 64
+    tiles into the library; `WorldView` textures the ground from it (green only where a tile is
+    missing). Verified live: Camelot Hills, 64/64 ground tiles textured, session healthy.
+    `ter<NNN>.mpk`'s `patch####-LL.dds` (128×128 DXT3, up to 3 layers/patch — the multi-texture
+    **blend/detail** layers) and the `grass`/`dense`/`shade`/`water` masks in `dat` are a later
+    refinement; the base painted ground is in now.
+    - **Open item (needs a windowed check):** within-tile UVs and tile-to-tile continuity are
+      correct, but whether the whole grid needs a global flip to align texture-space with world-space
+      can only be confirmed visually (headless can't GPU-render). If it reads flipped, it's a one-axis
+      UV change in `BuildTiledMesh`.
 
 ## Tooling
 

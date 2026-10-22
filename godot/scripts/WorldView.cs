@@ -167,15 +167,36 @@ public partial class WorldView : Node3D
             return false;
         }
         terrain.Scale = new Vector3(1f / RegionUnitsPerUnit, 1f / RegionUnitsPerUnit, 1f / RegionUnitsPerUnit);
-        // A plain green ground material (terrain texturing from the patch tiles is a later step).
+
+        // Texture each ground tile (texRR-CC) from the library, like any model. A tile that doesn't
+        // resolve keeps a plain green fallback so the ground is never a hole.
+        string libraryDir = string.IsNullOrEmpty(_libraryPath)
+            ? System.IO.Path.GetDirectoryName(_terrainPath) ?? ""
+            : _libraryPath;
+        int textured = ModelTexturing.Apply(terrain,
+            libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir);
+
+        var green = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.33f, 0.46f, 0.28f),
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        };
         foreach (MeshInstance3D mi in FindMeshes(terrain))
-            mi.MaterialOverride = new StandardMaterial3D
+        {
+            Mesh? mesh = mi.Mesh;
+            if (mesh is null)
+                continue;
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
             {
-                AlbedoColor = new Color(0.33f, 0.46f, 0.28f),
-                CullMode = BaseMaterial3D.CullModeEnum.Disabled, // render both sides regardless of winding
-            };
+                // Render both sides regardless of winding; keep green only where no tile was applied.
+                if (mi.GetSurfaceOverrideMaterial(s) is BaseMaterial3D tile)
+                    tile.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
+                else
+                    mi.SetSurfaceOverrideMaterial(s, green);
+            }
+        }
         AddChild(terrain);
-        GD.Print("[world] terrain loaded");
+        GD.Print($"[world] terrain loaded ({textured} ground tile(s) textured)");
         return true;
     }
 
