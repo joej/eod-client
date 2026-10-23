@@ -103,6 +103,15 @@ public sealed class TerrainTests
 
             // Flat height = 10 * scalefactor(8) + 0 * offsetfactor(32) = 80 everywhere.
             Assert.All(tiles, t => Assert.All(t.Vertices, v => Assert.Equal(80f, v.Z)));
+
+            // Terrain vertices carry region-global X and a PRE-NEGATED region Y, so that the shared
+            // exporter's (x,y,z)->(x,z,-y) map lands the ground in the client's ToGodot frame (+Y),
+            // under the player, instead of reflected across the X axis. X stays >= 0; Y stays <= 0.
+            Assert.All(tiles, t => Assert.All(t.Vertices, v =>
+            {
+                Assert.True(v.X >= 0f, $"region X should be non-negative, was {v.X}");
+                Assert.True(v.Y <= 0f, $"region Y should be pre-negated (<= 0), was {v.Y}");
+            }));
         }
         finally
         {

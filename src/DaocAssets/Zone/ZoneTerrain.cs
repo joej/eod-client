@@ -65,6 +65,15 @@ public sealed class ZoneTerrain
     /// The glTF exporter then emits one material per tile and the client textures each from the
     /// gathered <c>texRR-CC.dds</c> — the same per-shape texturing path buildings use. Tiles share
     /// their seam cells (vertices duplicated along tile edges) so each tile's UVs stay 0..1.
+    ///
+    /// Unlike a model (whose local vertices are meaningless until the client places it via its
+    /// region→Godot map), terrain vertices are already region-global, so they must land in the exact
+    /// frame the client uses for the player and placed objects: ToGodot = (X, Z, Y)/100. The shared
+    /// exporter instead applies the model convention (x,y,z)→(x,z,-y), which would reflect the ground
+    /// across the X axis (north↔south) and drop it thousands of units away from the player. We
+    /// pre-negate the region Y here so the exporter's -Y cancels to +Y and terrain lands under the
+    /// player; because negating one axis flips handedness, the winding is set opposite to BuildMesh's
+    /// so faces still point up after export.
     /// </summary>
     public IReadOnlyList<Nif.NifMesh> BuildTiledMesh(int offsetX, int offsetY, int tiles)
     {
@@ -89,7 +98,8 @@ public sealed class ZoneTerrain
             {
                 int cx = cx0 + lx, cy = cy0 + ly;
                 int i = ly * side + lx;
-                verts[i] = new System.Numerics.Vector3(offsetX + cx * step, offsetY + cy * step, HeightAtCell(cx, cy));
+                // Pre-negate region Y (see summary): exporter's -Y then yields the client's +Y.
+                verts[i] = new System.Numerics.Vector3(offsetX + cx * step, -(offsetY + cy * step), HeightAtCell(cx, cy));
                 uvs[i] = new System.Numerics.Vector2(lx / (float)cellsPerTile, ly / (float)cellsPerTile);
             }
 
@@ -102,8 +112,11 @@ public sealed class ZoneTerrain
                 ushort b = (ushort)(ly * side + lx + 1);
                 ushort c = (ushort)((ly + 1) * side + lx);
                 ushort d = (ushort)((ly + 1) * side + lx + 1);
-                tris[t++] = (a, c, b);
-                tris[t++] = (b, c, d);
+                // Opposite winding to BuildMesh: the pre-negated Y flips handedness, so this order
+                // is the one that faces up after the exporter's Z-up→Y-up map. (Godot renders the
+                // ground double-sided anyway, so this is belt-and-suspenders, but kept correct.)
+                tris[t++] = (a, b, c);
+                tris[t++] = (b, d, c);
             }
 
             meshes.Add(new Nif.NifMesh
