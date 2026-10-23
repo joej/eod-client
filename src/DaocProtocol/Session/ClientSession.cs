@@ -40,6 +40,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     private readonly ClientVersion _version = version ?? ClientVersion.V1127e;
     private readonly Dictionary<Realm, CharacterOverview> _overviews = [];
     private Realm _lastListedRealm;
+    private CryptKeyReply? _handshake;
 
     /// <summary>How long to wait for each reply before throwing <see cref="TimeoutException"/>.</summary>
     public TimeSpan ReplyTimeout { get; set; } = TimeSpan.FromSeconds(10);
@@ -58,12 +59,24 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// <summary>The account's realm from the last 0xFE; <see cref="Realm.None"/> = not chosen yet or all realms allowed.</summary>
     public Realm AccountRealm { get; private set; }
 
-    /// <summary>0xF4 → 0x22, then 0xA7 → 0x2A or 0x2C.</summary>
-    public async Task<LoginResult> LoginAsync(string account, string password, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// 0xF4 → 0x22 only: shows whether the server accepts our client version. A server that doesn't
+    /// closes the connection without a reply (<see cref="IOException"/>). <see cref="LoginAsync"/>
+    /// does this step itself unless it has already been done.
+    /// </summary>
+    public async Task<CryptKeyReply> HandshakeAsync(CancellationToken cancellationToken = default)
     {
         Require(SessionState.Connected);
         await connection.SendAsync(CryptKeyRequest.Code, CryptKeyRequest.Payload(_version), cancellationToken).ConfigureAwait(false);
-        CryptKeyReply.Parse((await ExpectAsync(cancellationToken, CryptKeyReply.Code).ConfigureAwait(false)).Payload);
+        _handshake = CryptKeyReply.Parse((await ExpectAsync(cancellationToken, CryptKeyReply.Code).ConfigureAwait(false)).Payload);
+        return _handshake;
+    }
+
+    /// <summary>0xF4 → 0x22 (unless <see cref="HandshakeAsync"/> ran), then 0xA7 → 0x2A or 0x2C.</summary>
+    public async Task<LoginResult> LoginAsync(string account, string password, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.Connected);
+        _handshake ??= await HandshakeAsync(cancellationToken).ConfigureAwait(false);
 
         await connection.SendAsync(LoginRequest.Code, LoginRequest.Payload(account, password), cancellationToken).ConfigureAwait(false);
         ServerPacket reply = await ExpectAsync(cancellationToken, LoginGranted.Code, LoginDenied.Code).ConfigureAwait(false);

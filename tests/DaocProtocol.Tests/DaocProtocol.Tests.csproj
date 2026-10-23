@@ -23,6 +23,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The launcher targets Windows only; its platform-neutral files are tested here. -->
+    <Compile Include="..\..\tools\Launcher\LauncherConfig.cs" Link="Launcher\LauncherConfig.cs" />
+    <Compile Include="..\..\tools\Launcher\ClientInstall.cs" Link="Launcher\ClientInstall.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="Fixtures\*.bin" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

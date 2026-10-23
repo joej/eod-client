@@ -98,6 +98,37 @@ public class ClientSessionTests
     }
 
     [Fact]
+    public async Task HandshakeAloneThenLoginSendsOneVersionPacket()
+    {
+        int announced = 0;
+        await using var server = new FakeServer(Recording(p =>
+        {
+            if (p.Code == CryptKeyRequest.Code)
+                announced++;
+            return null;
+        }));
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            CryptKeyReply reply = await session.HandshakeAsync();
+            Assert.Equal("1.127", reply.Version);
+            Assert.True((await session.LoginAsync("rustdaoc", "secret")).Success);
+            Assert.Equal(1, announced);
+        }
+    }
+
+    [Fact]
+    public async Task HandshakeFailsWhenTheServerRefusesTheVersion()
+    {
+        await using var server = new FakeServer(_ => null);
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await Assert.ThrowsAsync<IOException>(() => session.HandshakeAsync());
+        }
+    }
+
+    [Fact]
     public async Task FailsWhenTheServerHangsUp()
     {
         await using var server = new FakeServer(_ => null);
