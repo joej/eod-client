@@ -292,6 +292,12 @@ public partial class WorldView : Node3D
                 int t = ModelTexturing.Apply(m, libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir);
                 _zoneTexturedModels += t > 0 ? 1 : 0;
                 _zoneTexturedSurfaces += t;
+                // Render every surface double-sided. The exporter now winds faces outward (walls are
+                // solid), but DAoC authors thin architectural pieces — battlement caps, parapet edges,
+                // banners — as single-sided surfaces meant to be seen from one side; back-face culling
+                // makes them vanish (and reappear) as the camera moves around. Disabling culling costs
+                // a little overdraw and removes the artifact without hiding any real winding error.
+                MakeDoubleSided(m);
                 model = m;
             }
             else
@@ -367,6 +373,21 @@ public partial class WorldView : Node3D
         foreach (Node child in node.GetChildren())
             foreach (MeshInstance3D m in FindMeshes(child))
                 yield return m;
+    }
+
+    // Disables back-face culling on every surface of a model so single-sided art (thin caps, banners)
+    // doesn't vanish from the back. Works on whichever material the surface already carries.
+    private static void MakeDoubleSided(Node root)
+    {
+        foreach (MeshInstance3D mi in FindMeshes(root))
+        {
+            Mesh? mesh = mi.Mesh;
+            if (mesh is null)
+                continue;
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+                if (mi.GetActiveMaterial(s) is BaseMaterial3D mat)
+                    mat.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
+        }
     }
 
     // Right mouse button toggles mouse-look; while held, relative motion turns the camera.

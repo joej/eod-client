@@ -203,6 +203,33 @@ public sealed class NifFileTests
         // distributable, geometry-only artifact (assets policy).
         Assert.Equal("PSbeamLt_grey", Assert.Single(gltf.LogicalMaterials).Name);
         Assert.Empty(gltf.LogicalImages);
+
+        // Triangle winding must face OUT, i.e. agree with the exported NORMAL attribute. An earlier
+        // exporter flipped winding an extra time, leaving ~99% of faces inverted: with back-face
+        // culling the client then showed the inside of every model (see-through walls). Assert the
+        // front faces point the same way as the normals so this can't silently regress.
+        AssertWindingFacesOutward(prim);
+    }
+
+    // Fraction of triangles whose geometric winding agrees with the vertex normals must be high
+    // (a few genuinely double-sided/degenerate faces are tolerated). Front faces point outward.
+    private static void AssertWindingFacesOutward(MeshPrimitive prim)
+    {
+        var pos = prim.GetVertexAccessor("POSITION").AsVector3Array();
+        var nrm = prim.GetVertexAccessor("NORMAL").AsVector3Array();
+        var idx = prim.GetIndices();
+        int agree = 0, total = 0;
+        for (int i = 0; i + 2 < idx.Count; i += 3)
+        {
+            System.Numerics.Vector3 p0 = pos[(int)idx[i]], p1 = pos[(int)idx[i + 1]], p2 = pos[(int)idx[i + 2]];
+            System.Numerics.Vector3 face = System.Numerics.Vector3.Cross(p1 - p0, p2 - p0);
+            if (face.LengthSquared() < 1e-9f) continue; // degenerate
+            System.Numerics.Vector3 vn = nrm[(int)idx[i]] + nrm[(int)idx[i + 1]] + nrm[(int)idx[i + 2]];
+            total++;
+            if (System.Numerics.Vector3.Dot(face, vn) >= 0) agree++;
+        }
+        Assert.True(total > 0, "no non-degenerate triangles to check");
+        Assert.True(agree >= total * 0.9, $"winding faces inward: only {agree}/{total} triangles agree with their normals");
     }
 
     private static string VertHash(NifMesh m)

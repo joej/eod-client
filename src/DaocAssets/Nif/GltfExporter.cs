@@ -55,11 +55,17 @@ public static class GltfExporter
         for (int t = 0; t < m.Triangles.Length; t++)
         {
             var (a, b, c) = m.Triangles[t];
-            // Winding flipped (a, c, b) because the Z-up -> Y-up map changes handedness.
+            // Keep the NIF's own winding (a, b, c). Although the Z-up→Y-up map (x,z,-y) is a
+            // handedness change that would normally invert front/back, the exporter also carries the
+            // NIF's real per-vertex normals through the same map, and we bind them as the glTF NORMAL
+            // attribute. Measured against those normals on the keep, the NIF winding is the one that
+            // faces OUT (an extra flip to (a,c,b) left ~99% of faces inverted, so back-face culling
+            // removed the outside and the model read inside-out — see-through tower walls). So we do
+            // not flip here; winding agrees with the normals and front faces point outward.
             prim.AddTriangle(
                 Vertex(m, a, hasNormals, hasUv),
-                Vertex(m, c, hasNormals, hasUv),
-                Vertex(m, b, hasNormals, hasUv));
+                Vertex(m, b, hasNormals, hasUv),
+                Vertex(m, c, hasNormals, hasUv));
         }
         return builder;
     }
