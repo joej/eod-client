@@ -31,6 +31,11 @@ public partial class WorldView : Node3D
     private int _zoneTexturedSurfaces;
     private Label _status = null!;
     private Button _button = null!;
+    private Camera3D _camera = null!;
+    private float _camYaw;
+    private float _camPitch;
+    private bool _lookActive;
+    // Free-fly debug camera speed in Godot units/second (hold Shift to move faster).
     private int _packets;
     private int _pings;
     private double _seconds;
@@ -130,9 +135,15 @@ public partial class WorldView : Node3D
         if (zoneObjects > 0)
             GD.Print($"[world] placed {zoneObjects} zone object(s)");
 
-        var camera = new Camera3D { Position = at + new Vector3(0, 5, 9) };
-        AddChild(camera);
-        camera.LookAt(at + new Vector3(0, 1, 0));
+        // Free-fly debug camera (WASD + Q/E, right-drag to look, Shift to sprint): the spawn is often
+        // inside a large structure (Eodarms starts at Prydwen Keep), so no fixed chase offset reliably
+        // sees the scene. Start high and back, looking down at the player, then fly from there.
+        _camera = new Camera3D { Position = at + new Vector3(0, 45, 65), Far = 8000f };
+        AddChild(_camera);
+        _camera.LookAt(at + new Vector3(0, 1, 0));
+        Vector3 e = _camera.Rotation;          // seed yaw/pitch from the initial LookAt
+        _camPitch = e.X;
+        _camYaw = e.Y;
 
         var overlay = new CanvasLayer();
         _status = new Label { Position = new Vector2(16, 16) };
@@ -238,7 +249,12 @@ public partial class WorldView : Node3D
             inst.Position = ToGodot(x, y, z);
             // DAoC angle is degrees about the vertical axis; negate for Godot's handedness (as heading).
             inst.Rotation = new Vector3(0, -Mathf.DegToRad(angleDeg), 0);
-            inst.Scale = new Vector3(scale, scale, scale);
+            // The model's vertices are in region/NIF units (exporter leaves scale at 1), the same units
+            // the placement coords and terrain use, so bring them into Godot space by the same factor
+            // as everything else (ToGodot and the terrain both divide by RegionUnitsPerUnit). Without
+            // this the buildings render 100x oversized — the keep alone fills the whole zone.
+            float s = scale / RegionUnitsPerUnit;
+            inst.Scale = new Vector3(s, s, s);
             zoneRoot.AddChild(inst);
             placed++;
         }
@@ -353,8 +369,44 @@ public partial class WorldView : Node3D
                 yield return m;
     }
 
+    // Right mouse button toggles mouse-look; while held, relative motion turns the camera.
+    public override void _Input(InputEvent @event)
+    {
+        if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Right)
+        {
+            _lookActive = mb.Pressed;
+            Input.MouseMode = mb.Pressed ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
+        }
+        else if (@event is InputEventMouseMotion mm && _lookActive)
+        {
+            const float sens = 0.005f;
+            _camYaw -= mm.Relative.X * sens;
+            _camPitch = Mathf.Clamp(_camPitch - mm.Relative.Y * sens, -1.5f, 1.5f);
+        }
+    }
+
+    // Free-fly movement: WASD plane, Q/E down/up, Shift sprint. Camera-relative.
+    private void UpdateDebugCamera(double delta)
+    {
+        _camera.Rotation = new Vector3(_camPitch, _camYaw, 0);
+
+        var dir = Vector3.Zero;
+        if (Input.IsKeyPressed(Key.W)) dir -= _camera.GlobalTransform.Basis.Z;
+        if (Input.IsKeyPressed(Key.S)) dir += _camera.GlobalTransform.Basis.Z;
+        if (Input.IsKeyPressed(Key.A)) dir -= _camera.GlobalTransform.Basis.X;
+        if (Input.IsKeyPressed(Key.D)) dir += _camera.GlobalTransform.Basis.X;
+        if (Input.IsKeyPressed(Key.E)) dir += Vector3.Up;
+        if (Input.IsKeyPressed(Key.Q)) dir += Vector3.Down;
+        if (dir != Vector3.Zero)
+        {
+            float speed = Input.IsKeyPressed(Key.Shift) ? 120f : 30f;
+            _camera.Position += dir.Normalized() * speed * (float)delta;
+        }
+    }
+
     public override void _Process(double delta)
     {
+        UpdateDebugCamera(delta);
         _seconds += delta;
         while (_draining && _connection.TryReceive(out ServerPacket packet))
         {
@@ -375,6 +427,7 @@ public partial class WorldView : Node3D
         _status.Text =
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
             $"{_seconds:0} s in world   {_packets} packets   {_pings} ping replies   " +
-            (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note;
+            (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + "\n" +
+            "camera: WASD move, Q/E down/up, right-drag look, Shift sprint";
     }
 }
