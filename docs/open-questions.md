@@ -81,6 +81,7 @@ the 1.127 flow the server implements.
 |---|---|---|---|
 | W1 | What is one DAoC world unit in metres? The Godot client divides region coordinates by 100 without knowing the real scale. | our client | Open. Measure a character model's height in NIF units once assets are extracted. |
 | W2 | Which way does heading 0 point? The capsule's facing is a guess. | our client | Open. Compare with a real client facing a known direction. |
+| W3 | **~2/3 of the keep's shapes store NO texture coordinates (uvSets=0 in NiGeometryData).** In keep.NIF (NetImmerse 4.1.0.12), 39 of 59 geometry shapes — all the "bpaldor1" tower cylinders and wall bodies — declare 0 UV sets, verified by dumping the Data Flags field with the parse confirmed aligned (Has-Verts/Normals/Colors all clean, bounding sphere in place). The other ~20 shapes store uvSets=1 and texture correctly. With no UVs our renderer samples texel (0,0), so the stone texture collapses to its average colour (flat tan towers). Not a reader bug — the data genuinely has no stored UVs. | our converter, keep.NIF 2026-10-24 | Open. How does the real client texture these? Candidates: a texture-coordinate-generation mode in NiTexturingProperty/NiTextureEffect (sphere/object/planar mapping), a NiTextureTransform, or they are meant to be flat. Investigating via DAOC_Navigator's NIFLib (GPL-3.0 C#, full block support) — the authoritative layout/behaviour reference. |
 
 ## Not yet documented anywhere we've found
 
