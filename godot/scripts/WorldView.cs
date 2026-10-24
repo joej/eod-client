@@ -370,6 +370,7 @@ public partial class WorldView : Node3D
     }
 
     // Right mouse button toggles mouse-look; while held, relative motion turns the camera.
+    // P saves a screenshot of the current view.
     public override void _Input(InputEvent @event)
     {
         if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Right)
@@ -383,6 +384,40 @@ public partial class WorldView : Node3D
             _camYaw -= mm.Relative.X * sens;
             _camPitch = Mathf.Clamp(_camPitch - mm.Relative.Y * sens, -1.5f, 1.5f);
         }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.P })
+        {
+            _ = SaveScreenshot();
+        }
+    }
+
+    // Saves the current frame to <progress>/shot_<timestamp>.png. The progress dir is derived from
+    // the library path (its sibling "progress"), falling back to Godot's writable user:// dir. The
+    // viewport image is only valid after a frame is drawn, so await the post-draw signal first.
+    private async System.Threading.Tasks.Task SaveScreenshot()
+    {
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        Image img = GetViewport().GetTexture().GetImage();
+
+        string dir = ScreenshotDir();
+        DirAccess.MakeDirRecursiveAbsolute(dir);
+        string stamp = Time.GetDatetimeStringFromSystem().Replace(":", "-").Replace("T", "_");
+        string path = dir.PathJoin($"shot_{stamp}.png");
+
+        Error err = img.SavePng(path);
+        _note = err == Error.Ok ? $"   saved {path}" : $"   screenshot failed: {err}";
+        GD.Print(err == Error.Ok ? $"[world] screenshot -> {path}" : $"[world] screenshot failed: {err}");
+    }
+
+    private string ScreenshotDir()
+    {
+        if (!string.IsNullOrEmpty(_libraryPath))
+        {
+            // <...>/private/library -> <...>/private/progress
+            string? parent = System.IO.Path.GetDirectoryName(_libraryPath.TrimEnd('/'));
+            if (!string.IsNullOrEmpty(parent))
+                return parent.PathJoin("progress");
+        }
+        return ProjectSettings.GlobalizePath("user://progress");
     }
 
     // Free-fly movement: WASD plane, Q/E down/up, Shift sprint. Camera-relative.
@@ -428,6 +463,6 @@ public partial class WorldView : Node3D
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
             $"{_seconds:0} s in world   {_packets} packets   {_pings} ping replies   " +
             (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + "\n" +
-            "camera: WASD move, Q/E down/up, right-drag look, Shift sprint";
+            "camera: WASD move, Q/E down/up, right-drag look, Shift sprint, P screenshot";
     }
 }
