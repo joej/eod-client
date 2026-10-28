@@ -50,6 +50,13 @@ public sealed class NifFileTests
             yield return [p];
     }
 
+    public static IEnumerable<object[]> Keep422()
+    {
+        string p = Path.Combine(AppContext.BaseDirectory, "live-nif", "keep-422.nif");
+        if (File.Exists(p))
+            yield return [p];
+    }
+
     [Theory]
     [MemberData(nameof(Bowsprit))]
     public void ReadsTheBowspritGoldenGeometry(string path)
@@ -148,27 +155,91 @@ public sealed class NifFileTests
     [MemberData(nameof(MultiMat4x))]
     public void ReadsPerShapeTexturesInAMultiMaterialModel(string path)
     {
-        // zones/Nifs/WELL.NIF, NetImmerse 4.1.0.12: 5 NiTriStrips shapes sharing two skins via their
-        // own NiTexturingProperty -> NiSourceTexture. Before per-shape resolution every shape wore the
-        // model's first texture; now each wears its own, which is what stops a multi-material building
-        // (a keep uses ten skins across its parts) rendering in a single skin.
+        // zones/Nifs/WELL.NIF, NetImmerse 4.1.0.12: 5 NiTriStrips shapes. Four have their own
+        // NiTexturingProperty -> NiSourceTexture (two stone, two log); the fifth ("Editable Mesh" with
+        // an empty-name, editor-default blue material) has NO texturing property and is untextured.
+        // Per-shape resolution gives each textured shape its own skin — what stops a multi-material
+        // building (a keep uses ten skins across its parts) rendering in a single skin — and leaves the
+        // untextured shape null rather than smearing the model's first texture onto it (open question
+        // W3a; the old shared-first-texture fallback did exactly that).
         NifModel model = NifFile.Read(File.ReadAllBytes(path));
         Assert.Equal(new NifVersion(4, 1, 0, 12), model.Version);
         Assert.Equal(5, model.Meshes.Count);
 
-        // Exactly two distinct base textures across the shapes, each a stone/log skin (not all one).
-        // The names carry the NIF's own casing (STONE2-1.TGA) — the library gathers case-insensitively.
+        // Two distinct base textures across the four textured shapes (not all one), and one untextured
+        // shape. The names carry the NIF's own casing (STONE2-1.TGA) — the library gathers
+        // case-insensitively.
         string?[] tex = model.Meshes.Select(m => m.TextureFile).ToArray();
-        Assert.All(tex, Assert.NotNull);
+        Assert.Equal(1, tex.Count(t => t is null));
         Assert.Equal(new[] { "STONE2-1.TGA", "britlog.tga" },
-            tex.Select(t => t!).Distinct().OrderByDescending(t => t).ToArray());
-        Assert.Equal(3, tex.Count(t => t == "STONE2-1.TGA"));
+            tex.Where(t => t is not null).Select(t => t!).Distinct().OrderByDescending(t => t).ToArray());
+        Assert.Equal(2, tex.Count(t => t == "STONE2-1.TGA"));
         Assert.Equal(2, tex.Count(t => t == "britlog.tga"));
+
+        // The untextured shape still carries its material colour (never a texture).
+        Assert.All(model.Meshes.Where(m => m.TextureFile is null), m => Assert.NotNull(m.BaseColor));
 
         // Byte-for-byte golden: the shapes' geometry and their texture assignment together.
         Assert.Equal("6698d641119541f7", ModelVertHash(model));
-        Assert.Equal("1489dcddaff90ab4", TextureMapHash(model));
+        Assert.Equal("baf5e3a26b8f8ff7", TextureMapHash(model));
     }
+
+    [Theory]
+    [MemberData(nameof(Keep422))]
+    public void UntexturedKeepShapesCarryMaterialColourNotTheSharedTexture(string path)
+    {
+        // zones/Nifs/keep.NIF, NetImmerse 4.2.2.0: 59 shapes. 20 have a NiTexturingProperty and a real
+        // skin; the other 39 have NO texturing property and are flat surfaces coloured by their
+        // NiMaterialProperty — 38 share a tan stone colour (open question W3a). The old converter gave
+        // every untextured shape the model's FIRST texture (bpaldor1.dds) and, with no UVs, sampled it
+        // at texel (0,0) — the "flat tan towers" bug. This asserts the corrected behaviour: an
+        // untextured shape gets null TextureFile and its own material colour, and the shared-first-
+        // texture fallback is gone.
+        NifModel model = NifFile.Read(File.ReadAllBytes(path));
+        Assert.Equal(new NifVersion(4, 2, 2, 0), model.Version);
+        Assert.Equal(59, model.Meshes.Count);
+
+        NifMesh[] untextured = model.Meshes.Where(m => m.TextureFile is null).ToArray();
+        NifMesh[] textured = model.Meshes.Where(m => m.TextureFile is not null).ToArray();
+        Assert.Equal(39, untextured.Length);
+        Assert.Equal(20, textured.Length);
+
+        // Every untextured shape carries a material colour (never falls through to a texture).
+        Assert.All(untextured, m => Assert.NotNull(m.BaseColor));
+
+        // 38 of them share the tan stone diffuse rgb(233,171,74) -> (0.914, 0.671, 0.290), alpha 1.
+        var tan = new System.Numerics.Vector4(233 / 255f, 171 / 255f, 74 / 255f, 1f);
+        int tanCount = untextured.Count(m => Near(m.BaseColor!.Value, tan));
+        Assert.Equal(38, tanCount);
+
+        // No untextured shape wears the model's first texture (bpaldor1) — the fallback is gone.
+        Assert.DoesNotContain("bpaldor1.tga", untextured.Select(m => m.TextureFile));
+
+        // Textured shapes keep their own skins; bpaldor1 is one of them, on exactly the shape(s) that
+        // reference it as a texture — not smeared across the untextured towers.
+        Assert.Contains("bpaldor1.tga", textured.Select(m => m.TextureFile));
+
+        // glTF side: the base colour reaches the material and no texture bytes are embedded. Read the
+        // base-colour factors back out of the written glTF JSON (stable across SharpGLTF's material-
+        // channel API churn) and assert the tan factor is present.
+        var gltf = GltfExporter.BuildScene(model).ToGltf2();
+        Assert.Empty(gltf.LogicalImages);
+        using var doc = System.Text.Json.JsonDocument.Parse(gltf.GetJsonPreview());
+        var factors = doc.RootElement.GetProperty("materials").EnumerateArray()
+            .Where(m => m.TryGetProperty("pbrMetallicRoughness", out var p) && p.TryGetProperty("baseColorFactor", out _))
+            .Select(m =>
+            {
+                var f = m.GetProperty("pbrMetallicRoughness").GetProperty("baseColorFactor");
+                return new System.Numerics.Vector4(
+                    f[0].GetSingle(), f[1].GetSingle(), f[2].GetSingle(), f[3].GetSingle());
+            })
+            .ToArray();
+        Assert.Contains(factors, f => Near(f, tan));
+    }
+
+    private static bool Near(System.Numerics.Vector4 a, System.Numerics.Vector4 b) =>
+        Math.Abs(a.X - b.X) < 0.004 && Math.Abs(a.Y - b.Y) < 0.004
+        && Math.Abs(a.Z - b.Z) < 0.004 && Math.Abs(a.W - b.W) < 0.004;
 
     [Fact]
     public void RejectsNonNif()

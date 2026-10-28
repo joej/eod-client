@@ -46,6 +46,14 @@ public static class GltfExporter
         var material = new MaterialBuilder(materialName).WithMetallicRoughnessShader();
         material.WithMetallicRoughness(0f, 1f); // items read as diffuse; no PBR metalness
 
+        // Apply the shape's NiMaterialProperty colour as the glTF base-colour factor. On an untextured
+        // shape (no TextureFile) this IS the surface colour — the keep's tan stone bodies and other
+        // flat material-coloured surfaces (open question W3a). On a textured shape it tints the texture
+        // (DAoC keep skins are white, so no visible tint). Left at glTF's default white when the shape
+        // carries no material property, so textured shapes without one are unchanged.
+        if (m.BaseColor is { } rgba)
+            material.WithBaseColor(rgba);
+
         bool hasNormals = m.Normals is not null && m.Normals.Length == m.Vertices.Length;
         bool hasUv = m.TexCoords is not null && m.TexCoords.Length == m.Vertices.Length;
 

@@ -88,6 +88,7 @@ public static class NifFile
         public int[] Props = [];      // NiTriShape -> its property refs (one is a NiTexturingProperty)
         public int BaseTextureRef = -1; // NiTexturingProperty -> its base NiSourceTexture block
         public string? TextureFile;   // for NiSourceTexture blocks
+        public Vector4? MaterialColor; // NiMaterialProperty -> diffuse RGB + alpha (0..1)
     }
 
     // NetImmerse 4.x. Blocks reference each other by index and carry transforms in a NiNode/NiTriShape
@@ -135,18 +136,17 @@ public static class NifFile
                 case "NiSourceTexture":
                     b.TextureFile = ReadSourceTextureFileName(ref c, bytes);
                     break;
+                case "NiMaterialProperty":
+                    b.MaterialColor = ReadMaterialPropertyColor(ref c);
+                    break;
             }
         }
 
         // Walk from the scene root (block 0) composing transforms; bake each shape's world transform
         // into the geometry it references.
         var meshes = new List<NifMesh>();
-        string? firstTexture = null;
-        foreach (Block b in blocks)
-            if (b.TextureFile is not null) { firstTexture = b.TextureFile; break; }
-
         var seen = new HashSet<int>();
-        Walk4x(bytes, blocks, 0, Xform.Identity, seen, meshes, firstTexture);
+        Walk4x(bytes, blocks, 0, Xform.Identity, seen, meshes);
 
         // Fallback: bake any shape not reached from the root (a file whose root isn't block 0, or a
         // shape outside the hierarchy) at its own local transform, so we still get its geometry.
@@ -157,7 +157,8 @@ public static class NifFile
             {
                 NifMesh? geom = ReadGeometryAt(bytes, blocks, b.DataRef);
                 if (geom is not null)
-                    meshes.Add(BakeTransform(geom, b.Local, $"mesh{i}", ShapeTexture(blocks, b, firstTexture)));
+                    meshes.Add(BakeTransform(geom, b.Local, $"mesh{i}",
+                        ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b)));
             }
         }
 
@@ -171,7 +172,7 @@ public static class NifFile
     // geometry at its world transform. A static method (not a local function) because `bytes` is a
     // ref-like span that can't be captured in a closure.
     private static void Walk4x(ReadOnlySpan<byte> bytes, Block[] blocks, int index, Xform world,
-        HashSet<int> seen, List<NifMesh> meshes, string? texture)
+        HashSet<int> seen, List<NifMesh> meshes)
     {
         if (index < 0 || index >= blocks.Length || !seen.Add(index))
             return;
@@ -180,22 +181,27 @@ public static class NifFile
         if (b.Type is "NiNode" or "NiLODNode")
         {
             foreach (int child in b.Children)
-                Walk4x(bytes, blocks, child, w, seen, meshes, texture);
+                Walk4x(bytes, blocks, child, w, seen, meshes);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
         {
             NifMesh? geom = ReadGeometryAt(bytes, blocks, b.DataRef);
             if (geom is not null)
-                meshes.Add(BakeTransform(geom, w, $"mesh{index}", ShapeTexture(blocks, b, texture)));
+                meshes.Add(BakeTransform(geom, w, $"mesh{index}",
+                    ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b)));
         }
     }
 
     // Resolves a shape's own base texture: its property list holds a NiTexturingProperty whose base
     // TexDesc points at a NiSourceTexture. This is what makes a multi-material model (a keep uses ten
     // skins across its parts) wear the right texture on each shape, instead of one shared skin.
-    // Falls back to <paramref name="shared"/> (the model's first source texture) when a shape names
-    // none — e.g. a shape textured via a property on an ancestor we don't thread through.
-    private static string? ShapeTexture(Block[] blocks, Block shape, string? shared)
+    // Returns null when the shape has no NiTexturingProperty — such shapes are NOT textured; they are
+    // flat surfaces coloured by their NiMaterialProperty (open question W3a). We deliberately do NOT
+    // fall back to the model's first texture: that mislabels every untextured shape with an unrelated
+    // skin and, with no UVs, samples it at texel (0,0) — the "flat tan towers" bug. Verified across
+    // keep.NIF + 34 other NIFs: a shape has either its own texturing property or none, so no shape
+    // relies on an ancestor's property that this per-shape lookup would miss.
+    private static string? ShapeTexture(Block[] blocks, Block shape)
     {
         foreach (int p in shape.Props)
         {
@@ -205,11 +211,28 @@ public static class NifFile
             if (src >= 0 && src < blocks.Length && blocks[src].TextureFile is { } name)
                 return name;
         }
-        return shared;
+        return null;
     }
 
-    // Bakes a world transform into a mesh's vertices and normals, attaching the texture name.
-    private static NifMesh BakeTransform(NifMesh mesh, Xform w, string name, string? texture)
+    // Resolves a shape's flat surface colour from its NiMaterialProperty (diffuse RGB + alpha). Used
+    // on untextured shapes (no NiTexturingProperty) so they render in the right colour instead of a
+    // mis-sampled texture; on a textured shape it tints the texture (DAoC's keep skins are white, so
+    // no visible tint). Null when the shape names no material property.
+    private static Vector4? ShapeMaterialColor(Block[] blocks, Block shape)
+    {
+        foreach (int p in shape.Props)
+        {
+            if (p >= 0 && p < blocks.Length && blocks[p].Type == "NiMaterialProperty"
+                && blocks[p].MaterialColor is { } color)
+                return color;
+        }
+        return null;
+    }
+
+    // Bakes a world transform into a mesh's vertices and normals, attaching the texture name and the
+    // shape's material colour.
+    private static NifMesh BakeTransform(NifMesh mesh, Xform w, string name, string? texture,
+        Vector4? materialColor)
     {
         var verts = new Vector3[mesh.Vertices.Length];
         for (int i = 0; i < verts.Length; i++)
@@ -227,6 +250,7 @@ public static class NifFile
             Vertices = verts,
             Normals = normals,
             TextureFile = mesh.TextureFile ?? texture,
+            BaseColor = mesh.BaseColor ?? materialColor,
         };
     }
 
@@ -360,6 +384,33 @@ public static class NifFile
         catch (NifFormatException)
         {
             return -1;
+        }
+    }
+
+    // NiMaterialProperty body (4.x), positioned just past the type string. Layout (verified by byte
+    // dump against keep.NIF and 34 other building/item NIFs, matches nif.xml): NiObjectNET (Name +
+    // Extra Data ref + Controller ref), Flags u16, then four Color3s — Ambient, Diffuse, Specular,
+    // Emissive — then Glossiness f32 and Alpha f32. We keep the Diffuse colour and Alpha; a shape
+    // with no NiTexturingProperty renders flat in this colour (open question W3a). Returns null on a
+    // short/garbled read rather than throwing, so one odd block doesn't fail the whole file.
+    private static Vector4? ReadMaterialPropertyColor(ref NifCursor c)
+    {
+        try
+        {
+            c.SizedString();            // Name
+            c.I32(); c.I32();           // Extra Data ref, Controller ref
+            c.U16();                    // Flags
+            c.Vec3();                   // Ambient (discarded)
+            Vector3 diffuse = c.Vec3(); // Diffuse
+            c.Vec3();                   // Specular (discarded)
+            c.Vec3();                   // Emissive (discarded)
+            c.F32();                    // Glossiness
+            float alpha = c.F32();      // Alpha
+            return new Vector4(diffuse, alpha);
+        }
+        catch (NifFormatException)
+        {
+            return null;
         }
     }
 
