@@ -9,6 +9,8 @@
 // Model export in the editor.) Left-drag orbits, wheel zooms.
 // --textures <dir> points at a folder of extracted .dds (defaults to the .glb's own folder, where
 // tools/pipeline.sh puts them); each material's <name>.dds is loaded and set as its albedo.
+// --shot <path.png> renders one frame of the framed model and writes it to <path>, then quits —
+// a headless-friendly way to capture the converted model (combine with --headless for CI).
 
 using Godot;
 
@@ -55,10 +57,32 @@ public partial class ModelViewer : Node3D
 
         string path = ModelPathFromArgs() ?? Model;
         LoadModel(path);
+
+        // --shot captures the framed model to a PNG and exits — a verifiable, headless-friendly
+        // render of the converted glb. The viewport image is only valid once a frame has drawn,
+        // so this awaits the post-draw signal before grabbing it.
+        string? shot = ShotPathFromArgs();
+        if (!string.IsNullOrEmpty(shot))
+            _ = SaveShotAndQuit(shot);
     }
 
     private static string? ModelPathFromArgs() => ResolvePath(ArgValue("--model"));
     private static string? TextureDirFromArgs() => ResolvePath(ArgValue("--textures"));
+    private static string? ShotPathFromArgs() => ResolvePath(ArgValue("--shot"));
+
+    private async System.Threading.Tasks.Task SaveShotAndQuit(string path)
+    {
+        // Let the model and camera settle, then wait for the frame to finish drawing.
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        Image img = GetViewport().GetTexture().GetImage();
+        string? dir = System.IO.Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir))
+            DirAccess.MakeDirRecursiveAbsolute(dir);
+        Error err = img.SavePng(path);
+        GD.Print(err == Error.Ok ? $"[viewer] shot -> {path}" : $"[viewer] shot failed: {err}");
+        GetTree().Quit(err == Error.Ok ? 0 : 1);
+    }
 
     private static string? ArgValue(string name)
     {
