@@ -422,8 +422,14 @@ Gate 4 — Publish:
   ✓ Error handling (disconnect, auth failure, timeout)
   ✓ Debug packet toggle
   ✓ Protocol documentation from captures + code
-  ✓ Open source on GitHub with setup instructions
+  ✓ Open source on GitHub (public since 2026-10-14)
+  ⃞ Setup instructions for others to run it — not written yet (README says so)
 ```
+
+These gates were the original MVC (render a capsule at a server position), which is complete.
+The project's goal has since grown to a client a person can actually play. The milestones from
+here — self-driven movement, live entities, chat, then combat/inventory/animated models — are in
+`docs/roadmap.md`, which supersedes this gate list for planning.
 
 ---
 

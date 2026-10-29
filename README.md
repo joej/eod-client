@@ -5,33 +5,50 @@ dependency, and a Godot 4 (.NET) front end, tested against the
 [OpenDAoC](https://github.com/OpenDAoC/OpenDAoC-Core) server emulator.
 
 **Status: early.** Not ready for others to run yet: no releases and no setup instructions.
-Progress is logged at [eveofdarkness.org](https://eveofdarkness.org), named for Ben Falk's Eve
-of Darkness server (see Acknowledgements).
+The protocol flow works end to end and a textured world renders, but the character does not yet
+move under its own control and the world is not yet live (no other players, NPCs or chat). See
+[`docs/roadmap.md`](docs/roadmap.md) for where this is and where it's going. Progress is logged at
+[eveofdarkness.org](https://eveofdarkness.org), named for Ben Falk's Eve of Darkness server (see
+Acknowledgements).
 
 ## Progress
 
-Tested against our own OpenDAoC server (version pinned in `server/`):
+Tested against our own OpenDAoC server (version pinned in `server/`); ~110 tests across both
+libraries.
 
 - **Protocol library** (`src/DaocProtocol`, C#, no engine dependency): packet framing and checksum,
   login, the character screen (list, create, delete), entering the world, keep-alive, and a clean
-  logout.
-- **Godot client** (`godot/`): log in, list characters, enter the world, and show the character
-  as a capsule at the position the server sends. It stays connected (sessions of 5+ minutes) and
-  quits back to the character screen cleanly.
-- **Tests** (`tests/`): checksum and framing checked against a recorded 1.127 session, packet
-  builders and parsers, and a fake server that replays recorded replies.
-- **Command-line tool** (`tools/DaocCli`): the same steps without a window, for testing.
+  logout — verified byte-for-byte against a recorded 1.127 session and live against OpenDAoC.
+- **Asset pipeline** (`src/DaocAssets` + `tools/AssetExtract`): reads the client's own MPK/NPK
+  archives and converts its NIF models to glTF (static meshes — buildings, items, creatures in
+  bind pose) in metres, resolves textures, places a zone's static objects, and builds real terrain
+  from the heightmap. A convert-once asset library caches the results, with an overrides layer for
+  author-made content.
+- **Godot client** (`godot/`): log in, list characters, enter the world, and show the character at
+  the server's position. Given converted assets it renders a full textured zone — terrain plus the
+  zone's buildings. Sessions hold 5+ minutes and quit cleanly. A standalone model viewer orbits any
+  converted model.
+- **Tests** (`tests/`): framing/checksum against the recorded session, packet builders and parsers,
+  a fake server that replays recorded replies, and the asset readers (MPK, NIF, textures, zone,
+  terrain) against golden fixtures.
+- **Command-line tools** (`tools/`): `DaocCli` runs the login→world→quit flow without a window for
+  testing; `AssetExtract` (`mpk`) is the asset converter CLI; an EoD `Launcher` (Windows, built but
+  not yet validated) for pointing a real client at a server.
 
-No terrain, models, other players or movement yet.
+**Not yet:** self-driven movement, other players/NPCs, chat, combat, inventory, and animated
+character models. Those are the next milestones in [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Scope
 
-- Client protocol version **1.127** only (see [Versions](https://eveofdarkness.org/versions/)).
-- No game assets are included or distributed. Anything that needs game data will load it from
-  your own DAoC installation.
+- Client protocol version **1.127** only, against the **OpenDAoC** server (encryption off); see
+  [Versions](https://eveofdarkness.org/versions/).
+- No game assets are included or distributed. Everything that needs game data loads it from your
+  own DAoC installation and is converted locally; converted assets never enter the repo or a release.
 
 ## Documentation
 
+- [`docs/roadmap.md`](docs/roadmap.md): what's done and the stepwise milestones toward a minimally
+  playable client.
 - [`docs/protocol.md`](docs/protocol.md): the packets we use, field by field, and how each was
   verified.
 - [`docs/open-questions.md`](docs/open-questions.md): oddities and unconfirmed behaviour, with
