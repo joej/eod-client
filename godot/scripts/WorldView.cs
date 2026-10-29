@@ -14,12 +14,17 @@ namespace EodClient;
 
 public partial class WorldView : Node3D
 {
-    /// <summary>Region units per Godot unit.</summary>
-    private const float RegionUnitsPerUnit = 100f;
-
-    /// <summary>Target height (Godot units) to scale a loaded placeholder model to, so an item mesh
-    /// in NIF units reads at roughly human scale next to the ground.</summary>
-    private const float ModelTargetHeight = 2f;
+    // ----- World scale -----
+    // DAoC has TWO distinct unit systems, and each has exactly one conversion to Godot metres,
+    // owned in exactly one place:
+    //  * NIF units (mesh geometry): converted to metres by GltfExporter (× 0.025, "W1"). A model
+    //    .glb is therefore ALREADY in metres when it reaches this view — never rescale it for units.
+    //  * Region units (the x,y,z in 0x20/0xA9, zone placement coords, terrain heightmap): converted
+    //    here, by RegionMetresPerUnit. Terrain, live positions and zone-object PLACEMENTS all use it.
+    // The ratio between the two systems is not independently measured yet; RegionMetresPerUnit is a
+    // provisional 1/100 to be calibrated against a known-size building placed on real terrain (W1
+    // follow-up). Keep it the single knob so calibration is a one-line change.
+    private const float RegionMetresPerUnit = 1f / 100f;
 
     private DaocConnection _connection = null!;
     private WorldPosition _world = null!;
@@ -79,9 +84,11 @@ public partial class WorldView : Node3D
     }
 
     /// <summary>
-    /// DAoC: X east, Y south, Z up, in region units. Godot: Y up. So Godot = (X, Z, Y) / RegionUnitsPerUnit.
+    /// A region-unit coordinate to Godot metres. DAoC: X east, Y south, Z up. Godot: Y up, metres.
+    /// So Godot = (X, Z, Y) × RegionMetresPerUnit.
     /// </summary>
-    public static Vector3 ToGodot(float x, float y, float z) => new(x / RegionUnitsPerUnit, z / RegionUnitsPerUnit, y / RegionUnitsPerUnit);
+    public static Vector3 ToGodot(float x, float y, float z) =>
+        new(x * RegionMetresPerUnit, z * RegionMetresPerUnit, y * RegionMetresPerUnit);
 
     /// <summary>Heading 0–4095 = a full turn. The direction of heading 0 isn't checked yet.</summary>
     public static float HeadingRadians(ushort heading) => (heading & 0x0FFF) / 4096f * Mathf.Tau;
@@ -162,9 +169,9 @@ public partial class WorldView : Node3D
     }
 
     // Loads the zone terrain .glb if given. Its vertices are absolute region coordinates (already
-    // Y-up from the exporter), so it goes at the origin scaled by 1/RegionUnitsPerUnit to match the
-    // rest of the scene (which places everything via ToGodot, i.e. region units / 100). Returns false
-    // (use the flat placeholder) when no terrain was given or it can't load.
+    // Y-up from the exporter), so it goes at the origin scaled by RegionMetresPerUnit to match the
+    // rest of the scene (which places everything via ToGodot, i.e. region units → metres). Returns
+    // false (use the flat placeholder) when no terrain was given or it can't load.
     private bool TryAddTerrain()
     {
         if (string.IsNullOrEmpty(_terrainPath) || !Godot.FileAccess.FileExists(_terrainPath))
@@ -177,7 +184,7 @@ public partial class WorldView : Node3D
             GD.PrintErr($"[world] terrain failed to load: {_terrainPath}");
             return false;
         }
-        terrain.Scale = new Vector3(1f / RegionUnitsPerUnit, 1f / RegionUnitsPerUnit, 1f / RegionUnitsPerUnit);
+        terrain.Scale = new Vector3(RegionMetresPerUnit, RegionMetresPerUnit, RegionMetresPerUnit);
 
         // Texture each ground tile (texRR-CC) from the library, like any model. A tile that doesn't
         // resolve keeps a plain green fallback so the ground is never a hole.
@@ -249,12 +256,11 @@ public partial class WorldView : Node3D
             inst.Position = ToGodot(x, y, z);
             // DAoC angle is degrees about the vertical axis; negate for Godot's handedness (as heading).
             inst.Rotation = new Vector3(0, -Mathf.DegToRad(angleDeg), 0);
-            // The model's vertices are in region/NIF units (exporter leaves scale at 1), the same units
-            // the placement coords and terrain use, so bring them into Godot space by the same factor
-            // as everything else (ToGodot and the terrain both divide by RegionUnitsPerUnit). Without
-            // this the buildings render 100x oversized — the keep alone fills the whole zone.
-            float s = scale / RegionUnitsPerUnit;
-            inst.Scale = new Vector3(s, s, s);
+            // The model .glb is already in metres (GltfExporter bakes NIF units × 0.025). The only
+            // remaining factor is the per-fixture art scale from the manifest (a ratio, 100% -> 1.0);
+            // apply it directly. (Before GltfExporter baked in metres, this also divided by the region
+            // factor to shrink raw NIF units — that is now wrong and would scale the model twice.)
+            inst.Scale = new Vector3(scale, scale, scale);
             zoneRoot.AddChild(inst);
             placed++;
         }
@@ -334,16 +340,16 @@ public partial class WorldView : Node3D
         string textureDir = System.IO.Path.GetDirectoryName(_modelPath) ?? "";
         int textured = ModelTexturing.Apply(model, textureDir);
 
+        // The model is already in metres (GltfExporter bakes NIF units × 0.025), so trust its own
+        // size instead of forcing a fixed height — that lets a character stand at its true scale next
+        // to the terrain, which is what the W1 region/NIF calibration reads. Only recentre on X/Z and
+        // seat the lowest point at y = 0 (feet at the body origin). Scale stays 1.
         Aabb bounds = ModelBounds(model);
-        float height = Mathf.Max(bounds.Size.Y, 0.001f);
-        float scale = ModelTargetHeight / height;
-        model.Scale = new Vector3(scale, scale, scale);
-        // Recentre on X/Z and lift so the model's lowest point sits at y = 0 after scaling.
         Vector3 centre = bounds.Position + bounds.Size / 2f;
-        model.Position = new Vector3(-centre.X * scale, -bounds.Position.Y * scale, -centre.Z * scale);
+        model.Position = new Vector3(-centre.X, -bounds.Position.Y, -centre.Z);
         body.AddChild(model);
         GD.Print($"[world] character model {System.IO.Path.GetFileName(_modelPath)} " +
-            $"(NIF bounds {bounds.Size.Y:0} u, scaled x{scale:0.###}, textured {textured})");
+            $"({bounds.Size.Y:0.00} m tall, textured {textured})");
         return true;
     }
 

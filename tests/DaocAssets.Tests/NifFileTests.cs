@@ -283,6 +283,30 @@ public sealed class NifFileTests
         AssertWindingFacesOutward(prim);
     }
 
+    [Theory]
+    [MemberData(nameof(StripsCreature))]
+    public void HumanoidConvertsToAPlausibleHeightInMetres(string path)
+    {
+        // The W1 world scale (0.025 m/unit) is anchored on this fixture: a Gamebryo humanoid stands
+        // ~72 NIF units tall, which must come out ~1.8 m — human height — in the exported .glb. The
+        // whole scale pipeline (exporter bakes metres; WorldView/zone trust the .glb as metres, no
+        // re-scaling) rests on that, so guard it with a readable range: a wrong UnitsToMetres makes a
+        // "0.72 m dwarf" or "72 m titan" fail here, not silently mis-size the world.
+        NifModel model = NifFile.Read(File.ReadAllBytes(path));
+        var gltf = GltfExporter.BuildScene(model).ToGltf2();
+
+        float minY = float.MaxValue, maxY = float.MinValue;
+        foreach (var mesh in gltf.LogicalMeshes)
+            foreach (var prim in mesh.Primitives)
+                foreach (var v in prim.GetVertexAccessor("POSITION").AsVector3Array())
+                {
+                    if (v.Y < minY) minY = v.Y;
+                    if (v.Y > maxY) maxY = v.Y;
+                }
+        float heightMetres = maxY - minY;
+        Assert.InRange(heightMetres, 1.2f, 2.6f); // a humanoid, in metres — not raw units, not ×0.0025
+    }
+
     // Fraction of triangles whose geometric winding agrees with the vertex normals must be high
     // (a few genuinely double-sided/degenerate faces are tolerated). Front faces point outward.
     private static void AssertWindingFacesOutward(MeshPrimitive prim)
