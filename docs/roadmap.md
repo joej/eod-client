@@ -21,8 +21,10 @@ goals that lead to a minimally playable client (M4–M9), with honest notes on t
   inventory, targeting and basic interaction — enough that the game reads as the game, within the
   1.65 ruleset OpenDAoC serves.
 
-Scope stays: **client protocol 1.127 only**, against **OpenDAoC** (encryption off); **no game
-assets shipped** — everything is converted at runtime from the player's own DAoC install.
+Scope for the milestones below: **client protocol 1.127**, against **OpenDAoC** (encryption off);
+**no game assets shipped** — everything is converted at runtime from the player's own DAoC install.
+Supporting the current official **1.130** client is a later target of the same project, not a
+separate one — see "Later: the live (1.130) client" below.
 
 ---
 
@@ -150,10 +152,25 @@ stumbled into.
 2. **Skinned/animated characters (M7).** Hard in its own right, but no longer uncharted —
    OfflineDAoC and DAOC_Navigator are GPL references for the skinning/animation/figure-assembly path.
 
-## Out of scope (deliberately)
+## Later: the live (1.130) client
 
-Modern-client (1.130) support and its encryption/key transport (`docs/future-work.md`); sound; a
-polished UI; retail-server interop. These are tangents from a playable OpenDAoC client.
+The project targets protocol **1.127 now** — one `PacketLib` version, encryption off, the path every
+OpenDAoC shard already uses. The longer-horizon goal is that **the current official client (1.130)
+plays fully on OpenDAoC**, which means learning the whole 1.130 opcode set and supporting it on both
+sides. This is a version target that moves over time, not a different project; it comes after MVP so
+the client is actually playable at 1.127 first.
+
+Groundwork already done (see `docs/open-questions.md`, section "1.130"): a retail 1.130 session
+captured (R1), the live client run against a 1.130-crypto OpenDAoC fork, the world-entry crash
+isolated to the server sending a 1.68-era `0xA1` ObjectUpdate (E1), the unhandled entry opcodes
+cleared as harmless (E2), and a first action→opcode map built from scripted input (E3).
+
+The real blocker is **client-side encryption/key transport**: the 1.130 client encrypts from the
+first packet (RSA-wrapped session key, modified RC4), and no published tool turns that off for 1.130
+the way launchers do for 1.127 (`docs/future-work.md`). Until that's solved, 1.130 work stays
+server-side (make OpenDAoC serve the live client correctly) and analysis (captures, opcode mapping).
+
+Also out of scope for now, as genuine tangents: sound, a polished UI, and retail-server interop.
 
 ---
 

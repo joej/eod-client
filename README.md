@@ -40,8 +40,10 @@ character models. Those are the next milestones in [`docs/roadmap.md`](docs/road
 
 ## Scope
 
-- Client protocol version **1.127** only, against the **OpenDAoC** server (encryption off); see
-  [Versions](https://eveofdarkness.org/versions/).
+- Client protocol version **1.127** against the **OpenDAoC** server (encryption off); see
+  [Versions](https://eveofdarkness.org/versions/). Supporting the current official **1.130** client
+  is a later goal of the same project (see [`docs/roadmap.md`](docs/roadmap.md)); 1.130 protocol
+  research is already underway on the server/analysis side.
 - No game assets are included or distributed. Everything that needs game data loads it from your
   own DAoC installation and is converted locally; converted assets never enter the repo or a release.
 
