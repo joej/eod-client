@@ -92,9 +92,10 @@ not research — with two exceptions called out under "Walls" below.
 - Feed keyboard/mouse input into the player's position/heading and let the **existing 0xA9 sender**
   transmit it (the keep-alive already sends 0xA9 every second — movement is updating the value it
   sends, plus raising the rate while moving).
-- **Unify the world scale.** `WorldView` places live coords and zone objects at ÷100 while models now
-  export at 0.025 m/unit (÷40); pick one (likely the model scale) so a converted character and the
-  terrain agree. (W1 follow-up — the one real cleanup this milestone needs.)
+- ~~**Unify the world scale.**~~ **Done 2026-10-29.** Region units and NIF units share one scale,
+  **0.025 m/unit**; `WorldView.RegionMetresPerUnit = 0.025` and the terrain glb (already metres from the
+  exporter) is no longer double-scaled. Calibrated live: the keep renders at ~52 m on real Camelot
+  Hills terrain with the player capsule human-height in its courtyard (commit cf5a0b0; W1 closed).
 - Collide with terrain so the character walks on the ground (Godot physics on the terrain mesh).
 - **Done when:** you spawn in Camelot Hills and walk your character across real, textured terrain,
   and the server accepts your position (no link-death, no rubber-band kick).
