@@ -263,11 +263,12 @@ public sealed class NifFileTests
         Assert.NotNull(prim.GetVertexAccessor("TEXCOORD_0"));
 
         // With the node transform baked in, the bowsprit's first vertex is (0, 17.08, 15.0) in NIF
-        // space; Z-up -> Y-up maps (x, z, -y) = (0, 15.0, -17.08).
+        // space; Z-up -> Y-up maps (x, z, -y) = (0, 15.0, -17.08), then scaled to metres by the
+        // 0.025 m/unit world scale (W1): (0, 0.375, -0.427).
         var v0 = positions[0];
-        Assert.Equal(0f, v0.X, 0.01);
-        Assert.Equal(15.0f, v0.Y, 0.01);
-        Assert.Equal(-17.08f, v0.Z, 0.01);
+        Assert.Equal(0f, v0.X, 0.001);
+        Assert.Equal(15.0f * 0.025f, v0.Y, 0.001);
+        Assert.Equal(-17.08f * 0.025f, v0.Z, 0.001);
 
         // The material is named for the texture (sans extension) so Godot can resolve <name>.dds from
         // the owner's extracted folder, and NO texture bytes are embedded: the .glb stays a clean,

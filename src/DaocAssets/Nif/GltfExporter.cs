@@ -4,9 +4,11 @@
 // Uses SharpGLTF (MIT). The only non-trivial part is the coordinate conversion: NIF is Z-up and
 // left-handed-ish for DAoC's data; glTF/Godot are Y-up, right-handed, metres. We map
 // (x, y, z) -> (x, z, -y), which is the standard Z-up -> Y-up rotation, and flip triangle winding
-// to keep faces front-facing after the handedness change. Scale is left at 1 for now; one DAoC
-// world unit in metres is still unknown (open question W1), so models come out in NIF units and
-// can be rescaled once that's measured.
+// to keep faces front-facing after the handedness change. We also scale by UNITS_TO_METRES so the
+// model comes out in metres, Godot's unit (open question W1): one DAoC world unit = 0.025 m. That
+// figure is from OfflineDAoC's pipeline and we confirmed it against our own data — a Gamebryo
+// humanoid fixture (sample-strips-1010) measures 71.8 NIF units tall = 1.79 m at 0.025, and the
+// keep comes out ~16 m, a plausible 3-4 storey tower.
 
 using System.Numerics;
 using SharpGLTF.Geometry;
@@ -82,12 +84,20 @@ public static class GltfExporter
         NifMesh m, int i, bool hasNormals, bool hasUv)
     {
         Vector3 pos = ToYUp(m.Vertices[i]);
-        Vector3 nrm = hasNormals ? ToYUp(m.Normals![i]) : Vector3.UnitY;
+        Vector3 nrm = hasNormals ? DirToYUp(m.Normals![i]) : Vector3.UnitY;
         Vector2 uv = hasUv ? m.TexCoords![i] : Vector2.Zero;
         return new VertexBuilder<VertexPositionNormal, VertexTexture1, VertexEmpty>(
             new VertexPositionNormal(pos, nrm), new VertexTexture1(uv));
     }
 
-    // NIF (Z-up) -> glTF/Godot (Y-up): (x, y, z) -> (x, z, -y).
-    private static Vector3 ToYUp(Vector3 v) => new(v.X, v.Z, -v.Y);
+    // One DAoC world unit in metres (open question W1). Measured: a Gamebryo humanoid is ~72 units
+    // tall = ~1.8 m, matching OfflineDAoC's own constant. Positions are scaled by this; normals are
+    // directions, so they are mapped by ToYUp but NOT scaled.
+    private const float UnitsToMetres = 0.025f;
+
+    // NIF (Z-up) -> glTF/Godot (Y-up): (x, y, z) -> (x, z, -y), scaled to metres. For positions.
+    private static Vector3 ToYUp(Vector3 v) => new(v.X * UnitsToMetres, v.Z * UnitsToMetres, -v.Y * UnitsToMetres);
+
+    // Same axis swap for a direction (normal), WITHOUT the metre scale, so it stays unit length.
+    private static Vector3 DirToYUp(Vector3 v) => new(v.X, v.Z, -v.Y);
 }
