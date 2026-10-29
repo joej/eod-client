@@ -30,24 +30,38 @@ separate one — see "Later: the live (1.130) client" below.
 
 ## Accomplished
 
+Each finished milestone carries a `**Done** <date> · shot <name>` line: the completion date and the
+screenshot that shows it. Shot names refer to images in the owner's progress archive (`YYYY-MM-DD_NN`
+prefix); the archive itself is not in this repo, and **whether any shot is published is the owner's
+decision** — this line only names them in milestone order so a published timeline can follow it.
+"shot: none" means the milestone has no single representative image (e.g. a protocol-only step).
+
 ### M0 — Protocol foundation ✅
+**Done** 2026-10-13 · shot: none (protocol library — nothing visual to show)
 Packet framing and the client checksum, ported from DOLSharp/OpenDAoC and verified byte-for-byte
 against a recorded 1.127e session. Endian-explicit readers/writers. `DaocConnection` (background
 receive loop → channel) and `PacketLog`. ~63 protocol tests.
 
 ### M1 — Login through the character screen ✅
+**Done** 2026-10-14 · shot: none (character list seen live in the Godot Run window; not archived)
+
 The full account flow, verified live against OpenDAoC and against captures: 0xF4/0x22 handshake,
 0xA7 login, the character screen (0xFC/0xFE overview; 0xFF create/customise/delete with the
 cross-realm slot and stat rules). `ClientSession` is a linear request/reply state machine
 (`Connected → LoggedIn → CharacterScreen`).
 
 ### M2 — Enter the world and stay (the original MVC) ✅
+**Done** 2026-10-14 · shot: none (capsule at the server coordinates, seen live; not archived)
+
 World entry burst (0x9D→0xB1, 0xD4→0x20 position…0x4E, 0xE8, 0xBF→0x2D), keep-alive (0xA9 every 1 s,
 0xA3 every 10 s), and a clean `&quit` logout. The Godot client logs in, lists characters, enters the
 world, and shows the character as a capsule at the server's coordinates; sessions hold 5+ minutes.
 `tools/DaocCli` does the same headlessly for testing. **Gates 1–3 complete.**
 
 ### M3 — Static asset pipeline (beyond the original plan) ✅
+**Done** 2026-10-28 · shot 2026-10-24_06_scale-fixed-keep-and-village
+(earlier steps: 2026-10-22_02_first-textured-terrain, 2026-10-24_13_keep-tan-towers-wide)
+
 A whole track the MVC never promised, now working and tested (~48 asset tests):
 - **MPK/NPK reader** with CRC verification and lazy inflate.
 - **NIF → glTF converter** for static meshes: NetImmerse 4.1/4.2.x (items, buildings) and Gamebryo
