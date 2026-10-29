@@ -14,17 +14,19 @@ namespace EodClient;
 
 public partial class WorldView : Node3D
 {
-    // ----- World scale -----
-    // DAoC has TWO distinct unit systems, and each has exactly one conversion to Godot metres,
-    // owned in exactly one place:
-    //  * NIF units (mesh geometry): converted to metres by GltfExporter (× 0.025, "W1"). A model
-    //    .glb is therefore ALREADY in metres when it reaches this view — never rescale it for units.
-    //  * Region units (the x,y,z in 0x20/0xA9, zone placement coords, terrain heightmap): converted
-    //    here, by RegionMetresPerUnit. Terrain, live positions and zone-object PLACEMENTS all use it.
-    // The ratio between the two systems is not independently measured yet; RegionMetresPerUnit is a
-    // provisional 1/100 to be calibrated against a known-size building placed on real terrain (W1
-    // follow-up). Keep it the single knob so calibration is a one-line change.
-    private const float RegionMetresPerUnit = 1f / 100f;
+    // ----- World scale (W1, calibrated 2026-10-29) -----
+    // DAoC region units and NIF mesh units turn out to share ONE scale: 0.025 m/unit. Measured by
+    // re-converting Camelot Hills with the current exporter and comparing a known-size building to
+    // the terrain it stands on — keep.glb came out 52 × 65 m (a real keep) and the terrain spans the
+    // zone sensibly, both at 0.025. So there is a single conversion, used consistently:
+    //  * GltfExporter bakes × 0.025 into every .glb it writes — models AND the terrain mesh. Those
+    //    .glb files are therefore ALREADY in metres; this view must NOT rescale them for units.
+    //  * Raw region coordinates that never pass through the exporter — the live 0x20/0xA9 positions
+    //    and the zone.csv placement x,y,z — are converted here by RegionMetresPerUnit (= 0.025), so a
+    //    placed model lands where the terrain already is.
+    // Earlier this was a provisional 1/100 with the terrain re-scaled by it on top of the exporter's
+    // 0.025 — a double-scale that put the terrain at 1/40th size, 5 km from the player (W1 follow-up).
+    private const float RegionMetresPerUnit = 0.025f;
 
     private DaocConnection _connection = null!;
     private WorldPosition _world = null!;
@@ -168,9 +170,10 @@ public partial class WorldView : Node3D
         AddChild(overlay);
     }
 
-    // Loads the zone terrain .glb if given. Its vertices are absolute region coordinates (already
-    // Y-up from the exporter), so it goes at the origin scaled by RegionMetresPerUnit to match the
-    // rest of the scene (which places everything via ToGodot, i.e. region units → metres). Returns
+    // Loads the zone terrain .glb if given. The exporter already baked region units → metres (× 0.025)
+    // into its vertices in absolute region-global position, so it drops in at the origin with NO extra
+    // scale (scale 1) — matching models, which are also metres. ToGodot converts the raw live/placement
+    // coords by the same 0.025, so the terrain and everything placed on it share one frame. Returns
     // false (use the flat placeholder) when no terrain was given or it can't load.
     private bool TryAddTerrain()
     {
@@ -184,7 +187,9 @@ public partial class WorldView : Node3D
             GD.PrintErr($"[world] terrain failed to load: {_terrainPath}");
             return false;
         }
-        terrain.Scale = new Vector3(RegionMetresPerUnit, RegionMetresPerUnit, RegionMetresPerUnit);
+        // No scale: the .glb is already in metres (GltfExporter baked × 0.025). Scaling again here was
+        // the double-scale that shrank the terrain to 1/40th and divorced it from the player position.
+        terrain.Scale = Vector3.One;
 
         // Texture each ground tile (texRR-CC) from the library, like any model. A tile that doesn't
         // resolve keeps a plain green fallback so the ground is never a hole.
