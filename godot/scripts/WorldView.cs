@@ -208,11 +208,17 @@ public partial class WorldView : Node3D
         {
             SpringLength = _camDistance,
             Margin = 0.2f,
-            // Pull in off static world geometry. Collision layers are Godot defaults here; terrain
-            // trimesh bodies are on the default layer, so the mask catches them.
-            CollisionMask = uint.MaxValue,
+            // Pull in off placed world geometry (keep walls, towers, trees) so the camera never
+            // clips through scenery — but NOT off the terrain the player stands on. The terrain is
+            // on TerrainLayer; excluding that bit stops the arm jamming to zero against the ground
+            // (and against the keep floor at the Prydwen Keep spawn, which buried the camera inside
+            // the capsule). The body's own collider, if any, is excluded explicitly below.
+            CollisionMask = uint.MaxValue & ~TerrainLayer,
         };
         _camPivot.AddChild(_camArm);
+        foreach (Node n in _body.GetChildren())
+            if (n is CollisionObject3D co)
+                _camArm.AddExcludedObject(co.GetRid());
         _camera = new Camera3D { Far = 8000f, Fov = 70 };
         _camArm.AddChild(_camera);
         // The SpringArm extends the camera along the pivot's +Z, so to sit BEHIND a body that faces
@@ -285,23 +291,31 @@ public partial class WorldView : Node3D
                     mi.SetSurfaceOverrideMaterial(s, green);
             }
         }
-        // Trimesh static collision on every terrain surface, so the player can raycast down to the
-        // ground and walk on it (M4). CreateTrimeshCollision adds a StaticBody3D + CollisionShape3D
-        // as a child of each MeshInstance3D; a ray then hits the real heightmap surface. Put the
-        // terrain on its OWN collision layer so the ground raycast can target only terrain — a ray
-        // cast from high above was otherwise hitting a tall placed object (tree/keep) first and
-        // snapping the player onto its roof (spawned "very high in the air").
-        foreach (MeshInstance3D mi in FindMeshes(terrain))
-        {
-            mi.CreateTrimeshCollision();
-            foreach (Node child in mi.GetChildren())
-                if (child is StaticBody3D sb)
-                    sb.CollisionLayer = TerrainLayer;
-        }
-
+        // Trimesh static collision on every terrain surface, so the ground raycast finds the real
+        // heightmap and the player walks on it (M4). The terrain .glb is exported with its triangles
+        // wound FACE-DOWN (why the render path above needs CullMode.Disabled), so a plain trimesh
+        // collider only reports hits from below: our downward ground ray passed straight through it
+        // (ground --, player floating). ConcavePolygonShape3D.BackfaceCollision = true makes the ray
+        // hit either winding — the fix (diagnosed with a down-vs-up ray sweep: DOWN 1, UP 49 -> 49/49).
+        // Build the shape explicitly (not MeshInstance3D.CreateTrimeshCollision) only so we can set
+        // that flag. Put every terrain body on its OWN collision layer so the ground ray can target
+        // terrain alone — otherwise a ray from high above hits a tall placed object (tree/keep) first
+        // and snaps the player onto its roof ("spawned very high in the air").
         AddChild(terrain);
         _terrain = terrain;
-        GD.Print($"[world] terrain loaded ({textured} ground tile(s) textured)");
+        int built = 0;
+        foreach (MeshInstance3D mi in FindMeshes(terrain))
+        {
+            if (mi.Mesh is null)
+                continue;
+            ConcavePolygonShape3D shape = mi.Mesh.CreateTrimeshShape();
+            shape.BackfaceCollision = true;   // terrain faces point down; hit from above too
+            var sb = new StaticBody3D { CollisionLayer = TerrainLayer, Transform = mi.GlobalTransform };
+            sb.AddChild(new CollisionShape3D { Shape = shape });
+            AddChild(sb);
+            built++;
+        }
+        GD.Print($"[world] terrain loaded ({textured} ground tile(s) textured, {built} collider(s))");
         return true;
     }
 
@@ -699,7 +713,11 @@ public partial class WorldView : Node3D
     private void UpdateChaseCamera(double delta)
     {
         _camPivot.Rotation = new Vector3(_camPitch, _camYaw, 0);
-        _camArm.SpringLength = Mathf.Lerp(_camArm.SpringLength, _camDistance, Mathf.Min(1f, (float)delta * 10f));
+        // Lerp the arm's TARGET length toward the zoom distance; the SpringArm shortens from this
+        // target on its own when it hits placed geometry. Floor the target at CamMin so even a wall
+        // the arm catches can't collapse the camera into the pivot (the "inside the capsule" bug).
+        float target = Mathf.Max(CamMin, _camDistance);
+        _camArm.SpringLength = Mathf.Lerp(_camArm.SpringLength, target, Mathf.Min(1f, (float)delta * 10f));
     }
 
     // Movement + the ground raycast run in the PHYSICS frame: DirectSpaceState.IntersectRay is only
