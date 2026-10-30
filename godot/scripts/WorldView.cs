@@ -207,13 +207,17 @@ public partial class WorldView : Node3D
         _camArm = new SpringArm3D
         {
             SpringLength = _camDistance,
-            Margin = 0.2f,
-            // Pull in off placed world geometry (keep walls, towers, trees) so the camera never
-            // clips through scenery — but NOT off the terrain the player stands on. The terrain is
-            // on TerrainLayer; excluding that bit stops the arm jamming to zero against the ground
-            // (and against the keep floor at the Prydwen Keep spawn, which buried the camera inside
-            // the capsule). The body's own collider, if any, is excluded explicitly below.
-            CollisionMask = uint.MaxValue & ~TerrainLayer,
+            // A larger margin keeps the camera a bit further off whatever it hits, which also damps
+            // the brief flicker of seeing under a slope as the arm catches and releases the terrain
+            // edge frame to frame when walking over undulating ground.
+            Margin = 0.5f,
+            // Pull in off ALL world geometry, terrain included: walking up/down slopes otherwise put
+            // the camera under a hill behind the player (seeing up through the ground), because the
+            // arm couldn't see terrain to pull off it. The arm raycasts from the pivot (shoulder
+            // height) up-and-back, so it won't jam against the ground directly under the player; the
+            // body's own collider is excluded below, and CamMin floors the length so it can't collapse
+            // into the pivot even against a wall or the keep floor at the Prydwen Keep spawn.
+            CollisionMask = uint.MaxValue,
         };
         _camPivot.AddChild(_camArm);
         foreach (Node n in _body.GetChildren())
