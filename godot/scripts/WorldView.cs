@@ -68,6 +68,7 @@ public partial class WorldView : Node3D
     private bool _lookActive;
     private bool _freshCapture;           // true right after mouse capture, to drop the first delta
     private bool _groundHit;              // did the last ground raycast find terrain? (debug overlay)
+    private const uint TerrainLayer = 1 << 1;  // collision layer 2: terrain only, for the ground ray
     // Free-fly debug camera speed in Godot units/second (hold Shift to move faster).
     private int _packets;
     private int _pings;
@@ -286,9 +287,17 @@ public partial class WorldView : Node3D
         }
         // Trimesh static collision on every terrain surface, so the player can raycast down to the
         // ground and walk on it (M4). CreateTrimeshCollision adds a StaticBody3D + CollisionShape3D
-        // as a child of each MeshInstance3D; a ray then hits the real heightmap surface.
+        // as a child of each MeshInstance3D; a ray then hits the real heightmap surface. Put the
+        // terrain on its OWN collision layer so the ground raycast can target only terrain — a ray
+        // cast from high above was otherwise hitting a tall placed object (tree/keep) first and
+        // snapping the player onto its roof (spawned "very high in the air").
         foreach (MeshInstance3D mi in FindMeshes(terrain))
+        {
             mi.CreateTrimeshCollision();
+            foreach (Node child in mi.GetChildren())
+                if (child is StaticBody3D sb)
+                    sb.CollisionLayer = TerrainLayer;
+        }
 
         AddChild(terrain);
         _terrain = terrain;
@@ -658,6 +667,7 @@ public partial class WorldView : Node3D
         var ray = PhysicsRayQueryParameters3D.Create(
             new Vector3(col.X, 400f, col.Z),
             new Vector3(col.X, -400f, col.Z));
+        ray.CollisionMask = TerrainLayer;   // terrain only — never a tree/keep roof
         Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
         if (hit.Count > 0 && hit["position"].AsVector3() is { } p)
         {
