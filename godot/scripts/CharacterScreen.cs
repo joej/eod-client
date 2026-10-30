@@ -51,7 +51,9 @@ public partial class CharacterScreen : Control
         {
             int port = args.Length > i + 3 && int.TryParse(args[i + 3], out int p) ? p : 10300;
             int? enter = Option(args, "--enter");
-            _ = AutoLogin(args[i + 1], args[i + 2], port, enter, Option(args, "--stay") ?? 10);
+            // --stay N: CI/headless — spend N seconds in the world, then /quit and close. Without it,
+            // stay in the world indefinitely for interactive play (close the window or press Quit).
+            _ = AutoLogin(args[i + 1], args[i + 2], port, enter, Option(args, "--stay"));
         }
     }
 
@@ -342,7 +344,7 @@ public partial class CharacterScreen : Control
         await connection.DisposeAsync();
     }
 
-    private async Task AutoLogin(string host, string account, int port, int? enterSlot, int staySeconds)
+    private async Task AutoLogin(string host, string account, int port, int? enterSlot, int? staySeconds)
     {
         bool ok = await ListCharacters(host, port, account, OS.GetEnvironment("DAOC_PASSWORD"));
         GD.Print(_status.Text);
@@ -356,11 +358,17 @@ public partial class CharacterScreen : Control
                 GD.Print(_status.Text);
         }
 
+        // Interactive play: no --stay means stay in the world until the user closes the window or
+        // presses Quit. The keep-alive keeps the session up; we don't self-quit. (Earlier this
+        // defaulted to 10 s then /quit, so the window vanished ~10-30 s in during live testing.)
+        if (staySeconds is null)
+            return;
+
         if (ok && _world is not null)
         {
-            await ToSignal(GetTree().CreateTimer(staySeconds), SceneTreeTimer.SignalName.Timeout);
+            await ToSignal(GetTree().CreateTimer(staySeconds.Value), SceneTreeTimer.SignalName.Timeout);
             ok = _world.ClosedReason is null;
-            GD.Print($"in world {staySeconds} s: {_world.Packets} packets, {_world.Pings} ping replies, " +
+            GD.Print($"in world {staySeconds.Value} s: {_world.Packets} packets, {_world.Pings} ping replies, " +
                      (ok ? "still connected" : $"disconnected: {_world.ClosedReason}"));
             if (ok)
             {
