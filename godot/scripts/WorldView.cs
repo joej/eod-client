@@ -37,9 +37,10 @@ public partial class WorldView : Node3D
     private float _bodyYaw;              // the body's facing, radians (Godot sense)
     // Movement sent to the server is throttled to this rate while moving (well under the 5 s
     // link-death threshold, and gentle on the TCP position channel). 0 when standing still.
-    private double _sinceMoveSent;
-    private bool _movedSinceSend;        // moved/turned since the last 0xA9 we sent
-    private const double MoveSendInterval = 0.2; // 5 Hz
+    private float _posLeft;              // countdown to the next position send, seconds
+    private const float MovingSendInterval = 0.1f;   // 10 Hz while moving/turning (OfflineDAoC)
+    private const float IdleSendInterval = 1.0f;     // 1 Hz standing still
+    private const float PositionEpsilon = 1.0f;      // region units; ~0.025 m, below a frame's step
     // Ground-plane walk speed in region units/second and the matching 0xA9 "speed" value. 191 is
     // DAoC's base run; the server trusts our X/Y/Z, so this only has to look right and move at a
     // plausible rate. Metres/s = units/s × 0.025.
@@ -53,8 +54,17 @@ public partial class WorldView : Node3D
     private Label _status = null!;
     private Button _button = null!;
     private Camera3D _camera = null!;
-    private float _camYaw;
+    // Chase rig (adapted from OfflineDAoC's SpringArm3D camera, GPL-3.0; see
+    // docs/offlinedaoc-asset-pipeline.md): a pivot at shoulder height on the body carries a
+    // SpringArm3D, which pulls the camera in when it would clip terrain/walls — the thing a fixed
+    // manual offset gets wrong. The camera is the arm's child, so it always frames the pivot.
+    private Node3D _camPivot = null!;
+    private SpringArm3D _camArm = null!;
+    private float _camYaw;               // chase: orbit yaw (free-fly: camera yaw)
     private float _camPitch;
+    private float _camDistance = 5.5f;   // spring length target, metres (OfflineDAoC default)
+    private const float CamMin = 1.25f;  // 50 DAoC units; game.dll cameradistance clamp
+    private const float CamMax = 12.5f;  // 500 DAoC units
     private bool _lookActive;
     // Free-fly debug camera speed in Godot units/second (hold Shift to move faster).
     private int _packets;
@@ -185,17 +195,25 @@ public partial class WorldView : Node3D
         if (zoneObjects > 0)
             GD.Print($"[world] placed {zoneObjects} zone object(s)");
 
-        // Camera starts in chase mode behind the player (Tab switches to the free-fly debug camera,
-        // which is useful because the spawn is often inside a large structure — Eodarms starts at
-        // Prydwen Keep). Seed both: the chase position behind the body, and the free-fly yaw/pitch so
-        // a later Tab doesn't snap.
-        Vector3 chaseStart = at + _body.GlobalTransform.Basis.Z * ChaseOffset.Z + new Vector3(0, ChaseOffset.Y, 0);
-        _camera = new Camera3D { Position = chaseStart, Far = 8000f };
-        AddChild(_camera);
-        _camera.LookAt(at + ChaseLookAt);
-        Vector3 e = _camera.Rotation;          // seed yaw/pitch from the initial LookAt
-        _camPitch = e.X;
-        _camYaw = e.Y;
+        // Chase rig: pivot at shoulder height on the body → SpringArm3D → camera. The arm pulls the
+        // camera in off terrain/walls/scenery (mask below) so it never clips into the ground — the
+        // thing the old fixed-offset camera got wrong. Tab detaches it to a free-fly debug camera
+        // (handy: the spawn is often inside a large structure — Eodarms starts at Prydwen Keep).
+        _camPivot = new Node3D { Position = PivotHeight };
+        _body.AddChild(_camPivot);
+        _camArm = new SpringArm3D
+        {
+            SpringLength = _camDistance,
+            Margin = 0.2f,
+            // Pull in off static world geometry. Collision layers are Godot defaults here; terrain
+            // trimesh bodies are on the default layer, so the mask catches them.
+            CollisionMask = uint.MaxValue,
+        };
+        _camPivot.AddChild(_camArm);
+        _camera = new Camera3D { Far = 8000f, Fov = 70 };
+        _camArm.AddChild(_camera);
+        _camYaw = _bodyYaw;                     // start behind the body
+        _camPitch = -0.22f;                     // ~-12.6°, OfflineDAoC default
 
         var overlay = new CanvasLayer();
         _status = new Label { Position = new Vector2(16, 16) };
@@ -439,13 +457,23 @@ public partial class WorldView : Node3D
             _lookActive = mb.Pressed;
             Input.MouseMode = mb.Pressed ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
         }
+        else if (@event is InputEventMouseButton { Pressed: true } wheel && _chase)
+        {
+            // Mouse wheel zooms the chase camera (OfflineDAoC: ×0.88 per notch, clamped 1.25–12.5 m).
+            if (wheel.ButtonIndex == MouseButton.WheelUp)
+                _camDistance = Mathf.Clamp(_camDistance * 0.88f, CamMin, CamMax);
+            else if (wheel.ButtonIndex == MouseButton.WheelDown)
+                _camDistance = Mathf.Clamp(_camDistance / 0.88f, CamMin, CamMax);
+        }
         else if (@event is InputEventMouseMotion mm && _lookActive)
         {
             const float sens = 0.005f;
             if (_chase)
             {
-                // Right-drag turns the character (the chase camera follows the new facing).
+                // Right-drag steers: the character turns with the camera yaw, and pitch tilts the view.
                 _bodyYaw -= mm.Relative.X * sens;
+                _camYaw = _bodyYaw;
+                _camPitch = Mathf.Clamp(_camPitch - mm.Relative.Y * sens, -0.87f, 0.87f); // ±50°
             }
             else
             {
@@ -459,7 +487,31 @@ public partial class WorldView : Node3D
         }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Tab })
         {
-            _chase = !_chase;
+            SetChase(!_chase);
+        }
+    }
+
+    // Switches between the chase rig and a free-fly debug camera by reparenting the one Camera3D:
+    // under the spring arm for chase (so the arm drives it), or directly under WorldView for free-fly
+    // (so UpdateDebugCamera can set its global transform). Reparent keeps the camera where it is.
+    private void SetChase(bool chase)
+    {
+        if (chase == _chase)
+            return;
+        _chase = chase;
+        Transform3D worldXform = _camera.GlobalTransform;
+        _camera.GetParent().RemoveChild(_camera);
+        if (chase)
+        {
+            _camArm.AddChild(_camera);
+            _camera.Position = Vector3.Zero;   // back on the arm
+        }
+        else
+        {
+            AddChild(_camera);
+            _camera.GlobalTransform = worldXform; // stay put, then fly from here
+            _camYaw = _camera.Rotation.Y;
+            _camPitch = _camera.Rotation.X;
         }
     }
 
@@ -546,24 +598,25 @@ public partial class WorldView : Node3D
 
         SnapToGround();
 
-        // Did the player's position or heading change this frame (keys or mouse-look)?
+        // Event-driven position send (adapted from OfflineDAoC's _send_position, GPL-3.0): ~10 Hz
+        // while anything is changing, ~1 Hz standing still, and an immediate send the moment the
+        // position or heading changes even if the timer hasn't elapsed — crisp under motion, quiet at
+        // rest, and well under OpenDAoC's 5 s link-death threshold. (We compare against what the
+        // keep-alive/World already holds, so "changed" also covers mouse-look turns from _Input.)
+        _posLeft -= (float)delta;
         ushort heading = HeadingFromYaw(_bodyYaw);
-        bool changed = moving || heading != _world.Position.Heading;
+        (float rx, float ry, float rz) = ToRegion(_body.Position);
+        bool changed = moving
+            || heading != _world.Position.Heading
+            || Mathf.Abs(rx - _world.Position.X) > PositionEpsilon
+            || Mathf.Abs(ry - _world.Position.Y) > PositionEpsilon;
 
-        // While changing, send at MoveSendInterval; when it stops, send once more so the final
-        // resting position/heading and speed 0 reach the server promptly.
-        _sinceMoveSent += delta;
-        if (changed && _sinceMoveSent >= MoveSendInterval)
+        // Send when the timer runs out, or at once on a change (unless we just sent this tick).
+        if (_posLeft <= 0f || (changed && _posLeft < MovingSendInterval - 0.02))
         {
             SendMove(moving ? WalkUnitsPerSecond : 0f);
-            _sinceMoveSent = 0;
+            _posLeft = changed ? MovingSendInterval : IdleSendInterval;
         }
-        else if (!changed && _movedSinceSend)
-        {
-            SendMove(0f);
-            _sinceMoveSent = 0;
-        }
-        _movedSinceSend = changed;
     }
 
     // Keeps the body on the terrain: cast a ray straight down the body's column against the terrain
@@ -594,23 +647,16 @@ public partial class WorldView : Node3D
         _ = _session.MoveToAsync(rx, ry, rz, heading, speed);
     }
 
-    // Over-the-shoulder offset for the chase camera, in metres: close behind (+Z) and a little above
-    // a ~2 m character, looking at chest height. Tight enough that the capsule fills the frame rather
-    // than reading as a dot against the keep.
-    private static readonly Vector3 ChaseOffset = new(0, 2.8f, 3.2f);
-    private static readonly Vector3 ChaseLookAt = new(0, 1.0f, 0);
+    // Pivot height on the body (shoulder/eye), metres — OfflineDAoC uses 1.55.
+    private static readonly Vector3 PivotHeight = new(0, 1.55f, 0);
 
-    // Chase camera: sits behind and above the body, looking at it. A smooth follow keeps it from
-    // snapping. Tab switches to the free-fly debug camera (UpdateDebugCamera) for inspecting the zone.
+    // Chase camera: orient the pivot (pitch, yaw) and lerp the spring length toward the zoom target.
+    // The SpringArm3D itself does the position + collision pull-in; the camera, as its child, always
+    // frames the pivot. The only smoothing is on zoom (spring length), like OfflineDAoC.
     private void UpdateChaseCamera(double delta)
     {
-        Vector3 target = _body.Position + ChaseLookAt;
-        // Desired camera position: behind the body (its +Z) and up.
-        Vector3 behind = _body.GlobalTransform.Basis.Z * ChaseOffset.Z + new Vector3(0, ChaseOffset.Y, 0);
-        Vector3 want = _body.Position + behind;
-        float follow = 1f - Mathf.Exp(-8f * (float)delta); // frame-rate-independent smoothing
-        _camera.Position = _camera.Position.Lerp(want, follow);
-        _camera.LookAt(target);
+        _camPivot.Rotation = new Vector3(_camPitch, _camYaw, 0);
+        _camArm.SpringLength = Mathf.Lerp(_camArm.SpringLength, _camDistance, Mathf.Min(1f, (float)delta * 10f));
     }
 
     public override void _Process(double delta)
@@ -645,7 +691,7 @@ public partial class WorldView : Node3D
             $"A {(Input.IsKeyPressed(Key.A) ? 1 : 0)} D {(Input.IsKeyPressed(Key.D) ? 1 : 0)}   " +
             $"body {_body.Position.X:0.0},{_body.Position.Z:0.0}   mode {(_chase ? "chase" : "free")}\n" +
             (_chase
-                ? "move: W/S walk, A/D or right-drag turn   ·   Tab free-fly camera, P screenshot"
+                ? "move: W/S walk, A/D or right-drag turn, wheel zoom   ·   Tab free-fly camera, P screenshot"
                 : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot");
     }
 }
