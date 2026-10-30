@@ -5,8 +5,8 @@ person log into an OpenDAoC server and actually play — move around a textured 
 control, see other players and NPCs, chat, and (further out) fight and use their character.
 
 This replaces the original "MVC" framing (render a capsule at a server-sent position), which is
-**done**. The milestones below are grouped into what we've accomplished (M0–M3) and the stepwise
-goals that lead to a minimally playable client (M4–M9), with honest notes on the two genuine walls.
+**done**. The milestones below are grouped into what we've accomplished (M0–M4) and the stepwise
+goals that lead to a minimally playable client (M5–M9), with honest notes on the two genuine walls.
 
 ## Guiding definitions
 
@@ -86,19 +86,31 @@ currently drain-and-count**, plus **sending the player's own actions**. Every op
 documented in DOLSharp/OpenDAoC source (GPL, portable with attribution), so this is implementation,
 not research — with two exceptions called out under "Walls" below.
 
-### M4 — The player moves (self-driven movement over TCP)
+### M4 — The player moves (self-driven movement over TCP) ✅
 *You control your character; the world is drawn around you.*
-- Replace the free-fly debug camera with a **chase camera** on the player.
-- Feed keyboard/mouse input into the player's position/heading and let the **existing 0xA9 sender**
-  transmit it (the keep-alive already sends 0xA9 every second — movement is updating the value it
-  sends, plus raising the rate while moving).
+**Done 2026-10-30.** Verified live on macOS (Apple M2, Godot 4.7.2 .NET) against our OpenDAoC fork:
+Eodarms walks across real, textured Camelot Hills terrain, follows slopes up and down, with a chase
+camera behind — and the server accepts the self-driven position (no link-death, no rubber-band kick).
+- ~~Replace the free-fly debug camera with a **chase camera** on the player.~~ `SpringArm3D` chase
+  camera seated behind the body, colliding with terrain and scenery so it rides above slopes and
+  pulls in off walls; Tab toggles the old free-fly debug camera.
+- ~~Feed keyboard/mouse input into the player's position/heading and let the **existing 0xA9 sender**
+  transmit it.~~ `ClientSession.MoveToAsync` + event-driven send (~10 Hz moving, ~1 Hz idle) on top
+  of the keep-alive; WASD/mouse drive position and heading.
 - ~~**Unify the world scale.**~~ **Done 2026-10-29.** Region units and NIF units share one scale,
   **0.025 m/unit**; `WorldView.RegionMetresPerUnit = 0.025` and the terrain glb (already metres from the
   exporter) is no longer double-scaled. Calibrated live: the keep renders at ~52 m on real Camelot
   Hills terrain with the player capsule human-height in its courtyard (commit cf5a0b0; W1 closed).
-- Collide with terrain so the character walks on the ground (Godot physics on the terrain mesh).
-- **Done when:** you spawn in Camelot Hills and walk your character across real, textured terrain,
-  and the server accepts your position (no link-death, no rubber-band kick).
+- ~~Collide with terrain so the character walks on the ground (Godot physics on the terrain mesh).~~
+  A downward raycast pins the body to the terrain trimesh. Key fix: the exported terrain is wound
+  face-down, so the collider needed `ConcavePolygonShape3D.BackfaceCollision = true` for the ground
+  ray to register (the symptom was floating at spawn and walking horizontally off slopes).
+- **Done when:** ~~you spawn in Camelot Hills and walk your character across real, textured terrain,
+  and the server accepts your position (no link-death, no rubber-band kick).~~ **Met.**
+- *Known remainder (not M4-blocking):* placed models whose glTF materials are named generically
+  (`meshN`) instead of after their texture stay untextured — an export-pipeline (material-naming)
+  fix, tracked for the asset track. The unfocused-window send throttle (macOS pauses an idle
+  background window, which can starve 0xA9 and trip link-death) is a play-comfort fix for later.
 
 ### M5 — The world is alive (incoming entity state)
 *Other players and NPCs appear and move.*
@@ -189,10 +201,15 @@ Also out of scope for now, as genuine tangents: sound, a polished UI, and retail
 
 ---
 
-## Immediate next steps (M4 kickoff)
+## Immediate next steps (M5 kickoff)
 
-1. Reconcile the world scale (model 0.025 vs. live ÷100) so terrain, placed objects and the player
-   agree — closes the W1 follow-up.
-2. Add a chase camera and route input into the player's position/heading, driving the existing 0xA9
-   sender; verify the server accepts self-driven movement live (DaocCli or Godot `--autologin`).
-3. Terrain collision so the character stays on the ground.
+M4 is complete (self-driven movement on textured terrain, live-verified 2026-10-30). Next is M5 —
+making the world alive by interpreting the in-world packets the client currently drains and counts.
+
+1. **Build the world-packet dispatcher** (the missing `NetworkBridge` seam): replace the
+   drain-and-count loop in `WorldView._Process` with a router from opcode to handler. This is the
+   structural piece M5–M9 all build on.
+2. **Parse the 0xA1-family object/NPC position and spawn/despawn packets** (the bulk of what the
+   server already sends us — ~23 packets/s were mostly 0xA1) and render each as a scene entity that
+   moves as updates arrive; interpolate between updates.
+3. Then player spawns, remove-object, and heading/state updates (see M5 for the full list).
