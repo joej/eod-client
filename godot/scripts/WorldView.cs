@@ -171,6 +171,14 @@ public partial class WorldView : Node3D
             Position = new Vector3(0, 1.6f, -0.5f),
             MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(1f, 0.9f, 0.2f) },
         });
+        // Vertical stripe down the BACK (+Z): a fixed reference for the chase camera, which looks at
+        // the character's back. Bright so it reads against terrain and the keep.
+        body.AddChild(new MeshInstance3D
+        {
+            Mesh = new BoxMesh { Size = new Vector3(0.12f, 1.9f, 0.12f) },
+            Position = new Vector3(0, 1f, 0.42f),
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.2f, 0.55f, 1f) },
+        });
         AddChild(body);
 
         int zoneObjects = BuildZone();
@@ -589,8 +597,8 @@ public partial class WorldView : Node3D
     // Over-the-shoulder offset for the chase camera, in metres: close behind (+Z) and a little above
     // a ~2 m character, looking at chest height. Tight enough that the capsule fills the frame rather
     // than reading as a dot against the keep.
-    private static readonly Vector3 ChaseOffset = new(0, 1.8f, 3f);
-    private static readonly Vector3 ChaseLookAt = new(0, 1.2f, 0);
+    private static readonly Vector3 ChaseOffset = new(0, 2.8f, 3.2f);
+    private static readonly Vector3 ChaseLookAt = new(0, 1.0f, 0);
 
     // Chase camera: sits behind and above the body, looking at it. A smooth follow keeps it from
     // snapping. Tab switches to the free-fly debug camera (UpdateDebugCamera) for inspecting the zone.
