@@ -338,6 +338,11 @@ public partial class WorldView : Node3D
             // factor to shrink raw NIF units — that is now wrong and would scale the model twice.)
             inst.Scale = new Vector3(scale, scale, scale);
             zoneRoot.AddChild(inst);
+            // Trimesh collision per placed object, so the SpringArm chase camera pulls in off
+            // buildings/keep walls (not just terrain). Generated after AddChild so the static bodies
+            // sit in the live tree. ~1,500 static bodies for a full zone; revisit if load time bites.
+            foreach (MeshInstance3D mi in FindMeshes(inst))
+                mi.CreateTrimeshCollision();
             placed++;
         }
 
