@@ -712,7 +712,13 @@ public partial class WorldView : Node3D
     // frames the pivot. The only smoothing is on zoom (spring length), like OfflineDAoC.
     private void UpdateChaseCamera(double delta)
     {
-        _camPivot.Rotation = new Vector3(_camPitch, _camYaw, 0);
+        // The pivot is a CHILD of the body, so its rotation is relative to the body — the body's
+        // yaw is already inherited. The SpringArm extends the camera along the pivot's +Z, and the
+        // body faces -Z, so a pivot yaw of 0 puts the camera straight out the body's back (behind,
+        // looking at the blue stripe). Only pitch varies (look up/down); the camera is rigidly
+        // behind in chase mode and right-drag turns the body, not the camera. (Adding _bodyYaw here
+        // double-counted the body's rotation and skewed the camera off to the side.)
+        _camPivot.Rotation = new Vector3(_camPitch, 0f, 0);
         // Lerp the arm's TARGET length toward the zoom distance; the SpringArm shortens from this
         // target on its own when it hits placed geometry. Floor the target at CamMin so even a wall
         // the arm catches can't collapse the camera into the pivot (the "inside the capsule" bug).
