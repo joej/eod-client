@@ -32,6 +32,7 @@ public partial class WorldView : Node3D
     private ClientSession _session = null!;
     private WorldPosition _world = null!;
     private Node3D _body = null!;        // the controlled character
+    private Node3D? _terrain;            // terrain root with trimesh collision, for ground raycasts
     private bool _chase = true;          // chase camera (default) vs free-fly debug camera
     private float _bodyYaw;              // the body's facing, radians (Godot sense)
     // Movement sent to the server is throttled to this rate while moving (well under the 5 s
@@ -162,10 +163,13 @@ public partial class WorldView : Node3D
                 Position = new Vector3(0, 1, 0),
                 MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.8f, 0.2f, 0.2f) },
             });
+        // Facing marker on the FRONT of the body. The body walks along -Z (ahead = Basis.Z * -forward),
+        // so -Z is forward; the nose must sit at -Z or it marks the back and "forward" walks away from it.
         body.AddChild(new MeshInstance3D
         {
             Mesh = new BoxMesh { Size = new Vector3(0.2f, 0.2f, 0.6f) },
-            Position = new Vector3(0, 1.6f, 0.5f),
+            Position = new Vector3(0, 1.6f, -0.5f),
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(1f, 0.9f, 0.2f) },
         });
         AddChild(body);
 
@@ -249,7 +253,14 @@ public partial class WorldView : Node3D
                     mi.SetSurfaceOverrideMaterial(s, green);
             }
         }
+        // Trimesh static collision on every terrain surface, so the player can raycast down to the
+        // ground and walk on it (M4). CreateTrimeshCollision adds a StaticBody3D + CollisionShape3D
+        // as a child of each MeshInstance3D; a ray then hits the real heightmap surface.
+        foreach (MeshInstance3D mi in FindMeshes(terrain))
+            mi.CreateTrimeshCollision();
+
         AddChild(terrain);
+        _terrain = terrain;
         GD.Print($"[world] terrain loaded ({textured} ground tile(s) textured)");
         return true;
     }
@@ -525,6 +536,8 @@ public partial class WorldView : Node3D
             }
         }
 
+        SnapToGround();
+
         // Did the player's position or heading change this frame (keys or mouse-look)?
         ushort heading = HeadingFromYaw(_bodyYaw);
         bool changed = moving || heading != _world.Position.Heading;
@@ -543,6 +556,24 @@ public partial class WorldView : Node3D
             _sinceMoveSent = 0;
         }
         _movedSinceSend = changed;
+    }
+
+    // Keeps the body on the terrain: cast a ray straight down the body's column against the terrain
+    // trimesh collider and set Y to the hit. No gravity/stepping yet — the character is pinned to the
+    // ground surface, which is all M4 needs ("walk on the ground"). No terrain (flat placeholder) or
+    // no hit (over a gap) leaves Y where it is.
+    private void SnapToGround()
+    {
+        if (_terrain is null)
+            return;
+
+        Vector3 col = _body.Position;
+        var ray = PhysicsRayQueryParameters3D.Create(
+            new Vector3(col.X, col.Y + 100f, col.Z),
+            new Vector3(col.X, col.Y - 100f, col.Z));
+        Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
+        if (hit.Count > 0 && hit["position"].AsVector3() is { } p)
+            _body.Position = new Vector3(col.X, p.Y, col.Z);
     }
 
     private void SendMove(float speed)
