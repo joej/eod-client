@@ -224,6 +224,49 @@ public class ClientSessionTests
     }
 
     [Fact]
+    public async Task MoveToSendsOneUpdateAtTheNewPositionAndAdvancesWorld()
+    {
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await session.GetCharactersAsync(Realm.Albion);
+            await session.EnterWorldAsync(Realm.Albion, slot: 0);
+
+            // One step east: new X/Y/Z and heading, with a non-zero speed.
+            await session.MoveToAsync(561000f, 511700f, 2344f, heading: 2048, speed: 191f);
+
+            Assert.Equal((561000f, 511700f), (session.World!.Position.X, session.World.Position.Y));
+            Assert.Equal((ushort)2048, session.World.Position.Heading);
+            Assert.Equal(191f, session.MoveSpeed);
+            // Zone, object id and region are preserved across the move.
+            Assert.Equal("Camelot Hills", session.World.Zone.Name);
+        }
+
+        Assert.Null(server.Error);
+        List<ClientPacket> updates = server.Received.Where(p => p.Code == PositionUpdate.Code).ToList();
+        Assert.Single(updates); // no keep-alive ran; MoveToAsync sent exactly one 0xA9
+        byte[] expected = PositionUpdate.Payload(561000f, 511700f, 2344f, sessionId: 1, objectId: 0, zoneId: 0, heading: 2048, speed: 191f);
+        Assert.Equal(expected, updates[0].Payload);
+    }
+
+    [Fact]
+    public async Task MoveToRejectsOutsideTheWorld()
+    {
+        await using var server = new FakeServer(Recording());
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => session.MoveToAsync(1f, 2f, 3f, heading: 0));
+        }
+    }
+
+    [Fact]
     public async Task QuitsWhileTheHeartbeatContinues()
     {
         // The server answers "&quit" only when its timer runs out: here, with the first

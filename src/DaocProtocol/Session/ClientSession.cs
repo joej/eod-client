@@ -47,8 +47,18 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
 
     public SessionState State { get; private set; } = SessionState.Connected;
 
-    /// <summary>Set by <see cref="EnterWorldAsync"/>.</summary>
+    /// <summary>
+    /// The player's current position, set by <see cref="EnterWorldAsync"/> and advanced by
+    /// <see cref="MoveToAsync"/>. The keep-alive reports this value in every 0xA9.
+    /// </summary>
     public WorldPosition? World { get; private set; }
+
+    /// <summary>
+    /// The speed reported in 0xA9. 0 = standing still; the keep-alive and <see cref="MoveToAsync"/>
+    /// send it. The server trusts the client's X/Y/Z, so this is informational (animation/anti-cheat
+    /// on retail), not the thing that actually moves the player.
+    /// </summary>
+    public float MoveSpeed { get; set; }
 
     /// <summary>How often <see cref="KeepAliveAsync"/> sends 0xA9. The server marks a player link-dead after 5 s without one.</summary>
     public TimeSpan PositionInterval { get; set; } = TimeSpan.FromSeconds(1);
@@ -181,6 +191,35 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     }
 
     /// <summary>
+    /// Moves the player to a new region-global position and heading, then sends one 0xA9 so the
+    /// server sees it at once (the 1 s keep-alive would otherwise hold it until its next tick).
+    /// Call this from the input/physics loop while the player moves; the server trusts the X/Y/Z
+    /// it is given, so updating them is the movement. <paramref name="heading"/> is 0–4095
+    /// (4096 = 360°). The zone must still contain the new position; crossing a zone boundary needs
+    /// a zone lookup the caller does not do yet (see roadmap M4), so this keeps the current zone.
+    /// </summary>
+    public async Task MoveToAsync(float x, float y, float z, ushort heading, float speed = 0,
+        CancellationToken cancellationToken = default)
+    {
+        if (State != SessionState.InWorld || World is not WorldPosition world)
+            throw new InvalidOperationException($"Session is {State}; MoveToAsync needs the world.");
+
+        MoveSpeed = speed;
+        PositionAndObjectId moved = world.Position with { X = x, Y = y, Z = z, Heading = heading };
+        World = world with { Position = moved };
+        await SendPositionAsync(World, speed, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Sends one 0xA9 for the given position at the given speed. Shared by the keep-alive and <see cref="MoveToAsync"/>.</summary>
+    private Task SendPositionAsync(WorldPosition world, float speed, CancellationToken cancellationToken)
+    {
+        PositionAndObjectId p = world.Position;
+        return connection.SendAsync(PositionUpdate.Code,
+            PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, world.Zone.Id, p.Heading, speed),
+            cancellationToken);
+    }
+
+    /// <summary>
     /// Keeps the session alive until cancelled: 0xA3 every <see cref="PingInterval"/> from the
     /// character screen on (OpenDAoC's 150 s ping timeout applies there too), plus 0xA9 (standing
     /// still at the entry position) every <see cref="PositionInterval"/> while in the world. Start
@@ -200,12 +239,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
             do
             {
                 if (State == SessionState.InWorld && World is WorldPosition world)
-                {
-                    PositionAndObjectId p = world.Position;
-                    await connection.SendAsync(PositionUpdate.Code,
-                        PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, world.Zone.Id, p.Heading),
-                        cancellationToken).ConfigureAwait(false);
-                }
+                    await SendPositionAsync(world, MoveSpeed, cancellationToken).ConfigureAwait(false);
 
                 if (DateTime.UtcNow >= nextPing)
                 {

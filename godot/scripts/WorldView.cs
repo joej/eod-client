@@ -29,7 +29,20 @@ public partial class WorldView : Node3D
     private const float RegionMetresPerUnit = 0.025f;
 
     private DaocConnection _connection = null!;
+    private ClientSession _session = null!;
     private WorldPosition _world = null!;
+    private Node3D _body = null!;        // the controlled character
+    private bool _chase = true;          // chase camera (default) vs free-fly debug camera
+    private float _bodyYaw;              // the body's facing, radians (Godot sense)
+    // Movement sent to the server is throttled to this rate while moving (well under the 5 s
+    // link-death threshold, and gentle on the TCP position channel). 0 when standing still.
+    private double _sinceMoveSent;
+    private bool _movedSinceSend;        // moved/turned since the last 0xA9 we sent
+    private const double MoveSendInterval = 0.2; // 5 Hz
+    // Ground-plane walk speed in region units/second and the matching 0xA9 "speed" value. 191 is
+    // DAoC's base run; the server trusts our X/Y/Z, so this only has to look right and move at a
+    // plausible rate. Metres/s = units/s × 0.025.
+    private const float WalkUnitsPerSecond = 191f;
     private string? _modelPath;
     private string? _zonePath;
     private string? _libraryPath;
@@ -74,10 +87,11 @@ public partial class WorldView : Node3D
     /// stand in for the character; null or missing falls back to the capsule (MVC needs no assets).
     /// <paramref name="zoneManifest"/> is an optional zone.csv (from `mpk zone`) whose static objects
     /// are placed around the character; null or missing just shows the flat ground.</summary>
-    public void Init(DaocConnection connection, WorldPosition world,
+    public void Init(DaocConnection connection, ClientSession session, WorldPosition world,
         string? modelPath = null, string? zoneManifest = null, string? libraryPath = null, string? terrainPath = null)
     {
         _connection = connection;
+        _session = session;
         _world = world;
         _modelPath = modelPath;
         _zonePath = zoneManifest;
@@ -92,8 +106,21 @@ public partial class WorldView : Node3D
     public static Vector3 ToGodot(float x, float y, float z) =>
         new(x * RegionMetresPerUnit, z * RegionMetresPerUnit, y * RegionMetresPerUnit);
 
+    /// <summary>
+    /// The inverse of <see cref="ToGodot"/>: a Godot-metres position back to region units (X, Y, Z).
+    /// Godot (gx, gy, gz) = (X, Z, Y) × 0.025, so X = gx/0.025, Y = gz/0.025, Z = gy/0.025.
+    /// Movement is sending the server a new region X/Y/Z, so the player's Godot position round-trips
+    /// through this every time it changes.
+    /// </summary>
+    public static (float X, float Y, float Z) ToRegion(Vector3 g) =>
+        (g.X / RegionMetresPerUnit, g.Z / RegionMetresPerUnit, g.Y / RegionMetresPerUnit);
+
     /// <summary>Heading 0–4095 = a full turn. The direction of heading 0 isn't checked yet.</summary>
     public static float HeadingRadians(ushort heading) => (heading & 0x0FFF) / 4096f * Mathf.Tau;
+
+    /// <summary>A Godot facing (yaw about Y, as the body's -rotation) back to a 0–4095 DAoC heading.</summary>
+    public static ushort HeadingFromYaw(float yaw) =>
+        (ushort)(Mathf.PosMod(-yaw / Mathf.Tau, 1f) * 4096f);
 
     public override void _Ready()
     {
@@ -125,7 +152,9 @@ public partial class WorldView : Node3D
         // Character: at its world position, facing its heading, with a nose showing facing. The body
         // is a loaded .glb when one was supplied (first meeting of the asset pipeline and the live
         // world), otherwise the MVC capsule — the client still runs with no assets at all.
-        var body = new Node3D { Position = at, Rotation = new Vector3(0, -HeadingRadians(p.Heading), 0) };
+        _bodyYaw = -HeadingRadians(p.Heading);
+        var body = new Node3D { Position = at, Rotation = new Vector3(0, _bodyYaw, 0) };
+        _body = body;
         if (!TryAddModel(body))
             body.AddChild(new MeshInstance3D
             {
@@ -144,12 +173,14 @@ public partial class WorldView : Node3D
         if (zoneObjects > 0)
             GD.Print($"[world] placed {zoneObjects} zone object(s)");
 
-        // Free-fly debug camera (WASD + Q/E, right-drag to look, Shift to sprint): the spawn is often
-        // inside a large structure (Eodarms starts at Prydwen Keep), so no fixed chase offset reliably
-        // sees the scene. Start high and back, looking down at the player, then fly from there.
-        _camera = new Camera3D { Position = at + new Vector3(0, 45, 65), Far = 8000f };
+        // Camera starts in chase mode behind the player (Tab switches to the free-fly debug camera,
+        // which is useful because the spawn is often inside a large structure — Eodarms starts at
+        // Prydwen Keep). Seed both: the chase position behind the body, and the free-fly yaw/pitch so
+        // a later Tab doesn't snap.
+        Vector3 chaseStart = at + _body.GlobalTransform.Basis.Z * ChaseOffset.Z + new Vector3(0, ChaseOffset.Y, 0);
+        _camera = new Camera3D { Position = chaseStart, Far = 8000f };
         AddChild(_camera);
-        _camera.LookAt(at + new Vector3(0, 1, 0));
+        _camera.LookAt(at + ChaseLookAt);
         Vector3 e = _camera.Rotation;          // seed yaw/pitch from the initial LookAt
         _camPitch = e.X;
         _camYaw = e.Y;
@@ -392,12 +423,24 @@ public partial class WorldView : Node3D
         else if (@event is InputEventMouseMotion mm && _lookActive)
         {
             const float sens = 0.005f;
-            _camYaw -= mm.Relative.X * sens;
-            _camPitch = Mathf.Clamp(_camPitch - mm.Relative.Y * sens, -1.5f, 1.5f);
+            if (_chase)
+            {
+                // Right-drag turns the character (the chase camera follows the new facing).
+                _bodyYaw -= mm.Relative.X * sens;
+            }
+            else
+            {
+                _camYaw -= mm.Relative.X * sens;
+                _camPitch = Mathf.Clamp(_camPitch - mm.Relative.Y * sens, -1.5f, 1.5f);
+            }
         }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.P })
         {
             _ = SaveScreenshot();
+        }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Tab })
+        {
+            _chase = !_chase;
         }
     }
 
@@ -450,9 +493,94 @@ public partial class WorldView : Node3D
         }
     }
 
+    // Self-driven movement: W/S walk along facing, A/D turn, mouse-look turns while held. Updates the
+    // body's Godot position/yaw, then (throttled) sends the server the new region position + heading
+    // through ClientSession.MoveToAsync. The server trusts the X/Y/Z we send, so this IS the movement;
+    // the keep-alive goes on reporting whatever World.Position MoveToAsync last set.
+    private void UpdatePlayer(double delta)
+    {
+        // A/D turn (keys); mouse-look also turns in chase mode, feeding _bodyYaw from _Input.
+        float turnKeys = 0f;
+        if (Input.IsKeyPressed(Key.A)) turnKeys += 1f;
+        if (Input.IsKeyPressed(Key.D)) turnKeys -= 1f;
+        const float turnRate = 2.5f; // radians/s
+        _bodyYaw += turnKeys * turnRate * (float)delta;
+
+        float forward = 0f;
+        if (Input.IsKeyPressed(Key.W)) forward += 1f;
+        if (Input.IsKeyPressed(Key.S)) forward -= 1f;
+
+        _body.Rotation = new Vector3(0, _bodyYaw, 0);
+
+        bool moving = forward != 0f;
+        if (moving)
+        {
+            // Body faces -Z in Godot; forward is the body's -Z basis, flattened to the ground plane.
+            Vector3 ahead = _body.GlobalTransform.Basis.Z * -forward;
+            ahead.Y = 0;
+            if (ahead.LengthSquared() > 0)
+            {
+                float metresPerSec = WalkUnitsPerSecond * RegionMetresPerUnit;
+                _body.Position += ahead.Normalized() * metresPerSec * (float)delta;
+            }
+        }
+
+        // Did the player's position or heading change this frame (keys or mouse-look)?
+        ushort heading = HeadingFromYaw(_bodyYaw);
+        bool changed = moving || heading != _world.Position.Heading;
+
+        // While changing, send at MoveSendInterval; when it stops, send once more so the final
+        // resting position/heading and speed 0 reach the server promptly.
+        _sinceMoveSent += delta;
+        if (changed && _sinceMoveSent >= MoveSendInterval)
+        {
+            SendMove(moving ? WalkUnitsPerSecond : 0f);
+            _sinceMoveSent = 0;
+        }
+        else if (!changed && _movedSinceSend)
+        {
+            SendMove(0f);
+            _sinceMoveSent = 0;
+        }
+        _movedSinceSend = changed;
+    }
+
+    private void SendMove(float speed)
+    {
+        (float rx, float ry, float rz) = ToRegion(_body.Position);
+        ushort heading = HeadingFromYaw(_bodyYaw);
+        // Reflect it locally at once so the overlay and keep-alive see the new position without
+        // waiting for the async send; MoveToAsync sets the same values on the session.
+        _world = _world with { Position = _world.Position with { X = rx, Y = ry, Z = rz, Heading = heading } };
+        _ = _session.MoveToAsync(rx, ry, rz, heading, speed);
+    }
+
+    // Over-the-shoulder offset for the chase camera, in metres: close behind (+Z) and a little above
+    // a ~2 m character, looking at chest height. Tight enough that the capsule fills the frame rather
+    // than reading as a dot against the keep.
+    private static readonly Vector3 ChaseOffset = new(0, 1.8f, 3f);
+    private static readonly Vector3 ChaseLookAt = new(0, 1.2f, 0);
+
+    // Chase camera: sits behind and above the body, looking at it. A smooth follow keeps it from
+    // snapping. Tab switches to the free-fly debug camera (UpdateDebugCamera) for inspecting the zone.
+    private void UpdateChaseCamera(double delta)
+    {
+        Vector3 target = _body.Position + ChaseLookAt;
+        // Desired camera position: behind the body (its +Z) and up.
+        Vector3 behind = _body.GlobalTransform.Basis.Z * ChaseOffset.Z + new Vector3(0, ChaseOffset.Y, 0);
+        Vector3 want = _body.Position + behind;
+        float follow = 1f - Mathf.Exp(-8f * (float)delta); // frame-rate-independent smoothing
+        _camera.Position = _camera.Position.Lerp(want, follow);
+        _camera.LookAt(target);
+    }
+
     public override void _Process(double delta)
     {
-        UpdateDebugCamera(delta);
+        UpdatePlayer(delta);
+        if (_chase)
+            UpdateChaseCamera(delta);
+        else
+            UpdateDebugCamera(delta);
         _seconds += delta;
         while (_draining && _connection.TryReceive(out ServerPacket packet))
         {
@@ -474,6 +602,11 @@ public partial class WorldView : Node3D
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
             $"{_seconds:0} s in world   {_packets} packets   {_pings} ping replies   " +
             (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + "\n" +
-            "camera: WASD move, Q/E down/up, right-drag look, Shift sprint, P screenshot";
+            $"W {(Input.IsKeyPressed(Key.W) ? 1 : 0)} S {(Input.IsKeyPressed(Key.S) ? 1 : 0)} " +
+            $"A {(Input.IsKeyPressed(Key.A) ? 1 : 0)} D {(Input.IsKeyPressed(Key.D) ? 1 : 0)}   " +
+            $"body {_body.Position.X:0.0},{_body.Position.Z:0.0}   mode {(_chase ? "chase" : "free")}\n" +
+            (_chase
+                ? "move: W/S walk, A/D or right-drag turn   ·   Tab free-fly camera, P screenshot"
+                : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot");
     }
 }
