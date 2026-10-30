@@ -66,6 +66,8 @@ public partial class WorldView : Node3D
     private const float CamMin = 1.25f;  // 50 DAoC units; game.dll cameradistance clamp
     private const float CamMax = 12.5f;  // 500 DAoC units
     private bool _lookActive;
+    private bool _freshCapture;           // true right after mouse capture, to drop the first delta
+    private bool _groundHit;              // did the last ground raycast find terrain? (debug overlay)
     // Free-fly debug camera speed in Godot units/second (hold Shift to move faster).
     private int _packets;
     private int _pings;
@@ -464,6 +466,7 @@ public partial class WorldView : Node3D
         {
             _lookActive = mb.Pressed;
             Input.MouseMode = mb.Pressed ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
+            _freshCapture = mb.Pressed;   // swallow the first (often huge) motion delta after capture
         }
         else if (@event is InputEventMouseButton { Pressed: true } wheel && _chase)
         {
@@ -475,7 +478,15 @@ public partial class WorldView : Node3D
         }
         else if (@event is InputEventMouseMotion mm && _lookActive)
         {
+            if (_freshCapture)
+            {
+                _freshCapture = false;   // drop the first post-capture delta (a large recenter spike)
+                return;
+            }
             const float sens = 0.005f;
+            // Clamp per-event delta so an occasional spike can't snap the view.
+            Vector2 d = new(Mathf.Clamp(mm.Relative.X, -80, 80), Mathf.Clamp(mm.Relative.Y, -80, 80));
+            mm = new InputEventMouseMotion { Relative = d };
             if (_chase)
             {
                 // Right-drag steers: the character turns with the camera yaw, and pitch tilts the view.
@@ -600,7 +611,10 @@ public partial class WorldView : Node3D
             ahead.Y = 0;
             if (ahead.LengthSquared() > 0)
             {
-                float metresPerSec = WalkUnitsPerSecond * RegionMetresPerUnit;
+                // Shift sprints (×4) so you can cross a ~15 km zone to reach distant terrain/keep for
+                // testing; base is DAoC run (191 units/s). The sent 0xA9 speed stays the base value.
+                float sprint = Input.IsKeyPressed(Key.Shift) ? 4f : 1f;
+                float metresPerSec = WalkUnitsPerSecond * RegionMetresPerUnit * sprint;
                 _body.Position += ahead.Normalized() * metresPerSec * (float)delta;
             }
         }
@@ -637,13 +651,23 @@ public partial class WorldView : Node3D
         if (_terrain is null)
             return;
 
+        // Cast from above the terrain's whole height range straight down past its bottom, so a steep
+        // descent is always found (a ray only ±100 m of the body's current Y missed the ground once
+        // the body walked out past a downslope and kept its old height). Terrain Y here spans ~1–150 m.
         Vector3 col = _body.Position;
         var ray = PhysicsRayQueryParameters3D.Create(
-            new Vector3(col.X, col.Y + 100f, col.Z),
-            new Vector3(col.X, col.Y - 100f, col.Z));
+            new Vector3(col.X, 400f, col.Z),
+            new Vector3(col.X, -400f, col.Z));
         Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
         if (hit.Count > 0 && hit["position"].AsVector3() is { } p)
+        {
             _body.Position = new Vector3(col.X, p.Y, col.Z);
+            _groundHit = true;
+        }
+        else
+        {
+            _groundHit = false;   // over a gap / no terrain under this column
+        }
     }
 
     private void SendMove(float speed)
@@ -668,9 +692,16 @@ public partial class WorldView : Node3D
         _camArm.SpringLength = Mathf.Lerp(_camArm.SpringLength, _camDistance, Mathf.Min(1f, (float)delta * 10f));
     }
 
-    public override void _Process(double delta)
+    // Movement + the ground raycast run in the PHYSICS frame: DirectSpaceState.IntersectRay is only
+    // valid there, and from _Process it intermittently returns no hit — which left the body walking
+    // horizontally off a downslope instead of following the ground (the symptom on real terrain).
+    public override void _PhysicsProcess(double delta)
     {
         UpdatePlayer(delta);
+    }
+
+    public override void _Process(double delta)
+    {
         if (_chase)
             UpdateChaseCamera(delta);
         else
@@ -698,9 +729,10 @@ public partial class WorldView : Node3D
             (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + "\n" +
             $"W {(Input.IsKeyPressed(Key.W) ? 1 : 0)} S {(Input.IsKeyPressed(Key.S) ? 1 : 0)} " +
             $"A {(Input.IsKeyPressed(Key.A) ? 1 : 0)} D {(Input.IsKeyPressed(Key.D) ? 1 : 0)}   " +
-            $"body {_body.Position.X:0.0},{_body.Position.Z:0.0}   mode {(_chase ? "chase" : "free")}\n" +
+            $"body {_body.Position.X:0.0},{_body.Position.Y:0.0},{_body.Position.Z:0.0}   " +
+            $"ground {(_groundHit ? "ON" : "--")}   mode {(_chase ? "chase" : "free")}\n" +
             (_chase
-                ? "move: W/S walk, A/D or right-drag turn, wheel zoom   ·   Tab free-fly camera, P screenshot"
+                ? "move: W/S walk, A/D or right-drag turn, Shift sprint, wheel zoom   ·   Tab free-fly, P shot"
                 : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot");
     }
 }
