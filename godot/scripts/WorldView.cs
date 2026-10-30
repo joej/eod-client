@@ -212,7 +212,10 @@ public partial class WorldView : Node3D
         _camPivot.AddChild(_camArm);
         _camera = new Camera3D { Far = 8000f, Fov = 70 };
         _camArm.AddChild(_camera);
-        _camYaw = _bodyYaw;                     // start behind the body
+        // The SpringArm extends the camera along the pivot's +Z, so to sit BEHIND a body that faces
+        // -Z the pivot yaw is the body yaw turned 180°. Matching them put the camera in front, looking
+        // at the nose (so walking read as "backwards toward the camera").
+        _camYaw = _bodyYaw + Mathf.Pi;          // start behind the body
         _camPitch = -0.22f;                     // ~-12.6°, OfflineDAoC default
 
         var overlay = new CanvasLayer();
@@ -471,8 +474,9 @@ public partial class WorldView : Node3D
             if (_chase)
             {
                 // Right-drag steers: the character turns with the camera yaw, and pitch tilts the view.
+                // Camera stays behind the -Z-facing body, so its yaw trails bodyYaw by 180°.
                 _bodyYaw -= mm.Relative.X * sens;
-                _camYaw = _bodyYaw;
+                _camYaw = _bodyYaw + Mathf.Pi;
                 _camPitch = Mathf.Clamp(_camPitch - mm.Relative.Y * sens, -0.87f, 0.87f); // ±50°
             }
             else
