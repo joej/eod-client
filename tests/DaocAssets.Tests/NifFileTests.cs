@@ -241,6 +241,85 @@ public sealed class NifFileTests
         Math.Abs(a.X - b.X) < 0.004 && Math.Abs(a.Y - b.Y) < 0.004
         && Math.Abs(a.Z - b.Z) < 0.004 && Math.Abs(a.W - b.W) < 0.004;
 
+    // A unit triangle for the in-memory exporter tests below.
+    private static NifMesh TriMesh(string name, string? textureFile, System.Numerics.Vector4? baseColor) => new()
+    {
+        Name = name,
+        Vertices = [new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)],
+        Triangles = [(0, 1, 2)],
+        TextureFile = textureFile,
+        BaseColor = baseColor,
+    };
+
+    private static System.Numerics.Vector4[] BaseColorFactors(NifModel model)
+    {
+        var gltf = GltfExporter.BuildScene(model).ToGltf2();
+        using var doc = System.Text.Json.JsonDocument.Parse(gltf.GetJsonPreview());
+        if (!doc.RootElement.TryGetProperty("materials", out var mats))
+            return [];
+        return mats.EnumerateArray()
+            .Select(m => m.TryGetProperty("pbrMetallicRoughness", out var p)
+                         && p.TryGetProperty("baseColorFactor", out var f)
+                ? new System.Numerics.Vector4(f[0].GetSingle(), f[1].GetSingle(), f[2].GetSingle(), f[3].GetSingle())
+                : (System.Numerics.Vector4?)null)
+            .Where(v => v is not null).Select(v => v!.Value).ToArray();
+    }
+
+    [Theory]
+    [InlineData(null, null, null, null)]          // no NiMaterialProperty at all
+    [InlineData(1f, 1f, 1f, 1f)]                   // a material property that IS default white
+    public void UntexturedWhiteOrColourlessShapeGetsNeutralGreyNotMagenta(float? r, float? g, float? b, float? a)
+    {
+        // The in-world magenta came from an UNtextured shape whose colour is glTF's default white —
+        // either no NiMaterialProperty, or one that is white. SharpGLTF omits a default-white factor,
+        // so the material ends up with NO baseColorFactor, which Godot paints with its magenta "no
+        // material" placeholder (keep towers, house walls, bridge, forge, ruins). The exporter now
+        // forces an explicit neutral grey for these so a factor is always written and it never goes
+        // magenta. Covers both the colourless case and the explicitly-white case.
+        System.Numerics.Vector4? baseColor = r is null ? null : new System.Numerics.Vector4(r.Value, g!.Value, b!.Value, a!.Value);
+        var model = new NifModel
+        {
+            Version = new NifVersion(4, 2, 2, 0),
+            Meshes = [TriMesh("bare", textureFile: null, baseColor: baseColor)],
+        };
+        System.Numerics.Vector4[] factors = BaseColorFactors(model);
+        var grey = new System.Numerics.Vector4(0.6f, 0.6f, 0.6f, 1f);
+        Assert.Contains(factors, f => Near(f, grey));
+    }
+
+    [Fact]
+    public void UntexturedColouredShapeKeepsItsOwnColour()
+    {
+        // A non-white material colour (the keep's tan stone, W3a) must pass through unchanged — the
+        // grey default is only for the white/colourless case.
+        var tan = new System.Numerics.Vector4(233 / 255f, 171 / 255f, 74 / 255f, 1f);
+        var model = new NifModel
+        {
+            Version = new NifVersion(4, 2, 2, 0),
+            Meshes = [TriMesh("tan", textureFile: null, baseColor: tan)],
+        };
+        System.Numerics.Vector4[] factors = BaseColorFactors(model);
+        Assert.Contains(factors, f => Near(f, tan));
+        var grey = new System.Numerics.Vector4(0.6f, 0.6f, 0.6f, 1f);
+        Assert.DoesNotContain(factors, f => Near(f, grey));
+    }
+
+    [Fact]
+    public void TexturedShapeWithoutMaterialColourIsNotTinted()
+    {
+        // The neutral-grey default must apply ONLY to untextured, colourless shapes. A textured shape
+        // with no NiMaterialProperty must keep glTF's default white factor so its bound .dds shows
+        // unmodulated — tinting it grey would darken every such surface.
+        var model = new NifModel
+        {
+            Version = new NifVersion(4, 2, 2, 0),
+            Meshes = [TriMesh("skinned", textureFile: "keepSTONE.tga", baseColor: null)],
+        };
+        System.Numerics.Vector4[] factors = BaseColorFactors(model);
+        var grey = new System.Numerics.Vector4(0.6f, 0.6f, 0.6f, 1f);
+        Assert.DoesNotContain(factors, f => Near(f, grey));
+    }
+
     [Fact]
     public void RejectsNonNif()
     {
