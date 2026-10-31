@@ -369,6 +369,7 @@ public partial class CharacterScreen : Control
             await ToSignal(GetTree().CreateTimer(staySeconds.Value), SceneTreeTimer.SignalName.Timeout);
             ok = _world.ClosedReason is null;
             GD.Print($"in world {staySeconds.Value} s: {_world.Packets} packets, {_world.Pings} ping replies, " +
+                     $"{_world.Entities} live entities, " +
                      (ok ? "still connected" : $"disconnected: {_world.ClosedReason}"));
             if (ok)
             {
