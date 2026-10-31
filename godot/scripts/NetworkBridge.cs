@@ -35,6 +35,9 @@ public sealed class NetworkBridge
     /// <summary>An entity left view (0xA2 RemoveObject) or was destroyed (0xE1 ObjectDelete).</summary>
     public event Action<ushort>? ObjectRemoved;
 
+    /// <summary>A chat or system message arrived (0xAF Message), for the on-screen chat log.</summary>
+    public event Action<ChatMessage>? ChatReceived;
+
     /// <summary>The server answered a keep-alive (0x29). Kept so the overlay can count pings.</summary>
     public event Action? PingReplied;
 
@@ -74,6 +77,9 @@ public sealed class NetworkBridge
                     break;
                 case ObjectDelete.Code:
                     ObjectRemoved?.Invoke(ObjectDelete.Parse(packet.Payload).ObjectId);
+                    break;
+                case ChatMessage.Code:
+                    ChatReceived?.Invoke(ChatMessage.Parse(packet.Payload));
                     break;
                 case PingRequest.ReplyCode:
                     PingReplied?.Invoke();

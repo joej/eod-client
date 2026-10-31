@@ -158,12 +158,24 @@ in.
 > 0xA1 health byte exceeds 100 for some NPCs (open question W4). Server-side, the test account was made
 > GM so the movement monitor stops kicking the fast debug camera (daoc-re #2).
 
-### M6 — Talk (chat in and out)
+### M6 — Talk (chat in and out) ✅
+**Done** 2026-10-31 · shot 2026-10-31_18_say-hello-in-camelot-hills
 *You can communicate.*
-- Parse incoming chat/message packets (say/broadcast/send/system) into an on-screen log.
-- Send chat and slash-commands from a text input (we already send `&quit` as 0xAF; chat is the same
-  command channel).
-- **Done when:** you can `/say` and see it, and read what NPCs/system/other players send.
+Verified live on macOS against our OpenDAoC fork: standing in Camelot Hills, the chat log fills with
+the server's zone-entry and system lines, `/say hello` echoes back on the Say channel, and `/who`
+returns "1 player currently online" — both the receive and send halves of the one text channel work.
+- ~~Parse incoming chat/message packets~~ into an on-screen log: the single 0xAF Message packet
+  (`src/DaocProtocol/Packets/ChatPackets.cs`), decoded to a chat-type byte + text, colour-coded by
+  channel. The UI-control types (SocialInterface structured strings, the centred ScreenCenter banner)
+  are classified out of the log. Verified against the 1.127e capture (`ChatPacketTests`).
+- ~~Send chat and slash-commands from a text input~~: `ClientSession.SayAsync` / `SendCommandAsync`
+  ride the same 0xAF command channel as `&quit` — a typed `/say` (or any `/command`) is rewritten to
+  the `&`-prefixed wire form the server reads. A `LineEdit` in `WorldView` sends on Enter and returns
+  control to the game, so typing never drives the character.
+- **Done when:** you can `/say` and see it, and read what NPCs/system/other players send. **Met.**
+
+> **MVP reached at M6:** log in → walk a textured world → see others move → chat. This is the
+> "minimally playing" milestone and the right moment for a tagged release and a community show-and-tell.
 
 > **MVP reached at M6:** log in → walk a textured world → see others move → chat. This is the
 > "minimally playing" milestone and the right moment for a tagged release and a community show-and-tell.

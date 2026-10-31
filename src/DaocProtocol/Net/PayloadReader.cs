@@ -57,6 +57,18 @@ public ref struct PayloadReader(ReadOnlySpan<byte> payload)
         return length == 0 ? string.Empty : Encoding.Latin1.GetString(Take(length));
     }
 
+    /// <summary>
+    /// The rest of the payload as a string, stopping at the first NUL if there is one (the server's
+    /// PacketOut.WriteString appends a trailing NUL). Used by the 0xAF Message packet, whose text runs
+    /// to the end of the packet. Consumes everything that remains.
+    /// </summary>
+    public string StringRestNulTerminated()
+    {
+        ReadOnlySpan<byte> bytes = Take(Remaining);
+        int end = bytes.IndexOf((byte)0);
+        return Encoding.Latin1.GetString(end < 0 ? bytes : bytes[..end]);
+    }
+
     private ReadOnlySpan<byte> Take(int count)
     {
         if (count < 0 || count > Remaining)

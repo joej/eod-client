@@ -285,6 +285,37 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// <summary>Longest quit timer (60 s after combat) plus slack.</summary>
     public static readonly TimeSpan QuitTimeout = TimeSpan.FromSeconds(75);
 
+    /// <summary>
+    /// Say something on the local /say channel. Fire-and-forget: the server echoes it back as a
+    /// 0xAF Message (and sends it to others nearby), which the world drains and shows in the chat
+    /// log — this does not wait for that. Must be in the world.
+    /// </summary>
+    public Task SayAsync(string text, CancellationToken cancellationToken = default) =>
+        SendCommandAsync("say " + text, cancellationToken);
+
+    /// <summary>
+    /// Send a slash-command or chat over the 0xAF command channel. Accepts either the player-typed
+    /// form with a leading '/' (e.g. "/say hi", "/who") or the bare command ("say hi"); both are
+    /// sent as the "&amp;"-prefixed form the server reads (see WorldPackets.CommandRequest). The
+    /// server's reply, if any, arrives asynchronously as a 0xAF Message for the chat log.
+    /// </summary>
+    public Task SendCommandAsync(string command, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        string trimmed = command.TrimStart();
+        if (trimmed.Length == 0)
+            return Task.CompletedTask;
+
+        // The player may type '/say'; the wire form is '&say'. A bare word ("say") is also accepted.
+        string wire = trimmed[0] switch
+        {
+            '/' => "&" + trimmed[1..],
+            '&' => trimmed,
+            _ => "&" + trimmed,
+        };
+        return connection.SendAsync(CommandRequest.Code, CommandRequest.Payload(wire), cancellationToken);
+    }
+
     private void Require(SessionState state)
     {
         if (State != state)

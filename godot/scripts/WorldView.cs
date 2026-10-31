@@ -55,6 +55,16 @@ public partial class WorldView : Node3D
     private Label _status = null!;
     private Button _button = null!;
     private Camera3D _camera = null!;
+
+    // ----- Chat (M6) -----
+    // A scrolling log of incoming/outgoing lines and a text input. The input only grabs keys while
+    // it has focus (ChatInputActive); otherwise Enter focuses it. While focused, movement and the
+    // game hotkeys (P, Tab, mouse-look) are suppressed so typing never drives the character.
+    private RichTextLabel _chatLog = null!;
+    private LineEdit _chatInput = null!;
+    private const int ChatMaxLines = 200;
+    private int _chatLines;
+    private bool ChatInputActive => _chatInput is not null && _chatInput.HasFocus();
     // Chase rig (adapted from OfflineDAoC's SpringArm3D camera, GPL-3.0; see
     // docs/offlinedaoc-asset-pipeline.md): a pivot at shoulder height on the body carries a
     // SpringArm3D, which pulls the camera in when it would clip terrain/walls — the thing a fixed
@@ -256,12 +266,15 @@ public partial class WorldView : Node3D
         _bridge.NpcSpawned += OnNpcSpawned;
         _bridge.PlayerSpawned += OnPlayerSpawned;
         _bridge.ObjectRemoved += OnObjectRemoved;
+        _bridge.ChatReceived += OnChatReceived;
         _bridge.PingReplied += () => _pings++;
 
         var overlay = new CanvasLayer();
         _status = new Label { Position = new Vector2(16, 16) };
         overlay.AddChild(_status);
-        _button = new Button { Text = "Quit to character screen", Position = new Vector2(16, 72) };
+        // Click-only: don't let the button take keyboard focus, or Enter/Space could "press" it and
+        // it would compete with the chat box for focus.
+        _button = new Button { Text = "Quit to character screen", Position = new Vector2(16, 72), FocusMode = Control.FocusModeEnum.None };
         _button.Pressed += () =>
         {
             _button.Disabled = true;
@@ -271,7 +284,47 @@ public partial class WorldView : Node3D
                 BackToLoginPressed?.Invoke();
         };
         overlay.AddChild(_button);
+        BuildChatUi(overlay);
         AddChild(overlay);
+    }
+
+    // The chat log sits in the lower-left; the input is a thin bar beneath it. Both are anchored to
+    // the bottom so they follow the window as it resizes. BBCode is on so each line can be coloured
+    // by its chat type without any per-glyph work.
+    private void BuildChatUi(CanvasLayer overlay)
+    {
+        _chatLog = new RichTextLabel
+        {
+            BbcodeEnabled = true,
+            ScrollFollowing = true,
+            // Don't steal clicks/keys from the 3D view; only the input line is interactive.
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            FocusMode = Control.FocusModeEnum.None,
+            AnchorLeft = 0f,
+            AnchorRight = 0f,
+            AnchorTop = 1f,
+            AnchorBottom = 1f,
+            OffsetLeft = 16,
+            OffsetRight = 520,
+            OffsetTop = -236,
+            OffsetBottom = -52,
+        };
+        overlay.AddChild(_chatLog);
+
+        _chatInput = new LineEdit
+        {
+            PlaceholderText = "Press Enter to chat (/say by default; /who, /gu … work too)",
+            AnchorLeft = 0f,
+            AnchorRight = 0f,
+            AnchorTop = 1f,
+            AnchorBottom = 1f,
+            OffsetLeft = 16,
+            OffsetRight = 520,
+            OffsetTop = -44,
+            OffsetBottom = -16,
+        };
+        _chatInput.TextSubmitted += OnChatSubmitted;
+        overlay.AddChild(_chatInput);
     }
 
     // Loads the zone terrain .glb if given. The exporter already baked region units → metres (× 0.025)
@@ -516,6 +569,22 @@ public partial class WorldView : Node3D
     // P saves a screenshot of the current view.
     public override void _Input(InputEvent @event)
     {
+        // Enter focuses the chat box so you can type; Escape drops focus back to the game. While the
+        // box has focus the LineEdit consumes keys itself, so none of the game hotkeys below fire.
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Enter or Key.KpEnter }
+            && !ChatInputActive)
+        {
+            _chatInput.GrabFocus();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        if (ChatInputActive)
+        {
+            if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
+                _chatInput.ReleaseFocus();
+            return;   // typing: don't drive the camera or trigger P/Tab while the box has focus
+        }
+
         if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Right)
         {
             _lookActive = mb.Pressed;
@@ -595,9 +664,11 @@ public partial class WorldView : Node3D
         }
     }
 
-    // Saves the current frame to <progress>/shot_<timestamp>.png. The progress dir is derived from
-    // the library path (its sibling "progress"), falling back to Godot's writable user:// dir. The
-    // viewport image is only valid after a frame is drawn, so await the post-draw signal first.
+    // Saves the current frame to <progress>/shot_<timestamp>.png. The progress dir is the repo's
+    // git-ignored private/progress (where the roadmap/eveofdarkness workflow expects shots), resolved
+    // from the library path if given, else from the project directory; only if neither is under the
+    // repo does it fall back to Godot's writable user:// dir. The viewport image is only valid after a
+    // frame is drawn, so await the post-draw signal first.
     private async System.Threading.Tasks.Task SaveScreenshot()
     {
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
@@ -618,13 +689,26 @@ public partial class WorldView : Node3D
 
     private string ScreenshotDir()
     {
+        // 1. Sibling of the library path: <...>/private/library -> <...>/private/progress.
         if (!string.IsNullOrEmpty(_libraryPath))
         {
-            // <...>/private/library -> <...>/private/progress
             string? parent = System.IO.Path.GetDirectoryName(_libraryPath.TrimEnd('/'));
             if (!string.IsNullOrEmpty(parent))
                 return parent.PathJoin("progress");
         }
+
+        // 2. Repo's private/progress, found by walking up from the Godot project dir (res://). This is
+        //    the usual case for a no-assets launch (no --model): shots still land where the roadmap
+        //    and eveofdarkness workflow look for them, not in Godot's hidden user:// dir.
+        string projectDir = ProjectSettings.GlobalizePath("res://");
+        for (var d = new System.IO.DirectoryInfo(projectDir); d is not null; d = d.Parent)
+        {
+            string progress = System.IO.Path.Combine(d.FullName, "private", "progress");
+            if (System.IO.Directory.Exists(progress))
+                return progress;
+        }
+
+        // 3. Last resort: Godot's writable user data dir.
         return ProjectSettings.GlobalizePath("user://progress");
     }
 
@@ -657,8 +741,9 @@ public partial class WorldView : Node3D
         // camera (UpdateDebugCamera), and if they ALSO walked the body the character would wander —
         // into mobs, off cliffs — while you're only trying to look around. So free-fly freezes the
         // body's input; it still ground-snaps and keeps sending its (unchanged) position below, so it
-        // stays grounded and link-alive where you left it.
-        bool driving = _chase;
+        // stays grounded and link-alive where you left it. Likewise freeze while the chat box has
+        // focus, so typing "wade" doesn't walk the character.
+        bool driving = _chase && !ChatInputActive;
 
         // A/D turn (keys); mouse-look also turns in chase mode, feeding _bodyYaw from _Input.
         float turnKeys = 0f;
@@ -828,6 +913,85 @@ public partial class WorldView : Node3D
             e.Node.QueueFree();
     }
 
+    // ----- Chat (M6) -----
+
+    // A 0xAF Message arrived. Show the real chat/system lines; drop the UI-control types
+    // (SocialInterface structured strings, the centred ScreenCenter banner) that aren't text.
+    private void OnChatReceived(ChatMessage msg)
+    {
+        _chatReceived++;
+        if (msg.IsPlayerVisibleChat)
+            AppendChat(msg.Text, ChatColor(msg.Type));
+    }
+
+    /// <summary>Count of 0xAF Message packets seen, for the headless summary and overlay.</summary>
+    public int ChatMessages => _chatReceived;
+    private int _chatReceived;
+
+    // The player submitted the input line. Treat a leading '/' as a command and anything else as
+    // /say. The server echoes it back as a 0xAF, so we don't print our own copy (avoids doubling).
+    // Release focus so control returns to the game after each line (as DAoC does): press Enter again
+    // to chat again. Keeping focus here trapped the player — the box looked empty but still ate all
+    // input, so WASD and mouse-look went dead with no obvious way back.
+    private async void OnChatSubmitted(string text)
+    {
+        string line = text.Trim();
+        _chatInput.Clear();
+        _chatInput.ReleaseFocus();
+        if (line.Length == 0 || _closedReason is not null)
+            return;
+
+        try
+        {
+            if (line.StartsWith('/'))
+                await _session.SendCommandAsync(line);
+            else
+                await _session.SayAsync(line);
+        }
+        catch (System.Exception e)
+        {
+            AppendChat($"(could not send: {e.Message})", new Color(0.8f, 0.5f, 0.5f));
+        }
+    }
+
+    private void AppendChat(string text, Color color)
+    {
+        // Cap the backlog so a long session doesn't grow the label without bound.
+        if (_chatLines >= ChatMaxLines)
+        {
+            _chatLog.Clear();
+            _chatLines = 0;
+        }
+        _chatLog.PushColor(color);
+        _chatLog.AddText(text);
+        _chatLog.Pop();
+        _chatLog.Newline();
+        _chatLines++;
+    }
+
+    // Colour by channel/category, roughly as DAoC's default chat colours read: say white, tells and
+    // group/guild channels their own hues, system/important yellow-ish, combat/spell muted.
+    private static Color ChatColor(ChatType type) => type switch
+    {
+        ChatType.Say => new Color(0.95f, 0.95f, 0.95f),
+        ChatType.Send => new Color(0.7f, 0.7f, 1.0f),
+        ChatType.Group => new Color(0.5f, 0.85f, 0.95f),
+        ChatType.Guild => new Color(0.5f, 0.95f, 0.5f),
+        ChatType.Officer => new Color(0.4f, 0.8f, 0.4f),
+        ChatType.Alliance => new Color(0.6f, 0.9f, 0.7f),
+        ChatType.Broadcast => new Color(0.95f, 0.75f, 0.4f),
+        ChatType.Emote => new Color(0.85f, 0.7f, 0.95f),
+        ChatType.Trade or ChatType.LookingForGroup => new Color(0.9f, 0.85f, 0.5f),
+        ChatType.Help or ChatType.Advise => new Color(0.6f, 0.85f, 0.9f),
+        ChatType.Important or ChatType.Staff => new Color(1.0f, 0.85f, 0.3f),
+        ChatType.Spell or ChatType.SpellExpires or ChatType.SpellPulse or ChatType.SpellResisted
+            => new Color(0.7f, 0.75f, 0.85f),
+        ChatType.Loot or ChatType.Items or ChatType.Merchant => new Color(0.8f, 0.8f, 0.6f),
+        ChatType.YourDeath or ChatType.OthersDeath or ChatType.Damaged or ChatType.YouHit
+            or ChatType.OthersCombat => new Color(0.9f, 0.6f, 0.55f),
+        _ => new Color(0.75f, 0.78f, 0.72f),  // Unspecified/System and the rest: muted grey-green
+    };
+
     private static Color RealmColor(int realm) => realm switch
     {
         1 => new Color(0.6f, 0.2f, 0.2f),   // Albion red
@@ -895,7 +1059,7 @@ public partial class WorldView : Node3D
         PositionAndObjectId p = _world.Position;
         _status.Text =
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
-            $"{_seconds:0} s in world   {_packets} packets   {_pings} ping replies   {_entities.Count} entities   " +
+            $"{_seconds:0} s in world   {_packets} packets   {_pings} ping replies   {_entities.Count} entities   {_chatReceived} chat   " +
             (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + "\n" +
             $"W {(Input.IsKeyPressed(Key.W) ? 1 : 0)} S {(Input.IsKeyPressed(Key.S) ? 1 : 0)} " +
             $"A {(Input.IsKeyPressed(Key.A) ? 1 : 0)} D {(Input.IsKeyPressed(Key.D) ? 1 : 0)}   " +
