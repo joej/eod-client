@@ -161,7 +161,7 @@ in.
 > GM so the movement monitor stops kicking the fast debug camera (daoc-re #2).
 
 ### M6 — Talk (chat in and out) ✅
-**Done** 2026-10-31 · shot 2026-10-31_18_say-hello-in-camelot-hills
+**Done** 2026-10-31 · shot 2026-10-31_19_say-hello-in-cotswold
 *You can communicate.*
 Verified live on macOS against our OpenDAoC fork: standing in Camelot Hills, the chat log fills with
 the server's zone-entry and system lines, `/say hello` echoes back on the Say channel, and `/who`
