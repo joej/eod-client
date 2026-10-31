@@ -5,8 +5,8 @@ person log into an OpenDAoC server and actually play — move around a textured 
 control, see other players and NPCs, chat, and (further out) fight and use their character.
 
 This replaces the original "MVC" framing (render a capsule at a server-sent position), which is
-**done**. The milestones below are grouped into what we've accomplished (M0–M4) and the stepwise
-goals that lead to a minimally playable client (M5–M9), with honest notes on the two genuine walls.
+**done**. The milestones below are grouped into what we've accomplished (M0–M5) and the stepwise
+goals that lead to a minimally playable client (M6–M9), with honest notes on the two genuine walls.
 
 ## Guiding definitions
 
@@ -133,17 +133,30 @@ camera behind — and the server accepts the self-driven position (no link-death
   fix, tracked for the asset track. The unfocused-window send throttle (macOS pauses an idle
   background window, which can starve 0xA9 and trip link-death) is a play-comfort fix for later.
 
-### M5 — The world is alive (incoming entity state)
+### M5 — The world is alive (incoming entity state) ✅
+**Done** 2026-10-31 · shot 2026-10-31_17_npcs-in-cotswold-village
 *Other players and NPCs appear and move.*
-- Build a **world-packet dispatcher**: the receive loop stops counting opcodes and routes them to
-  handlers. This is the structural piece the client has lacked (there is no `NetworkBridge` yet —
-  this milestone creates that seam between protocol and Godot).
-- Parse and apply the in-world server packets, in rough priority: **0xA1-family object/NPC position
-  and spawn/despawn**, player spawns, **remove-object**, and heading/state updates. Represent each as
-  a scene entity (capsule or converted model) that moves as updates arrive.
-- Interpolate between updates so movement is smooth, not teleporting.
+Verified live on macOS against our OpenDAoC fork: standing in Cotswold, the village's NPCs appear as
+capsules around the buildings and move in real time (176 entities tracked in one session). The
+receive loop no longer just counts packets — a dispatcher routes them to handlers and the world fills
+in.
+- ~~Build a **world-packet dispatcher**~~. `godot/scripts/NetworkBridge.cs` is the new seam between
+  the protocol library and Godot: it parses each in-world opcode and raises typed events, replacing
+  `WorldView`'s drain-and-count loop. The structural piece the client had lacked.
+- ~~Parse and apply the in-world server packets~~: 0xA1 ObjectUpdate (NPC/mob position, the bulk of
+  the stream — verified byte-for-byte against the 1.127e capture), 0xDA NPCCreate, 0x4B PlayerCreate,
+  0xD9 ObjectCreate, 0xA2 RemoveObject, 0xE1 ObjectDelete. Each is a capsule, realm-tinted from its
+  create packet, placed by converting zone-local 0xA1 coords to region-global via the zone offset.
+- ~~Interpolate between updates~~ so movement glides rather than teleporting (per-NPC updates are ~1 Hz).
 - **Done when:** standing in a populated zone, you see NPCs and any other players/bots move around in
-  real time at roughly the right places.
+  real time at roughly the right places. **Met** (Cotswold NPCs, live).
+
+> **Known remainder (not M6-blocking):** the 0xDA/0x4B *create* packets that carry realm colour and
+> name arrive during the world-init burst, which `ClientSession.EnterWorldAsync` consumes before
+> `WorldView` starts draining — so entities first seen via a bare 0xA1 render neutral grey instead of
+> realm-tinted and named. Buffer the init-burst packets through the bridge to fix it. Also found: the
+> 0xA1 health byte exceeds 100 for some NPCs (open question W4). Server-side, the test account was made
+> GM so the movement monitor stops kicking the fast debug camera (daoc-re #2).
 
 ### M6 — Talk (chat in and out)
 *You can communicate.*
@@ -222,15 +235,15 @@ Also out of scope for now, as genuine tangents: sound, a polished UI, and retail
 
 ---
 
-## Immediate next steps (M5 kickoff)
+## Immediate next steps (M6 kickoff)
 
-M4 is complete (self-driven movement on textured terrain, live-verified 2026-10-30). Next is M5 —
-making the world alive by interpreting the in-world packets the client currently drains and counts.
+M5 is complete (the world-packet dispatcher and live entities, live-verified 2026-10-31 — NPCs appear
+and move in Cotswold). Next is M6 — chat, which reaches MVP (log in → walk a textured world → see
+others move → talk).
 
-1. **Build the world-packet dispatcher** (the missing `NetworkBridge` seam): replace the
-   drain-and-count loop in `WorldView._Process` with a router from opcode to handler. This is the
-   structural piece M5–M9 all build on.
-2. **Parse the 0xA1-family object/NPC position and spawn/despawn packets** (the bulk of what the
-   server already sends us — ~23 packets/s were mostly 0xA1) and render each as a scene entity that
-   moves as updates arrive; interpolate between updates.
-3. Then player spawns, remove-object, and heading/state updates (see M5 for the full list).
+1. **Parse incoming chat/message packets** (say/broadcast/send/system) into an on-screen log, routed
+   through the same `NetworkBridge` dispatcher M5 built.
+2. **Send chat and slash-commands** from a text input — the same 0xAF command channel we already use
+   for `&quit`.
+3. Along the way, fix the M5 remainder if it helps: buffer the world-init burst so NPC *create*
+   packets (realm colour + name) aren't lost and entities stop rendering neutral grey.

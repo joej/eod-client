@@ -578,7 +578,13 @@ public partial class WorldView : Node3D
         if (chase)
         {
             _camArm.AddChild(_camera);
-            _camera.Position = Vector3.Zero;   // back on the arm
+            // Reset the camera's local transform fully: the arm + pivot own chase orientation, but
+            // the camera node still carries the free-fly tilt/roll it was flown with. Leaving that in
+            // put the chase view at a skewed, buried angle on the way back. Zero it and re-seat the
+            // chase pitch behind the body so it snaps cleanly back to "over the shoulder".
+            _camera.Transform = Transform3D.Identity;
+            _camPitch = -0.22f;
+            _camPivot.Rotation = new Vector3(_camPitch, 0f, 0f);
         }
         else
         {
@@ -603,7 +609,10 @@ public partial class WorldView : Node3D
         string path = dir.PathJoin($"shot_{stamp}.png");
 
         Error err = img.SavePng(path);
-        _note = err == Error.Ok ? $"   saved {path}" : $"   screenshot failed: {err}";
+        // Show only the file NAME in the overlay, never the full local path: these shots are
+        // captured for the eveofdarkness.org panel, and an on-screen "/Users/…" path would have to
+        // be cropped out before any could be published. The full path still goes to the console log.
+        _note = err == Error.Ok ? $"   saved {path.GetFile()}" : $"   screenshot failed: {err}";
         GD.Print(err == Error.Ok ? $"[world] screenshot -> {path}" : $"[world] screenshot failed: {err}");
     }
 
@@ -644,16 +653,23 @@ public partial class WorldView : Node3D
     // the keep-alive goes on reporting whatever World.Position MoveToAsync last set.
     private void UpdatePlayer(double delta)
     {
+        // Only chase mode drives the character from WASD. In free-fly the same keys fly the debug
+        // camera (UpdateDebugCamera), and if they ALSO walked the body the character would wander —
+        // into mobs, off cliffs — while you're only trying to look around. So free-fly freezes the
+        // body's input; it still ground-snaps and keeps sending its (unchanged) position below, so it
+        // stays grounded and link-alive where you left it.
+        bool driving = _chase;
+
         // A/D turn (keys); mouse-look also turns in chase mode, feeding _bodyYaw from _Input.
         float turnKeys = 0f;
-        if (Input.IsKeyPressed(Key.A)) turnKeys += 1f;
-        if (Input.IsKeyPressed(Key.D)) turnKeys -= 1f;
+        if (driving && Input.IsKeyPressed(Key.A)) turnKeys += 1f;
+        if (driving && Input.IsKeyPressed(Key.D)) turnKeys -= 1f;
         const float turnRate = 2.5f; // radians/s
         _bodyYaw += turnKeys * turnRate * (float)delta;
 
         float forward = 0f;
-        if (Input.IsKeyPressed(Key.W)) forward += 1f;
-        if (Input.IsKeyPressed(Key.S)) forward -= 1f;
+        if (driving && Input.IsKeyPressed(Key.W)) forward += 1f;
+        if (driving && Input.IsKeyPressed(Key.S)) forward -= 1f;
 
         _body.Rotation = new Vector3(0, _bodyYaw, 0);
 
