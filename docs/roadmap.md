@@ -30,11 +30,30 @@ separate one — see "Later: the live (1.130) client" below.
 
 ## Accomplished
 
-Each finished milestone carries a `**Done** <date> · shot <name>` line: the completion date and the
-screenshot that shows it. Shot names refer to images in the owner's progress archive (`YYYY-MM-DD_NN`
-prefix); the archive itself is not in this repo, and **whether any shot is published is the owner's
-decision** — this line only names them in milestone order so a published timeline can follow it.
-"shot: none" means the milestone has no single representative image (e.g. a protocol-only step).
+eveofdarkness.org builds its progress panel from this file, so milestone entries follow one
+shape. When a milestone finishes, add ✅ to its heading **and**, on the very next line, its Done line:
+
+```
+### M4 — The player moves (self-driven movement over TCP) ✅
+**Done** 2026-10-30 · shot 2026-10-30_16_chase-camera-up-a-slope
+(earlier steps: 2026-10-29_15_keep-at-scale-capsule-in-courtyard)
+*You control your character; the world is drawn around you.*
+Prose about what was done goes here, below.
+```
+
+- **Done line:** `**Done** YYYY-MM-DD · shot <name>`, or `**Done** YYYY-MM-DD · shot: none (<why>)`
+  when there's no single representative image (e.g. a protocol-only step). Nothing else on the line.
+- **Earlier steps (optional):** the line right after, `(earlier steps: <name>, <name>)`, for shots that
+  show the way there.
+- **Shot names** are image names in the owner's progress archive without the extension, in the form
+  `YYYY-MM-DD_NN_short-description` (the date is the capture date). The archive itself is not in this
+  repo, and **whether any shot is published is the owner's decision**: naming a shot here doesn't
+  publish it.
+- **Unfinished milestones** keep the italic one-line summary right under the heading; the site shows
+  it for the next milestone.
+- Headings stay `### M<n> — Title`, numbered in order; "MVP reached at M<n>" marks the MVP.
+
+The site's build stops rather than guess if a ✅ milestone has no Done line in this form.
 
 ### M0 — Protocol foundation ✅
 **Done** 2026-10-13 · shot: none (protocol library — nothing visual to show)
@@ -87,8 +106,10 @@ documented in DOLSharp/OpenDAoC source (GPL, portable with attribution), so this
 not research — with two exceptions called out under "Walls" below.
 
 ### M4 — The player moves (self-driven movement over TCP) ✅
+**Done** 2026-10-30 · shot 2026-10-30_16_chase-camera-up-a-slope
+(earlier steps: 2026-10-29_15_keep-at-scale-capsule-in-courtyard)
 *You control your character; the world is drawn around you.*
-**Done 2026-10-30.** Verified live on macOS (Apple M2, Godot 4.7.2 .NET) against our OpenDAoC fork:
+Verified live on macOS (Apple M2, Godot 4.7.2 .NET) against our OpenDAoC fork:
 Eodarms walks across real, textured Camelot Hills terrain, follows slopes up and down, with a chase
 camera behind — and the server accepts the self-driven position (no link-death, no rubber-band kick).
 - ~~Replace the free-fly debug camera with a **chase camera** on the player.~~ `SpringArm3D` chase
