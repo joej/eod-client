@@ -756,21 +756,28 @@ public partial class WorldView : Node3D
         if (driving && Input.IsKeyPressed(Key.W)) forward += 1f;
         if (driving && Input.IsKeyPressed(Key.S)) forward -= 1f;
 
+        // Q/E strafe left/right: sidestep without turning. Essential with the mouse-chase camera,
+        // where you steer with the mouse and strafe to line up — forward + strafe is how you move.
+        float strafe = 0f;
+        if (driving && Input.IsKeyPressed(Key.Q)) strafe -= 1f;
+        if (driving && Input.IsKeyPressed(Key.E)) strafe += 1f;
+
         _body.Rotation = new Vector3(0, _bodyYaw, 0);
 
-        bool moving = forward != 0f;
+        bool moving = forward != 0f || strafe != 0f;
         if (moving)
         {
-            // Body faces -Z in Godot; forward is the body's -Z basis, flattened to the ground plane.
-            Vector3 ahead = _body.GlobalTransform.Basis.Z * -forward;
-            ahead.Y = 0;
-            if (ahead.LengthSquared() > 0)
+            // Body faces -Z in Godot; forward is its -Z basis, strafe its +X basis (right). Both are
+            // flattened to the ground plane, summed, then normalised so diagonal moves aren't faster.
+            Vector3 move = _body.GlobalTransform.Basis.Z * -forward + _body.GlobalTransform.Basis.X * strafe;
+            move.Y = 0;
+            if (move.LengthSquared() > 0)
             {
                 // Shift sprints (×4) so you can cross a ~15 km zone to reach distant terrain/keep for
                 // testing; base is DAoC run (191 units/s). The sent 0xA9 speed stays the base value.
                 float sprint = Input.IsKeyPressed(Key.Shift) ? 4f : 1f;
                 float metresPerSec = WalkUnitsPerSecond * RegionMetresPerUnit * sprint;
-                _body.Position += ahead.Normalized() * metresPerSec * (float)delta;
+                _body.Position += move.Normalized() * metresPerSec * (float)delta;
             }
         }
 
@@ -1066,7 +1073,7 @@ public partial class WorldView : Node3D
             $"body {_body.Position.X:0.0},{_body.Position.Y:0.0},{_body.Position.Z:0.0}   " +
             $"ground {(_groundHit ? "ON" : "--")}   mode {(_chase ? "chase" : "free")}\n" +
             (_chase
-                ? "move: W/S walk, A/D or right-drag turn, Shift sprint, wheel zoom   ·   Tab free-fly, P shot"
+                ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Shift sprint, wheel zoom   ·   Tab free-fly, P shot"
                 : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot");
     }
 }
