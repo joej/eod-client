@@ -176,15 +176,45 @@ returns "1 player currently online" — both the receive and send halves of the 
   control to the game, so typing never drives the character.
 - **Done when:** you can `/say` and see it, and read what NPCs/system/other players send. **Met.**
 
-### M7 — Your character, visibly (skinned models + animation)
-*Characters and creatures look like themselves and move.*
-- The hardest asset work: **skinning** (NiSkinInstance/bone weights → glTF skin) and **animation**
-  (.kfa clips). Static bind-pose geometry exists today; this makes it rigged and animated.
+### M7 — The world and its inhabitants render as DAoC (textured world + skinned models)
+*What you walk through, and who you see, looks like DAoC — not placeholders.*
+
+This is the MVP-completing milestone and the hardest. A live walk-through of Prydwen Keep
+(2026-10-31) catalogued exactly what "renders as DAoC" still needs; it splits into two buckets plus a
+small control item. Buckets **a** and **b** are independent and **a** gives a fast, dramatic visible
+win, so they may be sequenced M7a → M7b.
+
+**M7a — static assets texture correctly ("the world looks like DAoC").** Today the client places real
+terrain and building geometry, but the surfaces are wrong in three repeating ways (all seen live):
+- **Magenta walls/columns** — the debug fallback showing through because some shapes' textures aren't
+  bound when a model is loaded via the zone-placement path (interiors are full of it). Make the
+  zone/world load path bind these the way the close-up path already does. (W3a live follow-up.)
+- **Flat tan stone** — the ~2/3 of keep shapes that store **no UVs** render in their material colour
+  (tan) instead of tiled stone; the stairs show it starkly (textured risers, tan step tops). Resolve
+  the frontiers-style name-bound textures and the UV-less classic shapes to real stone. (W3/W3a/W3b.)
+- **Foliage with no alpha cut-out** — trees are DAoC's correct crossed-plane billboards, but without
+  alpha-testing the transparent background reads as solid dark rectangles. Apply the alpha cut-out
+  (the crossed-plane geometry itself is right — don't replace it).
+- **Fixtures sit flush on terrain** — houses/daises that currently float or sink get placed on the
+  ground correctly (the keep already does; generalise it).
+
+**M7b — characters and creatures are DAoC models ("the inhabitants look like DAoC").** The capsules
+become real figures:
+- **Skinning** (NiSkinInstance/bone weights → glTF skin) and **animation** (.kfa clips). Static
+  bind-pose geometry converts today; this makes it rigged and animated.
+- **Figure assembly** from body parts + equipment (parts by bone name); realm/class/race appearance.
 - **Reference-grade prior art exists**: OfflineDAoC's GPL-3.0 pipeline has working skinning, figure
-  assembly (parts by bone name) and .kfa decode — see `docs/offlinedaoc-asset-pipeline.md`. Adopt the
-  approach with attribution; this de-risks M7 substantially.
-- Figure assembly from body parts + equipment; realm/class/race appearance.
-- **Done when:** your character and the NPCs render as DAoC models with idle/walk/run animation.
+  assembly and .kfa decode (`docs/offlinedaoc-asset-pipeline.md`). Adopt the approach with attribution;
+  this de-risks M7b substantially. DAOC_Navigator is a second GPL reference.
+- Fixes the floating-capsule placement too: real models ground against the terrain.
+
+**M7c — strafe (small, but MVP).** Add strafe-left/right (Q/E) to the existing WASD + turn rig: with
+the mouse-chase camera, forward + strafe is how you actually navigate. A couple of input reads and a
+lateral vector, not a milestone's worth of work, but it belongs in the MVP.
+
+- **Done when:** you walk the keep and the village and the stone/wood/foliage read as DAoC (no magenta,
+  no flat-tan fills), your character and the NPCs render as DAoC models with idle/walk/run animation,
+  and you can strafe.
 
 > **MVP reached at M7:** log in → walk the DAoC world as it looks in-game (real terrain and buildings)
 > → see your character and NPCs as **DAoC models**, not capsules → chat. This is the "walk around the
@@ -199,11 +229,22 @@ These come **after** the MVP (M4–M7): M8–M10 are the post-MVP milestones. Th
 touch the walls; order is provisional, each is independently valuable, and M10 (asset quality tiers)
 runs in parallel rather than in sequence.
 
-### M8 — Vitals, targeting and interaction
-*The HUD and the basics of "doing things."*
+### M8 — Vitals, targeting, interaction — and solid world (post-MVP)
+*The HUD, the basics of "doing things," and a world you can't walk through.*
 - Parse health/mana/endurance, level/XP, and the stat/update packets into a HUD.
 - Target an entity; basic interact (talk to NPC, open a merchant/dialog) — read-only first.
-- **Done when:** you can select a target, see its and your vitals, and talk to an NPC.
+- **Fixture/interior collision** — deferred from the M7 walk-through, and intentionally **not** MVP
+  ("looks like DAoC" ≠ "collides like DAoC"). Today the ground raycast follows only the terrain
+  heightmap (a separate collision layer), so building geometry isn't solid: the player sinks into a
+  raised dais/keep floor, passes through a slope or stairs, and walks through walls. DAoC resolves the
+  player against the `collidee`/`climb` node-name volumes inside each model (identified in W3c); apply
+  those to stand on floors/daises/stairs, block at walls, and climb climb-volumes. *Possible early-lite
+  (still M8):* extend the ground ray to also hit floor geometry so you stand on daises — ~80% of the
+  indoor "feels right" for little work, but still collision, so it stays post-MVP.
+- **Jump** (spacebar) — also deferred from the walk-through, post-MVP. Not needed to walk the world,
+  and it opens a protocol question (the 0xBE jump packet seen in 1.130 RE).
+- **Done when:** you can select a target, see its and your vitals, talk to an NPC, and stand on/bump
+  into the world's solid geometry instead of passing through it.
 
 ### M9 — Combat and inventory you can see
 *The game reads as the game.*
@@ -298,18 +339,20 @@ Also out of scope for now, as genuine tangents: sound, a polished UI, and retail
 
 M6 is complete (chat in and out over the 0xAF text channel, live-verified 2026-10-31 — `/say` echoes
 and system/command lines read in Camelot Hills). **M7 is the MVP-completing milestone**: the world and
-its inhabitants render as DAoC, not primitives. Today the client renders static zone geometry (terrain
-and buildings) and places entities as capsules; M7 makes the characters and creatures real DAoC models.
+its inhabitants render as DAoC, not primitives. A live Prydwen Keep walk-through (2026-10-31) set the
+scope above (M7a texturing, M7b models, M7c strafe). Recommended order — M7a first gives a fast,
+dramatic visible win and de-risks the hard skinning work:
 
-1. **Skinning**: NiSkinInstance/bone-weight data → a glTF skin, so a figure deforms with its skeleton.
-   Static bind-pose geometry already converts; this is the rigged, animatable version.
-2. **Figure assembly**: build a character/monster from its body parts (by bone name) plus equipment,
-   with realm/class/race appearance — the DAoC "figure" system, not one monolithic mesh.
-3. **Animation**: decode the `.kfa` clips and drive idle/walk/run.
-4. **Reference prior art**: OfflineDAoC's GPL-3.0 pipeline has working skinning, figure assembly and
-   `.kfa` decode (`docs/offlinedaoc-asset-pipeline.md`) — adopt the approach with attribution; it
-   de-risks this substantially.
+1. **M7c strafe (Q/E)** — do it first as a quick standalone win; it's a couple of input reads on the
+   existing movement rig and the owner wants it for chase-camera navigation.
+2. **M7a, highest-impact first — kill the magenta.** Interiors are full of the debug-magenta fallback:
+   fix the zone/world load path so model textures bind the way the close-up path already does. Then the
+   UV-less flat-tan → real stone (W3a/W3b), then foliage alpha cut-out, then flush fixture placement.
+3. **M7b skinning + figures** — the hardest part: NiSkinInstance/bone weights → glTF skin, figure
+   assembly from parts (by bone name) + equipment, `.kfa` animation (idle/walk/run). Reference prior
+   art: OfflineDAoC's GPL-3.0 pipeline (`docs/offlinedaoc-asset-pipeline.md`), adopt with attribution;
+   DAOC_Navigator is a second GPL reference.
 
-Not blocking M7, a carried-over M5 remainder worth folding in when convenient: buffer the world-init
-burst so NPC *create* packets (realm colour + name) aren't lost and entities stop rendering neutral
-grey — the same create data M7 needs to pick the right model per entity.
+Fold in when convenient (not blocking): the carried-over M5 remainder — buffer the world-init burst so
+NPC *create* packets (realm colour + name) aren't lost and entities stop rendering neutral grey; it's
+the same create data M7b needs to pick the right model per entity.
