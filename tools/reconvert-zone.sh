@@ -20,7 +20,10 @@ for glb in "$MODELS"/*.glb; do
   # NPK name may differ in case from the model stem (e.g. Bfarmhouse.npk); match case-insensitively.
   npk=$(find "$NIFDIR" -maxdepth 1 -iname "$stem.npk" 2>/dev/null | head -1)
   [ -n "$npk" ] || { echo "  miss  $stem (no $stem.npk)"; miss=$((miss+1)); continue; }
-  rm -f "$TMP"/*.nif
+  # Clear any NIF left from a previous model (case-insensitive: members may be .NIF). A stale leftover
+  # would otherwise be picked below and silently converted under the wrong name — the bug that put one
+  # model's materials into another's .glb.
+  find "$TMP" -maxdepth 1 -iname "*.nif" -delete 2>/dev/null || true
   # Extract the whole NPK (one or few members) and take the .nif it yields — robust to member-name case.
   $MPK extract "$npk" --out "$TMP" >/dev/null 2>&1 || true
   nif=$(find "$TMP" -maxdepth 1 -iname "*.nif" | head -1)
