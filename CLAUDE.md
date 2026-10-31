@@ -464,6 +464,23 @@ In the **same commit** that finishes a milestone:
 Run `dotnet test --filter RoadmapFormatTests` after editing the roadmap; it encodes the site's exact
 parse rules, so a green run means the panel will build.
 
+**Share progress to the site.** eveofdarkness.org has a `/screenshots/` timeline and a home progress
+panel, plus devlog posts. How a shot reaches it (confirmed with the site session):
+
+- The site builds only from a **snapshot of `docs/roadmap.md`** kept in the eveofdarkness repo
+  (separate private repo `joej/eveofdarkness`, owned by that session). The `**Done**` and
+  `(earlier steps: ...)` shot names decide which image belongs to which milestone. Nothing is pulled
+  from eod-client at build time, so the handoff is: name the shot in the roadmap, leave the PNG in the
+  git-ignored `private/progress/`, push, and ping the eveofdarkness session. That session copies the
+  PNG from this machine, crops it to the game view, converts to webp, captions it, and builds. **Never
+  copy images anywhere yourself and never commit them to the public eod-client repo.**
+- **Only shots tied to a milestone appear.** For an interesting shot between milestones, add it to the
+  next milestone's `(earlier steps: ...)` line once that milestone is done, or ask the eveofdarkness
+  session to add a standalone mechanism.
+- Always check a shot's on-screen debug text for local paths (`/Users/...`) or private content before
+  naming it; the site won't publish ones that show a path. Publishing and deploying are the owner's
+  editorial call.
+
 ---
 
 ## Key External Resources
