@@ -5,19 +5,21 @@ person log into an OpenDAoC server and actually play — move around a textured 
 control, see other players and NPCs, chat, and (further out) fight and use their character.
 
 This replaces the original "MVC" framing (render a capsule at a server-sent position), which is
-**done**. The milestones below are grouped into what we've accomplished (M0–M5) and the stepwise
-goals that lead to a minimally playable client (M6–M9), with honest notes on the two genuine walls.
+**done**. The milestones below are grouped into what we've accomplished (M0–M6) and the stepwise
+goals that lead to a client you can walk the DAoC world in (M7–M9), with honest notes on the two
+genuine walls.
 
 ## Guiding definitions
 
 - **Minimum Viable Client (MVC) — done.** Protocol proven end to end: log in, pick a character,
   enter the world, hold a stable session. A capsule stands at the right coordinates.
-- **Minimum Viable *Player* (MVP) — the next real target (M4–M6).** A person can log in, **walk
-  their own character around a textured world**, **see other players and NPCs move**, and **chat**.
-  No combat, inventory, or skills required. This is the "minimally playing" state. It is reachable
-  over **TCP alone** — UDP is an optimization, not a prerequisite (the server accepts TCP position
-  updates, which our keep-alive already sends).
-- **Mostly playing (M7–M9).** Combat you can see and participate in, your character's vitals and
+- **Minimum Viable *Player* (MVP) — the target (M4–M7).** A person can log in, **walk their own
+  character around the DAoC world as it looks in-game** (real terrain and buildings), **see their
+  character and other players/NPCs render as DAoC models** (not capsules) and move, and **chat**.
+  Not a playable game — no combat, inventory, or skills — but the world and its inhabitants render as
+  DAoC. The movement/entity/chat parts (M4–M6) are reachable over **TCP alone** (UDP is an
+  optimization, not a prerequisite); the models part (M7) is the hardest asset work and completes it.
+- **Mostly playing (M8–M9).** Combat you can see and participate in, your character's vitals and
   inventory, targeting and basic interaction — enough that the game reads as the game, within the
   1.65 ruleset OpenDAoC serves.
 
@@ -98,7 +100,7 @@ A whole track the MVC never promised, now working and tested (~48 asset tests):
 
 ---
 
-## The path to minimally playing (MVP)
+## The path to walking the DAoC world (MVP)
 
 The gap from M3 to "a person can play" is almost entirely **interpreting live world-state packets we
 currently drain-and-count**, plus **sending the player's own actions**. Every opcode we need is
@@ -174,20 +176,6 @@ returns "1 player currently online" — both the receive and send halves of the 
   control to the game, so typing never drives the character.
 - **Done when:** you can `/say` and see it, and read what NPCs/system/other players send. **Met.**
 
-> **MVP reached at M6:** log in → walk a textured world → see others move → chat. This is the
-> "minimally playing" milestone and the right moment for a tagged release and a community show-and-tell.
-
-> **MVP reached at M6:** log in → walk a textured world → see others move → chat. This is the
-> "minimally playing" milestone and the right moment for a tagged release and a community show-and-tell.
-
----
-
-## The path to mostly playing (post-MVP)
-
-These come **after** the MVP sprint (M4–M6): current work targets MVP, and M7–M10 are the
-post-MVP milestones. They are larger and some touch the walls; order is provisional, each is
-independently valuable, and M10 (asset quality tiers) runs in parallel rather than in sequence.
-
 ### M7 — Your character, visibly (skinned models + animation)
 *Characters and creatures look like themselves and move.*
 - The hardest asset work: **skinning** (NiSkinInstance/bone weights → glTF skin) and **animation**
@@ -197,6 +185,19 @@ independently valuable, and M10 (asset quality tiers) runs in parallel rather th
   approach with attribution; this de-risks M7 substantially.
 - Figure assembly from body parts + equipment; realm/class/race appearance.
 - **Done when:** your character and the NPCs render as DAoC models with idle/walk/run animation.
+
+> **MVP reached at M7:** log in → walk the DAoC world as it looks in-game (real terrain and buildings)
+> → see your character and NPCs as **DAoC models**, not capsules → chat. This is the "walk around the
+> game world" milestone — not a playable game (no combat or skills), but the client renders the world
+> and its inhabitants as DAoC. The right moment for a tagged release and a community show-and-tell.
+
+---
+
+## The path to mostly playing (post-MVP)
+
+These come **after** the MVP (M4–M7): M8–M10 are the post-MVP milestones. They are larger and some
+touch the walls; order is provisional, each is independently valuable, and M10 (asset quality tiers)
+runs in parallel rather than in sequence.
 
 ### M8 — Vitals, targeting and interaction
 *The HUD and the basics of "doing things."*
@@ -213,7 +214,8 @@ independently valuable, and M10 (asset quality tiers) runs in parallel rather th
 
 ### M10 — Asset quality tiers and community reskin packs
 *Classic by default; progressively better by choice — and others can contribute whole new looks.*
-Post-MVP, parallel to M7–M9 (not blocking them). The asset library was built for this from the start
+Post-MVP, parallel to M8–M9 (not blocking them), building on the models M7 brings. The asset library
+was built for this from the start
 (convert-once flat library + an `overrides/` layer that wins at load time; see
 `docs/project` asset-library notes): "enhanced" is just a better-named-the-same asset layered over the
 classic one, so most of this needs **no renderer changes**, only content and a pack selector. The
@@ -292,15 +294,22 @@ Also out of scope for now, as genuine tangents: sound, a polished UI, and retail
 
 ---
 
-## Immediate next steps (M6 kickoff)
+## Immediate next steps (M7 kickoff)
 
-M5 is complete (the world-packet dispatcher and live entities, live-verified 2026-10-31 — NPCs appear
-and move in Cotswold). Next is M6 — chat, which reaches MVP (log in → walk a textured world → see
-others move → talk).
+M6 is complete (chat in and out over the 0xAF text channel, live-verified 2026-10-31 — `/say` echoes
+and system/command lines read in Camelot Hills). **M7 is the MVP-completing milestone**: the world and
+its inhabitants render as DAoC, not primitives. Today the client renders static zone geometry (terrain
+and buildings) and places entities as capsules; M7 makes the characters and creatures real DAoC models.
 
-1. **Parse incoming chat/message packets** (say/broadcast/send/system) into an on-screen log, routed
-   through the same `NetworkBridge` dispatcher M5 built.
-2. **Send chat and slash-commands** from a text input — the same 0xAF command channel we already use
-   for `&quit`.
-3. Along the way, fix the M5 remainder if it helps: buffer the world-init burst so NPC *create*
-   packets (realm colour + name) aren't lost and entities stop rendering neutral grey.
+1. **Skinning**: NiSkinInstance/bone-weight data → a glTF skin, so a figure deforms with its skeleton.
+   Static bind-pose geometry already converts; this is the rigged, animatable version.
+2. **Figure assembly**: build a character/monster from its body parts (by bone name) plus equipment,
+   with realm/class/race appearance — the DAoC "figure" system, not one monolithic mesh.
+3. **Animation**: decode the `.kfa` clips and drive idle/walk/run.
+4. **Reference prior art**: OfflineDAoC's GPL-3.0 pipeline has working skinning, figure assembly and
+   `.kfa` decode (`docs/offlinedaoc-asset-pipeline.md`) — adopt the approach with attribution; it
+   de-risks this substantially.
+
+Not blocking M7, a carried-over M5 remainder worth folding in when convenient: buffer the world-init
+burst so NPC *create* packets (realm colour + name) aren't lost and entities stop rendering neutral
+grey — the same create data M7 needs to pick the right model per entity.
