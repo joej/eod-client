@@ -46,6 +46,17 @@ public ref struct PayloadReader(ReadOnlySpan<byte> payload)
         return Encoding.Latin1.GetString(end < 0 ? bytes : bytes[..end]);
     }
 
+    /// <summary>
+    /// A string written by the server's PacketOut.WritePascalString: a single u8 byte-count then
+    /// the bytes, with NO trailing NUL (unlike <see cref="StringIntLE"/>). Used by the object/NPC
+    /// create packets for names and guild names; an empty string is a lone 0x00.
+    /// </summary>
+    public string StringU8()
+    {
+        int length = U8();
+        return length == 0 ? string.Empty : Encoding.Latin1.GetString(Take(length));
+    }
+
     private ReadOnlySpan<byte> Take(int count)
     {
         if (count < 0 || count > Remaining)

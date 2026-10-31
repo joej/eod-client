@@ -7,6 +7,7 @@
 using DaocProtocol.Net;
 using DaocProtocol.Packets;
 using DaocProtocol.Session;
+using DaocProtocol.World;
 using Godot;
 
 
@@ -77,6 +78,22 @@ public partial class WorldView : Node3D
     private bool _draining = true;
     private string _note = "";
 
+    // ----- Live entities (M5) -----
+    // The dispatcher that turns drained packets into typed events, and the scene nodes it drives.
+    // Keyed by the server's object id. Each entity lerps from its last position to the newest one
+    // the server sent (Target*), so movement reads smooth between the ~1 Hz-per-NPC updates rather
+    // than teleporting. The body (our own character) is driven by input, not by these, so it is
+    // never added here even though the server also sends 0xA1 for us.
+    private NetworkBridge _bridge = null!;
+    private readonly System.Collections.Generic.Dictionary<ushort, Entity> _entities = new();
+    private sealed class Entity
+    {
+        public required Node3D Node;
+        public Vector3 TargetPosition;
+        public float TargetYaw;
+        public double Age;            // seconds since spawn, for a brief "is this real" grace period
+    }
+
     /// <summary>Raised when the player presses Quit (connected).</summary>
     public event Action? QuitPressed;
 
@@ -85,6 +102,7 @@ public partial class WorldView : Node3D
 
     public int Packets => _packets;
     public int Pings => _pings;
+    public int Entities => _entities.Count;
     public string? ClosedReason => _closedReason;
 
     /// <summary>
@@ -230,6 +248,15 @@ public partial class WorldView : Node3D
         // at the nose (so walking read as "backwards toward the camera").
         _camYaw = _bodyYaw + Mathf.Pi;          // start behind the body
         _camPitch = -0.22f;                     // ~-12.6°, OfflineDAoC default
+
+        // Dispatcher: route drained packets to entity handlers (M5). Subscribe before the first
+        // drain in _Process so no world packet is missed.
+        _bridge = new NetworkBridge();
+        _bridge.ObjectMoved += OnObjectMoved;
+        _bridge.NpcSpawned += OnNpcSpawned;
+        _bridge.PlayerSpawned += OnPlayerSpawned;
+        _bridge.ObjectRemoved += OnObjectRemoved;
+        _bridge.PingReplied += () => _pings++;
 
         var overlay = new CanvasLayer();
         _status = new Label { Position = new Vector2(16, 16) };
@@ -730,6 +757,97 @@ public partial class WorldView : Node3D
         _camArm.SpringLength = Mathf.Lerp(_camArm.SpringLength, target, Mathf.Min(1f, (float)delta * 10f));
     }
 
+    // ----- Live entities (M5): spawn, move, remove -----
+
+    /// <summary>
+    /// 0xA1 carries ZONE-LOCAL coordinates and only the low 8 bits of the entity's zone-skin id, so
+    /// resolve the full zone within the player's region (all in-view entities share it) and add that
+    /// zone's region-coordinate offset to recover a region-global position. Falls back to the
+    /// player's own zone when the skin byte matches nothing (the common case: everyone in one zone).
+    /// </summary>
+    private Vector3 ZoneLocalToGodot(ushort xOffset, ushort yOffset, ushort z, byte zoneSkin)
+    {
+        ushort region = _world.Position.RegionId;
+        Zone zone = Zones.All.FirstOrDefault(zz => zz.RegionId == region && (zz.Id & 0xFF) == zoneSkin)
+            ?? _world.Zone;
+        return ToGodot(zone.X + xOffset, zone.Y + yOffset, z);
+    }
+
+    private void OnObjectMoved(ObjectUpdate u)
+    {
+        // The server sends 0xA1 for our own character too; we drive that from input, so skip it.
+        if (u.ObjectId == _world.Position.ObjectId)
+            return;
+        Vector3 pos = ZoneLocalToGodot(u.XOffsetInZone, u.YOffsetInZone, u.Z, u.ZoneSkinId);
+        float yaw = -HeadingRadians(u.HeadingOnly);
+        if (_entities.TryGetValue(u.ObjectId, out Entity? e))
+        {
+            e.TargetPosition = pos;
+            e.TargetYaw = yaw;
+        }
+        else
+        {
+            // An update for something we never saw spawn (we entered mid-session, or the create
+            // packet is one we don't parse yet): place a plain capsule so the world isn't empty.
+            SpawnEntity(u.ObjectId, pos, yaw, new Color(0.55f, 0.55f, 0.6f));
+        }
+    }
+
+    private void OnNpcSpawned(NpcCreate npc)
+    {
+        Vector3 pos = ToGodot(npc.X, npc.Y, npc.Z);
+        SpawnEntity(npc.ObjectId, pos, -HeadingRadians(npc.HeadingOnly), RealmColor(npc.Flags >> 6));
+    }
+
+    private void OnPlayerSpawned(PlayerCreate p)
+    {
+        Vector3 pos = ToGodot(p.X, p.Y, p.Z);
+        // A different, brighter tint so other players read as players, not mobs.
+        SpawnEntity(p.ObjectId, pos, -HeadingRadians(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f));
+    }
+
+    private void OnObjectRemoved(ushort objectId)
+    {
+        if (_entities.Remove(objectId, out Entity? e))
+            e.Node.QueueFree();
+    }
+
+    private static Color RealmColor(int realm) => realm switch
+    {
+        1 => new Color(0.6f, 0.2f, 0.2f),   // Albion red
+        2 => new Color(0.2f, 0.4f, 0.75f),  // Midgard blue
+        3 => new Color(0.3f, 0.6f, 0.3f),   // Hibernia green
+        _ => new Color(0.55f, 0.55f, 0.6f), // neutral
+    };
+
+    private void SpawnEntity(ushort objectId, Vector3 pos, float yaw, Color color)
+    {
+        var node = new Node3D { Position = pos, Rotation = new Vector3(0, yaw, 0) };
+        node.AddChild(new MeshInstance3D
+        {
+            Mesh = new CapsuleMesh { Radius = 0.4f, Height = 2f },
+            Position = new Vector3(0, 1, 0),
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = color },
+        });
+        AddChild(node);
+        _entities[objectId] = new Entity { Node = node, TargetPosition = pos, TargetYaw = yaw };
+    }
+
+    // Ease each entity toward the last position/facing the server reported. The per-NPC update rate
+    // is low (~1 Hz in the capture), so without this they teleport; with it they glide. The rate is
+    // frame-rate independent (exponential smoothing). Yaw lerps the short way around the circle.
+    private void InterpolateEntities(double delta)
+    {
+        float t = Mathf.Min(1f, (float)delta * 8f);
+        foreach (Entity e in _entities.Values)
+        {
+            e.Age += delta;
+            e.Node.Position = e.Node.Position.Lerp(e.TargetPosition, t);
+            float yaw = e.Node.Rotation.Y;
+            e.Node.Rotation = new Vector3(0, yaw + Mathf.AngleDifference(yaw, e.TargetYaw) * t, 0);
+        }
+    }
+
     // Movement + the ground raycast run in the PHYSICS frame: DirectSpaceState.IntersectRay is only
     // valid there, and from _Process it intermittently returns no hit — which left the body walking
     // horizontally off a downslope instead of following the ground (the symptom on real terrain).
@@ -746,11 +864,9 @@ public partial class WorldView : Node3D
             UpdateDebugCamera(delta);
         _seconds += delta;
         while (_draining && _connection.TryReceive(out ServerPacket packet))
-        {
-            _packets++;
-            if (packet.Code == PingRequest.ReplyCode)
-                _pings++;
-        }
+            _bridge.Dispatch(packet);
+        _packets = _bridge.PacketCount;
+        InterpolateEntities(delta);
 
         if (_closedReason is null && _connection.Completion.IsCompleted)
         {
@@ -763,7 +879,7 @@ public partial class WorldView : Node3D
         PositionAndObjectId p = _world.Position;
         _status.Text =
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
-            $"{_seconds:0} s in world   {_packets} packets   {_pings} ping replies   " +
+            $"{_seconds:0} s in world   {_packets} packets   {_pings} ping replies   {_entities.Count} entities   " +
             (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + "\n" +
             $"W {(Input.IsKeyPressed(Key.W) ? 1 : 0)} S {(Input.IsKeyPressed(Key.S) ? 1 : 0)} " +
             $"A {(Input.IsKeyPressed(Key.A) ? 1 : 0)} D {(Input.IsKeyPressed(Key.D) ? 1 : 0)}   " +
