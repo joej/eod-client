@@ -24,13 +24,13 @@ Standing in Camelot Hills, everything you see comes from one of these:
 | **Terrain** (hills, ground, tile textures) | zone heightmap + ground tiles | baked (client files) | region-global, baked into the mesh | one `terrain.glb` dropped in at load |
 | **Static scenery** (keeps, houses, trees, fences, rocks, wells) | the zone's fixture list | baked (client files) | region-global, listed per object | a `zone.csv` of `model, x, y, z, angle, scale`, each placed at load |
 | **Ground vegetation** (grass tufts) | per-zone density masks | baked (client files) | procedural scatter | **not applied yet** — see "The gap" below |
-| **NPCs / mobs** | live `0xDA` packets | live (server pushes) | zone-local 16-bit → region-global | a scene entity per object id, moved by `0xA1` updates |
-| **Other players** | live `0x4B` packets | live (server pushes) | region-global float32 | a scene entity per object id |
-| **Dynamic world objects** (doors, siege, dropped items) | live `0xD9` / `0x12` / `0xE1` | live (server pushes) | region-global integer | partially handled |
+| **NPCs / mobs** | live `0xDA` create + `0xA1` updates | live (server pushes) | create: region-global **big-endian u32**; updates: **zone-local 16-bit** | a scene entity per object id, spawned by `0xDA`, moved by `0xA1` |
+| **Other players** | live `0x4B` packets | live (server pushes) | region-global **little-endian float32** | a scene entity per object id |
+| **Dynamic world objects** (doors, siege, dropped items) | live `0xD9` / `0x12` / `0xE1` | live (server pushes) | region-global big-endian u32 | partially handled |
 
 Two things fall straight out of this table, and both surprised us in practice.
 
-### 1. The keep and a blade of grass are the same kind of object
+### 1. The keep and a tree are the same kind of object
 
 It is tempting to assume "big landmark buildings" are special. They are not. In our zone data the keep
 is **one line of `zone.csv`**, identical in form to a tree or a fence:
@@ -64,13 +64,16 @@ is not cosmetic, because the two halves use *different coordinate encodings*:
 
 - **Baked** (terrain, fixtures) is **region-global** and, in our pipeline, already converted to metres
   in the `.glb`. It just drops in.
-- **Live** entity packets are a grab-bag: `0x20`/`0xA9`/`0x4B` carry **little-endian float32**
-  region-global coordinates, while the high-frequency NPC update `0xA1` carries **big-endian 16-bit
-  zone-local** offsets that you must add the zone's origin to before you can place anything. Get this
-  wrong and your NPCs cluster at the zone corner, 500k units from where they belong.
+- **Live** entity packets are a grab-bag of **three** encodings, not one. My own position and other
+  players (`0x20`/`0xA9`/`0x4B`) carry **little-endian float32** region-global coordinates. The
+  *create* packets that spawn NPCs and world objects (`0xDA`/`0xD9`) carry region-global **big-endian
+  u32 integers** — same frame, opposite byte order, and not floats. And the high-frequency NPC
+  *update* (`0xA1`) carries **big-endian 16-bit zone-local** offsets you must add the zone's origin to
+  before you can place anything. Get that last one wrong and your NPCs cluster at the zone corner,
+  500k units from where they belong.
 
-That one asymmetry — same world, two coordinate systems depending on whether a thing is baked or
-streamed — is the single most common place a new client renders a correct-looking world with
+That asymmetry — one world, but baked geometry and three different live encodings depending on the
+packet — is the single most common place a new client renders a correct-looking world with
 everything in the wrong spot.
 
 Code: the live entity layouts (and the endianness notes) are in
