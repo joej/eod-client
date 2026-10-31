@@ -170,9 +170,11 @@ in.
 
 ---
 
-## The path to mostly playing
+## The path to mostly playing (post-MVP)
 
-These are larger and some touch the walls. Order is provisional; each is independently valuable.
+These come **after** the MVP sprint (M4–M6): current work targets MVP, and M7–M10 are the
+post-MVP milestones. They are larger and some touch the walls; order is provisional, each is
+independently valuable, and M10 (asset quality tiers) runs in parallel rather than in sequence.
 
 ### M7 — Your character, visibly (skinned models + animation)
 *Characters and creatures look like themselves and move.*
@@ -196,6 +198,49 @@ These are larger and some touch the walls. Order is provisional; each is indepen
   actions.
 - Parse inventory and equipment; show the character's items; equip/move within the 1.65 ruleset.
 - **Done when:** you can engage a mob, see the exchange and outcome, and manage what you're wearing.
+
+### M10 — Asset quality tiers and community reskin packs
+*Classic by default; progressively better by choice — and others can contribute whole new looks.*
+Post-MVP, parallel to M7–M9 (not blocking them). The asset library was built for this from the start
+(convert-once flat library + an `overrides/` layer that wins at load time; see
+`docs/project` asset-library notes): "enhanced" is just a better-named-the-same asset layered over the
+classic one, so most of this needs **no renderer changes**, only content and a pack selector. The
+intent is a visible progression over time *and* an open door for the community to reskin the game —
+with their own rendering, AI upscales, or new art — which should draw contributors and build the
+project's community.
+
+The tiers (cheapest first; each is independently shippable):
+- **Tier 0 — faithful but crisp (free).** Rendering settings on the textures we already convert:
+  mipmaps, anisotropic filtering, correct texture repeat/tiling on terrain. Helps *both* looks; the
+  current soft ground is partly this. Verified faithful: a real-client reference shot (Cotswold
+  gathering) shows DAoC's base grass is genuinely low-detail, so flat-ish ground is correct — the
+  "alive" difference is vegetation and real models, below.
+- **Tier 1 — upscale the owner's own textures.** Run the extracted DDS through an upscaler
+  (ESRGAN-class) at convert time → `overrides/`. Same art, 4–8× resolution. Stays within the assets
+  policy (a transform of legitimately-extracted files; output never ships in the repo/release).
+- **Tier 2 — detail DAoC had that we don't apply yet.** The biggest "why does the real shot look
+  alive and ours looks empty" factor, and it is **DAoC data we currently skip, not new art**:
+  - **Ground vegetation (grass tufts).** DAoC does *not* place grass as objects in `zone.csv`; the
+    client reads per-zone **ground-cover density masks** (`grass`/`dense`/`shade`/`water` layers in the
+    zone's `dat<NNN>.mpk`; see `docs/future-work.md`) and **procedurally scatters** grass-clump
+    billboards weighted by them. We extract the terrain and placed objects but not these masks. Plan:
+    read the masks (the extractor already reads mpks), then scatter billboards over the terrain with a
+    `MultiMeshInstance3D` (thousands of cheap quads), density from the mask — exactly as the original.
+  - Also in this tier: generated normal maps from diffuse textures, PBR materials, better foliage/tree
+    rendering.
+- **Tier 3 — genuinely new assets.** Hand-made or licensed models/textures that replace DAoC's. Same
+  `overrides/` mechanism, but this is where fresh/licensed art is needed to distribute anything (the
+  "no proprietary content" line); a real art project rather than a pipeline tweak.
+
+Enabling work (do the small part before override content piles up):
+- **Named packs**, not one flat `overrides/`: make the load path "selected pack(s) → base library"
+  (e.g. `packs/classic/`, `packs/hd/`), so classic-vs-enhanced is a selector and packs can stack.
+  Formalising this early turns packs into a first-class, contributable unit instead of a retrofit.
+- A pack manifest + contribution guide so an outside contributor can ship a reskin pack.
+
+- **Done when:** the player can choose a look (at least classic vs. one enhanced pack), grass/vegetation
+  renders from the zone masks, and the pack format + guide let someone outside the project publish a
+  reskin that drops in without code changes.
 
 ---
 
