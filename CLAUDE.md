@@ -431,6 +431,39 @@ The project's goal has since grown to a client a person can actually play. The m
 here — self-driven movement, live entities, chat, then combat/inventory/animated models — are in
 `docs/roadmap.md`, which supersedes this gate list for planning.
 
+### Marking a milestone done
+
+`docs/roadmap.md` is not just our planning doc: **eveofdarkness.org builds its home-page progress
+panel from it** — how many milestones are done, the date each finished, which is next, and one
+screenshot per finished milestone. The site's build **stops rather than guess** when an entry
+doesn't match the format (that's what broke when M4 was first marked done with a free-form line).
+So a finished-milestone entry has one exact shape, and the `RoadmapFormatTests` guard here fails in
+CI — next to the change — before the site ever sees it.
+
+In the **same commit** that finishes a milestone:
+
+1. Add `✅` (U+2705, not ✔/☑) to the heading, and on the **very next line** (no blank line between)
+   add the Done line, dated the day it was **verified live**:
+   `**Done** YYYY-MM-DD · shot <name>` — or `**Done** YYYY-MM-DD · shot: none (<why>)` when nothing
+   is visual (e.g. a protocol-only step). The `·` is U+00B7; a shot `<name>` has no spaces and
+   nothing follows it. Nothing else goes on that line.
+2. Optionally, on the line right after, `(earlier steps: <name>, <name>)` — shots that show the way
+   there, comma-separated.
+3. An **unfinished** milestone keeps its italic `*one-line summary*` directly under the heading (the
+   site shows it for the next milestone). Headings stay `### M<n> — Title` (em dash U+2014, one space
+   each side), numbered in order with no gaps; keep the `MVP reached at M<n>` marker.
+4. Pick **one** shot that shows the milestone working, plus up to two earlier steps if they tell the
+   story. Copy each from `private/progress` to `YYYY-MM-DD_NN_short-description.png` — the **capture**
+   date, the next number in that folder's sequence, a few hyphenated words — and add a row to its
+   README table. (Naming a shot here does **not** publish it; whether a shot goes on the site is the
+   owner's editorial call, made on the site side.)
+5. **Check each shot's on-screen text before naming it.** Avoid shots showing local paths (the
+   `saved /Users/…` overlay line) or anything else private.
+6. Push, then tell the eveofdarkness session (or the owner) that M<n> is done, with the shot names.
+
+Run `dotnet test --filter RoadmapFormatTests` after editing the roadmap; it encodes the site's exact
+parse rules, so a green run means the panel will build.
+
 ---
 
 ## Key External Resources
