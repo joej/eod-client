@@ -22,6 +22,10 @@ public static class NifFile
         string header = c.LineString();
         if (!header.Contains("File Format", StringComparison.Ordinal))
             throw new NifFormatException($"Not a NIF file (header: '{header}').");
+        // NetImmerse 2.x/3.x have copyright lines after this one and no binary version field; reading
+        // one as a version gave a garbage "newer than supported" error (open question W6).
+        if (System.Text.RegularExpressions.Regex.IsMatch(header, @"Version [23]\."))
+            throw new NifFormatException($"NetImmerse 2.x/3.x NIF is not supported ({header}).");
 
         // Version u32 follows the header line in both layouts. The layout after it differs:
         //  - 4.2.x: num-blocks u32, then each block is an inline sized type-name string + body.
@@ -406,12 +410,22 @@ public static class NifFile
         }
     }
 
+    /// <summary>The next sized "Ni…" type string at or after <paramref name="from"/>, or -1.</summary>
+    internal static int NextTypeStringAt(ReadOnlySpan<byte> bytes, int from) => NextTypeString(bytes, from);
+
+    /// <summary>The "Ni…" type string at <paramref name="q"/>, or null.</summary>
+    internal static string? TypeStringAtOffset(ReadOnlySpan<byte> bytes, int q) => TypeStringAt(bytes, q);
+
+    /// <summary>The 4.x block index as (type, offset of its type string), for <see cref="NifSurvey"/>.</summary>
+    internal static (string Type, int Offset)[] IndexBlocks(ReadOnlySpan<byte> bytes, int blockCount) =>
+        IndexBlocks4x(bytes, blockCount).Select(b => (b.Type, b.Offset)).ToArray();
+
     // Builds the block index by scanning for each block's type string: bodies aren't self-sized, so
     // a block ends where the next "Ni*" sized type string begins. Returns blocks[index] = (type,
     // offset-of-type-string). Verified to recover all blocks on real files.
     private static Block[] IndexBlocks4x(ReadOnlySpan<byte> bytes, int blockCount)
     {
-        var list = new List<Block>(blockCount);
+        var list = new List<Block>(Math.Min(blockCount, 4096));
         int q = FindFirstTypeString(bytes);
         while (list.Count < blockCount && q >= 0 && q < bytes.Length)
         {
@@ -452,9 +466,13 @@ public static class NifFile
             return null;
         if (bytes[q + 4] != (byte)'N' || bytes[q + 5] != (byte)'i')
             return null;
+        // A class name is a plain identifier. Text inside a block body can also start with "Ni" — 3ds
+        // Max's exporter writes "NiMAXPSysConverter flag" into string extra data, texture names like
+        // "Nicicle.tga" occur — and accepting those split the real block, used up the header's block
+        // count and dropped the file's last real block (496 files in the coverage audit).
         ReadOnlySpan<byte> s = bytes.Slice(q + 4, (int)len);
         foreach (byte ch in s)
-            if (ch is < 0x20 or > 0x7E)
+            if (!(char.IsAsciiLetterOrDigit((char)ch) || ch == (byte)'_'))
                 return null;
         return System.Text.Encoding.Latin1.GetString(s);
     }

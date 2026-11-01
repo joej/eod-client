@@ -38,6 +38,7 @@ internal ref struct NifCursor(ReadOnlySpan<byte> data)
 {
     private readonly ReadOnlySpan<byte> _data = data;
     public int Pos { get; private set; }
+    public int Length => _data.Length;
 
     /// <summary>Jumps the cursor to an absolute offset (used to skip block bodies we don't model).</summary>
     public void SeekTo(int offset)

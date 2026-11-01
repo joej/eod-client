@@ -356,23 +356,35 @@ Also out of scope for now, as genuine tangents: sound, a polished UI, and retail
 ## Immediate next steps (M7, status 2026-11-01)
 
 M7 is under way. Done: strafe (M7c); the magenta and placeholder surfaces (M7a, W3d/W3e); foliage
-cut-outs (M7a); and a
-development overlay in the Godot client (`godot/scripts/DevOverlay.cs`: layer toggles, wireframe and
-unshaded render modes, and click-to-inspect, which reports a surface's model, placement, mesh,
-texture, UVs and transparency). Recommended order for the rest:
+cut-outs (M7a); a development overlay in the Godot client (`godot/scripts/DevOverlay.cs`: layer
+toggles, wireframe and unshaded render modes, and click-to-inspect, which reports a surface's model,
+placement, mesh, texture, UVs and transparency); and a **NIF coverage audit** (`mpk audit`,
+`docs/nif-coverage.md`) that measures what every model file in the client contains against what the
+converter reads. It fixed a block-scanner bug that dropped the last block of 496 files, and it ranks
+the remaining gaps. The order below follows that ranking instead of bugs seen in the world:
 
-1. ~~**Foliage alpha cut-out (M7a).**~~ Done 2026-11-01 (see M7a above).
-2. **Seat fixtures on the terrain (M7a).** Generalise the keep's correct placement to the houses and
-   daises that float or sink.
+1. **A real Gamebryo 10.1 reader** (node tree, transforms, per-shape properties; W7). 960 zone and
+   1,259 item models are 10.1 and are read today by a geometry scan with no transforms, and 2,892 of
+   the 2,934 figure models are 10.1, so M7b needs it anyway. Check it with the audit's byte-exact decode
+   check, as for 4.x. Some floating or sunken fixtures may be 10.1 models missing their transforms:
+   recheck **fixture seating** (M7a) after this, before writing placement fixes.
+2. **Dark maps, second UV sets and vertex colours (M7a).** Baked lighting and shading on buildings and
+   dungeons: dark maps in 1,463 files, vertex colours in about 3,200. The largest remaining difference
+   between our surfaces and the game's.
 3. **M7b skinning + figures**, the hardest part: NiSkinInstance/bone weights → glTF skin, figure
    assembly from parts (by bone name) plus equipment, and `.kfa` animation (idle/walk/run). Reference
    prior art: OfflineDAoC's GPL-3.0 pipeline (`docs/offlinedaoc-asset-pipeline.md`), adopted with
    attribution; DAOC_Navigator is a second GPL reference. Keep the NIF node names through to Godot
    (meshes arrive as `MeshNN` today): figure assembly matches parts by name, and the inspect readout
-   becomes more useful.
+   becomes more useful. Audit `.kfa` files the same way first.
+4. Then the rest of the audit's list as it bears on what's on screen: 2.x/3.x models missing from zones
+   (W6), billboards, keyframe animation for doors and windmills, LOD ranges.
 
-Waiting on the owner: a retail screenshot of a round-tower top, the BritBarn climb or the Btavern
-door to settle the W3f placeholder meshes.
+Waiting on the owner:
+- a retail screenshot of a round-tower top, the BritBarn climb or the Btavern door, to settle the W3f
+  placeholder meshes;
+- retail screenshots of one spot under each tree setting, to settle which trees the client draws (W5:
+  the most-placed Camelot Hills trees also exist as SpeedTree files).
 
 Fold in when convenient (not blocking): the carried-over M5 remainder — buffer the world-init burst so
 NPC *create* packets (realm colour + name) aren't lost and entities stop rendering neutral grey; it's

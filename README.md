@@ -61,6 +61,8 @@ libraries.
   verified.
 - [`docs/open-questions.md`](docs/open-questions.md): oddities and unconfirmed behaviour, with
   sources and next steps.
+- [`docs/nif-coverage.md`](docs/nif-coverage.md): what the game's model files contain, what the
+  converter reads, and the measured gaps.
 - `CLAUDE.md`: working notes, with sources for each claim.
 - `server/`: a pinned OpenDAoC test server (podman or Docker compose).
 

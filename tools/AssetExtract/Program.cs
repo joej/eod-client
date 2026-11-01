@@ -33,6 +33,9 @@ internal static class Cli
         if (command == "terrain")
             return TerrainCmd(args);
 
+        if (command == "audit")
+            return AuditCmd(args);
+
         string inputPath = args[1];
         if (!File.Exists(inputPath))
         {
@@ -80,12 +83,96 @@ internal static class Cli
             int tris = model.Meshes.Sum(m => m.Triangles.Length);
             Console.WriteLine($"Converted NIF {model.Version}: {model.Meshes.Count} mesh(es), " +
                 $"{verts} verts, {tris} tris -> {Path.GetFullPath(outPath)}");
+            WarnDropped(File.ReadAllBytes(nifPath));
             return 0;
         }
         catch (NifFormatException e)
         {
             Console.Error.WriteLine($"{nifPath}: {e.Message}");
             return 1;
+        }
+    }
+
+    // Says which of the file's block types the converter skips or only partly uses, so a gap shows
+    // up at conversion time instead of as a wrong-looking model in the world.
+    private static void WarnDropped(byte[] nif)
+    {
+        NifSurvey s = NifSurvey.Read(nif);
+        foreach (var g in s.BlockTypes.GroupBy(t => t).OrderBy(g => g.Key))
+        {
+            NifCoverage c = NifSurvey.Coverage(g.Key, s.Version);
+            if (c == NifCoverage.Handled)
+                continue;
+            string note = NifSurvey.CoverageNote(g.Key, s.Version);
+            Console.WriteLine($"  {(c == NifCoverage.Unhandled ? "skipped" : "partial")} {g.Key} x{g.Count()}" +
+                (note.Length > 0 ? $": {note}" : ""));
+        }
+    }
+
+    // audit <client-dir> --out FILE.md: surveys every NIF in the install (loose, or inside .mpk/.npk
+    // archives) and writes the coverage report. Owner-run; the report describes the owner's client
+    // files, so keep it out of the repo (private/).
+    private static int AuditCmd(string[] args)
+    {
+        string root = args[1];
+        string? outPath = null;
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] == "--out" && i + 1 < args.Length)
+                outPath = args[++i];
+            else
+                return Usage();
+        }
+        if (outPath is null || !Directory.Exists(root))
+            return Usage();
+
+        var audit = new NifAudit();
+        var files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Where(p => Path.GetExtension(p).ToLowerInvariant() is ".nif" or ".mpk" or ".npk")
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToList();
+        int done = 0;
+        foreach (string path in files)
+        {
+            string rel = Path.GetRelativePath(root, path);
+            string folder = rel.Contains(Path.DirectorySeparatorChar) ? rel[..rel.IndexOf(Path.DirectorySeparatorChar)] : "(root)";
+            if (Path.GetExtension(path).Equals(".nif", StringComparison.OrdinalIgnoreCase))
+            {
+                Survey(audit, folder, rel, () => File.ReadAllBytes(path));
+            }
+            else
+            {
+                try
+                {
+                    using MpkArchive mpk = MpkArchive.Open(path);
+                    foreach (MpkEntry e in mpk.Entries)
+                        if (e.Name.EndsWith(".nif", StringComparison.OrdinalIgnoreCase))
+                            Survey(audit, folder, $"{rel}:{e.Name}", () => mpk.Extract(e));
+                }
+                catch (Exception e) when (e is MpkFormatException or IOException or InvalidDataException)
+                {
+                    Console.Error.WriteLine($"  archive skipped: {rel}: {e.Message}");
+                }
+            }
+            if (++done % 500 == 0)
+                Console.WriteLine($"  {done}/{files.Count} files, {audit.Files} NIFs");
+        }
+
+        File.WriteAllText(outPath, audit.ToMarkdown("NIF coverage audit"));
+        Console.WriteLine($"Surveyed {audit.Files} NIF(s) ({audit.Unreadable} unreadable, " +
+            $"{audit.BoundaryMismatches} block-scan mismatches) -> {Path.GetFullPath(outPath)}");
+        return 0;
+    }
+
+    private static void Survey(NifAudit audit, string folder, string source, Func<byte[]> load)
+    {
+        try
+        {
+            audit.Add(folder, source, NifSurvey.Read(load()));
+        }
+        catch (Exception e) when (e is NifFormatException or IOException or InvalidDataException or OverflowException)
+        {
+            audit.AddUnreadable(folder, source, e.Message);
         }
     }
 
@@ -379,6 +466,7 @@ internal static class Cli
               mpk index    <client-dir> --out index.json
               mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR
               mpk terrain  <dat<NNN>.mpk> --offset X Y --out FILE.glb [--tiles N] [--index index.json --library LIBDIR]
+              mpk audit    <client-dir> --out FILE.md
 
             With no member, extract writes every member. Default --out is the current directory.
             convert writes a glTF binary next to the .nif unless --out is given.
@@ -388,6 +476,9 @@ internal static class Cli
             Godot client loads). The offset is the zone's region offsetX/offsetY (zones.tsv x 8192).
             index walks the install once and records where every .nif/.dds lives (loose path or
             archive+member) to a JSON file, so later builds and lookups never re-scan.
+            audit surveys every NIF in the install and reports each block type and rendering feature,
+            how the converter treats it, and whether our byte-level decode of it holds. The report
+            describes your client's files: write it under private/, not into the repo.
             """);
         return 2;
     }

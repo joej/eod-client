@@ -346,6 +346,7 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │                                  #   (exit 0 granted, 2 denied, 1 error; never hex-logs 0xA7)
 ├── tools/AssetExtract/            # ✓ `mpk` CLI: list/extract archives, convert NIF → glb, gather
 │                                  #   textures, `zone` (zone.csv) and `terrain` (terrain.glb)
+│                                  #   `audit` (NIF coverage report; see docs/nif-coverage.md)
 ├── tools/Launcher/                # Windows launcher for pointing a real client at a server (built,
 │                                  #   not yet validated)
 ├── tools/pipeline.sh, reconvert-zone.sh  # owner-run conversion of their own install
@@ -368,6 +369,11 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
         │                          #   click-to-inspect readout (model/mesh/material/UVs)
         └── ModelTexturing.cs      # ✓ binds library .dds textures to glTF materials by name
 ```
+
+Rule: after any change to the NIF reader, rerun `mpk audit <client-dir> --out
+private/audit/nif-audit.md` and keep its integrity section clean (every decoded block ends on a real
+boundary); update `NifSurvey.Coverage` when the reader starts or stops using a block type. Asset gaps
+are found by measurement (`docs/nif-coverage.md`), not by waiting for them to show up in the world.
 
 Rule: nothing under `src/` may reference `GodotSharp`. If protocol code needs
 something from the engine, it belongs in the Godot project instead.
