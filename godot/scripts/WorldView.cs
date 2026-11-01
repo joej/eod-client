@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Gate 3 view: a capsule where the server put the character, on a plain ground, plus a status
-// overlay. CharacterScreen keeps the session alive (ClientSession.KeepAliveAsync); this node
+// Gate 3 view: a capsule where the server put the character, on a plain ground, plus the dev
+// overlay (DevOverlay). CharacterScreen keeps the session alive (ClientSession.KeepAliveAsync); this node
 // drains incoming packets once per frame and notices when the connection closes.
 
 using DaocProtocol.Net;
@@ -52,8 +52,24 @@ public partial class WorldView : Node3D
     private string? _terrainPath;
     private int _zoneTexturedModels;
     private int _zoneTexturedSurfaces;
-    private Label _status = null!;
+    private DevOverlay _dev = null!;
     private Button _button = null!;
+    // Layer roots the dev overlay toggles; the terrain is _terrain.
+    private Node3D? _zoneRoot;
+    private readonly Node3D _entityRoot = new() { Name = "Entities" };
+    private bool _fixturesOn = true;
+    private bool _terrainOn = true;
+    // Click-to-inspect: the click is queued from input and resolved in the physics frame (ray queries
+    // are only reliable there). The hit mesh gets a translucent accent overlay until the next pick.
+    private Vector2? _pendingClick;
+    private MeshInstance3D? _selected;
+    private readonly StandardMaterial3D _highlight = new()
+    {
+        AlbedoColor = new Color(DevOverlay.Accent, 0.35f),
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+    };
     private Camera3D _camera = null!;
 
     // ----- Chat (M6) -----
@@ -169,6 +185,11 @@ public partial class WorldView : Node3D
         PositionAndObjectId p = _world.Position;
         Vector3 at = ToGodot(p.X, p.Y, p.Z);
 
+        // Added first: its _Ready turns on wireframe generation, which must precede mesh loading.
+        _dev = new DevOverlay();
+        AddChild(_dev);
+        AddChild(_entityRoot);
+
         AddChild(new WorldEnvironment
         {
             Environment = new Godot.Environment
@@ -270,11 +291,9 @@ public partial class WorldView : Node3D
         _bridge.PingReplied += () => _pings++;
 
         var overlay = new CanvasLayer();
-        _status = new Label { Position = new Vector2(16, 16) };
-        overlay.AddChild(_status);
         // Click-only: don't let the button take keyboard focus, or Enter/Space could "press" it and
         // it would compete with the chat box for focus.
-        _button = new Button { Text = "Quit to character screen", Position = new Vector2(16, 72), FocusMode = Control.FocusModeEnum.None };
+        _button = new Button { Text = "Quit to character screen", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
         _button.Pressed += () =>
         {
             _button.Disabled = true;
@@ -283,9 +302,30 @@ public partial class WorldView : Node3D
             else
                 BackToLoginPressed?.Invoke();
         };
-        overlay.AddChild(_button);
+        _dev.AddToStatus(_button);
         BuildChatUi(overlay);
         AddChild(overlay);
+        BuildDevToggles(zoneObjects);
+    }
+
+    // Layer switches for the dev overlay. Hidden fixtures/terrain are also left out of inspect picks.
+    private void BuildDevToggles(int zoneObjects)
+    {
+        _dev.AddToggle("Terrain", true, on =>
+        {
+            _terrainOn = on;
+            if (_terrain is not null) _terrain.Visible = on;
+        });
+        _dev.AddToggle("Fixtures", true, on =>
+        {
+            _fixturesOn = on;
+            if (_zoneRoot is not null) _zoneRoot.Visible = on;
+        });
+        _dev.AddToggle("Entities", true, on => _entityRoot.Visible = on);
+        _dev.AddToggle("Own character", true, on => _body.Visible = on);
+        _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);
+        _dev.AddInfo($"{zoneObjects} fixtures · {_zoneTexturedModels} textured models\n" +
+            $"{_zoneTexturedSurfaces} textured surfaces" + (_terrain is null ? " · flat ground" : ""));
     }
 
     // The chat log sits in the lower-left; the input is a thin bar beneath it. Both are anchored to
@@ -395,6 +435,7 @@ public partial class WorldView : Node3D
             ConcavePolygonShape3D shape = mi.Mesh.CreateTrimeshShape();
             shape.BackfaceCollision = true;   // terrain faces point down; hit from above too
             var sb = new StaticBody3D { CollisionLayer = TerrainLayer, Transform = mi.GlobalTransform };
+            sb.SetMeta("terrain_mesh", mi);   // so an inspect pick can name the tile it hit
             sb.AddChild(new CollisionShape3D { Shape = shape });
             AddChild(sb);
             built++;
@@ -419,6 +460,7 @@ public partial class WorldView : Node3D
         string[] lines = Godot.FileAccess.GetFileAsString(_zonePath).Split('\n');
         var loaded = new System.Collections.Generic.Dictionary<string, Node3D?>();
         var zoneRoot = new Node3D { Name = "Zone" };
+        _zoneRoot = zoneRoot;
         int placed = 0;
 
         foreach (string raw in lines)
@@ -446,6 +488,9 @@ public partial class WorldView : Node3D
             // apply it directly. (Before GltfExporter baked in metres, this also divided by the region
             // factor to shrink raw NIF units — that is now wrong and would scale the model twice.)
             inst.Scale = new Vector3(scale, scale, scale);
+            // What the inspect readout reports for this placement (raw zone.csv values).
+            inst.SetMeta("glb", c[0]);
+            inst.SetMeta("placement", $"x {x:0} y {y:0} z {z:0}  angle {angleDeg:0}°  scale {scale:0.##}");
             zoneRoot.AddChild(inst);
             // Trimesh collision per placed object, so the SpringArm chase camera pulls in off
             // buildings/keep walls (not just terrain). Generated after AddChild so the static bodies
@@ -632,6 +677,118 @@ public partial class WorldView : Node3D
         {
             SetChase(!_chase);
         }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F1 })
+        {
+            _dev.PanelsVisible = !_dev.PanelsVisible;
+        }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F2 })
+        {
+            _dev.CycleRenderMode();
+        }
+    }
+
+    // Left-click on the world (not on a panel: panels stop their clicks) queues an inspect pick.
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb
+            && !_lookActive && !ChatInputActive)
+            _pendingClick = mb.Position;
+    }
+
+    // Casts from the camera through the clicked pixel and reports what it hit: for a fixture, its
+    // .glb and zone.csv placement, the mesh node, and every surface's material (texture stem,
+    // textured or not, UVs or not, colour, transparency) with the hit surface marked. That is the
+    // question M7a keeps asking about magenta walls, flat-tan stone and opaque foliage.
+    private void Inspect(Vector2 screen)
+    {
+        Vector3 from = _camera.ProjectRayOrigin(screen);
+        var ray = PhysicsRayQueryParameters3D.Create(from, from + _camera.ProjectRayNormal(screen) * 4000f);
+        ray.HitBackFaces = true;
+        uint mask = 0;
+        if (_fixturesOn) mask |= ~TerrainLayer;
+        if (_terrainOn) mask |= TerrainLayer;
+        ray.CollisionMask = mask;
+        Godot.Collections.Dictionary hit = mask == 0
+            ? new Godot.Collections.Dictionary()
+            : GetWorld3D().DirectSpaceState.IntersectRay(ray);
+
+        if (_selected is not null && IsInstanceValid(_selected))
+            _selected.MaterialOverlay = null;
+        _selected = null;
+
+        if (hit.Count == 0 || hit["collider"].AsGodotObject() is not Node collider)
+        {
+            _dev.SetInspect("Nothing hit (sky, or a hidden layer).", false);
+            return;
+        }
+
+        MeshInstance3D? mesh = collider.HasMeta("terrain_mesh")
+            ? collider.GetMeta("terrain_mesh").AsGodotObject() as MeshInstance3D
+            : collider.GetParent() as MeshInstance3D;
+        (float hx, float hy, float hz) = ToRegion(hit["position"].AsVector3());
+        int face = hit.ContainsKey("face_index") ? hit["face_index"].AsInt32() : -1;
+
+        var sb = new System.Text.StringBuilder();
+        Node? placed = mesh;
+        while (placed is not null && !placed.HasMeta("glb"))
+            placed = placed.GetParent();
+        if (placed is not null)
+        {
+            sb.AppendLine($"model   {placed.GetMeta("glb").AsString()}");
+            sb.AppendLine($"placed  {placed.GetMeta("placement").AsString()}");
+        }
+        else if (collider.HasMeta("terrain_mesh"))
+        {
+            sb.AppendLine("model   terrain");
+        }
+        sb.AppendLine($"hit     x {hx:0} y {hy:0} z {hz:0}" + (face >= 0 ? $"  face {face}" : ""));
+
+        if (mesh is null || mesh.Mesh is null)
+        {
+            sb.Append("(no mesh behind this collider)");
+        }
+        else
+        {
+            sb.AppendLine($"mesh    {mesh.Name}");
+            int hitSurface = SurfaceForFace(mesh.Mesh, face);
+            for (int s = 0; s < mesh.Mesh.GetSurfaceCount(); s++)
+                sb.AppendLine((s == hitSurface ? "> " : "  ") + DescribeSurface(mesh, s));
+            mesh.MaterialOverlay = _highlight;
+            _selected = mesh;
+        }
+
+        string text = sb.ToString().TrimEnd();
+        _dev.SetInspect(text, true);
+        GD.Print("[inspect]\n" + text);
+    }
+
+    // The trimesh collider lists triangles surface by surface, in order, so a face index maps back
+    // to its surface by cumulative triangle counts. -1 when unknown (no index, not an ArrayMesh).
+    private static int SurfaceForFace(Mesh mesh, int face)
+    {
+        if (face < 0 || mesh is not ArrayMesh am)
+            return -1;
+        int start = 0;
+        for (int s = 0; s < am.GetSurfaceCount(); s++)
+        {
+            int indices = am.SurfaceGetArrayIndexLen(s);
+            int tris = (indices > 0 ? indices : am.SurfaceGetArrayLen(s)) / 3;
+            if (face < start + tris)
+                return s;
+            start += tris;
+        }
+        return -1;
+    }
+
+    private static string DescribeSurface(MeshInstance3D mi, int s)
+    {
+        bool uv = mi.Mesh is ArrayMesh am && (am.SurfaceGetFormat(s) & Mesh.ArrayFormat.FormatTexUV) != 0;
+        if (mi.GetActiveMaterial(s) is not BaseMaterial3D m)
+            return $"s{s}  (no material)  {(uv ? "uv" : "NO UV")}";
+        string name = string.IsNullOrEmpty(m.ResourceName) ? "(unnamed)" : m.ResourceName;
+        string tex = m.AlbedoTexture is null ? "NO TEXTURE" : "textured";
+        string alpha = m.Transparency == BaseMaterial3D.TransparencyEnum.Disabled ? "" : $"  {m.Transparency}".ToLowerInvariant();
+        return $"s{s}  {name}  {tex}  {(uv ? "uv" : "NO UV")}  #{m.AlbedoColor.ToHtml(false)}{alpha}";
     }
 
     // Switches between the chase rig and a free-fly debug camera by reparenting the one Camera3D:
@@ -1024,7 +1181,7 @@ public partial class WorldView : Node3D
             Position = new Vector3(0, 1, 0),
             MaterialOverride = new StandardMaterial3D { AlbedoColor = color },
         });
-        AddChild(node);
+        _entityRoot.AddChild(node);
         _entities[objectId] = new Entity { Node = node, TargetPosition = pos, TargetYaw = yaw };
     }
 
@@ -1049,6 +1206,11 @@ public partial class WorldView : Node3D
     public override void _PhysicsProcess(double delta)
     {
         UpdatePlayer(delta);
+        if (_pendingClick is Vector2 click)
+        {
+            _pendingClick = null;
+            Inspect(click);
+        }
     }
 
     public override void _Process(double delta)
@@ -1072,7 +1234,7 @@ public partial class WorldView : Node3D
         }
 
         PositionAndObjectId p = _world.Position;
-        _status.Text =
+        _dev.Status =
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
             $"{_seconds:0} s in world   {_packets} packets   {_pings} ping replies   {_entities.Count} entities   {_chatReceived} chat   " +
             (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + "\n" +
@@ -1082,6 +1244,7 @@ public partial class WorldView : Node3D
             $"ground {(_groundHit ? "ON" : "--")}   mode {(_chase ? "chase" : "free")}\n" +
             (_chase
                 ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Shift sprint, wheel zoom   ·   Tab free-fly, P shot"
-                : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot");
+                : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot")
+            + "\nF1 panels · F2 render mode · left-click inspect";
     }
 }
