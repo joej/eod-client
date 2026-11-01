@@ -287,6 +287,25 @@ public sealed class NifFileTests
         Assert.Contains(factors, f => Near(f, grey));
     }
 
+    [Theory]
+    [MemberData(nameof(Keep422))]
+    public void CollisionAndHiddenHelperShapesAreDroppedFromTheScene(string path)
+    {
+        // game.dll's visibility pass hides (and the client never draws) nodes named exactly
+        // collidee/climb/sclimb/pickee/ladder/shadowcaster and any node with the NiAVObject Hidden
+        // flag (daoc-re RE/34). keep.NIF carries collidee subtrees; those shapes are flagged Helper by
+        // the reader and must NOT reach the exported scene — rendering them was the z-fighting
+        // placeholder geometry (and, for the keep, the collision hull overlapping the real stone).
+        NifModel model = NifFile.Read(File.ReadAllBytes(path));
+        Assert.Contains(model.Meshes, m => m.Helper);                 // the keep has helper shapes
+        Assert.Contains(model.Meshes, m => !m.Helper);                // and real ones
+
+        int exported = GltfExporter.BuildScene(model).ToGltf2().LogicalMeshes.Count;
+        int nonHelper = model.Meshes.Count(m => !m.Helper);
+        Assert.Equal(nonHelper, exported);                            // only non-helpers are exported
+        Assert.True(exported < model.Meshes.Count, "some shapes should be dropped");
+    }
+
     [Fact]
     public void UntexturedColouredShapeKeepsItsOwnColour()
     {

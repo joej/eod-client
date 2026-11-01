@@ -82,6 +82,8 @@ public static class NifFile
     {
         public required string Type;
         public required int Offset;
+        public string Name = "";      // NiObjectNET.Name — used to drop collidee/climb/shadow helpers
+        public ushort Flags;          // NiAVObject.Flags; bit 0 = Hidden (app-culled, drop subtree)
         public Xform Local = Xform.Identity;
         public int[] Children = [];
         public int DataRef = -1;      // NiTriShape -> its NiTriShapeData/NiTriStripsData block
@@ -112,8 +114,10 @@ public static class NifFile
             {
                 case "NiNode":
                 case "NiLODNode":
-                    if (TryReadAvObject(ref c, out Xform nx))
+                    if (TryReadAvObject(ref c, out Xform nx, out string nname, out ushort nflags))
                     {
+                        b.Name = nname;
+                        b.Flags = nflags;
                         b.Local = nx;
                         int nch = (int)c.U32();
                         var ch = new int[Math.Clamp(nch, 0, 100000)];
@@ -123,8 +127,10 @@ public static class NifFile
                     break;
                 case "NiTriShape":
                 case "NiTriStrips":
-                    if (TryReadAvObject(ref c, out Xform sx, out int[] props))
+                    if (TryReadAvObject(ref c, out Xform sx, out int[] props, out string sname, out ushort sflags))
                     {
+                        b.Name = sname;
+                        b.Flags = sflags;
                         b.Local = sx;
                         b.Props = props;
                         b.DataRef = c.I32();   // NiGeometry: Data ref (the geometry-data block)
@@ -158,7 +164,8 @@ public static class NifFile
                 NifMesh? geom = ReadGeometryAt(bytes, blocks, b.DataRef);
                 if (geom is not null)
                     meshes.Add(BakeTransform(geom, b.Local, $"mesh{i}",
-                        ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b)));
+                        ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b))
+                        with { Helper = IsHelperNodeName(b.Name) || IsHidden(b.Flags) });
             }
         }
 
@@ -172,25 +179,54 @@ public static class NifFile
     // geometry at its world transform. A static method (not a local function) because `bytes` is a
     // ref-like span that can't be captured in a closure.
     private static void Walk4x(ReadOnlySpan<byte> bytes, Block[] blocks, int index, Xform world,
-        HashSet<int> seen, List<NifMesh> meshes)
+        HashSet<int> seen, List<NifMesh> meshes, bool helper = false)
     {
         if (index < 0 || index >= blocks.Length || !seen.Add(index))
             return;
         Block b = blocks[index];
         Xform w = world.Compose(b.Local);
+        bool underHelper = helper || IsHelperNodeName(b.Name) || IsHidden(b.Flags);
         if (b.Type is "NiNode" or "NiLODNode")
         {
             foreach (int child in b.Children)
-                Walk4x(bytes, blocks, child, w, seen, meshes);
+                Walk4x(bytes, blocks, child, w, seen, meshes, underHelper);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
         {
             NifMesh? geom = ReadGeometryAt(bytes, blocks, b.DataRef);
             if (geom is not null)
                 meshes.Add(BakeTransform(geom, w, $"mesh{index}",
-                    ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b)));
+                    ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b)) with { Helper = underHelper });
         }
     }
+
+    // DAoC NIFs carry helper geometry the retail client never draws as a visible surface: collision
+    // hulls, pick/climb/ladder volumes and shadow-caster proxies. game.dll 1.130's visibility pass
+    // (FUN_004828a3, traced by the daoc-re session, RE/34-nif-node-names.md) hides a node and its whole
+    // subtree when its name is an EXACT, case-insensitive match (_stricmp) for one of these — NOT a
+    // prefix. So `collidee` is hidden but `collidee016`/`collideeH`/"coll tower low" are not (they hide
+    // only under a `collidee` parent or via their own file Hidden flag); `climb`/`sclimb` are exact too,
+    // and `climb001` is not hidden by its own name. Matching by prefix over-drops vs. retail — it was
+    // what wrongly removed the keep's `collision tower`/`collision wall` tan stone. The separate Hidden
+    // file flag (NiAVObject flags bit 0, Gamebryo app-culled) is handled in the walk, and is the more
+    // likely source of the placeholder-coloured (purple/aqua) shapes.
+    private static readonly string[] HiddenNodeNames =
+        ["collidee", "pickee", "ladder", "climb", "sclimb", "shadowcaster"];
+
+    private static bool IsHelperNodeName(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return false;
+        foreach (string h in HiddenNodeNames)
+            if (string.Equals(name, h, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
+    // NiAVObject flags bit 0 = Hidden: Gamebryo app-culls the node and its subtree, so the client
+    // never draws it. The likely source of the placeholder-coloured (purple/aqua) shapes that the
+    // artists left in the file but flagged hidden. (daoc-re RE/34; FUN_004828a3 sets this same bit.)
+    private static bool IsHidden(ushort flags) => (flags & 0x1) != 0;
 
     // Resolves a shape's own base texture: its property list holds a NiTexturingProperty whose base
     // TexDesc points at a NiSourceTexture. This is what makes a multi-material model (a keep uses ten
@@ -336,18 +372,24 @@ public static class NifFile
     // NiTriShape). Returns false if a bounding volume is present (we don't decode it) — the caller
     // then leaves the block's transform at identity rather than misparse.
     private static bool TryReadAvObject(ref NifCursor c, out Xform xform) =>
-        TryReadAvObject(ref c, out xform, out _);
+        TryReadAvObject(ref c, out xform, out _, out _, out _);
 
-    // Reads NiObjectNET + NiAVObject, yielding the local transform and the block's property refs
-    // (one of which, on a shape, is the NiTexturingProperty that names its base texture).
-    private static bool TryReadAvObject(ref NifCursor c, out Xform xform, out int[] props)
+    private static bool TryReadAvObject(ref NifCursor c, out Xform xform, out string name, out ushort flags) =>
+        TryReadAvObject(ref c, out xform, out _, out name, out flags);
+
+    // Reads NiObjectNET + NiAVObject, yielding the local transform, the block's property refs
+    // (one of which, on a shape, is the NiTexturingProperty that names its base texture), the block's
+    // Name (a node name like "collidee"/"shadowcaster" marks helper geometry) and its NiAVObject
+    // Flags (bit 0 = Hidden / app-culled; the client drops a hidden node and its whole subtree).
+    private static bool TryReadAvObject(ref NifCursor c, out Xform xform, out int[] props, out string name, out ushort flags)
     {
         xform = Xform.Identity;
         props = [];
-        c.SizedString();           // NiObjectNET.Name
+        flags = 0;
+        name = c.SizedString();    // NiObjectNET.Name
         c.I32();                   // Extra Data ref (single, until 4.2.2.0)
         c.I32();                   // Controller ref
-        c.U16();                   // NiAVObject.Flags (ushort at <= 4.2.2.0)
+        flags = c.U16();           // NiAVObject.Flags (ushort at <= 4.2.2.0); bit 0 = Hidden
         Vector3 trans = c.Vec3();
         float[] rot = new float[9];
         for (int i = 0; i < 9; i++) rot[i] = c.F32();

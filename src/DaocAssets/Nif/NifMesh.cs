@@ -23,6 +23,11 @@ public sealed record NifMesh
     /// surface colour; alongside a texture it tints it (white = no tint).</summary>
     public Vector4? BaseColor { get; init; }
 
+    /// <summary>True when this shape sits under a collision/climb/shadow-caster helper node (by node
+    /// name) that the retail client never draws as a visible surface. The exporter drops these — they
+    /// are the placeholder-coloured proxies that otherwise z-fight the real textured walls.</summary>
+    public bool Helper { get; init; }
+
     public override string ToString() =>
         $"{Name}: {Vertices.Length} verts, {Triangles.Length} tris" +
         (TextureFile is null ? "" : $", tex {TextureFile}") +

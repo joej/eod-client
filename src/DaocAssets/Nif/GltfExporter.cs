@@ -32,7 +32,11 @@ public static class GltfExporter
     {
         var scene = new SceneBuilder();
         foreach (NifMesh mesh in model.Meshes)
+        {
+            if (mesh.Helper)
+                continue; // collision/climb/shadow-caster proxy — the client never draws it
             scene.AddRigidMesh(BuildMesh(mesh), Matrix4x4.Identity);
+        }
         return scene;
     }
 
