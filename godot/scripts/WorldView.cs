@@ -1009,6 +1009,14 @@ public partial class WorldView : Node3D
 
     private void SpawnEntity(ushort objectId, Vector3 pos, float yaw, Color color)
     {
+        // Free any node we already have for this id before replacing it. This happens normally: an
+        // entity first seen via a bare 0xA1 update spawns grey (OnObjectMoved), then its 0xDA/0x4B
+        // create arrives and re-spawns it realm-coloured. Without freeing the old node it is orphaned
+        // in the scene tree — the NPC is drawn twice (a grey ghost left at the old spot, z-fighting
+        // the coloured one) until it next moves. Also covers a repeated create for a re-seen id.
+        if (_entities.Remove(objectId, out Entity? existing))
+            existing.Node.QueueFree();
+
         var node = new Node3D { Position = pos, Rotation = new Vector3(0, yaw, 0) };
         node.AddChild(new MeshInstance3D
         {
