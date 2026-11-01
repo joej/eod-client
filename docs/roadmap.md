@@ -305,6 +305,34 @@ The tiers (cheapest first; each is independently shippable):
   `overrides/` mechanism, but this is where fresh/licensed art is needed to distribute anything (the
   "no proprietary content" line); a real art project rather than a pipeline tweak.
 
+**Trees across the tiers** (decided 2026-11-01). We choose what to draw rather than copy one client
+setting: the client ships each common tree twice, as a classic hand-built NIF and as a SpeedTree file
+(a parametric recipe the SpeedTree runtime builds into geometry; open question W5). Godot loads glTF
+(and FBX) at runtime, so every route below ends in a glTF in the library or a pack.
+- **Classic (default):** the converted NIF trees, done (alpha cut-out and two-sided since 2026-11-01).
+- **Cheap wins on any tree (Tier 0/2):** alpha antialiasing on cut-out leaves (softer, non-flickering
+  edges), a wind vertex shader (sway by height), `MultiMesh` instancing for the ~1,000 trees in a zone,
+  and per-instance visibility ranges with a cross-fade.
+- **Enhanced (Tier 2): SpeedTree near, NIF far.** Convert the client's SpeedTree files to meshes with
+  **our own converter**, once, at conversion time (the SpeedTree runtime is commercial; we can't ship
+  it, and the free Learning Edition can't export). Draw the SpeedTree mesh up close and the classic NIF
+  beyond a distance, cross-faded. 36 trees exist in both forms (including Camelot Hills' elm1, elm2,
+  bpinea, bwillow, oak1); 113 are SpeedTree-only and need a far version we make (a simplified mesh or a
+  billboard card). **First: a format-feasibility check** — is the early SpeedTree format
+  (`__IdvSpt_02_`) documented, or read by open-source tools (Oblivion used `.spt` too)? Reading it is
+  analysis of data files, which our rules allow; disassembling the client is not. The free SpeedTree
+  Learning Edition may serve as a reference viewer for checking our output, if it opens these files
+  (unconfirmed).
+- **New trees (Tier 3, can ship):** CC0 tree packs (often glTF already), or trees made in Blender
+  (the Sapling add-on, or hand-modelled) or Tree It (free; exports OBJ/FBX; commercial use per its
+  forum terms, to confirm), normalised by a headless Blender script. Also
+  [glTF Procedural Trees](https://gltf-trees.donmccurdy.com/) (MIT, browser, exports glTF), built on
+  proctree.js (BSD, Paul Brunt): small and parameter-driven, so it could be ported to C# as a headless
+  generator in our converter. Use clearly licensed (CC0) bark and leaf textures, not the demo's. A replacement must match a small
+  contract: the same file name as the tree it replaces (e.g. `elm1.glb`) in a pack, metres, Y up,
+  origin at the base of the trunk, leaf materials cut-out and double-sided, optionally a low-detail
+  version for distance.
+
 Enabling work (do the small part before override content piles up):
 - **Named packs**, not one flat `overrides/`: make the load path "selected pack(s) → base library"
   (e.g. `packs/classic/`, `packs/hd/`), so classic-vs-enhanced is a selector and packs can stack.
