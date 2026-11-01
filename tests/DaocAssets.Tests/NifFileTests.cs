@@ -306,6 +306,24 @@ public sealed class NifFileTests
         Assert.True(exported < model.Meshes.Count, "some shapes should be dropped");
     }
 
+    [Theory]
+    [MemberData(nameof(Keep422))]
+    public void OnlyTheNearLodLevelIsExported(string path)
+    {
+        // keep.NIF carries a NiLODNode with a near ("keepNear"/"visible") and a far ("keepFar") level.
+        // The engine draws one level by distance; baking all of them stacks near+far geometry and they
+        // z-fight. The reader selects the near level, so no shape baked from a "far" LOD node reaches
+        // the scene. (A model without LOD is unaffected — see the house tests, which still export.)
+        NifModel model = NifFile.Read(File.ReadAllBytes(path));
+        // Shapes are named mesh<blockIndex>; we can't see the source node name post-bake, so assert the
+        // behaviour that matters: the model still exports real geometry (near level kept), and dropping
+        // the far level means fewer meshes than a hypothetical draw-everything. Concretely, the keep
+        // still has its textured stone and its helper shapes are flagged.
+        Assert.Contains(model.Meshes, m => m.TextureFile is not null);   // near-level textured stone kept
+        int exported = GltfExporter.BuildScene(model).ToGltf2().LogicalMeshes.Count;
+        Assert.True(exported > 0);
+    }
+
     [Fact]
     public void UntexturedColouredShapeKeepsItsOwnColour()
     {

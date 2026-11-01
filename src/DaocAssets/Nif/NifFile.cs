@@ -188,7 +188,16 @@ public static class NifFile
         bool underHelper = helper || IsHelperNodeName(b.Name) || IsHidden(b.Flags);
         if (b.Type is "NiNode" or "NiLODNode")
         {
-            foreach (int child in b.Children)
+            // A NiLODNode holds alternative detail levels of the same object; the engine draws exactly
+            // ONE child, by distance (near child range 0-N, far child range N-100000). We bake a single
+            // static mesh, so drawing every level stacks the near and far geometry and they z-fight
+            // (daoc-re confirmed Btavern/keep carry real NiLODNodes). Keep only the near/full-detail
+            // child and drop the far one(s). DAoC names them consistently — far children carry "far"
+            // in the name (BarnLODfar, keepFar, BTavernFar); the near child is "near"/"visible". We
+            // can't read the NiRangeLODData ranges here, so we select by that naming, and fall back to
+            // the first child if none is clearly "near". NiRangeLODData itself isn't a renderable child.
+            int[] children = b.Type == "NiLODNode" ? SelectLodChildren(blocks, b.Children) : b.Children;
+            foreach (int child in children)
                 Walk4x(bytes, blocks, child, w, seen, meshes, underHelper);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
@@ -227,6 +236,28 @@ public static class NifFile
     // never draws it. The likely source of the placeholder-coloured (purple/aqua) shapes that the
     // artists left in the file but flagged hidden. (daoc-re RE/34; FUN_004828a3 sets this same bit.)
     private static bool IsHidden(ushort flags) => (flags & 0x1) != 0;
+
+    // Chooses which NiLODNode children to walk: the near / full-detail level only. The engine draws a
+    // single level by camera distance; baking one static mesh means we pick the closest. DAoC names the
+    // far level with "far" (BarnLODfar/keepFar/BTavernFar); the near level is "near"/"visible". Prefer a
+    // child whose name marks it near; otherwise keep every child that is NOT a far level (so a model
+    // without the naming convention is unchanged); if that leaves nothing, keep the first child.
+    private static int[] SelectLodChildren(Block[] blocks, int[] children)
+    {
+        static bool IsFar(string n) => n.Contains("far", StringComparison.OrdinalIgnoreCase);
+        static bool IsNear(string n) =>
+            n.Contains("near", StringComparison.OrdinalIgnoreCase) ||
+            n.Contains("visible", StringComparison.OrdinalIgnoreCase);
+        static string NameOf(Block[] bs, int i) => i >= 0 && i < bs.Length ? bs[i].Name : "";
+
+        var near = children.Where(i => IsNear(NameOf(blocks, i))).ToArray();
+        if (near.Length > 0)
+            return near;
+        var notFar = children.Where(i => !IsFar(NameOf(blocks, i))).ToArray();
+        if (notFar.Length > 0)
+            return notFar;
+        return children.Length > 0 ? [children[0]] : children;
+    }
 
     // Resolves a shape's own base texture: its property list holds a NiTexturingProperty whose base
     // TexDesc points at a NiSourceTexture. This is what makes a multi-material model (a keep uses ten
