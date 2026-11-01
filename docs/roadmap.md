@@ -184,18 +184,24 @@ This is the MVP-completing milestone and the hardest. A live walk-through of Pry
 small control item. Buckets **a** and **b** are independent and **a** gives a fast, dramatic visible
 win, so they may be sequenced M7a → M7b.
 
-**M7a — static assets texture correctly ("the world looks like DAoC").** Today the client places real
-terrain and building geometry, but the surfaces are wrong in three repeating ways (all seen live):
-- **Magenta walls/columns** — the debug fallback showing through because some shapes' textures aren't
-  bound when a model is loaded via the zone-placement path (interiors are full of it). Make the
-  zone/world load path bind these the way the close-up path already does. (W3a live follow-up.)
-- **Flat tan stone** — the ~2/3 of keep shapes that store **no UVs** render in their material colour
-  (tan) instead of tiled stone; the stairs show it starkly (textured risers, tan step tops). Resolve
-  the frontiers-style name-bound textures and the UV-less classic shapes to real stone. (W3/W3a/W3b.)
-- **Foliage with no alpha cut-out** — trees are DAoC's correct crossed-plane billboards, but without
+**M7a — static assets texture correctly ("the world looks like DAoC").** The client places real
+terrain and building geometry. The walk-through found the surfaces wrong in four ways; the first two
+are fixed (status 2026-11-01):
+- ~~**Magenta walls/columns**~~ **Fixed 2026-10-31** (W3d, commit 51f0ed2). It was not unbound
+  textures: untextured shapes with a default-white colour exported no colour at all, and Godot painted
+  its magenta placeholder. The exporter now writes a colour for every untextured shape.
+- ~~**Flat tan stone and shimmering placeholder panels**~~ **Fixed 2026-10-31** (W3e, commits e4f50e9,
+  ead9f94). They were helper geometry the retail client never draws (collision hulls, climb/pick
+  volumes, shadow casters, Hidden-flagged shapes), plus near and far LOD levels drawn on top of each
+  other. The reader now applies game.dll's visibility rules and keeps only the near LOD level. Prydwen
+  Keep renders as a complete textured keep. **Residual (W3f):** a few numbered collision meshes on
+  4.1.0.12 buildings (round-tower top, BritBarn, Btavern) still show a placeholder colour; whether to
+  hide them waits on a retail screenshot of those spots. Some wall faces seen from inside a keep are
+  back-face culled (low priority).
+- **Foliage with no alpha cut-out** (open; the exporter does not read NIF alpha yet) — trees are DAoC's correct crossed-plane billboards, but without
   alpha-testing the transparent background reads as solid dark rectangles. Apply the alpha cut-out
   (the crossed-plane geometry itself is right — don't replace it).
-- **Fixtures sit flush on terrain** — houses/daises that currently float or sink get placed on the
+- **Fixtures sit flush on terrain** (open) — houses/daises that currently float or sink get placed on the
   ground correctly (the keep already does; generalise it).
 
 **M7b — characters and creatures are DAoC models ("the inhabitants look like DAoC").** The capsules
@@ -208,7 +214,7 @@ become real figures:
   this de-risks M7b substantially. DAOC_Navigator is a second GPL reference.
 - Fixes the floating-capsule placement too: real models ground against the terrain.
 
-**M7c — strafe (small, but MVP).** Add strafe-left/right (Q/E) to the existing WASD + turn rig: with
+**M7c — strafe (small, but MVP).** ~~Done 2026-10-31~~ (commit 87c7d90). Add strafe-left/right (Q/E) to the existing WASD + turn rig: with
 the mouse-chase camera, forward + strafe is how you actually navigate. A couple of input reads and a
 lateral vector, not a milestone's worth of work, but it belongs in the MVP.
 
@@ -344,23 +350,27 @@ Also out of scope for now, as genuine tangents: sound, a polished UI, and retail
 
 ---
 
-## Immediate next steps (M7 kickoff)
+## Immediate next steps (M7, status 2026-11-01)
 
-M6 is complete (chat in and out over the 0xAF text channel, live-verified 2026-10-31 — `/say` echoes
-and system/command lines read in Camelot Hills). **M7 is the MVP-completing milestone**: the world and
-its inhabitants render as DAoC, not primitives. A live Prydwen Keep walk-through (2026-10-31) set the
-scope above (M7a texturing, M7b models, M7c strafe). Recommended order — M7a first gives a fast,
-dramatic visible win and de-risks the hard skinning work:
+M7 is under way. Done: strafe (M7c); the magenta and placeholder surfaces (M7a, W3d/W3e); and a
+development overlay in the Godot client (`godot/scripts/DevOverlay.cs`: layer toggles, wireframe and
+unshaded render modes, and click-to-inspect, which reports a surface's model, placement, mesh,
+texture, UVs and transparency). Recommended order for the rest:
 
-1. **M7c strafe (Q/E)** — do it first as a quick standalone win; it's a couple of input reads on the
-   existing movement rig and the owner wants it for chase-camera navigation.
-2. **M7a, highest-impact first — kill the magenta.** Interiors are full of the debug-magenta fallback:
-   fix the zone/world load path so model textures bind the way the close-up path already does. Then the
-   UV-less flat-tan → real stone (W3a/W3b), then foliage alpha cut-out, then flush fixture placement.
-3. **M7b skinning + figures** — the hardest part: NiSkinInstance/bone weights → glTF skin, figure
-   assembly from parts (by bone name) + equipment, `.kfa` animation (idle/walk/run). Reference prior
-   art: OfflineDAoC's GPL-3.0 pipeline (`docs/offlinedaoc-asset-pipeline.md`), adopt with attribution;
-   DAOC_Navigator is a second GPL reference.
+1. **Foliage alpha cut-out (M7a).** Trees are DAoC's correct crossed-plane billboards, but their
+   transparent backgrounds draw as dark rectangles. Read the NIF alpha property in the reader and export
+   it as a glTF alpha mode (mask for cut-out). Small, and visible in every outdoor shot.
+2. **Seat fixtures on the terrain (M7a).** Generalise the keep's correct placement to the houses and
+   daises that float or sink.
+3. **M7b skinning + figures**, the hardest part: NiSkinInstance/bone weights → glTF skin, figure
+   assembly from parts (by bone name) plus equipment, and `.kfa` animation (idle/walk/run). Reference
+   prior art: OfflineDAoC's GPL-3.0 pipeline (`docs/offlinedaoc-asset-pipeline.md`), adopted with
+   attribution; DAOC_Navigator is a second GPL reference. Keep the NIF node names through to Godot
+   (meshes arrive as `MeshNN` today): figure assembly matches parts by name, and the inspect readout
+   becomes more useful.
+
+Waiting on the owner: a retail screenshot of a round-tower top, the BritBarn climb or the Btavern
+door to settle the W3f placeholder meshes.
 
 Fold in when convenient (not blocking): the carried-over M5 remainder — buffer the world-init burst so
 NPC *create* packets (realm colour + name) aren't lost and entities stop rendering neutral grey; it's

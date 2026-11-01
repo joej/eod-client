@@ -323,11 +323,20 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │   │   └── PacketLog.cs           # ✓ per-connection logger, Sink + Hex; never hex-logs 0xA7
 │   ├── Packets/                   # ✓ ClientVersion, LoginPackets, CharacterPackets (0x10, 0x28,
 │   │                              #   0xFC/0xFE overview, 0xFF create/delete), WorldPackets
-│   │                              #   (0x9D, 0xD4, 0xE8, 0xBF, 0x20, 0xA9, 0xA3/0x29)
+│   │                              #   (0x9D, 0xD4, 0xE8, 0xBF, 0x20, 0xA9, 0xA3/0x29),
+│   │                              #   WorldEntityPackets (0xA1, 0xDA, 0x4B, 0xD9, 0xA2, 0xE1),
+│   │                              #   ChatPackets (0xAF in and out)
 │   ├── World/                     # ✓ Zones.cs + zones.tsv (embedded; OpenDAoC-Database, GPL)
 │   └── Session/
 │       └── ClientSession.cs       # ✓ login → character screen → list/create/delete → world;
+│                                  #   MoveToAsync, SayAsync/SendCommandAsync, QuitAsync;
 │                                  #   KeepAliveAsync; reply timeout
+├── src/DaocAssets/                # ✓ asset reading (no Godot): Mpk/ (MPAK archives, CRC-checked),
+│                                  #   Nif/ (NIF 4.x/10.1 geometry reader, game.dll helper-shape
+│                                  #   and LOD rules, GltfExporter via SharpGLTF), Zone/ (zone
+│                                  #   layout, heightmap terrain, PCX), Library/ (convert-once
+│                                  #   asset library + install index), TextureResolver
+├── tests/DaocAssets.Tests/        # asset readers against golden fixtures (some read git-ignored private ones)
 ├── tests/DaocProtocol.Tests/      # net10.0 xUnit; Fixtures/ holds the RustDAoC 1.127e capture
 │                                  # (GPL, provenance in Fixtures/README.md). FakeServer: localhost
 │                                  # server replaying recorded replies, for ClientSession tests
@@ -335,17 +344,29 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │                                  #   tools/DaocCli -- <host> <account> [--port N] [--realm R]
 │                                  #   [--create Name | --delete slot] [--hex]
 │                                  #   (exit 0 granted, 2 denied, 1 error; never hex-logs 0xA7)
+├── tools/AssetExtract/            # ✓ `mpk` CLI: list/extract archives, convert NIF → glb, gather
+│                                  #   textures, `zone` (zone.csv) and `terrain` (terrain.glb)
+├── tools/Launcher/                # Windows launcher for pointing a real client at a server (built,
+│                                  #   not yet validated)
+├── tools/pipeline.sh, reconvert-zone.sh  # owner-run conversion of their own install
 └── godot/                         # ✓ Godot 4.7.2 .NET project (EodClient.csproj, net8.0, in the
     │                              #   solution); references DaocProtocol
     ├── project.godot              # main scene: scenes/Main.tscn
     ├── scenes/Main.tscn           # ✓ root Control with CharacterScreen.cs
+    ├── scenes/ModelViewer.tscn    # ✓ orbit any converted .glb (ModelViewer.cs)
     └── scripts/
         ├── CharacterScreen.cs     # ✓ UI built in code: login form, realm, character list, Enter
         │                          #   world, hex-log toggle. Headless check: DAOC_PASSWORD=… godot-mono
         │                          #   --headless --path godot -- --autologin <host> <account> [port]
-        │                          #   [--enter <slot> [--stay <seconds>]]
-        └── WorldView.cs           # ✓ Gate 3: ground, light, camera, capsule at (X, Z, Y)/100 with a
-                                   #   heading nose; drains packets per frame; status overlay
+        │                          #   [--enter <slot> [--stay <seconds>]] [--zone zone.csv]
+        │                          #   [--library <dir>] [--terrain terrain.glb] [--model <glb>]
+        ├── WorldView.cs           # ✓ terrain + placed zone objects (0.025 m/unit), chase camera,
+        │                          #   WASD/strafe movement sent via MoveToAsync, live entities
+        │                          #   (capsules, interpolated), chat log + input
+        ├── NetworkBridge.cs       # ✓ drained packets → typed events (entities, chat, pings)
+        ├── DevOverlay.cs          # ✓ dev panels: status, layer toggles, F2 render modes,
+        │                          #   click-to-inspect readout (model/mesh/material/UVs)
+        └── ModelTexturing.cs      # ✓ binds library .dds textures to glTF materials by name
 ```
 
 Rule: nothing under `src/` may reference `GodotSharp`. If protocol code needs
@@ -355,16 +376,16 @@ something from the engine, it belongs in the Godot project instead.
 
 ## Session and threading
 
-`ClientSession.State` (`SessionState`) has the states that exist so far: Connected → LoggedIn →
-CharacterScreen. World states (character selected, in world, heartbeat) come with Gate 3. Each
+`ClientSession.State` (`SessionState`): Connected → LoggedIn → CharacterScreen → InWorld, and
+LoggedOut once the server ends the game (0xA4). Each
 session method sends a request and awaits its reply, skipping unrelated packets (e.g. 0x29),
 and throws `TimeoutException` after `ReplyTimeout` (10 s): some server paths never answer.
 
 `DaocConnection` reads the socket on a background task and queues whole packets in a
 `System.Threading.Channels` channel. In Godot, awaiting the session from the main thread is
-fine (continuations return to it). Once in the world, unprompted packets (positions, chat) will
-be drained per frame with `TryReceive` and re-emitted as signals by `godot/scripts/NetworkBridge.cs`,
-the only place Godot meets the protocol. Sends are serialised, so a heartbeat timer may send
+fine (continuations return to it). Once in the world, `WorldView` drains unprompted packets
+(positions, creates, chat) per frame with `TryReceive` and hands them to `godot/scripts/NetworkBridge.cs`,
+which parses them and raises typed C# events: the only place Godot meets the protocol's packets. Sends are serialised, so a heartbeat timer may send
 while a session method waits.
 
 Logging: `new DaocConnection(new PacketLog(sink, hex))` logs every packet both ways. Godot
@@ -374,7 +395,8 @@ passes `GD.Print`, the CLI `Console.WriteLine`; expose `Hex` as the debug-packet
 
 ## Minimal World Scene
 
-No DAoC assets needed for MVC:
+The original MVC scene, kept for history; `WorldView` now builds the world in code (see Project
+Structure). No DAoC assets needed for MVC:
 
 ```
 World.tscn
