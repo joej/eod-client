@@ -28,10 +28,33 @@ public sealed record NifMesh
     /// are the placeholder-coloured proxies that otherwise z-fight the real textured walls.</summary>
     public bool Helper { get; init; }
 
+    /// <summary>Transparency from the shape's (or an ancestor's) <c>NiAlphaProperty</c>.</summary>
+    public SurfaceAlpha Alpha { get; init; }
+
+    /// <summary>Alpha below which a <see cref="SurfaceAlpha.Cutout"/> surface is discarded (0..1).</summary>
+    public float AlphaCutoff { get; init; } = 0.5f;
+
+    /// <summary>Draw both faces: alpha surfaces (crossed-plane foliage) and <c>NiStencilProperty</c>
+    /// draw mode 3.</summary>
+    public bool DoubleSided { get; init; }
+
     public override string ToString() =>
         $"{Name}: {Vertices.Length} verts, {Triangles.Length} tris" +
         (TextureFile is null ? "" : $", tex {TextureFile}") +
-        (BaseColor is { } c ? $", rgba({c.X:0.##},{c.Y:0.##},{c.Z:0.##},{c.W:0.##})" : "");
+        (BaseColor is { } c ? $", rgba({c.X:0.##},{c.Y:0.##},{c.Z:0.##},{c.W:0.##})" : "") +
+        (Alpha == SurfaceAlpha.Opaque ? "" : $", {Alpha.ToString().ToLowerInvariant()} {AlphaCutoff:0.###}") +
+        (DoubleSided ? ", two-sided" : "") + (Helper ? ", helper" : "");
+}
+
+/// <summary>How a surface uses its texture's alpha.</summary>
+public enum SurfaceAlpha
+{
+    /// <summary>Alpha ignored.</summary>
+    Opaque,
+    /// <summary>Alpha-tested: pixels under <see cref="NifMesh.AlphaCutoff"/> are not drawn (foliage).</summary>
+    Cutout,
+    /// <summary>Alpha-blended (glows and similar effects).</summary>
+    Blend,
 }
 
 /// <summary>A whole NIF file reduced to its static meshes.</summary>

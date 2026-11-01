@@ -91,6 +91,9 @@ public static class NifFile
         public int BaseTextureRef = -1; // NiTexturingProperty -> its base NiSourceTexture block
         public string? TextureFile;   // for NiSourceTexture blocks
         public Vector4? MaterialColor; // NiMaterialProperty -> diffuse RGB + alpha (0..1)
+        public ushort AlphaFlags;     // NiAlphaProperty -> flags (bit 0 blend, bits 5-8 dest, bit 9 test)
+        public byte AlphaThreshold;   // NiAlphaProperty -> alpha-test reference value (0..255)
+        public uint StencilDrawMode;  // NiStencilProperty -> face draw mode (3 = both sides)
     }
 
     // NetImmerse 4.x. Blocks reference each other by index and carry transforms in a NiNode/NiTriShape
@@ -114,11 +117,12 @@ public static class NifFile
             {
                 case "NiNode":
                 case "NiLODNode":
-                    if (TryReadAvObject(ref c, out Xform nx, out string nname, out ushort nflags))
+                    if (TryReadAvObject(ref c, out Xform nx, out int[] nprops, out string nname, out ushort nflags))
                     {
                         b.Name = nname;
                         b.Flags = nflags;
                         b.Local = nx;
+                        b.Props = nprops;   // a node's properties apply to its whole subtree
                         int nch = (int)c.U32();
                         var ch = new int[Math.Clamp(nch, 0, 100000)];
                         for (int k = 0; k < ch.Length; k++) ch[k] = c.I32();
@@ -145,6 +149,12 @@ public static class NifFile
                 case "NiMaterialProperty":
                     b.MaterialColor = ReadMaterialPropertyColor(ref c);
                     break;
+                case "NiAlphaProperty":
+                    ReadAlphaProperty(ref c, b);
+                    break;
+                case "NiStencilProperty":
+                    ReadStencilProperty(ref c, b);
+                    break;
             }
         }
 
@@ -163,8 +173,8 @@ public static class NifFile
             {
                 NifMesh? geom = ReadGeometryAt(bytes, blocks, b.DataRef);
                 if (geom is not null)
-                    meshes.Add(BakeTransform(geom, b.Local, $"mesh{i}",
-                        ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b))
+                    meshes.Add(WithSurface(BakeTransform(geom, b.Local, $"mesh{i}",
+                        ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b)), blocks, b, -1, -1)
                         with { Helper = IsHelperNodeName(b.Name) || IsHidden(b.Flags) });
             }
         }
@@ -178,8 +188,11 @@ public static class NifFile
     // Recursively walks the node hierarchy, composing transforms and baking each reached shape's
     // geometry at its world transform. A static method (not a local function) because `bytes` is a
     // ref-like span that can't be captured in a closure.
+    // `alpha`/`stencil` are the NiAlphaProperty/NiStencilProperty block indices inherited from the
+    // ancestors (-1 = none): a property on a node applies to its subtree unless a descendant carries
+    // its own of the same type.
     private static void Walk4x(ReadOnlySpan<byte> bytes, Block[] blocks, int index, Xform world,
-        HashSet<int> seen, List<NifMesh> meshes, bool helper = false)
+        HashSet<int> seen, List<NifMesh> meshes, bool helper = false, int alpha = -1, int stencil = -1)
     {
         if (index < 0 || index >= blocks.Length || !seen.Add(index))
             return;
@@ -197,15 +210,18 @@ public static class NifFile
             // can't read the NiRangeLODData ranges here, so we select by that naming, and fall back to
             // the first child if none is clearly "near". NiRangeLODData itself isn't a renderable child.
             int[] children = b.Type == "NiLODNode" ? SelectLodChildren(blocks, b.Children) : b.Children;
+            int nodeAlpha = FindProperty(blocks, b.Props, "NiAlphaProperty", alpha);
+            int nodeStencil = FindProperty(blocks, b.Props, "NiStencilProperty", stencil);
             foreach (int child in children)
-                Walk4x(bytes, blocks, child, w, seen, meshes, underHelper);
+                Walk4x(bytes, blocks, child, w, seen, meshes, underHelper, nodeAlpha, nodeStencil);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
         {
             NifMesh? geom = ReadGeometryAt(bytes, blocks, b.DataRef);
             if (geom is not null)
-                meshes.Add(BakeTransform(geom, w, $"mesh{index}",
-                    ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b)) with { Helper = underHelper });
+                meshes.Add(WithSurface(BakeTransform(geom, w, $"mesh{index}",
+                    ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b)), blocks, b, alpha, stencil)
+                    with { Helper = underHelper });
         }
     }
 
@@ -294,6 +310,51 @@ public static class NifFile
                 return color;
         }
         return null;
+    }
+
+    // The first property of `type` in `props`, else `inherited` (-1 = none).
+    private static int FindProperty(Block[] blocks, int[] props, string type, int inherited)
+    {
+        foreach (int p in props)
+            if (p >= 0 && p < blocks.Length && blocks[p].Type == type)
+                return p;
+        return inherited;
+    }
+
+    // Attaches the shape's transparency and sidedness, from its own NiAlphaProperty/NiStencilProperty
+    // or the nearest ancestor's.
+    private static NifMesh WithSurface(NifMesh mesh, Block[] blocks, Block shape, int inheritedAlpha,
+        int inheritedStencil)
+    {
+        int a = FindProperty(blocks, shape.Props, "NiAlphaProperty", inheritedAlpha);
+        int st = FindProperty(blocks, shape.Props, "NiStencilProperty", inheritedStencil);
+        (SurfaceAlpha mode, float cutoff) = a < 0
+            ? (SurfaceAlpha.Opaque, 0.5f)
+            : AlphaMode(blocks[a].AlphaFlags, blocks[a].AlphaThreshold);
+        bool bothSides = mode != SurfaceAlpha.Opaque || (st >= 0 && blocks[st].StencilDrawMode == 3);
+        return mesh with { Alpha = mode, AlphaCutoff = cutoff, DoubleSided = bothSides };
+    }
+
+    /// <summary>
+    /// How a NiAlphaProperty draws, as a glTF alpha mode and cut-off. Flags (nif.xml): bit 0 alpha
+    /// blend, bits 5-8 destination blend factor, bit 9 alpha test, threshold = the test's reference
+    /// (0..255). The rules follow OfflineDAoC's `alpha_mode` (rambodolphin13/OfflineDAoC,
+    /// `pipeline/nif_static.py`, GPL-3.0): an alpha test is a cut-out at its threshold (DAoC's trees:
+    /// flags 0x1221, test GREATER 75 → 0.29); a plain blend reads best as a cut-out at 0.5 for foliage
+    /// and decals; a blend onto ONE/DESTALPHA (additive glow) or INVSRCCOLOR (screen) stays blended,
+    /// the nearest glTF can express.
+    /// </summary>
+    public static (SurfaceAlpha Mode, float Cutoff) AlphaMode(ushort flags, byte threshold)
+    {
+        bool blend = (flags & 0x1) != 0;
+        int dest = (flags >> 5) & 0xF;
+        if (blend && dest is 0 or 8 or 3)
+            return (SurfaceAlpha.Blend, 0.5f);
+        if ((flags & 0x200) != 0)
+            return (SurfaceAlpha.Cutout, Math.Max(threshold / 255f, 0.05f));
+        if (blend)
+            return (SurfaceAlpha.Cutout, 0.5f);
+        return (SurfaceAlpha.Opaque, 0.5f);
     }
 
     // Bakes a world transform into a mesh's vertices and normals, attaching the texture name and the
@@ -458,6 +519,37 @@ public static class NifFile
         {
             return -1;
         }
+    }
+
+    // NiAlphaProperty body (4.x, nif.xml): NiObjectNET (Name, Extra Data ref, Controller ref), Flags
+    // u16, Threshold u8. Checked on elm1/bpinea/bwillow (4.2.1.0) and oak1 (4.1.0.12): 0x1221 / 75.
+    private static void ReadAlphaProperty(ref NifCursor c, Block b)
+    {
+        try
+        {
+            c.SizedString();
+            c.I32(); c.I32();
+            b.AlphaFlags = c.U16();
+            b.AlphaThreshold = c.U8();
+        }
+        catch (NifFormatException) { b.AlphaFlags = 0; }
+    }
+
+    // NiStencilProperty body (4.x, nif.xml for <= 10.0.1.2): NiObjectNET, Flags u16, Stencil Enabled
+    // u8, then Function, Ref, Mask, Fail, Z Fail, Pass and Draw Mode, all u32. Draw Mode 3 = both
+    // faces; DAoC's crossed-plane trees use it.
+    private static void ReadStencilProperty(ref NifCursor c, Block b)
+    {
+        try
+        {
+            c.SizedString();
+            c.I32(); c.I32();
+            c.U16();
+            c.U8();
+            for (int i = 0; i < 6; i++) c.U32();
+            b.StencilDrawMode = c.U32();
+        }
+        catch (NifFormatException) { b.StencilDrawMode = 0; }
     }
 
     // NiMaterialProperty body (4.x), positioned just past the type string. Layout (verified by byte

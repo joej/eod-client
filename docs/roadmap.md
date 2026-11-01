@@ -185,7 +185,7 @@ small control item. Buckets **a** and **b** are independent and **a** gives a fa
 win, so they may be sequenced M7a → M7b.
 
 **M7a — static assets texture correctly ("the world looks like DAoC").** The client places real
-terrain and building geometry. The walk-through found the surfaces wrong in four ways; the first two
+terrain and building geometry. The walk-through found the surfaces wrong in four ways; the first three
 are fixed (status 2026-11-01):
 - ~~**Magenta walls/columns**~~ **Fixed 2026-10-31** (W3d, commit 51f0ed2). It was not unbound
   textures: untextured shapes with a default-white colour exported no colour at all, and Godot painted
@@ -198,9 +198,12 @@ are fixed (status 2026-11-01):
   4.1.0.12 buildings (round-tower top, BritBarn, Btavern) still show a placeholder colour; whether to
   hide them waits on a retail screenshot of those spots. Some wall faces seen from inside a keep are
   back-face culled (low priority).
-- **Foliage with no alpha cut-out** (open; the exporter does not read NIF alpha yet) — trees are DAoC's correct crossed-plane billboards, but without
-  alpha-testing the transparent background reads as solid dark rectangles. Apply the alpha cut-out
-  (the crossed-plane geometry itself is right — don't replace it).
+- ~~**Foliage with no alpha cut-out**~~ **Fixed 2026-11-01.** The reader now parses
+  `NiAlphaProperty` (inherited down the node tree) and `NiStencilProperty`, and the exporter writes the
+  glTF alpha mode: DAoC's trees are alpha-tested (flags 0x1221, threshold 75), so their leaves export
+  as a two-sided cut-out at 0.29 and Godot imports them as alpha-scissor. Rules adapted from
+  OfflineDAoC (GPL-3.0). Verified on elm1, bpinea and oak1 rendered in Godot (before: solid quads;
+  after: leafy canopies), plus tests on real tree NIFs.
 - **Fixtures sit flush on terrain** (open) — houses/daises that currently float or sink get placed on the
   ground correctly (the keep already does; generalise it).
 
@@ -352,14 +355,13 @@ Also out of scope for now, as genuine tangents: sound, a polished UI, and retail
 
 ## Immediate next steps (M7, status 2026-11-01)
 
-M7 is under way. Done: strafe (M7c); the magenta and placeholder surfaces (M7a, W3d/W3e); and a
+M7 is under way. Done: strafe (M7c); the magenta and placeholder surfaces (M7a, W3d/W3e); foliage
+cut-outs (M7a); and a
 development overlay in the Godot client (`godot/scripts/DevOverlay.cs`: layer toggles, wireframe and
 unshaded render modes, and click-to-inspect, which reports a surface's model, placement, mesh,
 texture, UVs and transparency). Recommended order for the rest:
 
-1. **Foliage alpha cut-out (M7a).** Trees are DAoC's correct crossed-plane billboards, but their
-   transparent backgrounds draw as dark rectangles. Read the NIF alpha property in the reader and export
-   it as a glTF alpha mode (mask for cut-out). Small, and visible in every outdoor shot.
+1. ~~**Foliage alpha cut-out (M7a).**~~ Done 2026-11-01 (see M7a above).
 2. **Seat fixtures on the terrain (M7a).** Generalise the keep's correct placement to the houses and
    daises that float or sink.
 3. **M7b skinning + figures**, the hardest part: NiSkinInstance/bone weights → glTF skin, figure

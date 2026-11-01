@@ -41,7 +41,7 @@ libraries.
   testing; `AssetExtract` (`mpk`) is the asset converter CLI; an EoD `Launcher` (Windows, built but
   not yet validated) for pointing a real client at a server.
 
-**Not yet:** animated character and creature models, foliage transparency, solid buildings
+**Not yet:** animated character and creature models, solid buildings
 (collision beyond the terrain), vitals and targeting, combat and inventory. Those are the next milestones in [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Scope

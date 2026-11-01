@@ -79,6 +79,21 @@ public static class GltfExporter
             material.WithBaseColor(colour);
         }
 
+        // Transparency and sidedness from the NIF's NiAlphaProperty/NiStencilProperty: DAoC's trees are
+        // crossed planes with alpha-tested leaf textures, which only read as foliage when the
+        // transparent pixels are cut out and both faces draw.
+        switch (m.Alpha)
+        {
+            case SurfaceAlpha.Cutout:
+                material.WithAlpha(SharpGLTF.Materials.AlphaMode.MASK, m.AlphaCutoff);
+                break;
+            case SurfaceAlpha.Blend:
+                material.WithAlpha(SharpGLTF.Materials.AlphaMode.BLEND);
+                break;
+        }
+        if (m.DoubleSided)
+            material.WithDoubleSide(true);
+
         bool hasNormals = m.Normals is not null && m.Normals.Length == m.Vertices.Length;
         bool hasUv = m.TexCoords is not null && m.TexCoords.Length == m.Vertices.Length;
 
