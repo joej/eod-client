@@ -243,6 +243,15 @@ runs in parallel rather than in sequence.
   indoor "feels right" for little work, but still collision, so it stays post-MVP.
 - **Jump** (spacebar) — also deferred from the walk-through, post-MVP. Not needed to walk the world,
   and it opens a protocol question (the 0xBE jump packet seen in 1.130 RE).
+- **UI direction** (noted 2026-11-01; input for the HUD, not a separate milestone). Start from the
+  retail UI: list the windows a player relies on (vitals, target, chat, quickbar, map, inventory,
+  group) and keep their layout and behaviour, since players have years of muscle memory. Give them a
+  cleaner look in the dev overlay's style: dark translucent panels, small monospace labels, one accent
+  colour. Modernising can regress a dense window, so compare each one with the original. The community
+  already reskins the retail client's windows (Tubben's, MxN, Ghost and Derida UI, all for 1.127E UI
+  scaling; listed on prondrknorr.com). Later, the client could read the skin a player has installed,
+  the same way it reads their game assets. That depends on the skin format, which is unchecked: read
+  one pack before planning it. Never ship a skin with the client: none states a licence.
 - **Done when:** you can select a target, see its and your vitals, talk to an NPC, and stand on/bump
   into the world's solid geometry instead of passing through it.
 
