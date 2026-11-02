@@ -197,12 +197,14 @@ public sealed class NifFileTests
         // texture fallback is gone.
         NifModel model = NifFile.Read(File.ReadAllBytes(path));
         Assert.Equal(new NifVersion(4, 2, 2, 0), model.Version);
-        Assert.Equal(59, model.Meshes.Count);
+        // 55: the 59 shapes minus the 4 KeepFar shapes, which belong to the far LOD level and were only
+        // ever counted here because a fallback re-added them (see KeepDrawsOnlyItsNearLevelOnce).
+        Assert.Equal(55, model.Meshes.Count);
 
         NifMesh[] untextured = model.Meshes.Where(m => m.TextureFile is null).ToArray();
         NifMesh[] textured = model.Meshes.Where(m => m.TextureFile is not null).ToArray();
         Assert.Equal(39, untextured.Length);
-        Assert.Equal(20, textured.Length);
+        Assert.Equal(16, textured.Length);   // 20 before, minus the 4 textured KeepFar shapes
 
         // Every untextured shape carries a material colour (never falls through to a texture).
         Assert.All(untextured, m => Assert.NotNull(m.BaseColor));
@@ -495,5 +497,21 @@ public sealed class NifFileTests
             BinaryPrimitives.WriteUInt16LittleEndian(buf.AsSpan(o), c); o += 2;
         }
         return Convert.ToHexStringLower(SHA256.HashData(buf))[..16];
+    }
+
+    [Theory]
+    [MemberData(nameof(Keep422))]
+    public void KeepDrawsOnlyItsNearLevelOnce(string path)
+    {
+        // keep.NIF holds a NiLODNode with two whole keeps: KeepFar (shapes 151, 158, 163, 168) and
+        // KeepNear, both under a node translated (827, 557, -304). The walk keeps the near level; the
+        // unreached-shape fallback used to re-add the far shapes without that translation, drawing a
+        // second keep ~25 m off through the first. None of the far shapes may appear.
+        NifModel model = NifFile.Read(File.ReadAllBytes(path));
+        string[] names = model.Meshes.Select(m => m.Name).ToArray();
+        foreach (int far in new[] { 151, 158, 163, 168 })
+            Assert.DoesNotContain($"mesh{far}", names);
+        Assert.Contains("mesh175", names);   // keepNear:0
+        Assert.Equal(names.Length, names.Distinct().Count());
     }
 }

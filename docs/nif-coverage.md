@@ -52,6 +52,15 @@ Run it after any reader change; the integrity section must stay clean.
   inside a block we don't decode; the report lists them.
 - **2.x/3.x files were misreported** as "newer than supported". The reader now names the format.
 
+## What the audit cannot see
+
+It checks that we *read* every block correctly, not that we *assemble* the scene correctly. On
+2026-11-01 a live look at Prydwen Keep found an assembly bug it couldn't have caught: far LOD levels,
+skipped in the tree walk, were re-added by a fallback without their parents' transforms, so 15 of
+Camelot Hills' 46 models drew a shifted second copy (open question W3e). Assembly needs its own checks:
+structural tests on real files (e.g. "no shape under a skipped LOD level is emitted") and rendered
+comparisons of a sample of models from each family.
+
 ## The gaps, ranked
 
 By how much of the world they affect and how directly they block the roadmap (M7 = the world and its

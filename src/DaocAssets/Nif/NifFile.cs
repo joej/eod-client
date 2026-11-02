@@ -168,12 +168,17 @@ public static class NifFile
         var seen = new HashSet<int>();
         Walk4x(bytes, blocks, 0, Xform.Identity, seen, meshes);
 
-        // Fallback: bake any shape not reached from the root (a file whose root isn't block 0, or a
-        // shape outside the hierarchy) at its own local transform, so we still get its geometry.
+        // Fallback: bake any shape that is not in the root's hierarchy at all (a file whose root isn't
+        // block 0, or a shape outside the hierarchy) at its own local transform, so we still get its
+        // geometry. "In the hierarchy" counts every child, including the LOD levels the walk skips on
+        // purpose: treating a skipped far level as unreached re-added it here without its parents'
+        // transforms, which drew a second, shifted copy of Prydwen Keep's far model through the near
+        // one (walls cutting through the inner keep, stairs into a wall).
+        HashSet<int> inHierarchy = Descendants(blocks, 0);
         for (int i = 0; i < blocks.Length; i++)
         {
             Block b = blocks[i];
-            if ((b.Type is "NiTriShape" or "NiTriStrips") && !seen.Contains(i))
+            if ((b.Type is "NiTriShape" or "NiTriStrips") && !seen.Contains(i) && !inHierarchy.Contains(i))
             {
                 NifMesh? geom = ReadGeometryAt(bytes, blocks, b.DataRef);
                 if (geom is not null)
@@ -187,6 +192,24 @@ public static class NifFile
             throw new NifFormatException("No NiTriShapeData geometry found in NIF.");
 
         return new NifModel { Version = version, Meshes = meshes };
+    }
+
+    // Every block reachable from `root` through node children, regardless of LOD selection or
+    // helper/hidden rules.
+    private static HashSet<int> Descendants(Block[] blocks, int root)
+    {
+        var found = new HashSet<int>();
+        var stack = new Stack<int>();
+        stack.Push(root);
+        while (stack.Count > 0)
+        {
+            int i = stack.Pop();
+            if (i < 0 || i >= blocks.Length || !found.Add(i))
+                continue;
+            foreach (int c in blocks[i].Children)
+                stack.Push(c);
+        }
+        return found;
     }
 
     // Recursively walks the node hierarchy, composing transforms and baking each reached shape's
