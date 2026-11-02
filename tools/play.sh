@@ -147,15 +147,17 @@ do_assets() {
     build_mpk
     mkdir -p "$LIB" "$z" "$(dirname "$INDEX")"
 
-    if [ "$FRESH" = 1 ] || [ ! -f "$INDEX" ]; then
-        echo "indexing the install once (where every model and texture lives)…"
-        "$MPK" index "$CLIENT" --out "$INDEX"
-    fi
-
-    local stamp; stamp=$(converter_stamp)
+    # When the converter changed (or --fresh), everything derived from it is redone: the index (it
+    # decides which file a name resolves to), and the converted models and textures.
+    local stamp stale=0; stamp=$(converter_stamp)
     if [ "$FRESH" = 1 ] || [ ! -f "$STAMP_FILE" ] || [ "$(cat "$STAMP_FILE")" != "$stamp" ]; then
-        echo "converter changed since the last run (or --fresh): models will be reconverted"
+        stale=1
+        echo "converter changed since the last run (or --fresh): re-indexing and reconverting"
         rm -rf "$LIB/models" "$LIB/textures"
+    fi
+    if [ "$stale" = 1 ] || [ ! -f "$INDEX" ]; then
+        echo "indexing the install (where every model and texture lives)…"
+        "$MPK" index "$CLIENT" --out "$INDEX"
     fi
 
     "$MPK" terrain "$dat" --offset "$x" "$y" --index "$INDEX" --library "$LIB" --out "$z/terrain.glb"

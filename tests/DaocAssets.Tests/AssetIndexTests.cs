@@ -52,6 +52,29 @@ public sealed class AssetIndexTests : IDisposable
     }
 
     [Fact]
+    public void ZoneNifsWinsOverTheSameNameElsewhere()
+    {
+        // Camelot Hills names "giant.nif" (zones/Nifs/GIANT.npk); figures/Giant.NIF is the creature,
+        // and is loose, which would otherwise win. Same for a texture copied into items/.
+        Directory.CreateDirectory(Path.Combine(_client, "figures"));
+        File.WriteAllText(Path.Combine(_client, "figures", "Giant.NIF"), "creature");
+        Directory.CreateDirectory(Path.Combine(_client, "items"));
+        File.WriteAllText(Path.Combine(_client, "items", "abrwnstn.dds"), "small copy");
+        Directory.CreateDirectory(Path.Combine(_client, "zones", "Nifs"));
+        File.WriteAllBytes(Path.Combine(_client, "zones", "Nifs", "GIANT.npk"),
+            MpkBuilder.Build(("giant.nif", "zone object"u8.ToArray())));
+        File.WriteAllText(Path.Combine(_client, "zones", "Nifs", "abrwnstn.dds"), "zone texture");
+        // Elsewhere still resolves when zones/Nifs doesn't have the name.
+        File.WriteAllText(Path.Combine(_client, "figures", "ambrat.nif"), "rat");
+
+        AssetIndex index = AssetIndex.Build(_client);
+
+        Assert.Equal("zone object"u8.ToArray(), index.Read("giant.nif"));
+        Assert.Equal("zone texture"u8.ToArray(), index.Read("abrwnstn.dds"));
+        Assert.Equal("rat"u8.ToArray(), index.Read("ambrat.nif"));
+    }
+
+    [Fact]
     public void ReadsBytesFromLooseAndFromArchive()
     {
         Seed();

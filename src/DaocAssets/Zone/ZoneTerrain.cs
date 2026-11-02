@@ -60,10 +60,12 @@ public sealed class ZoneTerrain
     /// <summary>
     /// Builds the terrain as a grid of per-tile sub-meshes in region-global coordinates: the zone's
     /// painted ground is an <paramref name="tiles"/>×<paramref name="tiles"/> grid of texture tiles
-    /// (<c>texRR-CC.dds</c> in the zone's tex archive), so each sub-mesh covers one tile's block of
+    /// (<c>texXX-YY.dds</c> in the zone's tex archive: XX the tile column, i.e. the cell-X block, and YY
+    /// the row; within a tile the image's columns run along +X and its rows along +Y), so each
+    /// sub-mesh covers one tile's block of
     /// cells, carries local UVs 0..1 and names its tile as its <see cref="Nif.NifMesh.TextureFile"/>.
     /// The glTF exporter then emits one material per tile and the client textures each from the
-    /// gathered <c>texRR-CC.dds</c> — the same per-shape texturing path buildings use. Tiles share
+    /// gathered <c>texXX-YY.dds</c> — the same per-shape texturing path buildings use. Tiles share
     /// their seam cells (vertices duplicated along tile edges) so each tile's UVs stay 0..1.
     ///
     /// Unlike a model (whose local vertices are meaningless until the client places it via its
@@ -121,23 +123,23 @@ public sealed class ZoneTerrain
 
             meshes.Add(new Nif.NifMesh
             {
-                Name = $"tex{tr:00}-{tc:00}",
+                Name = $"tex{tc:00}-{tr:00}",
                 Vertices = verts,
                 Normals = null,
                 TexCoords = uvs,
                 Triangles = tris,
-                TextureFile = $"tex{tr:00}-{tc:00}.dds",
+                TextureFile = $"tex{tc:00}-{tr:00}.dds",
             });
         }
         return meshes;
     }
 
-    /// <summary>The tile names this terrain references (<c>texRR-CC.dds</c>), for a gather step.</summary>
+    /// <summary>The tile names this terrain references (<c>texXX-YY.dds</c>), for a gather step.</summary>
     public static IEnumerable<string> TileNames(int tiles)
     {
         for (int tr = 0; tr < tiles; tr++)
         for (int tc = 0; tc < tiles; tc++)
-            yield return $"tex{tr:00}-{tc:00}.dds";
+            yield return $"tex{tc:00}-{tr:00}.dds";
     }
 
     /// <summary>

@@ -35,8 +35,8 @@ public sealed class AssetIndex
     // to DDS), so a texture reference must resolve across these, not by exact file name.
     private static readonly string[] TextureExtensions = [".dds", ".tga", ".bmp"];
 
-    // Bare lower-case file name -> location. Loose files win over archived ones; among archives,
-    // first seen wins (the install rarely duplicates, and the per-model archive is found by name).
+    // Bare lower-case file name -> location. zones/Nifs wins over other folders, then loose files
+    // over archived ones, then first seen (see Build).
     private readonly Dictionary<string, AssetLocation> _byName;
 
     /// <summary>Root the index was built against (loose paths are absolute; archive paths too).</summary>
@@ -60,18 +60,32 @@ public sealed class AssetIndex
             throw new DirectoryNotFoundException($"Client directory not found: {clientDir}");
         string root = Path.GetFullPath(clientDir);
         var map = new Dictionary<string, AssetLocation>(StringComparer.Ordinal);
+        var rank = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        // Loose files first so they win over archived copies of the same name.
+        // The index is keyed by bare name, but the install reuses names across folders: a zone's NIF
+        // table says "giant.nif" and means zones/Nifs/GIANT.npk (a zone object), while figures/Giant.NIF
+        // is the creature; 193 texture names in zones/Nifs also exist elsewhere as different files,
+        // often lower-resolution copies in items/. Zone data is what the library converts, so the zone
+        // NIF folder wins: zones/Nifs loose (0), zones/Nifs archives (1), other loose (2), other
+        // archives (3). Within a rank the first seen wins. Measured 2026-11-02 (docs/world-coverage.md).
+        void Offer(string key, AssetLocation loc, int r)
+        {
+            if (rank.TryGetValue(key, out int have) && have <= r)
+                return;
+            map[key] = loc;
+            rank[key] = r;
+        }
+        string zoneNifs = Path.Combine(root, "zones", "Nifs") + Path.DirectorySeparatorChar;
+        bool InZoneNifs(string path) => path.StartsWith(zoneNifs, StringComparison.OrdinalIgnoreCase);
+
         foreach (string path in Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories))
         {
             if (!IsIndexed(path))
                 continue;
-            string key = Key(path);
-            if (!map.ContainsKey(key))
-                map[key] = AssetLocation.Loose(Path.GetFullPath(path));
+            string full = Path.GetFullPath(path);
+            Offer(Key(path), AssetLocation.Loose(full), InZoneNifs(full) ? 0 : 2);
         }
 
-        // Then archive members (don't overwrite a loose entry).
         int archives = 0;
         foreach (string archive in Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories))
         {
@@ -83,14 +97,10 @@ public sealed class AssetIndex
             {
                 using MpkArchive mpk = MpkArchive.Open(archive);
                 string abs = Path.GetFullPath(archive);
+                int r = InZoneNifs(abs) ? 1 : 3;
                 foreach (MpkEntry e in mpk.Entries)
-                {
-                    if (!IsIndexed(e.Name))
-                        continue;
-                    string key = Key(e.Name);
-                    if (!map.ContainsKey(key))
-                        map[key] = AssetLocation.InArchiveAt(abs, e.Name);
-                }
+                    if (IsIndexed(e.Name))
+                        Offer(Key(e.Name), AssetLocation.InArchiveAt(abs, e.Name), r);
             }
             catch (MpkFormatException)
             {

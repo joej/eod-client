@@ -89,6 +89,12 @@ public sealed class TerrainTests
             Assert.Equal(16, tiles.Count);
             Assert.Equal("tex00-00", tiles[0].Name);
             Assert.Equal("tex03-03.dds", tiles[^1].TextureFile);
+            // texXX-YY is column (cell X), then row (cell Y). Verified on Camelot Hills (2026-11-02):
+            // only this reading makes the 64 tiles continue across their edges, and the assembled
+            // ground then matches the zone's shademap.pcx (r = 0.76; transposed or mirrored ~0).
+            var east = tiles.Single(t => t.Vertices.All(v => v.X >= 2 * 8192f / 7 - 1 && v.X <= 4 * 8192f / 7 + 1)
+                                         && t.Vertices.All(v => -v.Y <= 2 * 8192f / 7 + 1));
+            Assert.Equal("tex01-00.dds", east.TextureFile);
 
             foreach (var t in tiles)
             {
