@@ -4,13 +4,29 @@ An open-source client for Dark Age of Camelot: a C# protocol library with no eng
 dependency, and a Godot 4 (.NET) front end, tested against the
 [OpenDAoC](https://github.com/OpenDAoC/OpenDAoC-Core) server emulator.
 
-**Status: early.** Not ready for others to run yet: no releases and no setup instructions.
+**Status: early.** No releases yet; you can run it from source (see [Quick start](#quick-start)).
 You can log in, walk your character across a textured DAoC zone, see NPCs and other players move,
 and chat. Characters and creatures are still capsules: real animated models are the next milestone
 (M7), and the one that reaches the "walk the DAoC world" MVP. See
 [`docs/roadmap.md`](docs/roadmap.md) for where this is and where it's going. Progress is logged at
 [eveofdarkness.org](https://eveofdarkness.org), named for Ben Falk's Eve of Darkness server (see
 Acknowledgements).
+
+## Quick start
+
+You need the .NET 10 SDK, the Godot 4 **.NET** build, your own DAoC client install (1.127, e.g.
+OpenDAoC's), and an OpenDAoC server you can reach (one is in `server/`). Then, from a fresh clone:
+
+```sh
+DAOC_PASSWORD=… tools/play.sh --client /path/to/DAoC --host <server> --account <name>
+```
+
+`tools/play.sh` converts Camelot Hills from your install into `private/` (git-ignored: it is the game's
+content, never commit it), builds the solution, and starts the client logged in at your character
+list. It remembers the options in `private/play.conf` (never the password; without
+`DAOC_PASSWORD` it asks), so later runs are just `tools/play.sh`. It reconverts models only when the
+converter's code has changed. `tools/play.sh assets`, `build` and `play` run one step;
+`--enter <slot>` goes straight into the world; `tools/play.sh --help` lists the rest.
 
 ## Progress
 

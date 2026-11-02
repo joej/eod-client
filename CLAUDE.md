@@ -349,6 +349,7 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │                                  #   `audit` (NIF coverage report; see docs/nif-coverage.md)
 ├── tools/Launcher/                # Windows launcher for pointing a real client at a server (built,
 │                                  #   not yet validated)
+├── tools/play.sh                  # clone → assets → build → play in one command (README Quick start)
 ├── tools/pipeline.sh, reconvert-zone.sh  # owner-run conversion of their own install
 └── godot/                         # ✓ Godot 4.7.2 .NET project (EodClient.csproj, net8.0, in the
     │                              #   solution); references DaocProtocol
@@ -452,7 +453,7 @@ Gate 4 — Publish:
   ✓ Debug packet toggle
   ✓ Protocol documentation from captures + code
   ✓ Open source on GitHub (public since 2026-10-14)
-  ⃞ Setup instructions for others to run it — not written yet (README says so)
+  ✓ Setup: `tools/play.sh` (clone → convert own install → build → play; README Quick start), 2026-11-02
 ```
 
 These gates were the original MVC (render a capsule at a server position), which is complete.
