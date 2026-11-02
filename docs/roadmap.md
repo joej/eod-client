@@ -233,7 +233,7 @@ archive describe more than terrain and objects, and we draw none of it yet:
 - ~~**Water.**~~ **First pass done 2026-11-01:** `ZoneWater` reads `[riverNN]`, `mpk water` writes
   `water.glb` + `water.csv`, and the client draws each body with a scrolling water shader (Camelot Hills'
   river now runs under the bridge). Still to do: the `extend_*` flags, tessellation, the colour fields,
-  the missing `ripl` overlay (W9), swimming (M8). The data: `[riverNN]` sections (100 zones): type `RIVER`/`LAKE`/`SWAMP`, a name ("Lake Avalon"),
+  lava and ocean types, swimming (M8). The `ripl` overlay turned out not to be used by current clients (W9). The data: `[riverNN]` sections (100 zones): type `RIVER`/`LAKE`/`SWAMP`, a name ("Lake Avalon"),
   surface height, left and right bank lines, texture (`watery`) with a ripple overlay (`ripl`), flow
   speed, colour, tessellation; plus `water.pcx` masks. Camelot Hills' river runs under the bridge
   (height 1916; the riverbed is dry in our client today).
@@ -376,6 +376,14 @@ setting: the client ships each common tree twice, as a classic hand-built NIF an
   analysis of data files, which our rules allow; disassembling the client is not. The free SpeedTree
   Learning Edition may serve as a reference viewer for checking our output, if it opens these files
   (unconfirmed).
+**Water across the tiers** (2026-11-01, W8). The client has three water modes over the same
+`[riverNN]` data, and modern profiles default to the upper two: **Classic** (what we draw now, the
+faithful default), **Shrouded Isles** (animated ripples and droplets driven by `water/Displacement1.bmp`
+and `Droplet1.bmp`), and **Reflective** (SI plus a reflection, bump-mapped with `water/bump3.tga`, at a
+selectable resolution and update rate). In Godot: SI as a normal-map ripple and droplet animation in
+the water shader; Reflective via screen-space reflections or a reflection probe (Godot 4 has no
+built-in planar reflection). Retail screenshots of one river in each mode are the reference.
+
 - **New trees (Tier 3, can ship):** CC0 tree packs (often glTF already), or trees made in Blender
   (the Sapling add-on, or hand-modelled) or Tree It (free; exports OBJ/FBX; commercial use per its
   forum terms, to confirm), normalised by a headless Blender script. Also
