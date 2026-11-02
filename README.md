@@ -23,8 +23,9 @@ DAOC_PASSWORD=… tools/play.sh --client /path/to/DAoC --host <server> --account
 
 `tools/play.sh` converts Camelot Hills from your install into `private/` (git-ignored: it is the game's
 content, never commit it), builds the solution, and starts the client logged in at your character
-list. It remembers the options in `private/play.conf` (never the password; without
-`DAOC_PASSWORD` it asks), so later runs are just `tools/play.sh`. It reconverts models only when the
+list. It remembers the options in `private/play.conf`, so later runs are just `tools/play.sh`. It
+never stores the password: it takes `DAOC_PASSWORD`, or runs a command you give once with
+`--password-cmd '<command that prints it>'` (a password manager or vault lookup), or asks. It reconverts models only when the
 converter's code has changed. `tools/play.sh assets`, `build` and `play` run one step;
 `--enter <slot>` goes straight into the world; `tools/play.sh --help` lists the rest.
 

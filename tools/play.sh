@@ -18,13 +18,16 @@
 #   --port N        server port (default 10300)
 #   --account NAME  account name
 #   --zone N        zone to convert (default 0, Camelot Hills; see src/DaocProtocol/World/zones.tsv)
+#   --password-cmd CMD  a command that prints the password (a password manager or vault lookup);
+#                   only the command is saved, never the password
 # Per run only:
 #   --enter SLOT    enter the world with the character in this slot (Albion 0-9, Midgard 10-19,
 #                   Hibernia 20-29) instead of stopping at the character list
 #   --fresh         re-index the install and reconvert everything, even if the converter hasn't changed
 #
-# The password is never saved: set DAOC_PASSWORD in the environment, or the script asks for it. It reaches
-# the client through the environment, not the command line.
+# The password is never saved: it comes from DAOC_PASSWORD in the environment, else from the saved
+# --password-cmd, else the script asks for it. It reaches the client through the environment, not
+# the command line.
 #
 # Everything it writes from your client install goes under private/, which git ignores. It is the
 # game's content: never commit it or hand it to anyone (see CLAUDE.md, "Game client and assets").
@@ -44,7 +47,7 @@ step() { printf '\n== %s\n' "$*"; }
 CMD=all
 case "${1:-}" in assets|build|play|all|config) CMD=$1; shift ;; esac
 
-CLIENT="" HOST="" PORT="" ACCOUNT="" ZONE=""
+CLIENT="" HOST="" PORT="" ACCOUNT="" ZONE="" PASSWORD_CMD=""
 [ -f "$CONF" ] && . "$CONF"
 ENTER="" FRESH=0 CHANGED=0
 while [ $# -gt 0 ]; do
@@ -54,9 +57,10 @@ while [ $# -gt 0 ]; do
         --port)    PORT=${2:?}; CHANGED=1; shift 2 ;;
         --account) ACCOUNT=${2:?}; CHANGED=1; shift 2 ;;
         --zone)    ZONE=${2:?}; CHANGED=1; shift 2 ;;
+        --password-cmd) PASSWORD_CMD=${2:?}; CHANGED=1; shift 2 ;;
         --enter)   ENTER=${2:?}; shift 2 ;;
         --fresh)   FRESH=1; shift ;;
-        -h|--help) sed -n '4,30p' "$0"; exit 0 ;;
+        -h|--help) sed -n '4,33p' "$0"; exit 0 ;;
         *) die "unknown option: $1 (see tools/play.sh --help)" ;;
     esac
 done
@@ -67,7 +71,8 @@ save_conf() {
     mkdir -p "$PRIV"
     {
         echo "# tools/play.sh settings (git-ignored). The password is never stored here."
-        printf 'CLIENT=%q\nHOST=%q\nPORT=%q\nACCOUNT=%q\nZONE=%q\n' "$CLIENT" "$HOST" "$PORT" "$ACCOUNT" "$ZONE"
+        printf 'CLIENT=%q\nHOST=%q\nPORT=%q\nACCOUNT=%q\nZONE=%q\nPASSWORD_CMD=%q\n' \
+            "$CLIENT" "$HOST" "$PORT" "$ACCOUNT" "$ZONE" "$PASSWORD_CMD"
     } > "$CONF"
 }
 [ "$CHANGED" = 1 ] && save_conf
@@ -89,6 +94,7 @@ if [ "$CMD" = config ]; then
     echo "  host    ${HOST:-(not set)}:$PORT"
     echo "  account ${ACCOUNT:-(not set)}"
     echo "  zone    $ZONE"
+    echo "  password ${PASSWORD_CMD:+from --password-cmd}${PASSWORD_CMD:-asked each run (or DAOC_PASSWORD)}"
     exit 0
 fi
 
@@ -186,6 +192,10 @@ do_play() {
     [ -f "$z/zone.csv" ] || die "no converted zone in $z: run tools/play.sh assets first"
     if ! nc -z -w 3 "$HOST" "$PORT" 2>/dev/null; then
         die "can't reach $HOST:$PORT (is the server up, and is this machine on the tailnet? try: tailscale status)"
+    fi
+    if [ -z "${DAOC_PASSWORD:-}" ] && [ -n "$PASSWORD_CMD" ]; then
+        DAOC_PASSWORD=$(bash -c "$PASSWORD_CMD" </dev/null) || die "--password-cmd failed"
+        [ -n "$DAOC_PASSWORD" ] || die "--password-cmd printed nothing"
     fi
     if [ -z "${DAOC_PASSWORD:-}" ]; then
         [ -t 0 ] || die "set DAOC_PASSWORD (no terminal to ask for it)"
