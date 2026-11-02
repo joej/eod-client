@@ -11,8 +11,7 @@
 // that the decode ends exactly where the next block begins (or where the file footer begins, for
 // the last block). A type that decodes exactly on every block in the install is one whose layout
 // we know completely; a mismatch is reported, never trusted. Gamebryo 10.1.0.0 files carry an exact
-// block-type table in their header, so their type counts are exact, but block bodies are not
-// decoded here (10.1 bodies have no boundaries to check against).
+// block-type table but no block sizes; they are decoded in sequence instead (NifSurvey.Gamebryo.cs).
 
 namespace DaocAssets.Nif;
 
@@ -28,7 +27,7 @@ public enum NifCoverage
 }
 
 /// <summary>One NIF's contents (see the file header for what is checked).</summary>
-public sealed class NifSurvey
+public sealed partial class NifSurvey
 {
     public required NifVersion Version { get; init; }
     /// <summary>Block count declared in the header.</summary>
@@ -66,6 +65,7 @@ public sealed class NifSurvey
         "NiTriStripsData", "NiTexturingProperty", "NiSourceTexture", "NiMaterialProperty",
         "NiAlphaProperty", "NiStencilProperty", "NiVertexColorProperty", "NiZBufferProperty",
         "NiSpecularProperty", "NiWireframeProperty", "NiShadeProperty", "NiDitherProperty",
+        "NiKeyframeController", "NiKeyframeData", "NiStringExtraData", "NiTextKeyExtraData",
     };
 
     /// <summary>
@@ -131,7 +131,7 @@ public sealed class NifSurvey
             return ReadLegacy(bytes, (byte)(legacy.Groups[1].Value[0] - '0'), (byte)(legacy.Groups[2].Value[0] - '0'));
         uint packed = c.U32();
         var version = new NifVersion((byte)(packed >> 24), (byte)(packed >> 16), (byte)(packed >> 8), (byte)packed);
-        return version >= V1010 ? Read1010(ref c, version) : Read4x(bytes, ref c, version);
+        return version >= V1010 ? Read1010(bytes, ref c, version) : Read4x(bytes, ref c, version);
     }
 
     // NetImmerse 2.x/3.x: no block count; list the type strings that follow the header.
@@ -152,34 +152,6 @@ public sealed class NifSurvey
             ScannedBlocks = types.Count,
             BlockTypes = types,
             Legacy = true,
-            ExactDecodes = new Dictionary<string, int>(),
-            FailedDecodes = new Dictionary<string, int>(),
-            Features = new Dictionary<string, int>(),
-        };
-    }
-
-    private static NifSurvey Read1010(ref NifCursor c, NifVersion version)
-    {
-        c.U32();                                 // User Version
-        int blockCount = checked((int)c.U32());
-        int numTypes = c.U16();
-        if (blockCount is < 0 or > 1_000_000 || numTypes > 10_000)
-            throw new NifFormatException($"Implausible 10.1 header (blocks {blockCount}, types {numTypes}).");
-        var names = new string[numTypes];
-        for (int t = 0; t < numTypes; t++)
-            names[t] = c.SizedString();
-        var types = new List<string>(blockCount);
-        for (int b = 0; b < blockCount; b++)
-        {
-            int index = c.U16();
-            types.Add(index < names.Length ? names[index] : $"<bad type index {index}>");
-        }
-        return new NifSurvey
-        {
-            Version = version,
-            DeclaredBlocks = blockCount,
-            ScannedBlocks = blockCount,
-            BlockTypes = types,
             ExactDecodes = new Dictionary<string, int>(),
             FailedDecodes = new Dictionary<string, int>(),
             Features = new Dictionary<string, int>(),
@@ -393,6 +365,31 @@ public sealed class NifSurvey
                 ObjectNet(ref c, type, f);
                 ushort flags = c.U16();
                 Bump(f, $"{type}: flags 0x{flags:X4}");
+                break;
+            }
+            case "NiKeyframeController":
+                c.I32();                                // Next Controller
+                c.U16();                                // Flags
+                Skip(ref c, 16);                        // Frequency, Phase, Start, Stop
+                c.I32();                                // Target
+                c.I32();                                // Data
+                break;
+            case "NiKeyframeData":
+                KeyframeData(ref c, f);
+                break;
+            case "NiStringExtraData":
+                c.I32();                                // Next Extra Data (<= 4.2.2.0)
+                c.U32();                                // Bytes Remaining
+                c.SizedString();
+                break;
+            case "NiTextKeyExtraData":
+            {
+                c.I32();                                // Next Extra Data
+                c.U32();                                // Unknown Int 1 (<= 4.2.2.0)
+                uint n = c.U32();
+                if (n > 10000) throw new NifFormatException($"Implausible text key count {n}.");
+                for (int k = 0; k < n; k++) { c.F32(); c.SizedString(); }
+                Bump(f, "NiTextKeyExtraData: text keys (clip markers)");
                 break;
             }
         }

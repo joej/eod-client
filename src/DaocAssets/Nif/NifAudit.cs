@@ -27,6 +27,11 @@ public sealed class NifAudit
     private int _falseNameFiles;
     private readonly List<string> _boundaryMismatches = [];
     private readonly List<(string Source, string Error)> _unreadable = [];
+    // 10.1 sequential decodes: per folder (complete, stopped, failed); stops and failures by type.
+    private readonly Dictionary<string, (int Complete, int Stopped, int Failed)> _seqByFolder = [];
+    private readonly Dictionary<string, int> _stoppedBy = [];
+    private readonly Dictionary<string, List<string>> _failedBy = [];
+    private readonly Dictionary<string, int> _failedCount = [];
 
     public int Files { get; private set; }
     public int Unreadable => _unreadable.Count;
@@ -46,6 +51,27 @@ public sealed class NifAudit
         if (!s.BoundariesMatchHeader)
             _boundaryMismatches.Add($"{source} (header {s.DeclaredBlocks} blocks, scan finds {s.ScannedBlocks}" +
                 (s.FalseTypeNames.Count > 0 ? $"; false type names: {string.Join(", ", s.FalseTypeNames.Distinct())}" : "") + ")");
+
+        if (s.Sequential != NifSurvey.SequentialDecode.NotApplicable)
+        {
+            var e = _seqByFolder.GetValueOrDefault(folder);
+            _seqByFolder[folder] = s.Sequential switch
+            {
+                NifSurvey.SequentialDecode.Complete => (e.Complete + 1, e.Stopped, e.Failed),
+                NifSurvey.SequentialDecode.Stopped => (e.Complete, e.Stopped + 1, e.Failed),
+                _ => (e.Complete, e.Stopped, e.Failed + 1),
+            };
+            if (s.Sequential == NifSurvey.SequentialDecode.Stopped)
+                Bump(_stoppedBy, s.StopType!);
+            if (s.Sequential == NifSurvey.SequentialDecode.Failed)
+            {
+                Bump(_failedCount, s.StopType!);
+                if (!_failedBy.TryGetValue(s.StopType!, out var list))
+                    _failedBy[s.StopType!] = list = [];
+                if (list.Count < 5)
+                    list.Add($"{source} ({s.StopReason})");
+            }
+        }
 
         string family = Family(s.Version);
         foreach (string type in s.BlockTypes)
@@ -125,7 +151,8 @@ public sealed class NifAudit
         sb.AppendLine("Coverage is how `NifFile.Read` (the converter) uses the type, per format family. " +
             "\"Decoded\" is the byte-level check: blocks whose full decode ended exactly at the next block, " +
             "plus (after +) blocks that decoded exactly to a later real boundary because the block scanner " +
-            "had split them at a false \"Ni…\" string (4.x only; 10.1 and 2.x/3.x bodies aren't decoded).").AppendLine();
+            "had split them at a false \"Ni…\" string (4.x only). 10.1 blocks count as exact only when their " +
+            "whole file decoded in sequence to the footer (see Integrity); 2.x/3.x bodies aren't decoded.").AppendLine();
         sb.AppendLine("| Type | Coverage (by format) | Files | Blocks | Formats | Decoded exactly | Where (files) | Converter drops |");
         sb.AppendLine("|---|---|---:|---:|---|---|---|---|");
         var rows = _types.Select(kv => (Type: kv.Key, S: kv.Value, Cov: CoverageOf(kv.Key, kv.Value)))
@@ -139,7 +166,8 @@ public sealed class NifAudit
         }
         sb.AppendLine();
 
-        sb.AppendLine("## Rendering features (4.x)").AppendLine();
+        sb.AppendLine("## Rendering features").AppendLine();
+        sb.AppendLine("4.x features are unprefixed; [10.1] features come only from files that decoded completely.").AppendLine();
         sb.AppendLine("| Feature | Blocks | Files |");
         sb.AppendLine("|---|---:|---:|");
         foreach (var (feature, (blocks, files)) in _features.OrderBy(kv => kv.Key, StringComparer.Ordinal))
@@ -157,6 +185,22 @@ public sealed class NifAudit
         foreach (var (type, s) in failedTypes)
             sb.AppendLine($"- **{type}**: {s.Failed} block(s) did not decode exactly, e.g. {string.Join("; ", s.FailedExamples)}");
         sb.AppendLine();
+        if (_seqByFolder.Count > 0)
+        {
+            sb.AppendLine("Gamebryo 10.1 files, decoded block by block to the footer:").AppendLine();
+            sb.AppendLine("| Folder | Complete | Stopped at an undecoded type | Failed |");
+            sb.AppendLine("|---|---:|---:|---:|");
+            foreach (var (folder, (complete, stopped, failedN)) in _seqByFolder.OrderByDescending(kv => kv.Value.Complete + kv.Value.Stopped + kv.Value.Failed))
+                sb.AppendLine($"| {folder} | {complete} | {stopped} | {failedN} |");
+            sb.AppendLine();
+            if (_stoppedBy.Count > 0)
+                sb.AppendLine("Stopped at (files): " + string.Join(", ",
+                    _stoppedBy.OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key} {kv.Value}"))).AppendLine();
+            foreach (var (type, n) in _failedCount.OrderByDescending(kv => kv.Value))
+                sb.AppendLine($"- **10.1 {type}**: {n} file(s) failed, e.g. {string.Join("; ", _failedBy[type])}");
+            if (_failedCount.Count > 0)
+                sb.AppendLine();
+        }
         if (_boundaryMismatches.Count > 0)
         {
             sb.AppendLine($"Block-scan mismatches ({_boundaryMismatches.Count}; {_falseNameFiles} with an impossible " +

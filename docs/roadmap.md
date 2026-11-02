@@ -223,6 +223,13 @@ become real figures:
   assembly and .kfa decode (`docs/offlinedaoc-asset-pipeline.md`). Adopt the approach with attribution;
   this de-risks M7b substantially. DAOC_Navigator is a second GPL reference.
 - Fixes the floating-capsule placement too: real models ground against the terrain.
+- **Audited 2026-11-02** (`docs/nif-coverage.md`, "Figures and animation"): every 10.1 figure and
+  animation file now decodes block by block to its footer (2,874 of 2,892 figures, all 1,542 10.1
+  `.kfa` clips, no failures), so the 10.1 layouts the reader needs are checked against the whole
+  install. Two kinds of figure: classic (one self-contained skinned file, e.g. `bcommonm.nif`) and
+  Catacombs (skeleton + parts bound by bone name). Steps: 10.1 node-tree reader → skin export → one
+  classic figure end to end → `.kfa` clips → Catacombs assembly → model-id tables for NPCs. Which
+  kind players get is open question W13.
 
 **M7c — strafe (small, but MVP).** ~~Done 2026-10-31~~ (commit 87c7d90). Add strafe-left/right (Q/E) to the existing WASD + turn rig: with
 the mouse-chase camera, forward + strafe is how you actually navigate. A couple of input reads and a

@@ -118,9 +118,9 @@ internal static class Cli
         }
     }
 
-    // audit <client-dir> --out FILE.md: surveys every NIF in the install (loose, or inside .mpk/.npk
-    // archives) and writes the coverage report. Owner-run; the report describes the owner's client
-    // files, so keep it out of the repo (private/).
+    // audit <client-dir> --out FILE.md: surveys every NIF and .kfa animation (also NIF format) in the
+    // install (loose, or inside .mpk/.npk archives) and writes the coverage report. Owner-run; the
+    // report describes the owner's client files, so keep it out of the repo (private/).
     private static int AuditCmd(string[] args)
     {
         string root = args[1];
@@ -137,7 +137,7 @@ internal static class Cli
 
         var audit = new NifAudit();
         var files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
-            .Where(p => Path.GetExtension(p).ToLowerInvariant() is ".nif" or ".mpk" or ".npk")
+            .Where(p => Path.GetExtension(p).ToLowerInvariant() is ".nif" or ".kfa" or ".mpk" or ".npk")
             .OrderBy(p => p, StringComparer.Ordinal)
             .ToList();
         int done = 0;
@@ -145,7 +145,7 @@ internal static class Cli
         {
             string rel = Path.GetRelativePath(root, path);
             string folder = rel.Contains(Path.DirectorySeparatorChar) ? rel[..rel.IndexOf(Path.DirectorySeparatorChar)] : "(root)";
-            if (Path.GetExtension(path).Equals(".nif", StringComparison.OrdinalIgnoreCase))
+            if (Path.GetExtension(path).ToLowerInvariant() is ".nif" or ".kfa")
             {
                 Survey(audit, folder, rel, () => File.ReadAllBytes(path));
             }
@@ -155,7 +155,8 @@ internal static class Cli
                 {
                     using MpkArchive mpk = MpkArchive.Open(path);
                     foreach (MpkEntry e in mpk.Entries)
-                        if (e.Name.EndsWith(".nif", StringComparison.OrdinalIgnoreCase))
+                        if (e.Name.EndsWith(".nif", StringComparison.OrdinalIgnoreCase)
+                            || e.Name.EndsWith(".kfa", StringComparison.OrdinalIgnoreCase))
                             Survey(audit, folder, $"{rel}:{e.Name}", () => mpk.Extract(e));
                 }
                 catch (Exception e) when (e is MpkFormatException or IOException or InvalidDataException)
@@ -718,7 +719,7 @@ internal static class Cli
             Godot client loads). The offset is the zone's region offsetX/offsetY (zones.tsv x 8192).
             index walks the install once and records where every .nif/.dds lives (loose path or
             archive+member) to a JSON file, so later builds and lookups never re-scan.
-            audit surveys every NIF in the install and reports each block type and rendering feature,
+            audit surveys every NIF (and .kfa animation) in the install and reports each block type and feature,
             how the converter treats it, and whether our byte-level decode of it holds. The report
             describes your client's files: write it under private/, not into the repo.
             """);

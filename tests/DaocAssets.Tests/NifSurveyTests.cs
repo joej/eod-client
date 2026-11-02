@@ -103,6 +103,127 @@ public class NifSurveyTests(ITestOutputHelper output)
     }
 }
 
+/// <summary>
+/// The Gamebryo 10.1 sequential decode: blocks have no sizes, so every block is decoded in order and
+/// the last must end exactly at the footer. Synthetic files, so each way it can go wrong is pinned.
+/// </summary>
+public class NifSurvey1010Tests
+{
+    // A 10.1.0.0 file: header, type table, Unknown Int 2, blocks (each after the u32 zero marker), footer.
+    private static byte[] File1010(string[] types, Action<BinaryWriter, int>[] bodies, bool marker = true)
+    {
+        var ms = new MemoryStream();
+        var w = new BinaryWriter(ms);
+        w.Write(Encoding.ASCII.GetBytes("Gamebryo File Format, Version 10.1.0.0\n"));
+        w.Write(0x0A010000u);
+        w.Write(0u);                                    // User Version
+        w.Write((uint)types.Length);                    // Num Blocks
+        string[] distinct = types.Distinct().ToArray();
+        w.Write((ushort)distinct.Length);
+        foreach (string t in distinct) { w.Write((uint)t.Length); w.Write(Encoding.ASCII.GetBytes(t)); }
+        foreach (string t in types) w.Write((ushort)Array.IndexOf(distinct, t));
+        w.Write(0u);                                    // Unknown Int 2
+        for (int i = 0; i < bodies.Length; i++)
+        {
+            if (marker) w.Write(0u);
+            bodies[i](w, i);
+        }
+        w.Write(1u); w.Write(0);                        // footer: one root, block 0
+        return ms.ToArray();
+    }
+
+    // NiNode body at 10.1: name, extra-data list, controller, flags, transform, properties, collision,
+    // children, effects.
+    private static void Node(BinaryWriter w, string name, int[] children)
+    {
+        w.Write((uint)name.Length); w.Write(Encoding.ASCII.GetBytes(name));
+        w.Write(0u); w.Write(-1);                       // extra data list, controller
+        w.Write((ushort)0x000C);
+        for (int k = 0; k < 3 + 9; k++) w.Write(k is 3 or 7 or 11 ? 1f : 0f);   // translation, identity rotation
+        w.Write(1f);                                    // scale
+        w.Write(0u); w.Write(-1);                       // properties, collision object
+        w.Write((uint)children.Length); foreach (int c in children) w.Write(c);
+        w.Write(0u);                                    // effects
+    }
+
+    private static void Alpha(BinaryWriter w)
+    {
+        w.Write(0u); w.Write(0u); w.Write(-1);          // name, extra data list, controller
+        w.Write((ushort)0x1221); w.Write((byte)75);
+    }
+
+    [Fact]
+    public void AFileWhoseBlocksDecodeToTheFooterIsComplete()
+    {
+        byte[] f = File1010(["NiNode", "NiAlphaProperty"], [(w, _) => Node(w, "Scene Root", [1]), (w, _) => Alpha(w)]);
+        NifSurvey s = NifSurvey.Read(f);
+        Assert.Equal(NifSurvey.SequentialDecode.Complete, s.Sequential);
+        Assert.Equal(1, s.ExactDecodes["NiNode"]);
+        Assert.Equal(1, s.ExactDecodes["NiAlphaProperty"]);
+        Assert.Equal(1, s.Features["[10.1] NiAlphaProperty: flags 0x1221 threshold 75 -> Cutout"]);
+    }
+
+    [Fact]
+    public void AStrayByteMakesTheDecodeMissTheFooter()
+    {
+        byte[] f = File1010(["NiNode", "NiAlphaProperty"],
+            [(w, _) => Node(w, "Scene Root", [1]), (w, _) => { Alpha(w); w.Write((byte)0); }]);
+        NifSurvey s = NifSurvey.Read(f);
+        Assert.Equal(NifSurvey.SequentialDecode.Failed, s.Sequential);
+        Assert.Equal("(footer)", s.StopType);
+        Assert.Empty(s.ExactDecodes);
+        Assert.Empty(s.Features);   // features from a broken decode are not reported
+    }
+
+    [Fact]
+    public void AMissingBlockMarkerOrABadReferenceFailsAtThatBlock()
+    {
+        byte[] noMarker = File1010(["NiAlphaProperty"], [(w, _) => Alpha(w)], marker: false);
+        NifSurvey a = NifSurvey.Read(noMarker);
+        Assert.Equal(NifSurvey.SequentialDecode.Failed, a.Sequential);
+        Assert.Equal("NiAlphaProperty", a.StopType);
+
+        byte[] badChild = File1010(["NiNode"], [(w, _) => Node(w, "Scene Root", [7])]);
+        NifSurvey b = NifSurvey.Read(badChild);
+        Assert.Equal(NifSurvey.SequentialDecode.Failed, b.Sequential);
+        Assert.Contains("Reference 7", b.StopReason);
+    }
+
+    [Fact]
+    public void ATypeWeDontDecodeStopsTheDecodeWithoutPassingAnything()
+    {
+        byte[] f = File1010(["NiNode", "NiPixelData"], [(w, _) => Node(w, "Scene Root", [1]), (w, _) => w.Write(0u)]);
+        NifSurvey s = NifSurvey.Read(f);
+        Assert.Equal(NifSurvey.SequentialDecode.Stopped, s.Sequential);
+        Assert.Equal("NiPixelData", s.StopType);
+        Assert.Empty(s.ExactDecodes);
+    }
+
+    [Fact]
+    public void ASeparatePartsRepeatedBonePointersAreReportedAsBoundByName()
+    {
+        // A fig3 body part: two skin bones, both pointing at the file's only node (its bones live in a
+        // separate skeleton file and are matched by name).
+        byte[] f = File1010(["NiNode", "NiSkinInstance"], [(w, _) => Node(w, "Scene Root", []), (w, _) =>
+        {
+            w.Write(-1); w.Write(0);                    // Data, Skeleton Root
+            w.Write(2u); w.Write(0); w.Write(0);        // Bones
+        }]);
+        NifSurvey s = NifSurvey.Read(f);
+        Assert.Equal(NifSurvey.SequentialDecode.Complete, s.Sequential);
+        Assert.Equal(1, s.Features["[10.1] NiSkinInstance: bone pointers repeat (bones bound by name to a separate skeleton)"]);
+    }
+
+    [Fact]
+    public void EveryTenOneTypeTheConverterUsesIsOneTheSurveyDecodes()
+    {
+        var v10 = new NifVersion(10, 1, 0, 0);
+        foreach (string t in new[] { "NiTriShapeData", "NiTriStripsData", "NiSourceTexture", "NiSkinData", "NiNode" })
+            if (NifSurvey.Coverage(t, v10) != NifCoverage.Unhandled)
+                Assert.Contains(t, NifSurvey.DecodedTypes1010);
+    }
+}
+
 public class NifBlockScanTests
 {
     [Fact]
