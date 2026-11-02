@@ -858,6 +858,10 @@ public partial class WorldView : Node3D
         {
             _dev.CycleRenderMode();
         }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
+        {
+            ClearInspect();
+        }
     }
 
     // Left-click on the world (not on a panel: panels stop their clicks) queues an inspect pick.
@@ -866,6 +870,15 @@ public partial class WorldView : Node3D
         if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb
             && !_lookActive && !ChatInputActive)
             _pendingClick = mb.Position;
+    }
+
+    // Drops the inspect highlight and readout (Esc, or clicking the selected object again).
+    private void ClearInspect()
+    {
+        if (_selected is not null && IsInstanceValid(_selected))
+            _selected.MaterialOverlay = null;
+        _selected = null;
+        _dev.SetInspect("Left-click a surface to inspect it.", false);
     }
 
     // Casts from the camera through the clicked pixel and reports what it hit: for a fixture, its
@@ -885,9 +898,8 @@ public partial class WorldView : Node3D
             ? new Godot.Collections.Dictionary()
             : GetWorld3D().DirectSpaceState.IntersectRay(ray);
 
-        if (_selected is not null && IsInstanceValid(_selected))
-            _selected.MaterialOverlay = null;
-        _selected = null;
+        MeshInstance3D? previous = _selected;
+        ClearInspect();
 
         if (hit.Count == 0 || hit["collider"].AsGodotObject() is not Node collider)
         {
@@ -900,6 +912,10 @@ public partial class WorldView : Node3D
             : collider.GetParent() as MeshInstance3D;
         (float hx, float hy, float hz) = ToRegion(hit["position"].AsVector3());
         int face = hit.ContainsKey("face_index") ? hit["face_index"].AsInt32() : -1;
+
+        // Clicking the highlighted object again deselects it.
+        if (mesh is not null && mesh == previous)
+            return;
 
         var sb = new System.Text.StringBuilder();
         Node? placed = mesh;
@@ -1459,6 +1475,6 @@ public partial class WorldView : Node3D
             (_chase
                 ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Shift sprint, wheel zoom   ·   Tab free-fly, P shot"
                 : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot")
-            + "\nF1 panels · F2 render mode · F3 view distance · left-click inspect";
+            + "\nF1 panels · F2 render mode · F3 view distance · left-click inspect (Esc clears)";
     }
 }
