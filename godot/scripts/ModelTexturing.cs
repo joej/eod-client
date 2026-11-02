@@ -61,6 +61,17 @@ public static class ModelTexturing
         return textured;
     }
 
+    /// <summary>Loads one texture by stem (e.g. "watery") from the first dir that has it, or null.</summary>
+    public static ImageTexture? Load(string stem, params string[] dirs)
+    {
+        var existing = new System.Collections.Generic.List<string>();
+        foreach (string d in dirs)
+            if (!string.IsNullOrEmpty(d) && DirAccess.DirExistsAbsolute(d))
+                existing.Add(d);
+        return existing.Count == 0 ? null
+            : LoadTexture(existing, stem, new System.Collections.Generic.Dictionary<string, ImageTexture?>());
+    }
+
     // Loads <stem>.dds (then .tga/.bmp/.png) into an ImageTexture, searching the dirs in order (so an
     // overrides dir wins). Cached by stem. Returns null when no readable texture file is found.
     private static ImageTexture? LoadTexture(

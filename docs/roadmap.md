@@ -230,7 +230,10 @@ lateral vector, not a milestone's worth of work, but it belongs in the MVP.
 
 **M7d — the zone's environment (from the world-data audit).** Each zone's `SECTOR.DAT` and data
 archive describe more than terrain and objects, and we draw none of it yet:
-- **Water.** `[riverNN]` sections (100 zones): type `RIVER`/`LAKE`/`SWAMP`, a name ("Lake Avalon"),
+- ~~**Water.**~~ **First pass done 2026-11-01:** `ZoneWater` reads `[riverNN]`, `mpk water` writes
+  `water.glb` + `water.csv`, and the client draws each body with a scrolling water shader (Camelot Hills'
+  river now runs under the bridge). Still to do: the `extend_*` flags, tessellation, the colour fields,
+  the missing `ripl` overlay (W9), swimming (M8). The data: `[riverNN]` sections (100 zones): type `RIVER`/`LAKE`/`SWAMP`, a name ("Lake Avalon"),
   surface height, left and right bank lines, texture (`watery`) with a ripple overlay (`ripl`), flow
   speed, colour, tessellation; plus `water.pcx` masks. Camelot Hills' river runs under the bridge
   (height 1916; the riverbed is dry in our client today).
@@ -465,10 +468,9 @@ placement, mesh, texture, UVs and transparency); and a **NIF coverage audit** (`
 converter reads. It fixed a block-scanner bug that dropped the last block of 496 files, and it ranks
 the remaining gaps. The order below follows that ranking instead of bugs seen in the world:
 
-1. **The zone's environment (M7d): water first, then sky and fog.** Read `[riverNN]` and build water
-   surfaces between the bank lines at the river's height, with its texture, ripple overlay and flow;
-   then `[sky]`, `[fog]` and the horizon/cloud textures. Data verified by the world audit, small,
-   and visible at once (Camelot Hills' bridge is over a dry riverbed today).
+1. **The zone's environment (M7d).** ~~Water~~ (first pass done 2026-11-01). Next: `[sky]`, `[fog]` and
+   the horizon/cloud textures, then lights and baked terrain shading. Data verified by the world audit,
+   small, and visible at once.
 2. **A real Gamebryo 10.1 reader** (node tree, transforms, per-shape properties; W7). 960 zone and
    1,259 item models are 10.1 and are read today by a geometry scan with no transforms, and 2,892 of
    the 2,934 figure models are 10.1, so M7b needs it anyway. Check it with the audit's byte-exact decode

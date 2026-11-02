@@ -56,6 +56,8 @@ public partial class WorldView : Node3D
     private Button _button = null!;
     // Layer roots the dev overlay toggles; the terrain is _terrain.
     private Node3D? _zoneRoot;
+    private Node3D? _waterRoot;
+    private int _waterBodies;
     private readonly Node3D _entityRoot = new() { Name = "Entities" };
     private bool _fixturesOn = true;
     private bool _terrainOn = true;
@@ -244,6 +246,7 @@ public partial class WorldView : Node3D
         AddChild(body);
 
         int zoneObjects = BuildZone();
+        _waterBodies = BuildWater();
         if (zoneObjects > 0)
             GD.Print($"[world] placed {zoneObjects} zone object(s)");
 
@@ -321,10 +324,11 @@ public partial class WorldView : Node3D
             _fixturesOn = on;
             if (_zoneRoot is not null) _zoneRoot.Visible = on;
         });
+        _dev.AddToggle("Water", true, on => { if (_waterRoot is not null) _waterRoot.Visible = on; });
         _dev.AddToggle("Entities", true, on => _entityRoot.Visible = on);
         _dev.AddToggle("Own character", true, on => _body.Visible = on);
         _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);
-        _dev.AddInfo($"{zoneObjects} fixtures · {_zoneTexturedModels} textured models\n" +
+        _dev.AddInfo($"{zoneObjects} fixtures · {_zoneTexturedModels} textured models · {_waterBodies} water\n" +
             $"{_zoneTexturedSurfaces} textured surfaces" + (_terrain is null ? " · flat ground" : ""));
     }
 
@@ -507,6 +511,60 @@ public partial class WorldView : Node3D
         GD.Print($"[world] zone: {placed} object(s), {distinct} distinct model(s), " +
             $"{_zoneTexturedModels} textured ({_zoneTexturedSurfaces} surface(s))");
         return placed;
+    }
+
+    // Loads the zone's rivers, lakes and swamps: water.glb (one waterNN mesh per body, already in
+    // region-global metres like the terrain) and water.csv (texture, flow, type per body), both written
+    // by `mpk water` beside zone.csv. Each surface gets the water shader with its texture and flow.
+    // Returns how many bodies were placed; none if the files aren't there.
+    private int BuildWater()
+    {
+        if (string.IsNullOrEmpty(_zonePath))
+            return 0;
+        string dir = System.IO.Path.GetDirectoryName(_zonePath) ?? "";
+        string glb = dir.PathJoin("water.glb"), csv = dir.PathJoin("water.csv");
+        if (!Godot.FileAccess.FileExists(glb) || !Godot.FileAccess.FileExists(csv))
+            return 0;
+
+        var rows = new System.Collections.Generic.Dictionary<string, string[]>();
+        foreach (string line in Godot.FileAccess.GetFileAsString(csv).Split('\n').Skip(1))
+        {
+            string[] c = line.Trim().Split(',');
+            if (c.Length >= 8)
+                rows[c[0]] = c;
+        }
+
+        var doc = new GltfDocument();
+        var state = new GltfState();
+        if (doc.AppendFromFile(glb, state) != Error.Ok || doc.GenerateScene(state) is not Node3D water)
+        {
+            GD.PrintErr($"[world] water failed to load: {glb}");
+            return 0;
+        }
+        string lib = string.IsNullOrEmpty(_libraryPath) ? dir : _libraryPath;
+        var shader = GD.Load<Shader>("res://shaders/water.gdshader");
+        int bodies = 0;
+        foreach (MeshInstance3D mi in FindMeshes(water))
+        {
+            // The node is named after the body (waterNN); the mesh instance may be it or its child.
+            string name = rows.ContainsKey(mi.Name) ? mi.Name : mi.GetParent()?.Name ?? "";
+            if (!rows.TryGetValue(name, out string[]? row))
+                continue;
+            var mat = new ShaderMaterial { Shader = shader };
+            if (ModelTexturing.Load(row[4], lib.PathJoin("overrides"), lib.PathJoin("textures"), lib) is { } tex)
+                mat.SetShaderParameter("albedo_tex", tex);
+            // DAoC's flow is about -50..50; as texture repeats per second, /1000 reads as a slow drift.
+            float flow = float.TryParse(row[6], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float f) ? f / 1000f : 0f;
+            mat.SetShaderParameter("flow", flow);
+            mi.MaterialOverride = mat;
+            bodies++;
+        }
+        water.Name = "Water";
+        AddChild(water);
+        _waterRoot = water;
+        GD.Print($"[world] water: {bodies} bod{(bodies == 1 ? "y" : "ies")}");
+        return bodies;
     }
 
     // Loads a zone .glb once (cached). Resolves the library layout: an overrides/<glb> wins, else

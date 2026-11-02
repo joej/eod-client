@@ -35,7 +35,9 @@ public static class GltfExporter
         {
             if (mesh.Helper)
                 continue; // collision/climb/shadow-caster proxy — the client never draws it
-            scene.AddRigidMesh(BuildMesh(mesh), Matrix4x4.Identity);
+            // Name the node after the mesh, so the client can tell meshes apart (water surfaces are
+            // matched to their water.csv row by it; the inspect readout shows it).
+            scene.AddRigidMesh(BuildMesh(mesh), Matrix4x4.Identity).WithName(mesh.Name);
         }
         return scene;
     }

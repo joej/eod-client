@@ -65,6 +65,17 @@ AssetExtract mpk zone     <dat000.mpk> --offset 548864 483328 \
 `mpk zone` writes `zone.csv` (rows `glb,x,y,z,angle,scale` in region coords) and the distinct models
 it references into `<LIB>`. The keep, if this zone has one, is among them.
 
+Water (rivers, lakes, swamps from the zone's `SECTOR.DAT`) goes beside `zone.csv`, where the client
+looks for it:
+
+```sh
+AssetExtract mpk water    <dat000.mpk> --offset 548864 483328 \
+    --index <LIB>/index.json --library <LIB> --out <dir holding zone.csv>
+```
+
+It writes `water.glb` (one `waterNN` surface per body, region coordinates like the terrain) and
+`water.csv` (each body's texture, overlay, flow and type).
+
 Optional cross-check — convert the standalone keep so you can compare it against the *placed* keep:
 
 ```sh

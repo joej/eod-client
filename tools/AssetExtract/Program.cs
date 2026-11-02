@@ -39,6 +39,9 @@ internal static class Cli
         if (command == "worldaudit")
             return WorldAuditCmd(args);
 
+        if (command == "water")
+            return WaterCmd(args);
+
         string inputPath = args[1];
         if (!File.Exists(inputPath))
         {
@@ -413,6 +416,64 @@ internal static class Cli
         }
     }
 
+    // water <dat<NNN>.mpk> --offset X Y --out DIR [--index index.json --library LIBDIR]: the zone's
+    // rivers, lakes and swamps (SECTOR.DAT [riverNN]) as DIR/water.glb, one mesh per body named
+    // waterNN, plus DIR/water.csv with each body's texture, overlay, flow and type for the client.
+    private static int WaterCmd(string[] args)
+    {
+        if (args.Length < 2)
+            return Usage();
+        string datMpk = args[1];
+        int? offX = null, offY = null;
+        string? outDir = null, indexPath = null, libDir = null;
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] == "--out" && i + 1 < args.Length) outDir = args[++i];
+            else if (args[i] == "--index" && i + 1 < args.Length) indexPath = args[++i];
+            else if (args[i] == "--library" && i + 1 < args.Length) libDir = args[++i];
+            else if (args[i] == "--offset" && i + 2 < args.Length
+                     && int.TryParse(args[i + 1], out int ox) && int.TryParse(args[i + 2], out int oy))
+            { offX = ox; offY = oy; i += 2; }
+            else
+                return Usage();
+        }
+        if (outDir is null || offX is null || offY is null || (indexPath is null) != (libDir is null))
+            return Usage();
+        if (!File.Exists(datMpk)) { Console.Error.WriteLine($"No such zone archive: {datMpk}"); return 1; }
+
+        using MpkArchive dat = MpkArchive.Open(datMpk);
+        MpkEntry? sectorEntry = dat.Entries.FirstOrDefault(e => e.Name.Equals("SECTOR.DAT", StringComparison.OrdinalIgnoreCase));
+        if (sectorEntry is null)
+        {
+            Console.Error.WriteLine("water: no SECTOR.DAT in this archive.");
+            return 1;
+        }
+        var bodies = ZoneWater.Parse(System.Text.Encoding.Latin1.GetString(dat.Extract(sectorEntry)));
+        Directory.CreateDirectory(outDir);
+        File.WriteAllLines(Path.Combine(outDir, "water.csv"),
+            [ZoneWater.CsvHeader, .. bodies.Select(ZoneWater.CsvRow)]);
+        if (bodies.Count == 0)
+        {
+            Console.WriteLine($"No water in this zone -> {Path.GetFullPath(Path.Combine(outDir, "water.csv"))} (header only)");
+            return 0;
+        }
+        var meshes = bodies.Select(b => ZoneWater.BuildMesh(b, offX.Value, offY.Value)).ToList();
+        string glb = Path.Combine(outDir, "water.glb");
+        GltfExporter.SaveGlb(new NifModel { Version = new NifVersion(0, 0, 0, 0), Meshes = meshes }, glb);
+        foreach (WaterBody b in bodies)
+            Console.WriteLine($"  {b.MeshName}: {b.Type,-6} \"{b.Name}\" height {b.Height}, {Math.Min(b.Left.Count, b.Right.Count)} bank pairs, " +
+                $"texture {b.Texture}{(b.MultiTexture.Length > 0 ? "+" + b.MultiTexture : "")}, flow {b.Flow}");
+        Console.WriteLine($"Water: {bodies.Count} bod{(bodies.Count == 1 ? "y" : "ies")} -> {Path.GetFullPath(glb)}");
+
+        if (indexPath is not null && libDir is not null)
+        {
+            var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir);
+            foreach (string stem in bodies.SelectMany(b => new[] { b.Texture, b.MultiTexture }).Where(t => t.Length > 0).Distinct())
+                Console.WriteLine($"  texture {stem}: " + (library.GatherTexture(stem + ".dds") is not null ? "gathered" : "MISSING"));
+        }
+        return 0;
+    }
+
     private static int TerrainCmd(string[] args)
     {
         // terrain <dat<NNN>.mpk> --offset X Y --out FILE.glb [--tiles N] [--index index.json --library LIBDIR]
@@ -534,6 +595,7 @@ internal static class Cli
               mpk terrain  <dat<NNN>.mpk> --offset X Y --out FILE.glb [--tiles N] [--index index.json --library LIBDIR]
               mpk audit    <client-dir> --out FILE.md
               mpk worldaudit <client-dir> --out FILE.md
+              mpk water    <dat<NNN>.mpk> --offset X Y --out DIR [--index index.json --library LIBDIR]
 
             With no member, extract writes every member. Default --out is the current directory.
             convert writes a glTF binary next to the .nif unless --out is given.

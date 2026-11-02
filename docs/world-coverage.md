@@ -33,7 +33,7 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 
 | Feature | Where | Zones | Roadmap |
 |---|---|---:|---|
-| Rivers, lakes, swamps | `[riverNN]`: type, name, height, bank lines, texture + ripple overlay, flow, colour, tessellation; `water.pcx` | 100 | M7d |
+| Rivers, lakes, swamps | `[riverNN]`: type, name, height, bank lines, texture + ripple overlay, flow, colour, tessellation; `water.pcx` | 100 | M7d: **read** (`ZoneWater`, `mpk water`) except `extend_*`, tessellation, colour |
 | Fog | `[fog]`: colour, amount, clip distance | 375 | M7d |
 | Sky | `[sky]` colour (329); `[terrain]` horizon and clouds (323–331); `skynif` (5) | 329 | M7d |
 | Forest fog regions | `[forest]`: colour, fog, rectangles and circles | 269 | M7d |
