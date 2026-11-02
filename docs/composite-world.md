@@ -121,7 +121,7 @@ independently:
    classic-vs-enhanced lives: because our asset library is a convert-once pool with an override layer,
    a higher-resolution or AI-upscaled texture with the same name transparently replaces the classic
    one, with no renderer change. (This is the "quality tiers and community reskin packs" direction in
-   our [roadmap](https://github.com/joej/eod-client/blob/main/docs/roadmap.md), M10.)
+   our [roadmap](https://github.com/joej/eod-client/blob/main/docs/roadmap.md), M12.)
 2. **Pipeline** — what the extractor/exporter does at convert time: scale, UV handling, material
    colours, mipmaps, filtering. Getting this right is faithful-but-crisp for free, and it is where most
    of the hard-won mesh/scale lessons live.

@@ -36,6 +36,9 @@ internal static class Cli
         if (command == "audit")
             return AuditCmd(args);
 
+        if (command == "worldaudit")
+            return WorldAuditCmd(args);
+
         string inputPath = args[1];
         if (!File.Exists(inputPath))
         {
@@ -161,6 +164,69 @@ internal static class Cli
         File.WriteAllText(outPath, audit.ToMarkdown("NIF coverage audit"));
         Console.WriteLine($"Surveyed {audit.Files} NIF(s) ({audit.Unreadable} unreadable, " +
             $"{audit.BoundaryMismatches} block-scan mismatches) -> {Path.GetFullPath(outPath)}");
+        return 0;
+    }
+
+    // worldaudit <client-dir> --out FILE.md: inventories every zone folder's data (zone kinds, archive
+    // members, SECTOR.DAT sections/keys, CSV headers). Owner-run; keep the report under private/.
+    private static int WorldAuditCmd(string[] args)
+    {
+        string root = args[1];
+        string? outPath = null;
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] == "--out" && i + 1 < args.Length)
+                outPath = args[++i];
+            else
+                return Usage();
+        }
+        string zonesDir = Path.Combine(root, "zones");
+        if (outPath is null || !Directory.Exists(zonesDir))
+            return Usage();
+
+        var audit = new DaocAssets.Zone.ZoneAudit();
+        var zoneDirs = Directory.GetDirectories(zonesDir)
+            .Where(d => System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(d), @"^zone\d+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            .Order(StringComparer.Ordinal).ToList();
+        foreach (string dir in zoneDirs)
+        {
+            var archives = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            var open = new Dictionary<string, MpkArchive>(StringComparer.OrdinalIgnoreCase);
+            var loose = new List<string>();
+            foreach (string f in Directory.GetFiles(dir))
+            {
+                string name = Path.GetFileName(f);
+                if (Path.GetExtension(f).Equals(".mpk", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        MpkArchive mpk = MpkArchive.Open(f);
+                        open[name] = mpk;
+                        archives[name] = mpk.Entries.Select(e => e.Name).ToList();
+                    }
+                    catch (Exception e) when (e is MpkFormatException or IOException or InvalidDataException)
+                    {
+                        Console.Error.WriteLine($"  archive skipped: {name}: {e.Message}");
+                    }
+                }
+                else
+                {
+                    loose.Add(name);
+                }
+            }
+            foreach (string sub in Directory.GetDirectories(dir))
+                loose.Add(Path.GetFileName(sub) + "/");
+            try
+            {
+                audit.AddZone(Path.GetFileName(dir), archives, (a, m) => open[a].Extract(m), loose);
+            }
+            finally
+            {
+                foreach (MpkArchive m in open.Values) m.Dispose();
+            }
+        }
+        File.WriteAllText(outPath, audit.ToMarkdown("World data audit"));
+        Console.WriteLine($"Surveyed {audit.Zones} zone folder(s) -> {Path.GetFullPath(outPath)}");
         return 0;
     }
 
@@ -467,6 +533,7 @@ internal static class Cli
               mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR
               mpk terrain  <dat<NNN>.mpk> --offset X Y --out FILE.glb [--tiles N] [--index index.json --library LIBDIR]
               mpk audit    <client-dir> --out FILE.md
+              mpk worldaudit <client-dir> --out FILE.md
 
             With no member, extract writes every member. Default --out is the current directory.
             convert writes a glTF binary next to the .nif unless --out is given.

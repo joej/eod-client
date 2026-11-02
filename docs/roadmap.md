@@ -5,9 +5,16 @@ person log into an OpenDAoC server and actually play — move around a textured 
 control, see other players and NPCs, chat, and (further out) fight and use their character.
 
 This replaces the original "MVC" framing (render a capsule at a server-sent position), which is
-**done**. The milestones below are grouped into what we've accomplished (M0–M6) and the stepwise
-goals that lead to a client you can walk the DAoC world in (M7–M9), with honest notes on the two
-genuine walls.
+**done**. The milestones below are grouped into what we've accomplished (M0–M6), the milestone that
+reaches a client you can walk the DAoC world in (M7, the MVP), and the post-MVP milestones toward
+mostly playing (M8–M13), with honest notes on the two genuine walls.
+
+**How this list is kept honest (2026-11-01).** It was first built from where we stood: the protocol,
+one zone, and bugs we happened to see. That missed whole parts of the world (water, sky, dungeons,
+moving between zones). It is now checked against measured inventories of what the client actually
+ships: `docs/nif-coverage.md` (every model file) and `docs/world-coverage.md` (every zone's data, and
+the client's other data folders). When either inventory turns up something with no home here, it gets
+one.
 
 ## Guiding definitions
 
@@ -19,8 +26,8 @@ genuine walls.
   Not a playable game — no combat, inventory, or skills — but the world and its inhabitants render as
   DAoC. The movement/entity/chat parts (M4–M6) are reachable over **TCP alone** (UDP is an
   optimization, not a prerequisite); the models part (M7) is the hardest asset work and completes it.
-- **Mostly playing (M8–M9).** Combat you can see and participate in, your character's vitals and
-  inventory, targeting and basic interaction — enough that the game reads as the game, within the
+- **Mostly playing (M8–M13).** Moving between zones, combat you can see and participate in, your
+  character's vitals and inventory, targeting and basic interaction, dungeons and cities — enough that the game reads as the game, within the
   1.65 ruleset OpenDAoC serves.
 
 Scope for the milestones below: **client protocol 1.127**, against **OpenDAoC** (encryption off);
@@ -221,12 +228,30 @@ become real figures:
 the mouse-chase camera, forward + strafe is how you actually navigate. A couple of input reads and a
 lateral vector, not a milestone's worth of work, but it belongs in the MVP.
 
-- **Done when:** you walk the keep and the village and the stone/wood/foliage read as DAoC (no magenta,
-  no flat-tan fills), your character and the NPCs render as DAoC models with idle/walk/run animation,
-  and you can strafe.
+**M7d — the zone's environment (from the world-data audit).** Each zone's `SECTOR.DAT` and data
+archive describe more than terrain and objects, and we draw none of it yet:
+- **Water.** `[riverNN]` sections (100 zones): type `RIVER`/`LAKE`/`SWAMP`, a name ("Lake Avalon"),
+  surface height, left and right bank lines, texture (`watery`) with a ripple overlay (`ripl`), flow
+  speed, colour, tessellation; plus `water.pcx` masks. Camelot Hills' river runs under the bridge
+  (height 1916; the riverbed is dry in our client today).
+- **Sky and fog.** `[sky]` colour (329 zones), `[fog]` colour, amount and clip distance (375),
+  `[terrain]` horizon and cloud textures (323–331), `[forest]` fog regions (266), `[farground]` (134).
+- **Static lights.** `lights.csv` (304 zones): torches and lamps.
+- **Baked terrain shading.** `shadow.pcx` and `shademap.pcx` (98 and 86 zones).
+- Also listed, smaller or unknown yet: terrain holes (`[holes]`, probably cave entrances), snow maps (18
+  zones), `textures.csv` + `patch` textures (possibly the "Atlantis terrain" option, W8), `[mongens]`
+  (unknown). Dynamic shadows and day/night are renderer and server matters (M13).
 
-> **MVP reached at M7:** log in → walk the DAoC world as it looks in-game (real terrain and buildings)
-> → see your character and NPCs as **DAoC models**, not capsules → chat. This is the "walk around the
+**Scope of the MVP.** One outdoor zone at a time, looking and behaving like DAoC: Camelot Hills first,
+then any of the 98 heightmap zones. Walking across a zone boundary, dungeons and cities come after
+(M8, M11).
+
+- **Done when:** you walk the keep and the village and the stone/wood/foliage read as DAoC (no magenta,
+  no flat-tan fills), water fills the rivers and lakes, the sky and fog match the zone, your character
+  and the NPCs render as DAoC models with idle/walk/run animation, and you can strafe.
+
+> **MVP reached at M7:** log in → walk a DAoC zone as it looks in-game (real terrain, buildings, water,
+> sky) → see your character and NPCs as **DAoC models**, not capsules → chat. This is the "walk around the
 > game world" milestone — not a playable game (no combat or skills), but the client renders the world
 > and its inhabitants as DAoC. The right moment for a tagged release and a community show-and-tell.
 
@@ -234,11 +259,22 @@ lateral vector, not a milestone's worth of work, but it belongs in the MVP.
 
 ## The path to mostly playing (post-MVP)
 
-These come **after** the MVP (M4–M7): M8–M10 are the post-MVP milestones. They are larger and some
-touch the walls; order is provisional, each is independently valuable, and M10 (asset quality tiers)
-runs in parallel rather than in sequence.
+These come **after** the MVP (M4–M7). Order is the intended sequence, but each is independently
+valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
 
-### M8 — Vitals, targeting, interaction — and solid world (post-MVP)
+### M8 — Move through the world
+*Walk out of one zone into the next; travel and die like a player.*
+- **Adjacent zones.** Load the neighbouring outdoor zones of the region and stream them as you move
+  (today one zone is loaded by command-line arguments). Cross zone boundaries without a loading
+  screen; the live position update already carries the zone, and `MoveToAsync` must follow it.
+- **Zone jumps and teleports.** `zonejump.csv` (345 zones) and `[jumpNN]` travel points; the server's
+  region-change and teleport packets; entering a dungeon or city (until M11, as a placeholder).
+- **Death, release and respawn**, which move the player to a bind point, often in another zone.
+- **Swimming** in the water M7 draws.
+- **Done when:** you can walk from Camelot Hills into Salisbury Plains and back, use a zone jump, and
+  die, release and come back at your bind point.
+
+### M9 — Vitals, targeting, interaction — and solid world
 *The HUD, the basics of "doing things," and a world you can't walk through.*
 - Parse health/mana/endurance, level/XP, and the stat/update packets into a HUD.
 - Target an entity; basic interact (talk to NPC, open a merchant/dialog) — read-only first.
@@ -248,7 +284,7 @@ runs in parallel rather than in sequence.
   raised dais/keep floor, passes through a slope or stairs, and walks through walls. DAoC resolves the
   player against the `collidee`/`climb` node-name volumes inside each model (identified in W3c); apply
   those to stand on floors/daises/stairs, block at walls, and climb climb-volumes. *Possible early-lite
-  (still M8):* extend the ground ray to also hit floor geometry so you stand on daises — ~80% of the
+  (still M9):* extend the ground ray to also hit floor geometry so you stand on daises — ~80% of the
   indoor "feels right" for little work, but still collision, so it stays post-MVP.
 - **Jump** (spacebar) — also deferred from the walk-through, post-MVP. Not needed to walk the world,
   and it opens a protocol question (the 0xBE jump packet seen in 1.130 RE).
@@ -264,16 +300,28 @@ runs in parallel rather than in sequence.
 - **Done when:** you can select a target, see its and your vitals, talk to an NPC, and stand on/bump
   into the world's solid geometry instead of passing through it.
 
-### M9 — Combat and inventory you can see
+### M10 — Combat and inventory you can see
 *The game reads as the game.*
 - Interpret combat packets (attack/animation/damage/death) so fights are visible; send basic combat
   actions.
 - Parse inventory and equipment; show the character's items; equip/move within the 1.65 ruleset.
 - **Done when:** you can engage a mob, see the exchange and outcome, and manage what you're wearing.
 
-### M10 — Asset quality tiers and community reskin packs
+### M11 — Dungeons and cities
+*Go inside: the 299 zones that aren't heightmaps.*
+Measured 2026-11-01 (`docs/world-coverage.md`): 282 dungeon zones and 17 "skycity" zones are built
+from a different, chunk-based format: `dungeon.chunk` (a list of NIF pieces), `dungeon.place`
+(placements), `dungeon.prop` (props), `dungeon.water`, and `portals.csv` (connections between
+pieces, 299 zones), with `nifproxy.csv`/`texproxy.csv` alternates. The files are text, so this is
+format work like the NIF audit, not reverse engineering. Capital cities may be among the skycity zones
+(unconfirmed).
+- Audit the chunk format across all 299 zones, then assemble a dungeon from its pieces and placements.
+- Portals and the dungeon visibility rules; dungeon water and lighting (`[dungeonfix]`).
+- **Done when:** you can enter a dungeon from its zone jump and walk it, rendered from its pieces.
+
+### M12 — Asset quality tiers and community reskin packs
 *Classic by default; progressively better by choice — and others can contribute whole new looks.*
-Post-MVP, parallel to M8–M9 (not blocking them), building on the models M7 brings. The asset library
+Post-MVP, parallel to M8–M11 (not blocking them), building on the models M7 brings. The asset library
 was built for this from the start
 (convert-once flat library + an `overrides/` layer that wins at load time; see
 `docs/project` asset-library notes): "enhanced" is just a better-named-the-same asset layered over the
@@ -349,6 +397,25 @@ Enabling work (do the small part before override content piles up):
   renders from the zone masks, and the pack format + guide let someone outside the project publish a
   reskin that drops in without code changes.
 
+### M13 — Atmosphere: effects, sound and music
+*The world moves and makes noise.*
+- **Day and night**, and weather: the client's `light/` folder holds lighting tables (`.tra`, `.col`;
+  unconfirmed) and the server sends the time.
+- **Spell and visual effects**: 1,575 effect NIFs, particles (unhandled in the NIF audit), UV-scrolling
+  and keyframe animation; doors and windmills.
+- **Sound and music**: `sounds/` (2,703 `.wav`, 49 music `.mp3`, 12 CSVs) and each zone's `sounds.dat`
+  (389 zones).
+- **Done when:** a day passes visibly in Camelot Hills, a spell shows its effect, and the zone has its
+  ambient sound and music.
+
+### Further out (unscheduled)
+Tracked so they're planned, not stumbled into: **character creation in the Godot UI** (the protocol
+side is done); **map and minimap**; **group, guild, quest and trade windows**; **mounts** (the server
+already sends 0x4E ControlledHorse at world entry); **housing** (`phousing/`: 410 NIFs); **RvR
+frontiers, keeps, doors and sieges** (`frontiers/`); **UI skins** (the retail UI is 151 XML layouts +
+DDS art in `ui/`; see the UI direction under M9); and **releasing for others** (setup instructions and
+a guide to converting your own install; Gate 4 in CLAUDE.md is still open).
+
 ---
 
 ## The two walls (known hard problems)
@@ -389,7 +456,8 @@ Also out of scope for now, as genuine tangents: sound, a polished UI, and retail
 
 ## Immediate next steps (M7, status 2026-11-01)
 
-M7 is under way. Done: strafe (M7c); the magenta and placeholder surfaces (M7a, W3d/W3e); foliage
+M7 is under way. Done: a **world-data audit** (`mpk worldaudit`, `docs/world-coverage.md`) that
+restructured this roadmap; strafe (M7c); the magenta and placeholder surfaces (M7a, W3d/W3e); foliage
 cut-outs (M7a); a development overlay in the Godot client (`godot/scripts/DevOverlay.cs`: layer
 toggles, wireframe and unshaded render modes, and click-to-inspect, which reports a surface's model,
 placement, mesh, texture, UVs and transparency); and a **NIF coverage audit** (`mpk audit`,
@@ -397,21 +465,25 @@ placement, mesh, texture, UVs and transparency); and a **NIF coverage audit** (`
 converter reads. It fixed a block-scanner bug that dropped the last block of 496 files, and it ranks
 the remaining gaps. The order below follows that ranking instead of bugs seen in the world:
 
-1. **A real Gamebryo 10.1 reader** (node tree, transforms, per-shape properties; W7). 960 zone and
+1. **The zone's environment (M7d): water first, then sky and fog.** Read `[riverNN]` and build water
+   surfaces between the bank lines at the river's height, with its texture, ripple overlay and flow;
+   then `[sky]`, `[fog]` and the horizon/cloud textures. Data verified by the world audit, small,
+   and visible at once (Camelot Hills' bridge is over a dry riverbed today).
+2. **A real Gamebryo 10.1 reader** (node tree, transforms, per-shape properties; W7). 960 zone and
    1,259 item models are 10.1 and are read today by a geometry scan with no transforms, and 2,892 of
    the 2,934 figure models are 10.1, so M7b needs it anyway. Check it with the audit's byte-exact decode
    check, as for 4.x. Some floating or sunken fixtures may be 10.1 models missing their transforms:
    recheck **fixture seating** (M7a) after this, before writing placement fixes.
-2. **Dark maps, second UV sets and vertex colours (M7a).** Baked lighting and shading on buildings and
+3. **Dark maps, second UV sets and vertex colours (M7a).** Baked lighting and shading on buildings and
    dungeons: dark maps in 1,463 files, vertex colours in about 3,200. The largest remaining difference
    between our surfaces and the game's.
-3. **M7b skinning + figures**, the hardest part: NiSkinInstance/bone weights → glTF skin, figure
+4. **M7b skinning + figures**, the hardest part: NiSkinInstance/bone weights → glTF skin, figure
    assembly from parts (by bone name) plus equipment, and `.kfa` animation (idle/walk/run). Reference
    prior art: OfflineDAoC's GPL-3.0 pipeline (`docs/offlinedaoc-asset-pipeline.md`), adopted with
    attribution; DAOC_Navigator is a second GPL reference. Keep the NIF node names through to Godot
    (meshes arrive as `MeshNN` today): figure assembly matches parts by name, and the inspect readout
    becomes more useful. Audit `.kfa` files the same way first.
-4. Then the rest of the audit's list as it bears on what's on screen: 2.x/3.x models missing from zones
+5. Then the rest of the audit's list as it bears on what's on screen: 2.x/3.x models missing from zones
    (W6), billboards, keyframe animation for doors and windmills, LOD ranges.
 
 Waiting on the owner:

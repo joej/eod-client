@@ -63,6 +63,8 @@ libraries.
   sources and next steps.
 - [`docs/nif-coverage.md`](docs/nif-coverage.md): what the game's model files contain, what the
   converter reads, and the measured gaps.
+- [`docs/world-coverage.md`](docs/world-coverage.md): what the game's zone and world data contains
+  (water, sky, dungeons, lights, …) and what the converter reads of it.
 - `CLAUDE.md`: working notes, with sources for each claim.
 - `server/`: a pinned OpenDAoC test server (podman or Docker compose).
 
