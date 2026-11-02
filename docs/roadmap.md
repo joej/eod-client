@@ -316,9 +316,11 @@ setting: the client ships each common tree twice, as a classic hand-built NIF an
 - **Enhanced (Tier 2): SpeedTree near, NIF far.** Convert the client's SpeedTree files to meshes with
   **our own converter**, once, at conversion time (the SpeedTree runtime is commercial; we can't ship
   it, and the free Learning Edition can't export). Draw the SpeedTree mesh up close and the classic NIF
-  beyond a distance, cross-faded. 36 trees exist in both forms (including Camelot Hills' elm1, elm2,
-  bpinea, bwillow, oak1); 113 are SpeedTree-only and need a far version we make (a simplified mesh or a
-  billboard card). **First: a format-feasibility check** — is the early SpeedTree format
+  beyond a distance, cross-faded. The client's `zones/trees/treemap.csv` is the map to follow: 55
+  classic trees have a SpeedTree replacement (including Camelot Hills' elm1, elm2, bpinea, bwillow,
+  oak1), with per-tree textures, z offset, scale and colour factors our converter should apply; 16 Trials
+  of Atlantis trees are SpeedTree-only (7 have no NIF at all) and need a far version we make (a
+  simplified mesh or a billboard card) — relevant only if Atlantis zones are served (W5). **First: a format-feasibility check** — is the early SpeedTree format
   (`__IdvSpt_02_`) documented, or read by open-source tools (Oblivion used `.spt` too)? Reading it is
   analysis of data files, which our rules allow; disassembling the client is not. The free SpeedTree
   Learning Edition may serve as a reference viewer for checking our output, if it opens these files
@@ -328,7 +330,11 @@ setting: the client ships each common tree twice, as a classic hand-built NIF an
   forum terms, to confirm), normalised by a headless Blender script. Also
   [glTF Procedural Trees](https://gltf-trees.donmccurdy.com/) (MIT, browser, exports glTF), built on
   proctree.js (BSD, Paul Brunt): small and parameter-driven, so it could be ported to C# as a headless
-  generator in our converter. Use clearly licensed (CC0) bark and leaf textures, not the demo's. A replacement must match a small
+  generator in our converter. Use clearly licensed (CC0) bark and leaf textures, not the demo's.
+  [NervForge](https://nervtech.org/nervforge/) (free, browser, exports glTF/GLB, maple/willow
+  presets) has no stated terms for exported trees: fine for experiments, not for a shipped pack until
+  the author confirms. Its MIT repo (`roche-emmanuel/nervland_adventures`) needs the author's private
+  engine to build, so it's algorithm reference only. A replacement must match a small
   contract: the same file name as the tree it replaces (e.g. `elm1.glb`) in a pack, metres, Y up,
   origin at the base of the trunk, leaf materials cut-out and double-sided, optionally a low-detail
   version for distance.
