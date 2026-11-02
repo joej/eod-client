@@ -237,8 +237,18 @@ archive describe more than terrain and objects, and we draw none of it yet:
   surface height, left and right bank lines, texture (`watery`) with a ripple overlay (`ripl`), flow
   speed, colour, tessellation; plus `water.pcx` masks. Camelot Hills' river runs under the bridge
   (height 1916; the riverbed is dry in our client today).
-- **Sky and fog.** `[sky]` colour (329 zones), `[fog]` colour, amount and clip distance (375),
-  `[terrain]` horizon and cloud textures (323–331), `[forest]` fog regions (266), `[farground]` (134).
+- ~~**Sky and fog.**~~ **First pass done 2026-11-01:** the client's sky is `zones/sky/sky_<name>.dat`
+  (chosen per zone or region in `zones/zones.mpk` → `zones.dat`; Camelot Hills → `sky_albion`), not
+  SECTOR.DAT's `[sky]` colour or horizon/cloud names, which the client doesn't read. `mpk sky` writes
+  `sky.csv` (canopy and cloud gradients, ambient and sun light, fog colour for every weather and time of
+  day; cloud layers; sun) and the client draws clear daytime: a sky shader with the canopy gradient, two
+  scrolling cloud layers and the sun disk, the file's light, and fog from SECTOR.DAT `[fog]` (clip = view
+  distance, amount = fogged share measured back from it: Camelot Hills fogs 340–400 m). **View distance
+  is a player setting** (`ClientSettings`, saved in `user://settings.cfg`; F3 or the dev overlay for now):
+  classic (the zone's own, the default), ×1.5, ×2, ×4, with the fog scaled to match; a long view
+  outgrows the single loaded zone until M8 streams its neighbours. Still to do:
+  canopy band elevations and the east/west rule (guessed; W10), `[forest]` fog regions (266 zones),
+  `[farground]`, `[rotate]`, moon and stars, and the clock (M13).
 - **Static lights.** `lights.csv` (304 zones): torches and lamps.
 - **Baked terrain shading.** `shadow.pcx` and `shademap.pcx` (98 and 86 zones).
 - Also listed, smaller or unknown yet: terrain holes (`[holes]`, probably cave entrances), snow maps (18
@@ -476,8 +486,8 @@ placement, mesh, texture, UVs and transparency); and a **NIF coverage audit** (`
 converter reads. It fixed a block-scanner bug that dropped the last block of 496 files, and it ranks
 the remaining gaps. The order below follows that ranking instead of bugs seen in the world:
 
-1. **The zone's environment (M7d).** ~~Water~~ (first pass done 2026-11-01). Next: `[sky]`, `[fog]` and
-   the horizon/cloud textures, then lights and baked terrain shading. Data verified by the world audit,
+1. **The zone's environment (M7d).** ~~Water~~ and ~~sky and fog~~ (first passes done 2026-11-01). Next:
+   static lights (`lights.csv`) and baked terrain shading (`shadow.pcx`, `shademap.pcx`). Data verified by the world audit,
    small, and visible at once.
 2. **A real Gamebryo 10.1 reader** (node tree, transforms, per-shape properties; W7). 960 zone and
    1,259 item models are 10.1 and are read today by a geometry scan with no transforms, and 2,892 of

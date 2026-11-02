@@ -54,7 +54,7 @@ public static class ZoneWater
     /// </summary>
     public static IReadOnlyList<WaterBody> Parse(string sectorDat)
     {
-        var sections = ReadSections(sectorDat);
+        var sections = IniFile.Parse(sectorDat).Sections;
         int sizeX = sections.TryGetValue("sectorsize", out var size) && size.TryGetValue("sizex", out string? sx)
             && int.TryParse(sx, out int n) && n > 0 ? n : 8;
         float cell = sizeX * 8192f / 256f;
@@ -62,7 +62,7 @@ public static class ZoneWater
         var bodies = new List<WaterBody>();
         foreach ((string name, Dictionary<string, string> keys) in sections)
         {
-            if (!name.StartsWith("river", StringComparison.Ordinal)
+            if (!name.StartsWith("river", StringComparison.OrdinalIgnoreCase)
                 || !int.TryParse(name.AsSpan(5), NumberStyles.None, CultureInfo.InvariantCulture, out int index))
                 continue;
             List<Vector2> left = Points(keys, "left", cell), right = Points(keys, "right", cell);
@@ -158,7 +158,7 @@ public static class ZoneWater
         var points = new SortedDictionary<int, Vector2>();
         foreach ((string key, string value) in keys)
         {
-            if (!key.StartsWith(prefix, StringComparison.Ordinal)
+            if (!key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
                 || !int.TryParse(key.AsSpan(prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out int i))
                 continue;
             string[] p = value.Split(',');
@@ -167,29 +167,6 @@ public static class ZoneWater
                 points[i] = new Vector2(x * cell, y * cell);
         }
         return [.. points.Values];
-    }
-
-    private static Dictionary<string, Dictionary<string, string>> ReadSections(string text)
-    {
-        var sections = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-        Dictionary<string, string>? current = null;
-        foreach (string raw in text.Split('\n'))
-        {
-            string line = raw.Trim();
-            if (line.Length == 0 || line.StartsWith(';'))
-                continue;
-            if (line.StartsWith('[') && line.Contains(']'))
-            {
-                string name = line[1..line.IndexOf(']')].Trim().ToLowerInvariant();
-                current = sections.TryGetValue(name, out var existing) ? existing
-                    : sections[name] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                continue;
-            }
-            int eq = line.IndexOf('=');
-            if (current is not null && eq > 0)
-                current[line[..eq].Trim().ToLowerInvariant()] = line[(eq + 1)..].Trim();
-        }
-        return sections;
     }
 
     private static float Float(string? s) =>

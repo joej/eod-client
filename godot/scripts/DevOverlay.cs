@@ -102,6 +102,27 @@ public partial class DevOverlay : CanvasLayer
         _layers.MoveChild(box, _renderButton.GetIndex());
     }
 
+    /// <summary>Adds a button to the layers panel that cycles through <paramref name="options"/>;
+    /// returns a function that advances it (for a hotkey).</summary>
+    public System.Action AddChoice(string label, string[] options, int index, System.Action<int> onChange)
+    {
+        var button = new Button { FocusMode = Control.FocusModeEnum.None, Flat = true, Alignment = HorizontalAlignment.Left };
+        StyleFont(button, Accent);
+        int current = index;
+        void Show() => button.Text = $"{label}: {options[current]}";
+        void Next()
+        {
+            current = (current + 1) % options.Length;
+            Show();
+            onChange(current);
+        }
+        button.Pressed += Next;
+        Show();
+        _layers.AddChild(button);
+        _layers.MoveChild(button, _renderButton.GetIndex() + 1);
+        return Next;
+    }
+
     /// <summary>Adds a control (e.g. the quit button) under the status text.</summary>
     public void AddToStatus(Control c) => _statusBox.AddChild(c);
 

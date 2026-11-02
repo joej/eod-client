@@ -361,6 +361,7 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
         │                          #   --headless --path godot -- --autologin <host> <account> [port]
         │                          #   [--enter <slot> [--stay <seconds>]] [--zone zone.csv]
         │                          #   [--library <dir>] [--terrain terrain.glb] [--model <glb>]
+        │                          #   [--campose X Y Z YAW PITCH] [--shot SECONDS] [--view classic|x2|x4]
         ├── WorldView.cs           # ✓ terrain + placed zone objects (0.025 m/unit), chase camera,
         │                          #   WASD/strafe movement sent via MoveToAsync, live entities
         │                          #   (capsules, interpolated), chat log + input

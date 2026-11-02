@@ -34,8 +34,8 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 | Feature | Where | Zones | Roadmap |
 |---|---|---:|---|
 | Rivers, lakes, swamps | `[riverNN]`: type, name, height, bank lines, texture + ripple overlay, flow, colour, tessellation; `water.pcx` | 100 | M7d: **read** (`ZoneWater`, `mpk water`) except `extend_*`, tessellation, colour |
-| Fog | `[fog]`: colour, amount, clip distance | 375 | M7d |
-| Sky | `[sky]` colour (329); `[terrain]` horizon and clouds (323–331); `skynif` (5) | 329 | M7d |
+| Fog | `[fog]` clip (the view distance) and amount (fogged share, measured back from clip); its colour keys aren't read by the client | 375 | M7d: **read** |
+| Sky | not SECTOR.DAT: `zones/sky/sky_<name>.dat`, chosen by `zones/zones.mpk` → `zones.dat` `skydome` (zone, else region, else `sky_default`); SECTOR.DAT `[sky]` colour and `[terrain]` horizon/clouds are not read by the client | 329 | M7d: **read** (`SkyDefinition`, `mpk sky`) |
 | Forest fog regions | `[forest]`: colour, fog, rectangles and circles | 269 | M7d |
 | Far ground | `[farground]` texture | 134 | M7d |
 | Static lights | `lights.csv` (x, y, z and a fourth value, likely the light type) | 304 | M7d |
@@ -55,6 +55,8 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 |---|---|---|
 | `anims/` | 4,060 `.kfa` animations | M7b (audit the format first) |
 | `light/` | `.tra`, `.col`, `.pcx`: probably day/night lighting tables (unconfirmed) | M13 |
+| `zones/sky/` | `sky.mpk` (25 `sky_<name>.dat`: sun, moon, stars, cloud layers, per weather × time of day canopy and cloud gradients, ambient/sun light, fog colour, storms, rain, snow) and its textures | M7d (day), M13 (clock, weather) |
+| `zones/zones.mpk` | `zones.dat`: every zone's name, region, offsets, size, type, entry music, sky; each region's sky, grass (`grass_alb.csv`/`.dds`) and expansion | M7d, M8, M12 |
 | `water/` | water textures and 3 NIFs | M7d |
 | `effects/` | 1,575 effect NIFs, 573 DDS | M13 |
 | `sounds/` | 2,703 `.wav`, 49 music `.mp3`, 12 CSVs | M13 |

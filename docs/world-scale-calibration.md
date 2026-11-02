@@ -76,6 +76,12 @@ AssetExtract mpk water    <dat000.mpk> --offset 548864 483328 \
 It writes `water.glb` (one `waterNN` surface per body, region coordinates like the terrain) and
 `water.csv` (each body's texture, overlay, flow and type).
 
+The sky goes beside it too; the sky file is chosen the way the client does (`zones.dat`):
+
+```sh
+AssetExtract mpk sky      <dat000.mpk> --index <LIB>/index.json --library <LIB> --out <dir holding zone.csv>
+```
+
 Optional cross-check — convert the standalone keep so you can compare it against the *placed* keep:
 
 ```sh

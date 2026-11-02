@@ -57,6 +57,14 @@ public partial class WorldView : Node3D
     // Layer roots the dev overlay toggles; the terrain is _terrain.
     private Node3D? _zoneRoot;
     private Node3D? _waterRoot;
+    private Godot.Environment _environment = null!;
+    private DirectionalLight3D _sun = null!;
+    private string? _skyName;
+    // The zone's own view distance (SECTOR.DAT [fog] clip) and fogged share, in metres / 0..1; 0 when
+    // the zone has no sky.csv. The player's view-distance setting multiplies the distance.
+    private float _zoneClip;
+    private float _fogShare;
+    private System.Action? _nextViewDistance;
     private int _waterBodies;
     private readonly Node3D _entityRoot = new() { Name = "Entities" };
     private bool _fixturesOn = true;
@@ -192,17 +200,17 @@ public partial class WorldView : Node3D
         AddChild(_dev);
         AddChild(_entityRoot);
 
-        AddChild(new WorldEnvironment
+        _environment = new Godot.Environment
         {
-            Environment = new Godot.Environment
-            {
-                BackgroundMode = Godot.Environment.BGMode.Color,
-                BackgroundColor = new Color(0.55f, 0.7f, 0.85f),
-                AmbientLightSource = Godot.Environment.AmbientSource.Color,
-                AmbientLightColor = new Color(0.6f, 0.6f, 0.6f),
-            },
-        });
-        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-50, 30, 0) });
+            BackgroundMode = Godot.Environment.BGMode.Color,
+            BackgroundColor = new Color(0.55f, 0.7f, 0.85f),
+            AmbientLightSource = Godot.Environment.AmbientSource.Color,
+            AmbientLightColor = new Color(0.6f, 0.6f, 0.6f),
+        };
+        AddChild(new WorldEnvironment { Environment = _environment });
+        _sun = new DirectionalLight3D { RotationDegrees = new Vector3(-50, 30, 0) };
+        AddChild(_sun);
+        _skyName = ApplySky("clear", "day");
 
         // Ground: the zone's real terrain mesh if given (its vertices are absolute region coords, so
         // it loads at the origin with the usual region→Godot scale), otherwise a flat placeholder.
@@ -308,12 +316,17 @@ public partial class WorldView : Node3D
         _dev.AddToStatus(_button);
         BuildChatUi(overlay);
         AddChild(overlay);
+        _viewSetting = ViewOverride() ?? ClientSettings.ViewDistance;
+        ApplyViewDistance(_viewSetting);
         BuildDevToggles(zoneObjects);
+        ApplyDevArgs();
     }
 
     // Layer switches for the dev overlay. Hidden fixtures/terrain are also left out of inspect picks.
     private void BuildDevToggles(int zoneObjects)
     {
+        _nextViewDistance = _dev.AddChoice("F3 view", [.. ClientSettings.ViewDistances.Select(v => v.Label)],
+            _viewSetting, i => { ClientSettings.ViewDistance = i; ApplyViewDistance(i); });
         _dev.AddToggle("Terrain", true, on =>
         {
             _terrainOn = on;
@@ -567,6 +580,104 @@ public partial class WorldView : Node3D
         return bodies;
     }
 
+    // Applies the zone's sky from sky.csv (written by `mpk sky` beside zone.csv) for one weather condition
+    // and time of day: the sky shader's canopy and cloud gradients, cloud layers and sun disk; ambient and
+    // sun light from the file; and depth fog in the file's distance-fog colour. Fog distances come from
+    // SECTOR.DAT's [fog]: clip is the client's far plane (view distance) and amount the percentage of
+    // that distance, measured back from it, that is fogged (Camelot Hills: 15% of 16000 units → fog
+    // from 340 to 400 m); amount 0 turns fog off. Light energies are scaled by eye. Returns the sky's name,
+    // or null (plain colour background) when there is no sky.csv.
+    private string? ApplySky(string condition, string time)
+    {
+        if (string.IsNullOrEmpty(_zonePath))
+            return null;
+        string dir = System.IO.Path.GetDirectoryName(_zonePath) ?? "";
+        string csv = dir.PathJoin("sky.csv");
+        if (!Godot.FileAccess.FileExists(csv))
+            return null;
+        var kv = new System.Collections.Generic.Dictionary<string, string>();
+        foreach (string line in Godot.FileAccess.GetFileAsString(csv).Split('\n').Skip(1))
+        {
+            int comma = line.IndexOf(',');
+            if (comma > 0)
+                kv[line[..comma]] = line[(comma + 1)..].Trim();
+        }
+        string k = $"{condition}.{time}";
+        Color Col(string key) => kv.TryGetValue(key, out string? v) && Floats(v) is { Length: >= 3 } f
+            ? new Color(f[0], f[1], f[2], f.Length > 3 ? f[3] : 1f) : Colors.White;
+        float Num(string key, float fallback) =>
+            kv.TryGetValue(key, out string? v) && Floats(v) is { Length: >= 1 } f ? f[0] : fallback;
+
+        string lib = string.IsNullOrEmpty(_libraryPath) ? dir : _libraryPath;
+        string[] texDirs = [lib.PathJoin("overrides"), lib.PathJoin("textures"), lib];
+        var mat = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/sky.gdshader") };
+        foreach (string band in new[] { "zenith", "east1", "east2", "east3", "east4", "west1", "west2", "west3", "west4", "nadir" })
+        {
+            mat.SetShaderParameter(band, Col($"{k}.canopy.{band}"));
+            if (band != "nadir")
+                mat.SetShaderParameter("c_" + band, Col($"{k}.clouds.{band}"));
+        }
+        // cloud0 = top, cloud1 = bottom (the first two layers; the "2" layers are weather variants).
+        foreach (var (key, uniform) in new[] { ("cloud0", "top"), ("cloud1", "bottom") })
+        {
+            if (!kv.TryGetValue(key, out string? layer))
+                continue;
+            string[] p = layer.Split(' ');
+            if (ModelTexturing.Load(p[0], texDirs) is not { } tex)
+                continue;
+            mat.SetShaderParameter($"cloud_{uniform}", tex);
+            mat.SetShaderParameter($"{uniform}_tile", Floats(p[1])[0]);
+            mat.SetShaderParameter($"{uniform}_speed", Floats(p[2])[0]);
+            mat.SetShaderParameter("has_clouds", true);
+        }
+        if (kv.TryGetValue("sun", out string? sun) && ModelTexturing.Load(sun.Split(' ')[0], texDirs) is { } disk)
+        {
+            mat.SetShaderParameter("sun_disk", disk);
+            mat.SetShaderParameter("has_sun", true);
+            mat.SetShaderParameter("sun_color", Col("sun.noon_color"));
+        }
+        _environment.BackgroundMode = Godot.Environment.BGMode.Sky;
+        _environment.Sky = new Sky { SkyMaterial = mat };
+
+        _environment.AmbientLightSource = Godot.Environment.AmbientSource.Color;
+        _environment.AmbientLightColor = Col($"{k}.ambient");
+        _environment.AmbientLightEnergy = Num($"{k}.ambient_amount", 0.5f) * 1.4f;
+        _sun.LightColor = Col($"{k}.sun");
+        _sun.LightEnergy = Num($"{k}.sun_amount", 0.6f) * 1.7f;
+
+        _zoneClip = Num("fog.clip", 0) * RegionMetresPerUnit;
+        _fogShare = Mathf.Clamp(Num("fog.amount", 0) / 100f, 0f, 1f);
+        _environment.FogLightColor = Col($"{k}.fog");
+        float clip = _zoneClip, amount = _fogShare;
+        string name = kv.GetValueOrDefault("sky", "?");
+        GD.Print($"[world] sky: sky_{name} {k}, zone view {clip:0} m, fogged share {amount:0.00}");
+        return name;
+    }
+
+    // View distance: the zone's own (classic) times the player's setting. The camera's far plane and the
+    // fog scale together, keeping the zone's fogged share, so a longer view still fades out the way the
+    // zone does. Zones without sky.csv keep a long fixed far plane and no fog. (Beyond the loaded zone
+    // there is nothing to see until neighbouring zones load, roadmap M8.)
+    private void ApplyViewDistance(int setting)
+    {
+        if (_zoneClip <= 0)
+            return;
+        float view = _zoneClip * ClientSettings.ViewDistances[setting].Multiple;
+        _camera.Far = view * 1.02f;
+        _environment.FogEnabled = _fogShare > 0;
+        _environment.FogMode = Godot.Environment.FogModeEnum.Depth;
+        _environment.FogDensity = 1f;
+        _environment.FogSkyAffect = 0f;
+        _environment.FogDepthEnd = view;
+        _environment.FogDepthBegin = view * (1f - _fogShare);
+        GD.Print($"[world] view distance {ClientSettings.ViewDistances[setting].Label}: {view:0} m" +
+            (_fogShare > 0 ? $", fog {_environment.FogDepthBegin:0}-{view:0} m" : ""));
+    }
+
+    private static float[] Floats(string s) => s.Split(' ', System.StringSplitOptions.RemoveEmptyEntries)
+        .Select(x => float.TryParse(x, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float f) ? f : 0f)
+        .ToArray();
+
     // Loads a zone .glb once (cached). Resolves the library layout: an overrides/<glb> wins, else
     // models/<glb>; a flat <lib>/<glb> is also accepted (manifest-folder fallback). Textures are
     // applied from the same layers (overrides win over textures/). Null if it can't load.
@@ -739,6 +850,10 @@ public partial class WorldView : Node3D
         {
             _dev.PanelsVisible = !_dev.PanelsVisible;
         }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F3 })
+        {
+            _nextViewDistance?.Invoke();
+        }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F2 })
         {
             _dev.CycleRenderMode();
@@ -884,6 +999,42 @@ public partial class WorldView : Node3D
     // from the library path if given, else from the project directory; only if neither is under the
     // repo does it fall back to Godot's writable user:// dir. The viewport image is only valid after a
     // frame is drawn, so await the post-draw signal first.
+    // Developer options for repeatable views of the real client (rendered comparisons):
+    //   --campose X Y Z YAW PITCH  start in free-fly with the camera at region coordinates X Y Z,
+    //                              looking along YAW (degrees, 0 = north, 90 = east) and PITCH (degrees)
+    //   --shot SECONDS             save a screenshot (as P does) after that many seconds in the world
+    //   --view LABEL               view distance for this run (classic, x1.5, x2, x4), not saved
+    private double _shotAt = -1;
+    private int _viewSetting;
+
+    // --view LABEL: a view distance for this run only (the saved setting is untouched).
+    private static int? ViewOverride()
+    {
+        string[] args = OS.GetCmdlineUserArgs();
+        int v = System.Array.IndexOf(args, "--view");
+        if (v < 0 || v + 1 >= args.Length)
+            return null;
+        int idx = System.Array.FindIndex(ClientSettings.ViewDistances, x => x.Label == args[v + 1]);
+        return idx >= 0 ? idx : null;
+    }
+    private void ApplyDevArgs()
+    {
+        string[] args = OS.GetCmdlineUserArgs();
+        int i = System.Array.IndexOf(args, "--campose");
+        if (i >= 0 && i + 5 < args.Length && Floats(string.Join(' ', args[(i + 1)..(i + 6)])) is { Length: 5 } c)
+        {
+            SetChase(false);
+            _camera.GlobalPosition = ToGodot(c[0], c[1], c[2]);
+            // Godot yaw 0 looks along -Z (north, since DAoC y runs south); DAoC-style yaw turns clockwise.
+            _camYaw = -Mathf.DegToRad(c[3]);
+            _camPitch = Mathf.DegToRad(c[4]);
+        }
+        int s = System.Array.IndexOf(args, "--shot");
+        if (s >= 0 && s + 1 < args.Length && double.TryParse(args[s + 1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double at))
+            _shotAt = at;
+    }
+
     private async System.Threading.Tasks.Task SaveScreenshot()
     {
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
@@ -1273,6 +1424,11 @@ public partial class WorldView : Node3D
 
     public override void _Process(double delta)
     {
+        if (_shotAt >= 0 && _seconds >= _shotAt)
+        {
+            _shotAt = -1;
+            _ = SaveScreenshot();
+        }
         if (_chase)
             UpdateChaseCamera(delta);
         else
@@ -1303,6 +1459,6 @@ public partial class WorldView : Node3D
             (_chase
                 ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Shift sprint, wheel zoom   ·   Tab free-fly, P shot"
                 : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot")
-            + "\nF1 panels · F2 render mode · left-click inspect";
+            + "\nF1 panels · F2 render mode · F3 view distance · left-click inspect";
     }
 }
