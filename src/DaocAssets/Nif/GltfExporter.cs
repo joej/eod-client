@@ -141,6 +141,20 @@ public static class GltfExporter
         MaterialBuilder material = Material(m);
         bool hasNormals = m.Normals is not null && m.Normals.Length == m.Vertices.Length;
         bool hasUv = m.TexCoords is not null && m.TexCoords.Length == m.Vertices.Length;
+        // A second texture layer (a figure's face decal) rides on TEXCOORD_1, as on unskinned meshes.
+        Vector2[]? uv2 = m.DarkTexCoords ?? m.DetailTexCoords ?? m.DecalTexCoords;
+        if (uv2 is not null && uv2.Length == m.Vertices.Length)
+        {
+            var layered = new MeshBuilder<VertexPositionNormal, VertexTexture2, VertexJoints4>(m.Name);
+            var lp = layered.UsePrimitive(material);
+            VertexBuilder<VertexPositionNormal, VertexTexture2, VertexJoints4> LV(int i) => new(
+                new VertexPositionNormal(m.Vertices[i], hasNormals ? m.Normals![i] : Vector3.UnitZ),
+                new VertexTexture2(hasUv ? m.TexCoords![i] : Vector2.Zero, uv2[i]),
+                new VertexJoints4(m.Skin![i].Length > 0 ? m.Skin[i] : [(0, 1f)]));
+            foreach (var (a, b, c) in m.Triangles)
+                lp.AddTriangle(LV(a), LV(b), LV(c));
+            return layered;
+        }
         var builder = new MeshBuilder<VertexPositionNormal, VertexTexture1, VertexJoints4>(m.Name);
         var prim = builder.UsePrimitive(material);
         VertexBuilder<VertexPositionNormal, VertexTexture1, VertexJoints4> V(int i)
@@ -164,7 +178,7 @@ public static class GltfExporter
 
         // A second texture layer (the dark map, else the detail map) rides on TEXCOORD_1, and vertex
         // colours the NIF says to use on COLOR_0; a plain shape keeps the smaller vertex format.
-        Vector2[]? uv2 = m.DarkTexCoords ?? m.DetailTexCoords;
+        Vector2[]? uv2 = m.DarkTexCoords ?? m.DetailTexCoords ?? m.DecalTexCoords;
         bool hasUv2 = uv2 is not null && uv2.Length == m.Vertices.Length;
         bool hasColors = m.VertexColors is not null && m.VertexColors.Length == m.Vertices.Length;
         if (hasUv2 || hasColors)
@@ -262,6 +276,8 @@ public static class GltfExporter
             extras["dark"] = System.IO.Path.GetFileNameWithoutExtension(m.DarkTextureFile);
         if (!string.IsNullOrEmpty(m.DetailTextureFile))
             extras["detail"] = System.IO.Path.GetFileNameWithoutExtension(m.DetailTextureFile);
+        if (!string.IsNullOrEmpty(m.DecalTextureFile))
+            extras["decal"] = System.IO.Path.GetFileNameWithoutExtension(m.DecalTextureFile);
         if (m.VertexColors is not null)
             extras["vertexColors"] = true;
         if (extras.Count > 0)

@@ -77,8 +77,8 @@ public sealed class MonsterFigureTests
         Assert.Equal(new Dictionary<string, string?>
         {
             ["Body1:0"] = "m1_bodym.tga",
-            ["HeadA1:19"] = "b_mhed1.tga",          // the face
-            ["HeadB1:24"] = "hair_dirtblonde.tga",  // the hair
+            ["HeadA1:19"] = "hair_dirtblonde.tga",  // head parts: the hair skin, the face over it (below)
+            ["HeadB1:24"] = "hair_dirtblonde.tga",
             ["LBody1:6"] = "m1_tunic1.tga",
         }, shown);
         // Body1b (variant "1b"), other numbers, the low-detail body and the cloak (no cloak skin) are hidden.
@@ -102,30 +102,50 @@ public sealed class MonsterFigureTests
     }
 
     [Fact]
-    public void TheHairShellSitsUnderTheAlphaCutFace()
+    public void HeadPartsWearTheHairWithTheFaceOverItOnTheSecondUvSet()
     {
+        // Each head part: the hair skin on UV set 0 and the face skin as a decal on set 1 (its alpha shows
+        // the hair through the brows and rim). Drawn on set 0 the face wrapped round the head.
         Vector2[] set0 = [Vector2.Zero, Vector2.UnitX, Vector2.UnitY], set1 = [Vector2.One, Vector2.UnitY, Vector2.UnitX];
-        // Face and hair are overlapping head shells. The face skin is an oval with a transparent rim, so
-        // the face is alpha-tested on top and the hair moves in along its normals (no z-fighting).
-        var head = new NifModel
+        NifMesh Head(string shape) => new()
+        {
+            Name = shape, ShapeName = shape, Vertices = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ],
+            Normals = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ], Triangles = [(0, 1, 2)], TexCoords = set0, UvSets = [set0, set1],
+        };
+        var head = new NifModel { Version = new NifVersion(10, 1, 0, 0), Meshes = [Head("HeadA1:19"), Head("HeadB1:24")] };
+        NifModel dressed = MonsterFigure.Dress(head, MonsterTables.Parse(Monsters, Monnifs, Skins).Resolve(8)!);
+        foreach (NifMesh part in dressed.Meshes)
+        {
+            Assert.Equal(("hair_dirtblonde.tga", "b_mhed1.tga"), (part.TextureFile, part.DecalTextureFile));
+            Assert.Same(set0, part.TexCoords);
+            Assert.Same(set1, part.DecalTexCoords);
+            Assert.Equal(Vector3.UnitX, part.Vertices[0]);       // not moved
+        }
+    }
+
+    [Fact]
+    public void ASkinnedHeadPartExportsTheFaceDecalOnTexcoord1()
+    {
+        var model = new NifModel
         {
             Version = new NifVersion(10, 1, 0, 0),
+            Joints = [new NifJoint { Name = "Bip01 Head", Parent = -1, Local = Matrix4x4.Identity }],
             Meshes =
             [
-                new NifMesh { Name = "face", ShapeName = "HeadA1:19", Vertices = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ],
-                    Normals = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ], Triangles = [(0, 1, 2)],
-                    TexCoords = set0, UvSets = [set0, set1] },
-                new NifMesh { Name = "hair", ShapeName = "HeadB1:24", Vertices = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ],
-                    Normals = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ], Triangles = [(0, 1, 2)],
-                    TexCoords = set0, UvSets = [set0, set1] },
+                new NifMesh
+                {
+                    Name = "head", ShapeName = "HeadA1:19", Vertices = [Vector3.Zero, Vector3.UnitX, Vector3.UnitY], Triangles = [(0, 1, 2)],
+                    TexCoords = [Vector2.Zero, Vector2.UnitX, Vector2.UnitY], TextureFile = "hair_dirtblonde.tga",
+                    DecalTextureFile = "b_mhed1.tga", DecalTexCoords = [Vector2.One, Vector2.UnitY, Vector2.UnitX],
+                    SkinJoints = [(0, Matrix4x4.Identity)], Skin = [[(0, 1f)], [(0, 1f)], [(0, 1f)]],
+                },
             ],
         };
-        NifModel dressed = MonsterFigure.Dress(head, MonsterTables.Parse(Monsters, Monnifs, Skins).Resolve(8)!);
-        // The face skin maps on the head's second UV set (set 0 wraps it round the whole head); hair keeps set 0.
-        Assert.Same(set1, dressed.Meshes[0].TexCoords);
-        Assert.Same(set0, dressed.Meshes[1].TexCoords);
-        Assert.Equal((Vector3.UnitX, SurfaceAlpha.Cutout), (dressed.Meshes[0].Vertices[0], dressed.Meshes[0].Alpha));  // the face
-        Assert.Equal((new Vector3(0.9f, 0, 0), SurfaceAlpha.Opaque), (dressed.Meshes[1].Vertices[0], dressed.Meshes[1].Alpha));  // the hair, 0.1 in
+        var gltf = GltfExporter.BuildScene(model).ToGltf2();
+        var prim = Assert.Single(Assert.Single(gltf.LogicalMeshes).Primitives);
+        Assert.NotNull(prim.GetVertexAccessor("TEXCOORD_1"));
+        Assert.Equal(new Vector2(1, 1), prim.GetVertexAccessor("TEXCOORD_1").AsVector2Array()[0]);
+        Assert.Contains("\"decal\":\"b_mhed1\"", prim.Material.Extras.ToJsonString());
     }
 
     [Fact]

@@ -61,6 +61,10 @@ public sealed record NifMesh
     /// <summary>The detail map (a finely repeating texture layered over the base) and its UV set.</summary>
     public string? DetailTextureFile { get; init; }
     public Vector2[]? DetailTexCoords { get; init; }
+    /// <summary>A decal laid over the base through its own alpha, on its own UV set: a classic figure's
+    /// face skin over the hair skin on the head parts (see MonsterFigure).</summary>
+    public string? DecalTextureFile { get; init; }
+    public Vector2[]? DecalTexCoords { get; init; }
 
     /// <summary>The NIF shape (NiTriShape) name, e.g. a body-part variant in a classic figure.</summary>
     public string ShapeName { get; init; } = "";
@@ -70,6 +74,7 @@ public sealed record NifMesh
         (TextureFile is null ? "" : $", tex {TextureFile}") +
         (DarkTextureFile is null ? "" : $", dark {DarkTextureFile}") +
         (DetailTextureFile is null ? "" : $", detail {DetailTextureFile}") +
+        (DecalTextureFile is null ? "" : $", decal {DecalTextureFile}") +
         (VertexColors is null ? "" : ", vertex colours") +
         (BaseColor is { } c ? $", rgba({c.X:0.##},{c.Y:0.##},{c.Z:0.##},{c.W:0.##})" : "") +
         (Alpha == SurfaceAlpha.Opaque ? "" : $", {Alpha.ToString().ToLowerInvariant()} {AlphaCutoff:0.###}") +

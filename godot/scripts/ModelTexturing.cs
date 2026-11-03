@@ -105,6 +105,14 @@ public static class ModelTexturing
             copy.DetailUVLayer = BaseMaterial3D.DetailUV.UV2;
             copy.DetailBlendMode = BaseMaterial3D.BlendModeEnum.Mul;
         }
+        // A decal (a figure's face over its hair skin): mixed over the base by the decal's own alpha.
+        else if (layers.TryGetValue("decal", out Variant dc) && LoadTexture(dirs, dc.AsString(), cache) is { } decal)
+        {
+            copy.DetailEnabled = true;
+            copy.DetailAlbedo = decal;
+            copy.DetailUVLayer = BaseMaterial3D.DetailUV.UV2;
+            copy.DetailBlendMode = BaseMaterial3D.BlendModeEnum.Mix;
+        }
         if (layers.ContainsKey("vertexColors"))
             copy.VertexColorUseAsAlbedo = true;
     }

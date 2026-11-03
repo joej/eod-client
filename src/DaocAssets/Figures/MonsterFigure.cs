@@ -137,12 +137,15 @@ public static class MonsterFigure
                 "Cloak" => variant == "1" && spec.Skins.ContainsKey("Cloak"),
                 _ => variant == "1",
             };
-            // HeadA is the face (the "Face" skin), HeadB the hair (the "Head" skin).
-            // A creature is one shape, not named parts (Wolf.nif's "Editable Mesh"): it wears the Body skin.
-            string skinSlot = slot switch { "HeadA" => "Face", "HeadB" => "Head", "" => "Body", _ => slot };
+            // Both head parts wear the hair skin ("Head") on UV set 0, with the face skin ("Face") laid
+            // over it on set 1. A creature is one shape, not named parts (Wolf.nif's "Editable Mesh"):
+            // it wears the Body skin.
+            bool head = slot is "HeadA" or "HeadB";
+            string skinSlot = head ? "Head" : slot == "" ? "Body" : slot;
+            string? face = head && mesh.UvSets is { Length: > 1 } && spec.Skins.TryGetValue("Face", out string? fs) ? fs : null;
             // A head part with no skin and no texture of its own is left off: "Headless Elf" (model 2222)
             // sets Head and Face to 0.
-            if (slot is "HeadA" or "HeadB" && mesh.TextureFile is null && !spec.Skins.ContainsKey(skinSlot))
+            if (head && mesh.TextureFile is null && face is null && !spec.Skins.ContainsKey(skinSlot))
                 shown = false;
             string? skin = shown && (slot.Length > 0 || mesh.TextureFile is null)
                 && spec.Skins.TryGetValue(skinSlot, out string? s) ? s : null;
@@ -150,9 +153,8 @@ public static class MonsterFigure
             {
                 Helper = mesh.Helper || !shown,
                 TextureFile = skin ?? mesh.TextureFile,
-                Vertices = slot == "HeadB" && shown ? TuckIn(mesh) : mesh.Vertices,
-                TexCoords = slot == "HeadA" && mesh.UvSets is { Length: > 1 } uv ? uv[1] : mesh.TexCoords,
-                Alpha = slot == "HeadA" && mesh.Alpha == SurfaceAlpha.Opaque ? SurfaceAlpha.Cutout : mesh.Alpha,
+                DecalTextureFile = shown ? face : null,
+                DecalTexCoords = shown && face is not null ? mesh.UvSets![1] : null,
             });
         }
         return new NifModel { Version = figure.Version, Joints = figure.Joints, Meshes = meshes };
@@ -160,22 +162,13 @@ public static class MonsterFigure
 
     private const int FullFigureParts = 20;
 
-    // The face skin maps on the head's second UV set: on set 0 its mouth and eyes wrap round the cheeks
-    // and the back of the head (owner, 2026-11-03). Every classic head part carries both sets; the
-    // OfflineDAoC pipeline (GPL-3.0, nif_character.py: 'HeadA1@1') draws the face from set 1 too.
-    // The face shell and the hair shell overlap almost everywhere (bcommonm: 61% of the hair's vertices
-    // within 4 mm of the face's). The hair is the whole scalp; the face skin is an oval with the rest of
-    // its texture transparent (213 of the install's 218 <race>_<sex>hed textures are DXT5 with about 30%
-    // of the area cut out), though the NIFs carry no NiAlphaProperty on it. So the face is drawn
-    // alpha-tested, and the hair moves 0.1 NIF units (2.5 mm) in along its normals so the face wins
-    // where both are opaque: no z-fighting (the back of the head shimmered, owner 2026-11-03) and the
-    // hair shows through the face's cut-out rim.
-    private const float HairTuck = 0.1f;
-
-    private static System.Numerics.Vector3[] TuckIn(NifMesh hair) =>
-        hair.Normals is { } n && n.Length == hair.Vertices.Length
-            ? hair.Vertices.Select((v, i) => v - n[i] * HairTuck).ToArray()
-            : hair.Vertices;
+    // A classic head is drawn the way multi-texturing would: each head part (HeadA, HeadB) wears the hair
+    // skin on UV set 0 and the face skin on set 1 over it, through the face's alpha (213 of the install's
+    // 218 <race>_<sex>hed textures cut out ~30%: brows, cheek marks, the rim). Evidence: both parts carry
+    // the same set 1; drawn on set 0 the face wrapped round the head (owner, 2026-11-03); retail's troll
+    // (Erikstaad market) shows its hair skin's colour in the face's brow and cheek cut-outs, while on
+    // NTrollM the hair part lies ~0.44 NIF units outside the face, so a separate face shell can't be on
+    // top there. OfflineDAoC's GPL pipeline also draws the face from set 1 ('HeadA1@1').
 
     // The number after the colon is one part numbering shared by every classic figure (surveyed over the
     // install's figures: each id carries the same part name in 30-51 files, a handful of outliers aside).

@@ -136,6 +136,7 @@ public partial class ModelViewer : Node3D
             _status.Text = $"Failed to load ({err}):\n{path}";
             return;
         }
+        ModelTexturing.TagLayers(state);     // the extra texture layers (dark/detail maps, face decals)
         Node scene = doc.GenerateScene(state);
         _pivot.AddChild(scene);
 
