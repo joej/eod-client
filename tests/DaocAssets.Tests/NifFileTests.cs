@@ -393,7 +393,7 @@ public sealed class NifFileTests
         var w = new BinaryWriter(ms);
         w.Write(System.Text.Encoding.ASCII.GetBytes("NetImmerse File Format, Version 4.2.1.0\n"));
         w.Write(0x04020100u);
-        w.Write(9u);
+        w.Write(12u);
         void Sized(string t) { w.Write((uint)t.Length); w.Write(System.Text.Encoding.ASCII.GetBytes(t)); }
         void Av(string name)
         {
@@ -418,16 +418,18 @@ public sealed class NifFileTests
         }
         void Node(string name, params int[] children) { Sized("NiNode"); Av(name); w.Write((uint)children.Length); foreach (int c in children) w.Write(c); w.Write(0u); }
         void Shape(string name, int data) { Sized("NiTriShape"); Av(name); w.Write(data); w.Write(-1); }
-        Node("Scene Root", 1, 4, 7);                                  // 0
+        Node("Scene Root", 1, 4, 7, 9);                               // 0
         Node("climb001", 2);                                          // 1
         Shape("ladder panel", 3); Sized("NiTriShapeData"); Triangle(); // 2, 3
         Node("climbwall", 5);                                         // 4
         Shape("wall", 6); Sized("NiTriShapeData"); Triangle();        // 5, 6
         Shape("floor", 8); Sized("NiTriShapeData"); Triangle();       // 7, 8
+        Node("ext00 (footprint)", 10);                                // 9: a city piece's ground outline
+        Shape("outline", 11); Sized("NiTriShapeData"); Triangle();    // 10, 11
         w.Write(1u); w.Write(0);
 
         NifModel model = NifFile.Read(ms.ToArray());
-        Assert.Equal(["mesh2"], model.Meshes.Where(m => m.Helper).Select(m => m.Name));
+        Assert.Equal(["mesh10", "mesh2"], model.Meshes.Where(m => m.Helper).Select(m => m.Name).Order());
         Assert.Equal(["mesh5", "mesh7"], model.Meshes.Where(m => !m.Helper).Select(m => m.Name).Order());
     }
 

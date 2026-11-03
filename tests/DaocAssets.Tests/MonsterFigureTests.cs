@@ -83,6 +83,19 @@ public sealed class MonsterFigureTests
         // Body1b (variant "1b"), other numbers, the low-detail body and the cloak (no cloak skin) are hidden.
     }
 
+    [Fact]
+    public void ACreaturesSingleShapeWearsTheBodySkin()
+    {
+        // Wolf.nif is one shape ("Editable Mesh"), skinned with the row's Body skin (wolf_black.tga).
+        var wolf = new NifModel
+        {
+            Version = new NifVersion(4, 2, 2, 0),
+            Meshes = [new NifMesh { Name = "mesh109", ShapeName = "Editable Mesh", Vertices = [Vector3.Zero, Vector3.UnitX, Vector3.UnitY], Triangles = [(0, 1, 2)] }],
+        };
+        FigureSpec spec = MonsterTables.Parse(Monsters, Monnifs, Skins).Resolve(8)!;
+        Assert.Equal("m1_bodym.tga", Assert.Single(MonsterFigure.Dress(wolf, spec).Meshes).TextureFile);
+    }
+
     [Theory]
     [InlineData("Body1b:3", "Body", "1b")]
     [InlineData("LBody2:6", "LBody", "2")]

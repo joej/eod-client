@@ -24,3 +24,8 @@ largenettingsystem.glb| sunk into the ground | netting set into the sea floor (u
 
 # Giant trees (open question W19): one 345-vertex mesh, 228 m tall in its own units, placed at 1.1-1.4x.
 Iarnwood.glb          | implausible size | Iarnwood's giant forest trees, very tall in retail (owner's recollection, 2026-11-03; no screenshot yet)
+
+# Collision-only city pieces: every shape is under "collider ..." nodes (untextured, purple), the
+# client's invisible walls; drawn, they were purple patches in the cities (2026-11-03).
+cam35.glb             | missing or empty model | collision-only City of Camelot piece (all shapes under collider nodes)
+tir24.glb             | missing or empty model | collision-only Tir na Nog piece (all shapes under collider nodes)

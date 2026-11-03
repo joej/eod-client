@@ -164,7 +164,12 @@ public static partial class NifFile
                     b.TextureFile = ReadSourceTextureFileName(ref c, bytes);
                     break;
                 case "NiMaterialProperty":
-                    b.MaterialColor = ReadMaterialPropertyColor(ref c);
+                    {
+                        // Its name: on shapes whose texture is embedded, the texture's file name.
+                        var nc = c;
+                        try { b.Name = nc.SizedString(); } catch (NifFormatException) { }
+                        b.MaterialColor = ReadMaterialPropertyColor(ref c);
+                    }
                     break;
                 case "NiAlphaProperty":
                     ReadAlphaProperty(ref c, b);
@@ -288,8 +293,18 @@ public static partial class NifFile
     // volumes. The exact-name rule above doesn't hide them, and in retail a ladder shows its rungs, not
     // the flat green climb panel in front of them (owner, Llyn Barfog, 2026-11-03; open question W3f).
     // Untextured shapes under such a node are hidden; textured ones are kept, in case they are art.
+    // Also footprints and colliders: a capital city's pieces carry "collisionswitch / footprints /
+    // ext00 (footprint)" and "collider ..." nodes, untextured ground outlines and collision volumes
+    // that drew as a lime-green and purple layer under the streets (owner, City of Camelot,
+    // 2026-11-03: walking into a wall dropped him onto it). Textured shapes under such nodes stay:
+    // Prydwen Keep's "collision tower" stone is real.
     internal static bool IsNumberedHelperName(string name) =>
-        !string.IsNullOrEmpty(name) && NumberedHelper.IsMatch(name);
+        !string.IsNullOrEmpty(name) && (NumberedHelper.IsMatch(name)
+            || name.Contains("footprint", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("collider", StringComparison.OrdinalIgnoreCase)
+            // "collisionswitch" is not one: it holds a model's visible parts too (avpier's pier).
+            || (name.StartsWith("collision", StringComparison.OrdinalIgnoreCase)
+                && !name.Equals("collisionswitch", StringComparison.OrdinalIgnoreCase)));
 
     private static readonly System.Text.RegularExpressions.Regex NumberedHelper = new(
         "^(collidee|pickee|ladder|climb|sclimb|shadowcaster)[0-9]+$",
@@ -390,6 +405,14 @@ public static partial class NifFile
             int src = blocks[p].BaseTextureRef;
             if (src >= 0 && src < blocks.Length && blocks[src].TextureFile is { } name)
                 return name;
+            // An embedded texture (pixels in the file, no name; the capital cities' pieces): the
+            // shape's material is named after the texture file, which the install also ships
+            // (cam36's "bpalwall.tga" as bpalwall.dds). Owner, City of Camelot, 2026-11-03.
+            if (src >= 0 && src < blocks.Length && blocks[src].Type == "NiSourceTexture")
+                foreach (int m in shape.Props)
+                    if (m >= 0 && m < blocks.Length && blocks[m].Type == "NiMaterialProperty"
+                        && System.IO.Path.GetExtension(blocks[m].Name).ToLowerInvariant() is ".tga" or ".dds" or ".bmp")
+                        return blocks[m].Name;
         }
         return null;
     }

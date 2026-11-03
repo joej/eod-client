@@ -138,8 +138,10 @@ public static class MonsterFigure
                 _ => variant == "1",
             };
             // HeadA is the face (its skin from the face number), HeadB the hair (the "Head" skin).
-            string skinSlot = slot switch { "HeadA" => "Face", "HeadB" => "Head", _ => slot };
-            string? skin = shown && spec.Skins.TryGetValue(skinSlot, out string? s) ? s : null;
+            // A creature is one shape, not named parts (Wolf.nif's "Editable Mesh"): it wears the Body skin.
+            string skinSlot = slot switch { "HeadA" => "Face", "HeadB" => "Head", "" => "Body", _ => slot };
+            string? skin = shown && (slot.Length > 0 || mesh.TextureFile is null)
+                && spec.Skins.TryGetValue(skinSlot, out string? s) ? s : null;
             meshes.Add(mesh with
             {
                 Helper = mesh.Helper || !shown,
