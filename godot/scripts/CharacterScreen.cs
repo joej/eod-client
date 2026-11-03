@@ -5,9 +5,13 @@
 //
 // Headless check (prints the result and quits; exit code 0 on success):
 //   DAOC_PASSWORD=... Godot --headless --path godot -- --autologin <host> <account> [port]
-//       [--enter <slot> [--stay <seconds>]] [--model <abs.glb>]
+//       [--enter <slot> [--goto <zone>] [--stay <seconds>]] [--zones <dir>] [--model <abs.glb>]
 // --model loads a converted .glb as the character body (asset-pipeline stand-in); without it the
 // world shows the MVC capsule, so the client still runs with no assets.
+// --zones is the folder of converted zones (private/zones): each view loads zoneNNN/ for the zone
+// the server puts the character in, and a new one whenever the server moves it to another zone.
+// --zone/--terrain name one zone's files instead (whatever the server says). --goto moves the
+// character to the middle of a zone after entering (GM command /jump: the account must be a GM).
 
 using DaocProtocol.Net;
 using DaocProtocol.Packets;
@@ -77,9 +81,7 @@ public partial class CharacterScreen : Control
             return;
         }
         var world = new WorldPosition(new PositionAndObjectId(x, y, z, 0, 0, region, 0), zone);
-        _world = new WorldView();
-        _world.Init(null, null, world, ResolvedPath(args, "--model"),
-            ResolvedPath(args, "--zone"), ResolvedPath(args, "--library"), ResolvedPath(args, "--terrain"));
+        _world = NewWorldView(world, offline: true);
         _world.QuitPressed += () => GetTree().Quit();
         GetTree().Root.CallDeferred(Node.MethodName.AddChild, _world);
         Visible = false;
@@ -268,14 +270,10 @@ public partial class CharacterScreen : Control
         {
             _status.Text = "Entering the world…";
             WorldPosition world = await _session.EnterWorldAsync(_listedRealm, slot);
+            if (Option(OS.GetCmdlineUserArgs(), "--goto") is int gotoZone)
+                world = await GoTo(world, gotoZone);
 
-            _world = new WorldView();
-            string[] a = OS.GetCmdlineUserArgs();
-            _world.Init(_connection, _session, world, ResolvedPath(a, "--model"),
-                ResolvedPath(a, "--zone"), ResolvedPath(a, "--library"), ResolvedPath(a, "--terrain"));
-            _world.QuitPressed += () => _ = LeaveWorld();
-            _world.BackToLoginPressed += () => _ = BackToLogin("Disconnected.");
-            GetTree().Root.AddChild(_world);
+            ShowWorld(world);
             Visible = false;
             return true;
         }
@@ -285,6 +283,100 @@ public partial class CharacterScreen : Control
             _connect.Disabled = false;
             return false;
         }
+    }
+
+    /// <summary>
+    /// Moves the character to the middle of <paramref name="zoneId"/> before the world is shown (no
+    /// view is draining yet, so the session sees the server's answer). A refused or failed move
+    /// leaves the character where it entered, with a line saying why.
+    /// </summary>
+    private async Task<WorldPosition> GoTo(WorldPosition from, int zoneId)
+    {
+        DaocProtocol.World.Zone? zone = DaocProtocol.World.Zones.All.FirstOrDefault(z => z.Id == zoneId);
+        if (zone is null || _session is null)
+        {
+            GD.PrintErr($"--goto: no zone {zoneId} in zones.tsv");
+            return from;
+        }
+        (float x, float y) = zone.Centre;
+        GD.Print($"--goto {zoneId}: jumping to the middle of {zone.Name} (region {zone.RegionId})");
+        try
+        {
+            // Z is the server's to keep until the view snaps the body onto the terrain and reports it.
+            return await _session.JumpAsync(zone.RegionId, x, y, from.Position.Z);
+        }
+        catch (Exception e) when (e is TimeoutException or IOException or InvalidDataException)
+        {
+            GD.PrintErr($"--goto {zoneId}: {e.Message}");
+            return _session.World ?? from;
+        }
+    }
+
+    /// <summary>
+    /// Shows the world at <paramref name="world"/>, replacing the current view. Called on entry and
+    /// again whenever the server moves the character to another zone or region: each view holds one
+    /// zone's terrain and objects.
+    /// </summary>
+    private void ShowWorld(WorldPosition world)
+    {
+        WorldView? old = _world;
+        _world = NewWorldView(world, offline: false);
+        _world.QuitPressed += () => _ = LeaveWorld();
+        _world.BackToLoginPressed += () => _ = BackToLogin("Disconnected.");
+        _world.Relocated += moved => CallDeferred(MethodName.ShowWorldDeferred, moved.Zone.Id);
+        _world.RegionChanging += () => _ = FollowRegionChange();
+        old?.QueueFree();
+        GetTree().Root.AddChild(_world);
+    }
+
+    // Relocated fires while the old view dispatches a packet; swap views outside that call.
+    private void ShowWorldDeferred(int zoneId)
+    {
+        if (_session?.World is WorldPosition world && world.Zone.Id == zoneId)
+            ShowWorld(world);
+    }
+
+    private async Task FollowRegionChange()
+    {
+        if (_session is null)
+            return;
+        try
+        {
+            WorldPosition world = await _session.ChangeRegionAsync();
+            GD.Print($"[world] region change: now in {world.Zone.Name} (zone {world.Zone.Id}, region {world.Position.RegionId})");
+            ShowWorld(world);
+        }
+        catch (Exception e) when (e is IOException or TimeoutException or InvalidDataException or InvalidOperationException)
+        {
+            await BackToLogin($"Region change failed: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// A world view for <paramref name="world"/>, with the zone's converted files: from --zones (the
+    /// zone the server put us in), else the explicit --zone/--terrain files.
+    /// </summary>
+    private WorldView NewWorldView(WorldPosition world, bool offline)
+    {
+        string[] a = OS.GetCmdlineUserArgs();
+        string? zoneCsv = ResolvedPath(a, "--zone"), terrain = ResolvedPath(a, "--terrain"), note = "";
+        if (ResolvedPath(a, "--zones") is string zonesDir)
+        {
+            string dir = System.IO.Path.Combine(zonesDir, $"zone{world.Zone.Id:D3}");
+            zoneCsv = System.IO.Path.Combine(dir, "zone.csv");
+            terrain = System.IO.Path.Combine(dir, "terrain.glb");
+            if (!System.IO.File.Exists(zoneCsv))
+            {
+                note = $"zone {world.Zone.Id} ({world.Zone.Name}) is not converted: flat ground (make zone{world.Zone.Id})";
+                zoneCsv = terrain = null;
+            }
+        }
+        var view = new WorldView { AssetsNote = note };
+        view.Init(offline ? null : _connection, offline ? null : _session, world, ResolvedPath(a, "--model"),
+            zoneCsv, ResolvedPath(a, "--library"), terrain);
+        if (note.Length > 0)
+            GD.Print($"[world] {note}");
+        return view;
     }
 
     /// <summary>

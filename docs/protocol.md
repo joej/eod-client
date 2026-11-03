@@ -264,6 +264,42 @@ GPL): zone offsets and sizes × 8192, half-open rectangle, first match.
 *Verified:* all 92 recorded 0xA9 packets rebuild byte for byte; the recorded position falls in the
 zone the recorded client reported.
 
+## Being moved by the server
+
+The server moves a player with `GamePlayer.MoveTo` (the GM command `/jump`, teleports, recall).
+The client must take the new position over at once: the server believes every 0xA9, so a client
+that goes on reporting its old position moves itself straight back. Our client holds 0xA9 back
+(pings go on) from sending a `/jump` until the new position is known.
+
+**Within the region: 0x04 CharacterJump** (S→C, `PacketLib168.SendPlayerJump`, all big-endian):
+
+```
+u32 BE x, y              region-global, integers (0x20 uses floats)
+u16 BE object id
+u16 BE z
+u16 BE heading
+u16 BE house number      0 outside houses
+```
+
+x, y and z are all 0 when only the heading changed.
+
+**To another region: 0xB1 + 0xB7 RegionChanged** (S→C, `PacketLib174.SendRegionChanged`). The
+server has already taken the player out of the world. 0xB7: u16 BE region skin, u16 BE zone skin,
+then `00 00 00 01 0C 00 FF BF`. The client enters the world again from 0xD4: **0xD4** → burst with
+**0x20** … **0x4E**, then **0xE8** and **0xBF** → **0x2D**, as at login. The 0xD4 handler accepts
+this while "playing" because the player object is inactive; it sets the connection to "world
+enter", and only 0xBF sets it back (clearing the server's cache of what we've been sent, so the
+new region's objects arrive). No realm check applies to the move (`IsAllowedToZone` is `true` in
+every rule set): an Albion character can stand in Hibernia.
+
+**`/jump to X Y Z REGION`** (GM and above; `GMCommands/jump.cs`): X, Y, Z integers; the region's
+expansion must not exceed the client's.
+
+*Verified live (2026-11-03):* Camelot Hills → Salisbury Plains (same region) answered by 0x04;
+Salisbury Plains → Cursed Forest (region 200) by B1 B7, then our D4 → … 4E, E8, BF → 2D, with the
+new region's NPCs arriving; Cursed Forest → Camelot Hills through the Godot client, which loaded each
+zone's converted assets by the zone the server reported.
+
 ## Logging out
 
 Closing the socket while "playing" makes the character link-dead: it stays in the world for 60 s
@@ -289,5 +325,5 @@ and logins in the meantime are refused (0x2C, 0x11 AccountIsInLogoutProcedure). 
 | Framing, checksum | `Net/ClientPacket.cs`, `Net/ServerPacket.cs`, `Net/Checksum.cs` | `CaptureFramingTests`, `ChecksumTests` |
 | Login | `Packets/LoginPackets.cs` | `LoginPacketTests` |
 | Character screen | `Packets/CharacterPackets.cs` | `CharacterPacketTests`, `CharacterCreateTests` |
-| World, keep-alive, logout | `Packets/WorldPackets.cs`, `World/Zones.cs` | `WorldPacketTests` |
+| World, keep-alive, server moves, logout | `Packets/WorldPackets.cs`, `World/Zones.cs` | `WorldPacketTests` |
 | Session flow | `Session/ClientSession.cs`, `Net/DaocConnection.cs` | `ClientSessionTests` (against a fake server replaying recorded replies) |

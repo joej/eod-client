@@ -38,6 +38,15 @@ public sealed class NetworkBridge
     /// <summary>A chat or system message arrived (0xAF Message), for the on-screen chat log.</summary>
     public event Action<ChatMessage>? ChatReceived;
 
+    /// <summary>The server moved the player within its region (0x04 CharacterJump, e.g. /jump).</summary>
+    public event Action<CharacterJump>? Jumped;
+
+    /// <summary>
+    /// The server moved the player to another region (0xB7). The packets after it belong to the
+    /// re-entry (ClientSession.ChangeRegionAsync), so the subscriber must stop draining at once.
+    /// </summary>
+    public event Action<RegionChanged>? RegionChanged;
+
     /// <summary>The server answered a keep-alive (0x29). Kept so the overlay can count pings.</summary>
     public event Action? PingReplied;
 
@@ -80,6 +89,12 @@ public sealed class NetworkBridge
                     break;
                 case ChatMessage.Code:
                     ChatReceived?.Invoke(ChatMessage.Parse(packet.Payload));
+                    break;
+                case CharacterJump.Code:
+                    Jumped?.Invoke(CharacterJump.Parse(packet.Payload));
+                    break;
+                case DaocProtocol.Packets.RegionChanged.Code:
+                    RegionChanged?.Invoke(DaocProtocol.Packets.RegionChanged.Parse(packet.Payload));
                     break;
                 case PingRequest.ReplyCode:
                     PingReplied?.Invoke();

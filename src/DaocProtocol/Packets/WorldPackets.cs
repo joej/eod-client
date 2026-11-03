@@ -4,7 +4,9 @@
 // RegionListRequestHandler, WorldInitRequestHandler, PlayerInitRequestHandler,
 // GameOpenRequestHandler, PingRequestHandler, PlayerPositionUpdateHandler (1.124+ branch),
 // PacketLib1124.SendPlayerPositionAndObjectID, PacketLib168.SendPingReply. Checked against the
-// recorded 1.127e session in the tests.
+// recorded 1.127e session in the tests. Moves the server makes (GamePlayer.MoveTo, e.g. a GM's
+// /jump): PacketLib168.SendPlayerJump (0x04) and PacketLib174.SendRegionChanged (0xB7); no client
+// version from 1.100 on overrides either. The recording has neither.
 
 using DaocProtocol.Net;
 
@@ -171,4 +173,48 @@ public static class QuitReply
     public const byte Code = 0xA4;
 
     public static bool LeavesGame(ReadOnlySpan<byte> payload) => new PayloadReader(payload).U8() == 1;
+}
+
+/// <summary>
+/// 0x04 (server → client): the server moved the player within its region (GamePlayer.MoveTo, e.g.
+/// /jump). Unlike 0x20 the coordinates are integers: X and Y u32 BE, Z u16 BE, all region-global.
+/// The client must take the new position over: the server trusts the next 0xA9, so a client that
+/// keeps reporting its old position moves itself straight back.
+/// </summary>
+/// <param name="X">Region-global; 0 (with Y and Z) when only the heading changed.</param>
+/// <param name="House">House number when the player is inside one, else 0.</param>
+public sealed record CharacterJump(uint X, uint Y, ushort ObjectId, ushort Z, ushort Heading, ushort House)
+{
+    public const byte Code = 0x04;
+
+    /// <summary>True when the packet only turns the player (SendPlayerJump(headingOnly: true)).</summary>
+    public bool HeadingOnly => X == 0 && Y == 0 && Z == 0;
+
+    public static CharacterJump Parse(ReadOnlySpan<byte> payload)
+    {
+        var r = new PayloadReader(payload);
+        return new CharacterJump(r.U32BE(), r.U32BE(), r.U16BE(), r.U16BE(), r.U16BE(), r.U16BE());
+    }
+
+    public byte[] ToBytes() => new PayloadWriter().U32BE(X).U32BE(Y).U16BE(ObjectId).U16BE(Z).U16BE(Heading).U16BE(House).ToArray();
+}
+
+/// <summary>
+/// 0xB7 (server → client): the server moved the player to another region. It has already taken the
+/// player out of the world and sent the new region's 0xB1; the client loads the region and enters
+/// it again with 0xD4 (see <c>ClientSession.ChangeRegionAsync</c>). Payload: region skin and zone
+/// skin u16 BE, then fixed bytes (0, 1, server id 0x0C, 0, 0xFFBF).
+/// </summary>
+public sealed record RegionChanged(ushort RegionId, ushort ZoneId)
+{
+    public const byte Code = 0xB7;
+
+    public static RegionChanged Parse(ReadOnlySpan<byte> payload)
+    {
+        var r = new PayloadReader(payload);
+        return new RegionChanged(r.U16BE(), r.U16BE());
+    }
+
+    public byte[] ToBytes() => new PayloadWriter().U16BE(RegionId).U16BE(ZoneId)
+        .U16BE(0).U16BE(1).U8(0x0C).U8(0).U16BE(0xFFBF).ToArray();
 }

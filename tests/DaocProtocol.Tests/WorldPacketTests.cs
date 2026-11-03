@@ -124,4 +124,34 @@ public class WorldPacketTests
         Assert.Throws<ArgumentOutOfRangeException>(() => WorldInitRequest.Payload(Realm.Albion, 10));
         Assert.Throws<ArgumentException>(() => RegionListRequest.Payload(Realm.None, 0));
     }
+
+    // No recording has a server-made move; these bytes are written by hand from the server writers
+    // (PacketLib168.SendPlayerJump, PacketLib174.SendRegionChanged), all big-endian.
+    [Fact]
+    public void ParsesCharacterJumpAsTheServerWritesIt()
+    {
+        byte[] payload =
+        [
+            0x00, 0x08, 0x8E, 0xD0,   // X 560848
+            0x00, 0x07, 0xCE, 0xC5,   // Y 511685
+            0x41, 0x67,               // object id
+            0x09, 0x28,               // Z 2344
+            0x05, 0xE8,               // heading 1512
+            0x00, 0x00,               // not in a house
+        ];
+        var jump = CharacterJump.Parse(payload);
+        Assert.Equal(new CharacterJump(560848, 511685, 0x4167, 2344, 1512, 0), jump);
+        Assert.False(jump.HeadingOnly);
+        Assert.Equal(payload, jump.ToBytes());
+        Assert.True(new CharacterJump(0, 0, 0x4167, 0, 99, 0).HeadingOnly);
+    }
+
+    [Fact]
+    public void ParsesRegionChangedAsTheServerWritesIt()
+    {
+        byte[] payload = [0x00, 0xC8, 0x00, 0xD0, 0x00, 0x00, 0x00, 0x01, 0x0C, 0x00, 0xFF, 0xBF];
+        var changed = RegionChanged.Parse(payload);
+        Assert.Equal(new RegionChanged(RegionId: 200, ZoneId: 208), changed);
+        Assert.Equal(payload, changed.ToBytes());
+    }
 }

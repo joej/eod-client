@@ -179,6 +179,13 @@ payloads with a port of the server's reader.
   every 10 s, plus 0xA9 every 1 s in the world (our choice; retail rates unknown).
   Live 2026-10-14 (`DaocCli --enter 0 --stay 330`): 330 s in world, 31/31 pings answered, ~23
   packets/s received (mostly 0xA1 NPC updates), no link death until we closed the socket.
+- Being moved (verified live 2026-11-03; `ClientSession.JumpAsync`/`ApplyJump`/`ChangeRegionAsync`,
+  docs/protocol.md "Being moved by the server"): `/jump to X Y Z REGION` (GM) → 0x04 CharacterJump
+  in the same region (u32 BE x, y; u16 BE object id, z, heading, house), or 0xB1 + 0xB7 for another
+  region, after which the client re-enters from 0xD4 (… 4E, E8, BF → 2D). 0xA9 is held back while
+  the move is pending: the server would believe an old position. The Godot client loads assets by
+  the server's zone (`--zones private/zones`) and builds a new WorldView on every zone change;
+  `tools/play.sh --zone N --enter S` jumps to zone N's middle.
 - Leaving (verified live 2026-10-14; `ClientSession.QuitAsync`): send `&quit` as 0xAF
   (`00` + text + `00`; the server skips one byte), keep sending 0xA9 through OpenDAoC's quit
   timer (20 s, up to 60 s after combat; instant for GMs or with `disable_quit_timer`), receive

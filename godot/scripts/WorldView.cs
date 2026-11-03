@@ -136,6 +136,25 @@ public partial class WorldView : Node3D
     /// <summary>Raised when the player presses Back to login (after the connection closed).</summary>
     public event Action? BackToLoginPressed;
 
+    /// <summary>
+    /// The server moved the player into another zone of this region (0x04): this view's terrain and
+    /// objects are the wrong ones, so the owner replaces it with a view of the new zone. The session
+    /// already holds the new position. Draining has stopped.
+    /// </summary>
+    public event Action<WorldPosition>? Relocated;
+
+    /// <summary>
+    /// The server moved the player to another region (0xB7). Draining has stopped; the owner runs
+    /// ClientSession.ChangeRegionAsync (which must see the packets that follow) and builds a new view.
+    /// </summary>
+    public event Action? RegionChanging;
+
+    /// <summary>
+    /// One line on where this view's zone assets came from, for the status panel (e.g. that the
+    /// server's zone isn't converted). Set before adding to the tree.
+    /// </summary>
+    public string AssetsNote { get; set; } = "";
+
     public int Packets => _packets;
     public int Pings => _pings;
     public int Entities => _entities.Count;
@@ -300,6 +319,13 @@ public partial class WorldView : Node3D
         _bridge.ObjectRemoved += OnObjectRemoved;
         _bridge.ChatReceived += OnChatReceived;
         _bridge.PingReplied += () => _pings++;
+        _bridge.Jumped += OnJumped;
+        _bridge.RegionChanged += _ =>
+        {
+            _draining = false;   // what follows is the re-entry's, not ours
+            _note = "   changing region…";
+            RegionChanging?.Invoke();
+        };
 
         var overlay = new CanvasLayer();
         // Click-only: don't let the button take keyboard focus, or Enter/Space could "press" it and
@@ -1280,6 +1306,38 @@ public partial class WorldView : Node3D
             _ = _session.MoveToAsync(rx, ry, rz, heading, speed);
     }
 
+    // The server moved us within the region (0x04). Take the position over at once — the next 0xA9
+    // must carry it, or the server moves us back — then either move the body here or, in another
+    // zone, hand over to a view of that zone.
+    private void OnJumped(CharacterJump jump)
+    {
+        if (_session is null)
+            return;
+        WorldPosition moved;
+        try
+        {
+            moved = _session.ApplyJump(jump);
+        }
+        catch (Exception e) when (e is InvalidDataException or InvalidOperationException)
+        {
+            GD.PrintErr($"[world] jump not applied: {e.Message}");
+            return;
+        }
+        GD.Print($"[world] moved by the server to {moved.Zone.Name} (zone {moved.Zone.Id}) x {moved.Position.X:0} y {moved.Position.Y:0} z {moved.Position.Z:0}");
+        if (moved.Zone.Id != _world.Zone.Id)
+        {
+            _draining = false;
+            _note = $"   moving to {moved.Zone.Name}…";
+            Relocated?.Invoke(moved);
+            return;
+        }
+        _world = moved;
+        PositionAndObjectId p = moved.Position;
+        _body.Position = ToGodot(p.X, p.Y, p.Z);
+        _bodyYaw = -HeadingRadians(p.Heading);
+        _body.Rotation = new Vector3(0, _bodyYaw, 0);
+    }
+
     // Pivot height on the body (shoulder/eye), metres — OfflineDAoC uses 1.55.
     private static readonly Vector3 PivotHeight = new(0, 1.55f, 0);
 
@@ -1526,6 +1584,7 @@ public partial class WorldView : Node3D
         PositionAndObjectId p = _world.Position;
         _dev.Status =
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
+            (AssetsNote.Length > 0 ? AssetsNote + "\n" : "") +
             $"{_seconds:0} s in world   {_packets} packets   {_pings} ping replies   {_entities.Count} entities   {_chatReceived} chat   " +
             (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + "\n" +
             $"W {(Input.IsKeyPressed(Key.W) ? 1 : 0)} S {(Input.IsKeyPressed(Key.S) ? 1 : 0)} " +

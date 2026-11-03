@@ -16,6 +16,11 @@ public enum SessionState
     CharacterScreen,
     /// <summary>A character is in the world.</summary>
     InWorld,
+    /// <summary>
+    /// The server is moving the character (a /jump we asked for, or a region change). 0xA9 is held
+    /// back until the new position is known, so the server isn't sent the old one; pings go on.
+    /// </summary>
+    Relocating,
     /// <summary>The server ended the game (0xA4 with "leave the game"); close the connection.</summary>
     LoggedOut,
 }
@@ -40,6 +45,11 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     private readonly ClientVersion _version = version ?? ClientVersion.V1127e;
     private readonly Dictionary<Realm, CharacterOverview> _overviews = [];
     private Realm _lastListedRealm;
+    private (Realm Realm, int Slot) _inWorldAs;
+    // Taken while checking the state and sending a 0xA9, and while entering Relocating and sending
+    // the move: otherwise a heartbeat that saw "in world" could send the old position just after
+    // the /jump, and the server, handling packets in order, would move us back.
+    private readonly SemaphoreSlim _positionLock = new(1, 1);
     private CryptKeyReply? _handshake;
 
     /// <summary>How long to wait for each reply before throwing <see cref="TimeoutException"/>.</summary>
@@ -48,8 +58,9 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     public SessionState State { get; private set; } = SessionState.Connected;
 
     /// <summary>
-    /// The player's current position, set by <see cref="EnterWorldAsync"/> and advanced by
-    /// <see cref="MoveToAsync"/>. The keep-alive reports this value in every 0xA9.
+    /// The player's current position, set by <see cref="EnterWorldAsync"/>, advanced by
+    /// <see cref="MoveToAsync"/>, and replaced when the server moves us (<see cref="ApplyJump"/>,
+    /// <see cref="ChangeRegionAsync"/>, <see cref="JumpAsync"/>). The keep-alive reports it in every 0xA9.
     /// </summary>
     public WorldPosition? World { get; private set; }
 
@@ -174,6 +185,19 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         await connection.SendAsync(CharacterSelectRequest.Code, CharacterSelectRequest.Payload(), cancellationToken).ConfigureAwait(false);
         await ExpectAsync(cancellationToken, SessionId.Code).ConfigureAwait(false);
 
+        _inWorldAs = (realm, slot);
+        return await InitWorldAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The in-world part of entering, shared with <see cref="ChangeRegionAsync"/>: 0xD4 → burst
+    /// with 0x20 … 0x4E, then 0xE8 and 0xBF → 0x2D. 0xD4 puts the server's connection in its
+    /// "world enter" state and only 0xBF takes it back to "playing" (clearing its cache of the
+    /// objects we've been sent, so the new surroundings arrive).
+    /// </summary>
+    private async Task<WorldPosition> InitWorldAsync(CancellationToken cancellationToken)
+    {
+        (Realm realm, int slot) = _inWorldAs;
         await connection.SendAsync(WorldInitRequest.Code, WorldInitRequest.Payload(realm, slot), cancellationToken).ConfigureAwait(false);
         PositionAndObjectId position = PositionAndObjectId.Parse((await ExpectAsync(cancellationToken, PositionAndObjectId.Code).ConfigureAwait(false)).Payload);
         await ExpectAsync(cancellationToken, WorldInitRequest.EndOfBurstCode).ConfigureAwait(false);
@@ -182,13 +206,102 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         await connection.SendAsync(GameOpenRequest.Code, GameOpenRequest.Payload(), cancellationToken).ConfigureAwait(false);
         await ExpectAsync(cancellationToken, GameOpenRequest.ReplyCode).ConfigureAwait(false);
 
-        // Position updates must name a zone the server knows, or it kicks the player.
-        Zone zone = Zones.Find(position.RegionId, position.X, position.Y)
-            ?? throw new InvalidDataException($"No zone in region {position.RegionId} contains ({position.X}, {position.Y}).");
-        World = new WorldPosition(position, zone);
+        World = new WorldPosition(position, ZoneAt(position));
         State = SessionState.InWorld;
         return World;
     }
+
+    // Position updates must name a zone the server knows, or it kicks the player.
+    private static Zone ZoneAt(PositionAndObjectId p) =>
+        Zones.Find(p.RegionId, p.X, p.Y)
+        ?? throw new InvalidDataException($"No zone in region {p.RegionId} contains ({p.X}, {p.Y}).");
+
+    /// <summary>
+    /// Takes over a position the server set with 0x04 (a move within the region: /jump, a GM moving
+    /// us, a recall nearby). Call it as soon as the packet arrives: until then the keep-alive keeps
+    /// reporting the old position, which the server would believe. Returns the new position.
+    /// </summary>
+    public WorldPosition ApplyJump(CharacterJump jump)
+    {
+        if (State is not (SessionState.InWorld or SessionState.Relocating) || World is not WorldPosition world)
+            throw new InvalidOperationException($"Session is {State}; a jump needs the world.");
+
+        PositionAndObjectId p = jump.HeadingOnly
+            ? world.Position with { Heading = jump.Heading }
+            : world.Position with { X = jump.X, Y = jump.Y, Z = jump.Z, Heading = jump.Heading };
+        World = new WorldPosition(p, ZoneAt(p));
+        State = SessionState.InWorld;
+        return World;
+    }
+
+    /// <summary>
+    /// Follows the server into another region after its 0xB7: enters the world again (as
+    /// <see cref="EnterWorldAsync"/> does from 0xD4 on) and returns the new position. Nothing else may
+    /// read packets meanwhile: this method must see the 0x20 and 0x4E. The keep-alive holds back
+    /// 0xA9 until it returns (the player isn't in any region in between).
+    /// </summary>
+    public async Task<WorldPosition> ChangeRegionAsync(CancellationToken cancellationToken = default)
+    {
+        await _positionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (State is not (SessionState.InWorld or SessionState.Relocating))
+                throw new InvalidOperationException($"Session is {State}; a region change needs the world.");
+            State = SessionState.Relocating;
+        }
+        finally
+        {
+            _positionLock.Release();
+        }
+        return await InitWorldAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Asks the server to move the player (OpenDAoC's GM command "/jump to X Y Z REGION", so the
+    /// account must be a GM) and follows it: 0x04 within the region, 0xB7 and a new world entry for
+    /// another one. Nothing else may read packets meanwhile. A server that refuses (not a GM, or no
+    /// zone at that spot) sends a chat message instead, and this times out.
+    /// </summary>
+    public async Task<WorldPosition> JumpAsync(ushort regionId, float x, float y, float z, CancellationToken cancellationToken = default)
+    {
+        await _positionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            Require(SessionState.InWorld);
+            State = SessionState.Relocating;
+            await connection.SendAsync(CommandRequest.Code,
+                CommandRequest.Payload($"&jump to {(int)x} {(int)y} {(int)z} {regionId}"), cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            if (State == SessionState.Relocating)
+                State = SessionState.InWorld;
+            throw;
+        }
+        finally
+        {
+            _positionLock.Release();
+        }
+
+        ServerPacket reply;
+        try
+        {
+            // Shorter than the server's 5 s link-death limit: 0xA9 is held back while we wait.
+            reply = await ExpectAsync(cancellationToken, JumpTimeout, CharacterJump.Code, RegionChanged.Code).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            State = SessionState.InWorld;   // nothing moved: carry on where we were
+            throw new TimeoutException($"The server didn't move us within {JumpTimeout.TotalSeconds:0} s (is the account a GM?).");
+        }
+
+        return reply.Code == CharacterJump.Code
+            ? ApplyJump(CharacterJump.Parse(reply.Payload))
+            : await InitWorldAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>How long <see cref="JumpAsync"/> waits for the server's move.</summary>
+    public static readonly TimeSpan JumpTimeout = TimeSpan.FromSeconds(3);
 
     /// <summary>
     /// Moves the player to a new region-global position and heading, then sends one 0xA9 so the
@@ -201,13 +314,24 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     public async Task MoveToAsync(float x, float y, float z, ushort heading, float speed = 0,
         CancellationToken cancellationToken = default)
     {
-        if (State != SessionState.InWorld || World is not WorldPosition world)
-            throw new InvalidOperationException($"Session is {State}; MoveToAsync needs the world.");
+        await _positionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // While the server moves us, our idea of the position is stale: drop the step.
+            if (State == SessionState.Relocating)
+                return;
+            if (State != SessionState.InWorld || World is not WorldPosition world)
+                throw new InvalidOperationException($"Session is {State}; MoveToAsync needs the world.");
 
-        MoveSpeed = speed;
-        PositionAndObjectId moved = world.Position with { X = x, Y = y, Z = z, Heading = heading };
-        World = world with { Position = moved };
-        await SendPositionAsync(World, speed, cancellationToken).ConfigureAwait(false);
+            MoveSpeed = speed;
+            PositionAndObjectId moved = world.Position with { X = x, Y = y, Z = z, Heading = heading };
+            World = world with { Position = moved };
+            await SendPositionAsync(World, speed, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _positionLock.Release();
+        }
     }
 
     /// <summary>Sends one 0xA9 for the given position at the given speed. Shared by the keep-alive and <see cref="MoveToAsync"/>.</summary>
@@ -233,13 +357,22 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
             throw new InvalidOperationException($"Session is {State}; keep-alive needs the character screen or the world.");
 
         DateTime nextPing = DateTime.UtcNow;
+        // Relocating counts as staying: pings go on, 0xA9 waits for the new position.
         using var timer = new PeriodicTimer(PositionInterval);
         try
         {
             do
             {
-                if (State == SessionState.InWorld && World is WorldPosition world)
-                    await SendPositionAsync(world, MoveSpeed, cancellationToken).ConfigureAwait(false);
+                await _positionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    if (State == SessionState.InWorld && World is WorldPosition world)
+                        await SendPositionAsync(world, MoveSpeed, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _positionLock.Release();
+                }
 
                 if (DateTime.UtcNow >= nextPing)
                 {
@@ -247,7 +380,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
                     nextPing = DateTime.UtcNow + PingInterval;
                 }
             }
-            while (State is SessionState.CharacterScreen or SessionState.InWorld
+            while (State is SessionState.CharacterScreen or SessionState.InWorld or SessionState.Relocating
                    && await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

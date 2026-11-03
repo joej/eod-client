@@ -14,6 +14,9 @@ public sealed record Zone(ushort Id, ushort RegionId, int X, int Y, int Width, i
 {
     public const int Unit = 8192;
 
+    /// <summary>The middle of the zone, region-global.</summary>
+    public (float X, float Y) Centre => (X + Width / 2f, Y + Height / 2f);
+
     public bool Contains(float x, float y) =>
         X <= (int)x && Y <= (int)y && X + Width > (int)x && Y + Height > (int)y;
 }

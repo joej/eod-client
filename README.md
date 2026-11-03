@@ -21,13 +21,15 @@ OpenDAoC's), and an OpenDAoC server you can reach (one is in `server/`). Then, f
 DAOC_PASSWORD=… tools/play.sh --client /path/to/DAoC --host <server> --account <name>
 ```
 
-`tools/play.sh` converts Camelot Hills from your install into `private/` (git-ignored: it is the game's
+`tools/play.sh` converts the outdoor zones from your install into `private/` (git-ignored: it is the game's
 content, never commit it), builds the solution, and starts the client logged in at your character
 list. It remembers the options in `private/play.conf`, so later runs are just `tools/play.sh`. It
 never stores the password: it takes `DAOC_PASSWORD`, or runs a command you give once with
-`--password-cmd '<command that prints it>'` (a password manager or vault lookup), or asks. It reconverts models only when the
-converter's code has changed. `tools/play.sh assets`, `build` and `play` run one step;
-`--enter <slot>` goes straight into the world; `tools/play.sh --help` lists the rest.
+`--password-cmd '<command that prints it>'` (a password manager or vault lookup), or asks. It redoes
+only what changed in your install or the converter. `tools/play.sh assets`, `build` and `play` run one
+step; `--enter <slot>` goes straight into the world, where the client shows whichever zone the server
+puts your character in; `--zone <n>` with `--enter` takes the character to that zone (the account must
+be a GM); `tools/play.sh --help` lists the rest.
 
 ## Progress
 

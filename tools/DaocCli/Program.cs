@@ -5,14 +5,16 @@
 //
 //   DAOC_PASSWORD=... dotnet run --project tools/DaocCli -- <host> <account>
 //       [--port 10300] [--realm albion|midgard|hibernia]
-//       [--create <Name> | --delete <slot> | --enter <slot> [--stay <seconds>]]
+//       [--create <Name> | --delete <slot> | --enter <slot> [--goto <zone>] [--stay <seconds>]]
 //       [--idle <seconds> [--no-keepalive]] [--log | --hex]
 //
 // --realm is used when the account has no realm yet (or may use all realms); default albion.
 // --create makes a level 1 Briton Armsman (Albion only) in the first free slot; --delete removes
 // the character in a slot (0-9) of the account's realm. Both list the characters again afterwards.
 // --enter puts the character in a slot into the world and keeps the session alive for --stay
-// seconds (default 10), reports what arrived, then logs out with /quit (about 20 s). --log prints every packet's code and length,
+// seconds (default 10), reports what arrived, then logs out with /quit (about 20 s). --goto then
+// moves the character to the middle of a zone (src/DaocProtocol/World/zones.tsv) with the GM
+// command /jump, so the account must be a GM. --log prints every packet's code and length,
 // --hex the whole packet (never the login request). --idle waits at the character screen first;
 // with --no-keepalive it sends no pings there (OpenDAoC disconnects after 150 s without one).
 // The password is read from DAOC_PASSWORD so it stays out of command lines and shell history.
@@ -25,7 +27,7 @@ using DaocProtocol.Session;
 
 if (args.Length < 2)
 {
-    Console.Error.WriteLine("usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--create <Name> | --delete <slot> | --enter <slot> [--stay <seconds>]] [--idle <seconds> [--no-keepalive]] [--log | --hex]");
+    Console.Error.WriteLine("usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--create <Name> | --delete <slot> | --enter <slot> [--goto <zone>] [--stay <seconds>]] [--idle <seconds> [--no-keepalive]] [--log | --hex]");
     return 1;
 }
 
@@ -39,6 +41,7 @@ Realm realmChoice = args.SkipWhile(a => a != "--realm").Skip(1)
 string? createName = args.SkipWhile(a => a != "--create").Skip(1).FirstOrDefault();
 int? deleteSlot = args.SkipWhile(a => a != "--delete").Skip(1).Select(int.Parse).Cast<int?>().FirstOrDefault();
 int? enterSlot = args.SkipWhile(a => a != "--enter").Skip(1).Select(int.Parse).Cast<int?>().FirstOrDefault();
+int? gotoZone = args.SkipWhile(a => a != "--goto").Skip(1).Select(int.Parse).Cast<int?>().FirstOrDefault();
 int staySeconds = args.SkipWhile(a => a != "--stay").Skip(1).Select(int.Parse).DefaultIfEmpty(10).First();
 int idleSeconds = args.SkipWhile(a => a != "--idle").Skip(1).Select(int.Parse).DefaultIfEmpty(0).First();
 bool keepAliveOn = !args.Contains("--no-keepalive");
@@ -105,6 +108,15 @@ try
         PositionAndObjectId p = world.Position;
         Console.WriteLine($"in world: object id {p.ObjectId}, region {p.RegionId}, zone {world.Zone.Id} ({world.Zone.Name}), " +
                           $"x {p.X} y {p.Y} z {p.Z}, heading {p.Heading}");
+        if (gotoZone is int zoneId)
+        {
+            DaocProtocol.World.Zone target = DaocProtocol.World.Zones.All.FirstOrDefault(z => z.Id == zoneId)
+                ?? throw new ArgumentException($"No zone {zoneId} in zones.tsv.");
+            (float cx, float cy) = target.Centre;
+            WorldPosition moved = await session.JumpAsync(target.RegionId, cx, cy, p.Z);
+            PositionAndObjectId m = moved.Position;
+            Console.WriteLine($"jumped: region {m.RegionId}, zone {moved.Zone.Id} ({moved.Zone.Name}), x {m.X} y {m.Y} z {m.Z}");
+        }
         await StayInWorld(TimeSpan.FromSeconds(staySeconds));
     }
 

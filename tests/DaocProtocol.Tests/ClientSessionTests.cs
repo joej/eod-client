@@ -181,6 +181,155 @@ public class ClientSessionTests
         Assert.DoesNotContain(server.Received, p => p.Code == CharacterCreateRequest.Code);
     }
 
+    /// <summary>A 0x20 as PacketLib1124 writes it, for a world entry somewhere the recording never went.</summary>
+    private static ServerPacket PositionPacket(float x, float y, float z, ushort region, ushort heading = 0) =>
+        new(PositionAndObjectId.Code, new PayloadWriter().F32LE(x).F32LE(y).F32LE(z).U16BE(0x4167).U16BE(heading)
+            .Zeros(4).U16BE(region).U8(0x80).Zeros(5).ToArray());
+
+    /// <summary>Logs in and enters the world against <paramref name="server"/>.</summary>
+    private static async Task<(DaocConnection, ClientSession)> InWorld(FakeServer server)
+    {
+        var (connection, session) = await Connect(server);
+        await session.LoginAsync("rustdaoc", "secret");
+        await session.OpenCharacterScreenAsync();
+        await session.GetCharactersAsync(Realm.Albion);
+        await session.EnterWorldAsync(Realm.Albion, slot: 0);
+        return (connection, session);
+    }
+
+    private static bool IsJump(ClientPacket p) =>
+        p.Code == CommandRequest.Code && System.Text.Encoding.Latin1.GetString(p.Payload).Contains("&jump");
+
+    [Fact]
+    public async Task JumpWithinTheRegionTakesOverTheServersPosition()
+    {
+        // Salisbury Plains (zone 1) is in Camelot Hills' region 1: the server answers with 0x04.
+        await using var server = new FakeServer(Recording(p => IsJump(p)
+            ? [new ServerPacket(CharacterJump.Code, new CharacterJump(560000, 570000, 0x4167, 1000, 2048, 0).ToBytes())]
+            : WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await InWorld(server);
+        await using (connection)
+        {
+            WorldPosition world = await session.JumpAsync(1, 560000, 570000, 1000);
+
+            Assert.Equal(SessionState.InWorld, session.State);
+            Assert.Equal((560000f, 570000f, 1000f), (world.Position.X, world.Position.Y, world.Position.Z));
+            Assert.Equal("Salisbury Plains", world.Zone.Name);
+            Assert.Equal(world, session.World);
+
+            // The next 0xA9 reports the new position in the new zone.
+            await session.MoveToAsync(560001, 570000, 1000, heading: 2048);
+        }
+
+        Assert.Null(server.Error);
+        ClientPacket command = Assert.Single(server.Received, IsJump);
+        Assert.Equal(CommandRequest.Payload("&jump to 560000 570000 1000 1"), command.Payload);
+        Assert.Equal(PositionUpdate.Payload(560001, 570000, 1000, sessionId: 1, objectId: 0, zoneId: 1, heading: 2048),
+            server.Received.Last(p => p.Code == PositionUpdate.Code).Payload);
+    }
+
+    [Fact]
+    public async Task JumpToAnotherRegionEntersTheWorldThere()
+    {
+        // Cursed Forest (zone 208, region 200): 0xB1 + 0xB7, then the client's 0xD4 brings the new
+        // world's burst, and 0xE8 + 0xBF finish the entry as at login.
+        bool moved = false;
+        await using var server = new FakeServer(Recording(p =>
+        {
+            if (IsJump(p))
+            {
+                moved = true;
+                return [Recorded[7], new ServerPacket(RegionChanged.Code, new RegionChanged(200, 208).ToBytes())];
+            }
+            if (p.Code == WorldInitRequest.Code && moved)
+                return [PositionPacket(455000, 488000, 3000, region: 200, heading: 100), new ServerPacket(WorldInitRequest.EndOfBurstCode, [0])];
+            return WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null);
+        }));
+        var (connection, session) = await InWorld(server);
+        await using (connection)
+        {
+            WorldPosition world = await session.JumpAsync(200, 455000, 488000, 3000);
+
+            Assert.Equal(SessionState.InWorld, session.State);
+            Assert.Equal((455000f, 488000f, (ushort)200), (world.Position.X, world.Position.Y, world.Position.RegionId));
+            Assert.Equal("Cursed Forest", world.Zone.Name);
+        }
+
+        Assert.Null(server.Error);
+        int jump = server.Received.FindIndex(p => IsJump(p));
+        Assert.Equal(new byte[] { 0xD4, 0xE8, 0xBF },
+            server.Received.Skip(jump + 1).Where(p => p.Code != PositionUpdate.Code && p.Code != PingRequest.Code).Select(p => p.Code));
+        // The re-entry names the same character as the first one.
+        Assert.Equal(WorldInitRequest.Payload(Realm.Albion, 0), server.Received.Skip(jump).First(p => p.Code == WorldInitRequest.Code).Payload);
+    }
+
+    [Fact]
+    public async Task HoldsPositionUpdatesWhileTheServerMovesUs()
+    {
+        // The server takes 400 ms to answer the jump; a heartbeat in between would report the old
+        // position, which the server would believe. Only after the 0x04 may 0xA9 go out again.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        long jumpAt = -1;
+        bool answered = false;
+        await using var server = new FakeServer(Recording(p =>
+        {
+            if (IsJump(p))
+            {
+                jumpAt = clock.ElapsedMilliseconds;
+                return [];
+            }
+            if (p.Code == PingRequest.Code && jumpAt >= 0 && !answered && clock.ElapsedMilliseconds - jumpAt >= 400)
+            {
+                answered = true;
+                return [new ServerPacket(CharacterJump.Code, new CharacterJump(560000, 570000, 0x4167, 1000, 0, 0).ToBytes())];
+            }
+            return WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null);
+        }));
+        var (connection, session) = await InWorld(server);
+        await using (connection)
+        {
+            session.PositionInterval = TimeSpan.FromMilliseconds(50);
+            session.PingInterval = TimeSpan.FromMilliseconds(50);
+            using var stop = new CancellationTokenSource();
+            Task keepAlive = session.KeepAliveAsync(stop.Token);
+            await Task.Delay(200);
+            await session.JumpAsync(1, 560000, 570000, 1000);
+            await Task.Delay(200);
+            stop.Cancel();
+            await keepAlive;
+        }
+
+        Assert.Null(server.Error);
+        Assert.True(answered);
+        int jump = server.Received.FindIndex(p => IsJump(p));
+        List<ClientPacket> after = server.Received.Skip(jump + 1).ToList();
+        int firstUpdate = after.FindIndex(p => p.Code == PositionUpdate.Code);
+        Assert.True(firstUpdate >= 0, "position updates resume after the jump");
+        // Pings kept going while we waited (the server answered on one of them)...
+        Assert.True(after.Take(firstUpdate).Count(p => p.Code == PingRequest.Code) >= 4);
+        // ...and every 0xA9 after the command carries the new position, none the old one.
+        Assert.All(after.Where(p => p.Code == PositionUpdate.Code),
+            u => Assert.Equal(PositionUpdate.Payload(560000, 570000, 1000, sessionId: 1, objectId: 0, zoneId: 1, heading: 0), u.Payload));
+    }
+
+    [Fact]
+    public async Task ARefusedJumpLeavesUsWhereWeWere()
+    {
+        // A player without GM rights gets a chat line, not a move.
+        await using var server = new FakeServer(Recording(p => IsJump(p)
+            ? [new ServerPacket(ChatMessage.Code, [0, 0, 0, 0, 0, 0, 0, 0])]
+            : WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await InWorld(server);
+        await using (connection)
+        {
+            WorldPosition before = session.World!;
+            var e = await Assert.ThrowsAsync<TimeoutException>(() => session.JumpAsync(1, 560000, 570000, 1000));
+            Assert.Contains("GM", e.Message);
+            Assert.Equal(SessionState.InWorld, session.State);
+            Assert.Equal(before, session.World);
+        }
+    }
+
     /// <summary>Recorded world entry: 9D → B1 + 29, D4 → the burst from C5 to 4E (packets 10–36), BF → 2D (packet 237).</summary>
     private static ServerPacket[]? WorldEntry(ClientPacket p) => p.Code switch
     {
