@@ -59,6 +59,18 @@ public class ZoneWaterTests
     }
 
     [Fact]
+    public void ALakeThatNamesNoTextureGetsTheClassicWaterTexture()
+    {
+        // Cothrom Gorge's lakes (and most Shrouded Isles and Atlantis water) write "texture=" empty:
+        // retail draws them with its own water effect. With no texture at all they rendered white.
+        var lake = Assert.Single(ZoneWater.Parse(Sector.Replace("texture=watery.tga", "texture=")), b => b.Index == 2);
+        Assert.Equal(ZoneWater.DefaultTexture, lake.Texture);
+        Assert.Equal("watery.dds", ZoneWater.BuildMesh(lake, 0, 0).TextureFile);
+        var lava = Assert.Single(ZoneWater.Parse(Sector.Replace("texture=watery.tga", "texture=").Replace("type=lake", "type=LAVA")), b => b.Index == 2);
+        Assert.Equal(ZoneWater.DefaultLavaTexture, lava.Texture);
+    }
+
+    [Fact]
     public void TheGridSpansTheZoneTablesSizeNotSectorSize()
     {
         // SECTOR.DAT's sizex=4 (Snowdonia) is not the zone's extent: the zone table's 8 is.

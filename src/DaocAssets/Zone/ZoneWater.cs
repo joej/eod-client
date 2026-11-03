@@ -44,6 +44,16 @@ public sealed record WaterBody
 
 public static class ZoneWater
 {
+    /// <summary>
+    /// The texture for a body that names none: 101 of the install's 236 water bodies, nearly all in the
+    /// Shrouded Isles and Atlantis zones. Retail draws those with its own water effect (reflections and
+    /// the bump maps in the install's water/ folder, quality set by the [water] section of the graphics
+    /// profiles; open question W24). Until we draw that, they get the classic water texture every other
+    /// lake, river and swamp names, instead of no texture (which rendered them white); a lava body gets
+    /// the lava texture (two have none, one coloured 255: red, read as BGR, as 16776960 reads cyan).
+    /// </summary>
+    public const string DefaultTexture = "watery", DefaultLavaTexture = "lava";
+
     /// <summary>Texture repeats every this many region units (≈12.8 m); a guess to tune by eye.</summary>
     public const float TileUnits = 512f;
 
@@ -73,7 +83,9 @@ public static class ZoneWater
                 Name = keys.GetValueOrDefault("name", ""),
                 Type = keys.GetValueOrDefault("type", "").ToUpperInvariant(),
                 Height = Float(keys.GetValueOrDefault("height")),
-                Texture = Stem(keys.GetValueOrDefault("texture", "")),
+                Texture = Stem(keys.GetValueOrDefault("texture", "")) is { Length: > 0 } t ? t
+                    : keys.GetValueOrDefault("type", "").Equals("LAVA", StringComparison.OrdinalIgnoreCase) ? DefaultLavaTexture
+                    : DefaultTexture,
                 MultiTexture = Stem(keys.GetValueOrDefault("multitexture", "")),
                 Flow = Float(keys.GetValueOrDefault("flow")),
                 Color = long.TryParse(keys.GetValueOrDefault("color"), out long c) ? c : 0,
