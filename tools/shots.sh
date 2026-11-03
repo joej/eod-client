@@ -19,6 +19,8 @@ Z="$PRIV/zones/zone$(printf %03d "${ZONE:-0}")"
 OUT="$PRIV/progress/shots/$LABEL"
 [ -f "$Z/zone.csv" ] || { echo "shots.sh: no converted zone in $Z (run tools/play.sh assets)" >&2; exit 1; }
 GODOT=${GODOT:-$(command -v godot-mono || command -v godot4-mono || command -v godot)}
+# Always build the client first (incremental): shots of stale code show nothing about the change.
+dotnet build "$REPO/godot/EodClient.csproj" -v q --nologo >/dev/null
 # The world opens at the first pose's position (the zone and terrain around it load from there).
 read -r _ x y z _ < <(grep -v '^\s*#' "$POSES" | grep -v '^\s*$' | head -1)
 cd "$REPO"

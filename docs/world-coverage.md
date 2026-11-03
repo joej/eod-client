@@ -15,11 +15,30 @@ bytes of binary files. Each file and key is marked as **used** (read by the conv
 The report describes the owner's client files, so it is written under `private/` and never committed;
 this page holds the findings. Run on 2026-11-01 over the owner's 1.127 OpenDAoC install.
 
+## How the converted world is checked (2026-11-02)
+
+Reading every byte correctly is not the same as building the world correctly: until 2026-11-02, 93% of
+all outdoor objects were placed underground while every count looked right. Three checks now judge the
+result, and CLAUDE.md requires them before an asset change is handed over:
+
+- **`mpk zonecheck`** (`tools/zonecheck-all.sh` for every outdoor zone, about 3 minutes; `tools/play.sh
+  assets` for the zone being played, stopping on errors) places each object as the client does, with
+  its converted model's real bounds, and compares it with the terrain: under the ground, origin sunk,
+  floating, outside the zone, implausible size, missing or empty model. Findings reviewed and believed
+  intended are listed in `tools/zonecheck-known.txt` (unverified until compared with retail).
+  2026-11-02, all 87 outdoor zones, 95,460 placements: 306 errors and 25,862 warnings at the first run,
+  17 and 757 after the fixes it led to; the rest are listed per zone in the private report.
+- **The field review** in `mpk worldaudit`: every column and key of the files the converter reads, with
+  their values; each one the converter ignores, and each zero/empty/negative value in one it reads, is a
+  review item. The 2026-11-02 review produced W14-W18.
+- **`tools/shots.sh`**: fixed camera poses (`tools/shots/camhills.txt`) rendered offline, compared before
+  and after a change. Every bug the owner reports gets a pose.
+
 ## Kinds of zone
 
 | Kind | Zones | How it's built | Converter |
 |---|---:|---|---|
-| Outdoor | 98 | heightmap (`terrain.pcx` + `offset.pcx`), placed NIFs (`nifs.csv` + `fixtures.csv`), terrain tile textures | **read** |
+| Outdoor | 98 | heightmap (`terrain.pcx` + `offset.pcx`), placed NIFs (`nifs.csv` + `fixtures.csv`), terrain tile textures | **read** (87 convert; the zone table gives the extent, W14) |
 | Dungeon | 282 | `dungeon.chunk` (NIF pieces), `dungeon.place`, `dungeon.prop`, `dungeon.water`, `portals.csv` | not read (roadmap M11) |
 | "Skycity" | 17 | the same chunk files under `skycity.*` | not read (M11) |
 | Other / empty | 5 | | |

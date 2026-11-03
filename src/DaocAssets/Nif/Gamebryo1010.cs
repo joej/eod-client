@@ -493,6 +493,7 @@ internal static class Gamebryo1010
         float[] rot = new float[9];
         for (int i = 0; i < 9; i++) rot[i] = c.F32();
         float scale = c.F32();
+        (rot, scale, trans) = NifFile.Sanitize(rot, scale, trans);
         b.Local = new NifTransform(rot, trans, scale);
         b.Props = RefList(ref c, nb);
         if (Ref(ref c, nb) >= 0) Bump(f, $"{b.Type}: has collision object");

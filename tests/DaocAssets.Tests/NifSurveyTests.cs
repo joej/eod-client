@@ -324,3 +324,19 @@ public class NifSkinTests
         Assert.InRange(maxY - minY, 1.6f, 2.0f);      // a ~1.8 m Briton
     }
 }
+
+/// <summary>Every private fixture converts to finite geometry: a NaN vertex is dropped silently by the
+/// glTF writer, so it has to be caught here (ncarcass-421.nif has a node with a NaN transform).</summary>
+public class NifFiniteGeometryTests
+{
+    [Theory]
+    [MemberData(nameof(NifSurveyTests.PrivateNifs), MemberType = typeof(NifSurveyTests))]
+    public void EveryFixtureConvertsToFiniteVertices(string name)
+    {
+        NifModel model = NifFile.Read(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "live-nif", name)));
+        foreach (NifMesh m in model.Meshes.Where(m => !m.Helper))
+            Assert.All(m.Vertices, v => Assert.True(float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z), $"{m.Name}: {v}"));
+        var gltf = GltfExporter.BuildScene(model).ToGltf2();
+        Assert.Equal(model.Meshes.Count(m => !m.Helper), gltf.LogicalMeshes.Count);   // nothing dropped
+    }
+}

@@ -30,6 +30,11 @@ public static class GltfExporter
     /// <summary>Builds a glTF scene from the model (exposed for tests that inspect it in memory).</summary>
     public static SceneBuilder BuildScene(NifModel model)
     {
+        // A NaN vertex would be dropped silently by the glTF writer, leaving an empty or holed model
+        // that looks like a successful conversion. Fail loudly instead (the library reports it).
+        foreach (NifMesh mesh in model.Meshes)
+            if (!mesh.Helper && mesh.Vertices.Any(v => float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z)))
+                throw new InvalidOperationException($"{mesh.Name} ({mesh.ShapeName}) has NaN vertex positions.");
         if (model.Joints.Count > 0)
             return BuildSkinnedScene(model);
         var scene = new SceneBuilder();

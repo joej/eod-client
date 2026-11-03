@@ -121,12 +121,7 @@ zone_info() { awk -F'\t' -v z="$ZONE" '!/^#/ && $1 == z { print; exit }' "$ZONES
 
 # What the converter is made of right now: the committed trees plus any uncommitted edits. When it
 # changes, previously converted models may be wrong (the library otherwise reuses them forever).
-converter_stamp() {
-    (cd "$REPO" && {
-        git rev-parse HEAD:src/DaocAssets HEAD:tools/AssetExtract 2>/dev/null
-        git diff HEAD -- src/DaocAssets tools/AssetExtract 2>/dev/null
-    } | shasum | cut -d' ' -f1)
-}
+. "$REPO/tools/lib/converter-stamp.sh"
 STAMP_FILE="$LIB/.converter"
 
 assets_current() {

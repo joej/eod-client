@@ -23,9 +23,18 @@ MPK="$REPO/tools/AssetExtract/bin/Debug/net10.0/mpk"
 INDEX="$PRIV/asset-index/index.json"
 LIB="$PRIV/library"
 OUT="$PRIV/audit/zonecheck"
-[ -x "$MPK" ] || dotnet build "$REPO/tools/AssetExtract" -v q --nologo
+# Always build (incremental): a check run with a stale tool checks old code.
+dotnet build "$REPO/tools/AssetExtract/AssetExtract.csproj" -v q --nologo >/dev/null
 [ -f "$INDEX" ] || "$MPK" index "$CLIENT" --out "$INDEX"
 mkdir -p "$OUT" "$LIB"
+
+# Converted models are reused across runs; when the converter's code changed they are stale.
+. "$REPO/tools/lib/converter-stamp.sh"
+stamp=$(converter_stamp)
+if [ "$(cat "$LIB/.converter" 2>/dev/null)" != "$stamp" ]; then
+    echo "converter changed since the library was built: reconverting models and textures"
+    rm -rf "$LIB/models" "$LIB/textures"
+fi
 
 summary="$OUT/summary.md"
 {
@@ -59,4 +68,5 @@ grep -v '^#' "$REPO/src/DaocProtocol/World/zones.tsv" | while IFS=$'\t' read -r 
     findings=$(sed -nE 's/.*warning\(s\) \((.*)\)$/\1/p' <<<"$line")
     echo "| $zone | $name | $placements | $errors | $warnings | $findings |" >> "$summary"
 done
+echo "$stamp" > "$LIB/.converter"
 echo "summary -> $summary"

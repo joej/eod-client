@@ -533,9 +533,24 @@ public static partial class NifFile
         for (int i = 0; i < p.Length; i++) p[i] = c.I32();   // Property refs
         if (c.Bool())              // Has Bounding Volume (until 4.2.2.0)
             return false;          // present only rarely; bail to identity rather than misparse
+        (rot, scale, trans) = Sanitize(rot, scale, trans);
         xform = new Xform(rot, scale, trans);
         props = p;
         return true;
+    }
+
+    /// <summary>
+    /// A node transform with NaN in it becomes "no transform" for the broken part: translation 0,
+    /// rotation identity, scale 1. Some files carry such nodes (zones/Nifs Ncarcass.nif: every visible
+    /// mesh under it came out NaN, and the glTF writer silently dropped all of it, leaving an empty
+    /// model); OfflineDAoC reads NaN as 0 the same way (nif_character.py, node_trs).
+    /// </summary>
+    internal static (float[] Rot, float Scale, Vector3 Trans) Sanitize(float[] rot, float scale, Vector3 trans)
+    {
+        if (rot.Any(float.IsNaN)) rot = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+        if (float.IsNaN(scale) || scale == 0) scale = 1;
+        trans = new Vector3(float.IsNaN(trans.X) ? 0 : trans.X, float.IsNaN(trans.Y) ? 0 : trans.Y, float.IsNaN(trans.Z) ? 0 : trans.Z);
+        return (rot, scale, trans);
     }
 
     // NiTexturingProperty body (4.x), positioned just past the type string. Layout (verified by

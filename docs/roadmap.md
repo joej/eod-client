@@ -211,8 +211,12 @@ are fixed (status 2026-11-01):
   as a two-sided cut-out at 0.29 and Godot imports them as alpha-scissor. Rules adapted from
   OfflineDAoC (GPL-3.0). Verified on elm1, bpinea and oak1 rendered in Godot (before: solid quads;
   after: leafy canopies), plus tests on real tree NIFs.
-- **Fixtures sit flush on terrain** (open) — houses/daises that currently float or sink get placed on the
-  ground correctly (the keep already does; generalise it).
+- ~~**Fixtures sit flush on terrain**~~ **Fixed 2026-11-02** (commits 0478b56, 698f368). `fixtures.csv`'s
+  On Ground column (and a Z of 0) mean "stand on the terrain"; we had read Z literally, which put 93% of
+  all outdoor objects underground. Found by the owner in Camelot Hills, then measured across all 87
+  outdoor zones by the new zone check (`mpk zonecheck`, `tools/zonecheck-all.sh`), which also found
+  nine collapsed and two half-size terrains (W14). Open from the same review: a second fixture rotation
+  (W15), terrain flips and borrowed textures (W16).
 
 **M7b — characters and creatures are DAoC models ("the inhabitants look like DAoC").** The capsules
 become real figures:
