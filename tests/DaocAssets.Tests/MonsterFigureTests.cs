@@ -84,6 +84,27 @@ public sealed class MonsterFigureTests
     }
 
     [Fact]
+    public void TheFaceShellIsTuckedInUnderTheHair()
+    {
+        // Face and hair are overlapping head shells; the face moves in along its normals so the hair
+        // wins where both are (no z-fighting) and the face shows where it is alone.
+        var head = new NifModel
+        {
+            Version = new NifVersion(10, 1, 0, 0),
+            Meshes =
+            [
+                new NifMesh { Name = "face", ShapeName = "HeadA1:19", Vertices = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ],
+                    Normals = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ], Triangles = [(0, 1, 2)] },
+                new NifMesh { Name = "hair", ShapeName = "HeadB1:24", Vertices = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ],
+                    Normals = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ], Triangles = [(0, 1, 2)] },
+            ],
+        };
+        NifModel dressed = MonsterFigure.Dress(head, MonsterTables.Parse(Monsters, Monnifs, Skins).Resolve(8)!);
+        Assert.Equal(new Vector3(0.9f, 0, 0), dressed.Meshes[0].Vertices[0]);   // the face, 0.1 in
+        Assert.Equal(Vector3.UnitX, dressed.Meshes[1].Vertices[0]);             // the hair, unmoved
+    }
+
+    [Fact]
     public void ACreaturesSingleShapeWearsTheBodySkin()
     {
         // Wolf.nif is one shape ("Editable Mesh"), skinned with the row's Body skin (wolf_black.tga).

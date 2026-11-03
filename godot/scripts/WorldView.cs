@@ -976,6 +976,27 @@ public partial class WorldView : Node3D
     // .glb and zone.csv placement, the mesh node, and every surface's material (texture stem,
     // textured or not, UVs or not, colour, transparency) with the hit surface marked. That is the
     // question M7a keeps asking about magenta walls, flat-tan stone and opaque foliage.
+    // What stands between a point and the sun: a ray from just above the point toward the light,
+    // against everything that has collision (zone models, terrain). Names the first model it meets, or
+    // says the point is in sunlight. Figures cast shadows too but have no collision, so they don't show.
+    private string ShadowCaster(Vector3 point)
+    {
+        Vector3 towardSun = _sun.GlobalTransform.Basis.Z.Normalized();   // a DirectionalLight3D shines along -Z
+        var ray = PhysicsRayQueryParameters3D.Create(point + towardSun * 0.05f, point + towardSun * 400f);
+        ray.HitBackFaces = true;
+        Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
+        if (hit.Count == 0 || hit["collider"].AsGodotObject() is not Node collider)
+            return "shadow  none (in sunlight)";
+        Node? n = collider.HasMeta("terrain_mesh") ? null : collider.GetParent();
+        while (n is not null && !n.HasMeta("glb"))
+            n = n.GetParent();
+        float distance = point.DistanceTo(hit["position"].AsVector3());
+        (float x, float y, float z) = ToRegion(hit["position"].AsVector3());
+        string what = n is not null ? n.GetMeta("glb").AsString() : collider.HasMeta("terrain_mesh") ? "terrain" : collider.Name;
+        string mesh = collider.GetParent() is MeshInstance3D mi ? $" {mi.Name}" : "";
+        return $"shadow  from {what}{mesh}, {distance:0} m toward the sun (x {x:0} y {y:0} z {z:0})";
+    }
+
     private void Inspect(Vector2 screen)
     {
         Vector3 from = _camera.ProjectRayOrigin(screen);
@@ -1022,6 +1043,7 @@ public partial class WorldView : Node3D
             sb.AppendLine("model   terrain");
         }
         sb.AppendLine($"hit     x {hx:0} y {hy:0} z {hz:0}" + (face >= 0 ? $"  face {face}" : ""));
+        sb.AppendLine(ShadowCaster(hit["position"].AsVector3()));
 
         if (mesh is null || mesh.Mesh is null)
         {

@@ -146,10 +146,23 @@ public static class MonsterFigure
             {
                 Helper = mesh.Helper || !shown,
                 TextureFile = skin ?? mesh.TextureFile,
+                Vertices = slot == "HeadA" && shown ? TuckIn(mesh) : mesh.Vertices,
             });
         }
         return new NifModel { Version = figure.Version, Joints = figure.Joints, Meshes = meshes };
     }
+
+    // The face shell and the hair shell overlap almost everywhere (bcommonm: 61% of the hair's vertices
+    // within 4 mm of the face's, most at the back of the head), so they z-fought: the back of the head
+    // shimmered (owner, 2026-11-03). The hair belongs on top where both are; the face shows where the
+    // hair has no surface (the front). Moving the face 0.1 NIF units (2.5 mm) in along its normals
+    // keeps that order at any distance.
+    private const float FaceTuck = 0.1f;
+
+    private static System.Numerics.Vector3[] TuckIn(NifMesh face) =>
+        face.Normals is { } n && n.Length == face.Vertices.Length
+            ? face.Vertices.Select((v, i) => v - n[i] * FaceTuck).ToArray()
+            : face.Vertices;
 
     // "Body1b:3" -> ("Body", "1b"); "HeadA1:19" -> ("HeadA", "1"); "Lod1a" -> ("Lod", "1a"); else ("", "").
     internal static (string Slot, string Variant) SlotOf(string shapeName)
