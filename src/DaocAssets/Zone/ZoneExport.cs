@@ -36,6 +36,22 @@ public static class ZoneExport
         ZoneLayout layout = ZoneLayout.Parse(nifsCsv, fixturesCsv, offsetX, offsetY);
         Directory.CreateDirectory(outDir);
 
+        // "On Ground" objects stand on the terrain: their stored Z is stale (Camelot Hills: 546 are 0,
+        // the other 975 sit a median 726 units, up to 1,583, below the ground), while objects without
+        // the flag match the terrain to within ~40 units. So an On Ground object gets the terrain
+        // height under its position; the rest keep their Z (a bridgehouse sits 315 below on purpose).
+        ZoneTerrain? terrain = null;
+        try { terrain = ZoneTerrain.Read(zoneDatMpk); }
+        catch (Exception e) when (e is FormatException or InvalidDataException or MpkFormatException or KeyNotFoundException) { }
+        int grounded = 0;
+        float Z(ZoneFixture f)
+        {
+            if (!f.OnGround || terrain is null)
+                return f.Z;
+            grounded++;
+            return terrain.HeightAt(f.X - offsetX, f.Y - offsetY);
+        }
+
         // Ensure each distinct model is in the library (converted once, or an override); the library
         // also gathers each model's textures. Lookups are index-backed — no install scan.
         var glbByNif = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -65,14 +81,17 @@ public static class ZoneExport
             sb.Append(glb).Append(',')
               .Append(f.X.ToString("0.###", CultureInfo.InvariantCulture)).Append(',')
               .Append(f.Y.ToString("0.###", CultureInfo.InvariantCulture)).Append(',')
-              .Append(f.Z.ToString("0.###", CultureInfo.InvariantCulture)).Append(',')
+              .Append(Z(f).ToString("0.###", CultureInfo.InvariantCulture)).Append(',')
               .Append(f.AngleDeg.ToString(CultureInfo.InvariantCulture)).Append(',')
               .Append(f.Scale.ToString("0.###", CultureInfo.InvariantCulture)).Append('\n');
             placed++;
         }
         File.WriteAllText(Path.Combine(outDir, "zone.csv"), sb.ToString());
 
-        return new ZoneExportReport(layout.Fixtures.Count, layout.Models.Count, converted, missingModel, failed, placed);
+        return new ZoneExportReport(layout.Fixtures.Count, layout.Models.Count, converted, missingModel, failed, placed)
+        {
+            Grounded = grounded,
+        };
     }
 
     private static string ReadMember(MpkArchive mpk, string name)
@@ -85,4 +104,8 @@ public static class ZoneExport
 
 /// <summary>Summary of a zone export run.</summary>
 public readonly record struct ZoneExportReport(
-    int Fixtures, int Models, int Converted, int MissingModel, int Failed, int Placed);
+    int Fixtures, int Models, int Converted, int MissingModel, int Failed, int Placed)
+{
+    /// <summary>Placements stood on the terrain because they are flagged "On Ground".</summary>
+    public int Grounded { get; init; }
+}

@@ -20,7 +20,8 @@ public readonly record struct ZoneFixture(
     string Label,       // textual name from the CSV, e.g. "Keep"
     float X, float Y, float Z,   // region-global position (zone offset already applied)
     int AngleDeg,       // rotation about the vertical axis, 0..359 degrees
-    float Scale);       // per-cent in the CSV; stored as a ratio (100 -> 1.0)
+    float Scale,        // per-cent in the CSV; stored as a ratio (100 -> 1.0)
+    bool OnGround = false); // the CSV's "On Ground" column: the object stands on the terrain
 
 /// <summary>A zone's static-object layout: the fixtures and the distinct models they reference.</summary>
 public sealed class ZoneLayout
@@ -67,11 +68,14 @@ public sealed class ZoneLayout
             int.TryParse(cols[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out int angle);
             float scale = TryFloat(cols[7], out float s) && s > 0 ? s / 100f : 1f;
 
+            // Column 11 is "On Ground" (header: ID, NIF #, Textual Name, X, Y, Z, A, Scale, Collide,
+            // Collide Radius, Animate, On Ground, Flip, Cave, Unique Id).
+            bool onGround = cols.Length > 11 && cols[11] == "1";
             fixtures.Add(new ZoneFixture(
                 model.Name, model.Label,
                 x + offsetX, y + offsetY, z,
                 ((angle % 360) + 360) % 360,
-                scale));
+                scale, onGround));
         }
 
         return new ZoneLayout { Fixtures = fixtures };

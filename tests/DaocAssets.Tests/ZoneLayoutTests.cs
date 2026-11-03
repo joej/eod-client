@@ -64,4 +64,20 @@ public sealed class ZoneLayoutTests
         Assert.All(layout.Fixtures, f => Assert.False(string.IsNullOrEmpty(f.NifName)));
         Assert.DoesNotContain(layout.Fixtures, f => f.Label == "Unknown");
     }
+
+    [Fact]
+    public void ReadsTheOnGroundColumn()
+    {
+        // The real header: ..., Scale, Collide, Collide Radius, Animate, On Ground, Flip, Cave, Unique Id.
+        const string fixtures =
+            "Fixtures,,,,,,,,NIF,Collide,,On.\n" +
+            "ID,NIF #,Textual Name,X,Y,Z,A,Scale,Collide,Radius,Animate,Ground,Flip,Cave, Unique Id\n" +
+            "1,407,Keep,25344,47104,2880,0,100,5120,0,0,1,0,0,1\n" +
+            "2,403,Pine,1000,2000,0,0,90,0,8,0,1,0,0,2\n" +
+            "3,403,Pine,1000,2000,700,0,90,0,8,0,0,0,0,3\n";
+        ZoneLayout layout = ZoneLayout.Parse(Nifs, fixtures, 0, 0);
+        Assert.Equal([true, true, false], layout.Fixtures.Select(f => f.OnGround));
+        // Short rows (no such column) are not on the ground.
+        Assert.All(ZoneLayout.Parse(Nifs, Fixtures, 0, 0).Fixtures, f => Assert.False(f.OnGround));
+    }
 }

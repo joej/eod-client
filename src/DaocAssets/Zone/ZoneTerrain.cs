@@ -53,6 +53,22 @@ public sealed class ZoneTerrain
         return new ZoneTerrain(terrain, offset, scale, off, sizeX, sizeY);
     }
 
+    /// <summary>
+    /// Ground height (region Z) at a zone-local position (region units from the zone's corner),
+    /// interpolated between the four surrounding heightmap cells; outside the map, the nearest edge.
+    /// </summary>
+    public float HeightAt(float localX, float localY)
+    {
+        int n = Cells;
+        float step = (float)RegionWidth / (n - 1);
+        float fx = Math.Clamp(localX / step, 0, n - 1), fy = Math.Clamp(localY / step, 0, n - 1);
+        int x0 = Math.Min((int)fx, n - 2), y0 = Math.Min((int)fy, n - 2);
+        float tx = fx - x0, ty = fy - y0;
+        float top = HeightAtCell(x0, y0) * (1 - tx) + HeightAtCell(x0 + 1, y0) * tx;
+        float bottom = HeightAtCell(x0, y0 + 1) * (1 - tx) + HeightAtCell(x0 + 1, y0 + 1) * tx;
+        return top * (1 - ty) + bottom * ty;
+    }
+
     /// <summary>Height (region Z) at heightmap cell (cx, cy).</summary>
     public float HeightAtCell(int cx, int cy) =>
         _terrain.At(cx, cy) * _scaleFactor + _offset.At(cx, cy) * _offsetFactor;

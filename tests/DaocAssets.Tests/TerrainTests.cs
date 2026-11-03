@@ -126,6 +126,48 @@ public sealed class TerrainTests
     }
 
     // A flat w x h, 8-bit RLE PCX whose every pixel is `value` (one run per row).
+    [Fact]
+    public void HeightAtInterpolatesBetweenCellsAlongTheRightAxes()
+    {
+        // A ramp rising along X only (cell value = column): an object's ground height must follow X,
+        // not Y (a swapped lookup would put every On Ground object at the wrong height).
+        byte[] mpk = MpkBuilder.Build(
+            ("terrain.pcx", RampPcx(8, 8)), ("offset.pcx", FlatPcx(8, 8, value: 0)),
+            ("SECTOR.DAT", System.Text.Encoding.Latin1.GetBytes("[terrain]\nscalefactor=8\noffsetfactor=32\nsizex=1\nsizey=1\n")));
+        string tmp = Path.Combine(Path.GetTempPath(), "daoc-terr-" + Guid.NewGuid().ToString("N") + ".mpk");
+        try
+        {
+            File.WriteAllBytes(tmp, mpk);
+            ZoneTerrain terrain = ZoneTerrain.Read(tmp);
+            float step = 8192f / 7;                                  // 8 cells span the zone's 8192 units
+            Assert.Equal(0f, terrain.HeightAt(0, 5000), 3);
+            Assert.Equal(3 * 8f, terrain.HeightAt(3 * step, 100), 3);  // on cell 3
+            Assert.Equal(3.5f * 8f, terrain.HeightAt(3.5f * step, 4000), 3);   // halfway to cell 4
+            Assert.Equal(7 * 8f, terrain.HeightAt(99999, 0), 3);      // clamped at the far edge
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    // An 8-bit PCX whose cell (x, y) holds x.
+    private static byte[] RampPcx(int w, int h)
+    {
+        var head = new byte[128];
+        head[0] = 0x0A; head[2] = 1; head[3] = 8;
+        W16(head, 8, w - 1); W16(head, 10, h - 1);
+        head[65] = 1; W16(head, 66, w);
+        var body = new List<byte>();
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                body.Add(0xC1);                 // run of 1 (values below 0xC0 could be literal; keep it uniform)
+                body.Add((byte)x);
+            }
+        return [.. head, .. body];
+    }
+
     private static byte[] FlatPcx(int w, int h, byte value)
     {
         var head = new byte[128];
