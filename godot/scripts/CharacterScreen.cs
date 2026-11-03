@@ -46,6 +46,7 @@ public partial class CharacterScreen : Control
     {
         // Closing the window while in the world quits cleanly first (see _Notification).
         GetTree().AutoAcceptQuit = false;
+        ClientSettings.ApplyWindowMode();
         BuildUi();
         LoadSettings();
 
@@ -110,6 +111,18 @@ public partial class CharacterScreen : Control
         string cwd = OS.GetEnvironment("PWD");
         string baseDir = string.IsNullOrEmpty(cwd) ? System.IO.Directory.GetCurrentDirectory() : cwd;
         return System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDir, m));
+    }
+
+    // F11 toggles fullscreen from anywhere: the login and character screen, and the world, which
+    // leaves this node in the tree.
+    public override void _Input(InputEvent @event)
+    {
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
+        {
+            ClientSettings.Fullscreen = !ClientSettings.Fullscreen;
+            ClientSettings.ApplyWindowMode();
+            GetViewport().SetInputAsHandled();
+        }
     }
 
     public override void _ExitTree() => _ = Disconnect();

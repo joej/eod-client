@@ -27,6 +27,35 @@ public static class ClientSettings
         }
     }
 
+    /// <summary>Fullscreen (F11) or a maximized window.</summary>
+    public static bool Fullscreen
+    {
+        get => Load().GetValue("graphics", "fullscreen", false).AsBool();
+        set => Save("fullscreen", value);
+    }
+
+    /// <summary>The sun casts real shadows (buildings, trees). Ours: the original drew fixed ones.</summary>
+    public static bool SunShadows
+    {
+        get => Load().GetValue("graphics", "sun_shadows", true).AsBool();
+        set => Save("sun_shadows", value);
+    }
+
+    /// <summary>Puts the window in the saved mode (no-op without a display, e.g. headless checks).</summary>
+    public static void ApplyWindowMode()
+    {
+        if (DisplayServer.GetName() == "headless")
+            return;
+        DisplayServer.WindowSetMode(Fullscreen ? DisplayServer.WindowMode.Fullscreen : DisplayServer.WindowMode.Maximized);
+    }
+
+    private static void Save(string key, Variant value)
+    {
+        ConfigFile cfg = Load();
+        cfg.SetValue("graphics", key, value);
+        cfg.Save(Path);
+    }
+
     private static ConfigFile Load()
     {
         var cfg = new ConfigFile();

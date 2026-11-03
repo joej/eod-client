@@ -54,6 +54,12 @@ public static class ModelTexturing
                 // Duplicate so we don't mutate a material shared across surfaces/instances.
                 var copy = (BaseMaterial3D)material.Duplicate();
                 copy.AlbedoTexture = tex;
+                // Sharp at shallow angles (the ground under a chase camera) rather than blurred.
+                copy.TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic;
+                // Cut-out foliage: with MSAA, alpha to coverage smooths the leaves' cut edges instead
+                // of leaving them stair-stepped and shimmering.
+                if (copy.Transparency == BaseMaterial3D.TransparencyEnum.AlphaScissor)
+                    copy.AlphaAntialiasingMode = BaseMaterial3D.AlphaAntiAliasing.AlphaToCoverage;
                 mi.SetSurfaceOverrideMaterial(s, copy);
                 textured++;
             }
@@ -107,6 +113,13 @@ public static class ModelTexturing
                 };
                 if (err == Error.Ok)
                 {
+                    // TGA and BMP (and the odd DDS) come without mipmaps, so they shimmered at a distance.
+                    if (!img.HasMipmaps())
+                    {
+                        if (img.IsCompressed())
+                            img.Decompress();
+                        img.GenerateMipmaps();
+                    }
                     result = ImageTexture.CreateFromImage(img);
                     break;
                 }

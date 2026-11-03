@@ -227,7 +227,14 @@ public partial class WorldView : Node3D
             AmbientLightColor = new Color(0.6f, 0.6f, 0.6f),
         };
         AddChild(new WorldEnvironment { Environment = _environment });
-        _sun = new DirectionalLight3D { RotationDegrees = new Vector3(-50, 30, 0) };
+        _sun = new DirectionalLight3D
+        {
+            RotationDegrees = new Vector3(-50, 30, 0),
+            ShadowEnabled = ClientSettings.SunShadows,
+            // Shadows out to 250 m in four cascades: crisp near the player, cheap beyond.
+            DirectionalShadowMaxDistance = 250f,
+            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
+        };
         AddChild(_sun);
         _skyName = ApplySky("clear", "day");
 
@@ -353,6 +360,11 @@ public partial class WorldView : Node3D
     {
         _nextViewDistance = _dev.AddChoice("F3 view", [.. ClientSettings.ViewDistances.Select(v => v.Label)],
             _viewSetting, i => { ClientSettings.ViewDistance = i; ApplyViewDistance(i); });
+        _dev.AddToggle("Sun shadows", ClientSettings.SunShadows, on =>
+        {
+            ClientSettings.SunShadows = on;
+            _sun.ShadowEnabled = on;
+        });
         _dev.AddToggle("Terrain", true, on =>
         {
             _terrainOn = on;
@@ -1592,7 +1604,7 @@ public partial class WorldView : Node3D
         _dev.Status =
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
             (AssetsNote.Length > 0 ? AssetsNote + "\n" : "") +
-            $"{_seconds:0} s in world   {_packets} packets   {_pings} ping replies   {_entities.Count} entities   {_chatReceived} chat   " +
+            $"{Engine.GetFramesPerSecond():0} fps   {_seconds:0} s in world   {_packets} packets   {_pings} ping replies   {_entities.Count} entities   {_chatReceived} chat   " +
             (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + "\n" +
             $"W {(Input.IsKeyPressed(Key.W) ? 1 : 0)} S {(Input.IsKeyPressed(Key.S) ? 1 : 0)} " +
             $"A {(Input.IsKeyPressed(Key.A) ? 1 : 0)} D {(Input.IsKeyPressed(Key.D) ? 1 : 0)}   " +
