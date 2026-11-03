@@ -40,6 +40,7 @@ public partial class CharacterScreen : Control
     private Realm _listedRealm;
     private readonly List<CharacterSummary> _listed = [];
     private WorldView? _world;
+    private ushort _playerModel;   // the entered character's model id, for its figure
     private CancellationTokenSource? _keepAlive;
 
     public override void _Ready()
@@ -283,6 +284,7 @@ public partial class CharacterScreen : Control
         {
             _status.Text = "Entering the world…";
             WorldPosition world = await _session.EnterWorldAsync(_listedRealm, slot);
+            _playerModel = _listed.FirstOrDefault(c => c.Slot == slot)?.Model ?? 0;
             if (Option(OS.GetCmdlineUserArgs(), "--goto") is int gotoZone)
                 world = await GoTo(world, gotoZone);
 
@@ -395,7 +397,7 @@ public partial class CharacterScreen : Control
                 zoneCsv = terrain = null;
             }
         }
-        var view = new WorldView { AssetsNote = note };
+        var view = new WorldView { AssetsNote = note, PlayerModel = _playerModel };
         view.Init(offline ? null : _connection, offline ? null : _session, world, ResolvedPath(a, "--model"),
             zoneCsv, ResolvedPath(a, "--library"), terrain);
         if (note.Length > 0)

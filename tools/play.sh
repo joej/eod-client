@@ -188,7 +188,7 @@ do_assets() {
     if [ -n "$GOTO" ]; then
         local n; n=$(printf %03d "$GOTO")
         step "assets: zone $GOTO from $CLIENT"
-        make -C "$REPO" -j"$jobs" CLIENT="$CLIENT" "check-zone$n" \
+        make -C "$REPO" -j"$jobs" CLIENT="$CLIENT" "check-zone$n" figures \
             || die "zone $GOTO: conversion failed or its zone check found errors (see $ZONES/zone$n/zonecheck.md)"
     else
         # The character may be saved in any zone, and the server can move it to any other.

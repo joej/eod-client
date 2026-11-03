@@ -153,6 +153,13 @@ public partial class WorldView : Node3D
     /// </summary>
     public event Action? RegionChanging;
 
+    /// <summary>The player's own model id (the character list's model; monsters.csv row, e.g. 32 =
+    /// Briton male): the body is drawn as that figure when one was converted. 0 = none.</summary>
+    public ushort PlayerModel { get; set; }
+
+    private AnimationPlayer? _bodyAnim;
+    private string _bodyClip = "";
+
     /// <summary>
     /// One line on where this view's zone assets came from, for the status panel (e.g. that the
     /// server's zone isn't converted). Set before adding to the tree.
@@ -261,29 +268,33 @@ public partial class WorldView : Node3D
         _bodyYaw = -HeadingRadians(p.Heading);
         var body = new Node3D { Position = at, Rotation = new Vector3(0, _bodyYaw, 0) };
         _body = body;
-        if (!TryAddModel(body))
+        // The body: a --model override, else the character's own DAoC figure, else the MVC capsule
+        // with a nose and a back stripe to show its facing.
+        if (!TryAddModel(body) && !TryAddOwnFigure(body))
+        {
             body.AddChild(new MeshInstance3D
             {
                 Mesh = new CapsuleMesh { Radius = 0.4f, Height = 2f },
                 Position = new Vector3(0, 1, 0),
                 MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.8f, 0.2f, 0.2f) },
             });
-        // Facing marker on the FRONT of the body. The body walks along -Z (ahead = Basis.Z * -forward),
-        // so -Z is forward; the nose must sit at -Z or it marks the back and "forward" walks away from it.
-        body.AddChild(new MeshInstance3D
-        {
-            Mesh = new BoxMesh { Size = new Vector3(0.2f, 0.2f, 0.6f) },
-            Position = new Vector3(0, 1.6f, -0.5f),
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(1f, 0.9f, 0.2f) },
-        });
-        // Vertical stripe down the BACK (+Z): a fixed reference for the chase camera, which looks at
-        // the character's back. Bright so it reads against terrain and the keep.
-        body.AddChild(new MeshInstance3D
-        {
-            Mesh = new BoxMesh { Size = new Vector3(0.12f, 1.9f, 0.12f) },
-            Position = new Vector3(0, 1f, 0.42f),
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.2f, 0.55f, 1f) },
-        });
+            // Facing marker on the FRONT of the body. The body walks along -Z (ahead = Basis.Z * -forward),
+            // so -Z is forward; the nose must sit at -Z or it marks the back and "forward" walks away from it.
+            body.AddChild(new MeshInstance3D
+            {
+                Mesh = new BoxMesh { Size = new Vector3(0.2f, 0.2f, 0.6f) },
+                Position = new Vector3(0, 1.6f, -0.5f),
+                MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(1f, 0.9f, 0.2f) },
+            });
+            // Vertical stripe down the BACK (+Z): a fixed reference for the chase camera, which looks at
+            // the character's back. Bright so it reads against terrain and the keep.
+            body.AddChild(new MeshInstance3D
+            {
+                Mesh = new BoxMesh { Size = new Vector3(0.12f, 1.9f, 0.12f) },
+                Position = new Vector3(0, 1f, 0.42f),
+                MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.2f, 0.55f, 1f) },
+            });
+        }
         AddChild(body);
 
         int zoneObjects = BuildZone();
@@ -777,6 +788,33 @@ public partial class WorldView : Node3D
 
     // Loads the .glb at _modelPath as the character body: scaled to a human-ish height and seated on
     // the ground (feet at the body origin). Returns false (keep the capsule) if no usable model.
+    // The character's own figure (models/model<PlayerModel>.glb, from mpk figures). It stands on its
+    // origin and faces +Z, so it is turned to the body's -Z.
+    private bool TryAddOwnFigure(Node3D body)
+    {
+        if (PlayerModel == 0 || Figure(PlayerModel) is not { } figure)
+            return false;
+        var inst = (Node3D)figure.Template.Duplicate();
+        inst.Scale = new Vector3(figure.Scale, figure.Scale, figure.Scale);
+        // A figure faces +Z (seen live: the chase camera, behind the body, met the face); the body
+        // walks along -Z, so turn it half round.
+        inst.Rotation = new Vector3(0, Mathf.Pi, 0);
+        body.AddChild(inst);
+        _bodyAnim = inst.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() as AnimationPlayer;
+        PlayBodyClip("idle");
+        GD.Print($"[world] character drawn as figure model{PlayerModel}");
+        return true;
+    }
+
+    private void PlayBodyClip(string clip)
+    {
+        if (_bodyAnim is null || _bodyClip == clip || !_bodyAnim.HasAnimation(clip))
+            return;
+        _bodyAnim.GetAnimation(clip).LoopMode = Animation.LoopModeEnum.Linear;
+        _bodyAnim.Play(clip, customBlend: 0.2);
+        _bodyClip = clip;
+    }
+
     private bool TryAddModel(Node3D body)
     {
         if (string.IsNullOrEmpty(_modelPath) || !Godot.FileAccess.FileExists(_modelPath))
@@ -1272,6 +1310,9 @@ public partial class WorldView : Node3D
 
         SnapToGround();
 
+        // DAoC's normal pace is a run; backing up has its own clip.
+        PlayBodyClip(!moving ? "idle" : forward < 0 ? "back" : "run");
+
         // Event-driven position send (adapted from OfflineDAoC's _send_position, GPL-3.0): ~10 Hz
         // while anything is changing, ~1 Hz standing still, and an immediate send the moment the
         // position or heading changes even if the timer hasn't elapsed — crisp under motion, quiet at
@@ -1577,6 +1618,7 @@ public partial class WorldView : Node3D
             var inst = (Node3D)figure.Template.Duplicate();
             float scale = figure.Scale * Mathf.Max(size, 1) / 50f;
             inst.Scale = new Vector3(scale, scale, scale);
+            inst.Rotation = new Vector3(0, Mathf.Pi, 0);   // figures face +Z; entities face -Z
             node.AddChild(inst);
             player = inst.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() as AnimationPlayer;
         }

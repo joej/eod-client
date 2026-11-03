@@ -10,6 +10,7 @@
 #   make check-zone208      ... and fail if its zone check has errors
 #   make clean-zone208      delete zone 208's converted files (its models stay in the shared library)
 #   make zones              every outdoor zone and capital city, plus private/zones/summary.md
+#                           and the NPC figures (make figures: every classic model id)
 #   make check-zones        ... and fail if any zone check has errors
 #   make clean-library      delete every converted model and texture (they are redone on demand)
 #   make clean              delete everything this Makefile made
@@ -155,9 +156,18 @@ check-zone$(1): zone$(1)
 endef
 $(foreach z,$(WANT),$(eval $(call ZONE_RULES,$(z),$(shell expr $(z) + 0))))
 
+# --- figures: every classic-figure NPC model id (models/model<id>.glb + models/figures.csv) ----------
+FIGURES := $(LIB)/models/.figures.done
+.PHONY: figures
+figures: $(FIGURES)
+$(FIGURES): $(INDEX) $(MODEL_SRC) $(wildcard $(A)/Figures/*.cs) tools/AssetExtract/Program.cs | $(TOOL)
+	@mkdir -p $(@D)
+	$(MPK) figures --gamedata $(CLIENT)/gamedata.mpk --index $(INDEX) --library $(LIB)
+	@touch $@
+
 # --- every zone ----------------------------------------------------------------------------------------
 .PHONY: zones check-zones
-zones: $(foreach z,$(ZONES) $(CITIES),zone$(z)) $(ZONEDIR)/summary.md
+zones: $(foreach z,$(ZONES) $(CITIES),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES)
 
 $(ZONEDIR)/summary.md: $(foreach z,$(ZONES) $(CITIES),$(ZONEDIR)/zone$(z)/zonecheck.md)
 	@{ echo "# Zone check, every converted zone (outdoor and cities)"; echo; \
