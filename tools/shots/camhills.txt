@@ -1,4 +1,5 @@
 # Fixed camera poses in Camelot Hills (zone 0) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 0
 # (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
 # Each pose looks at a place where something has gone wrong before, so a change that breaks it shows.
 keep          574208 532832 3696   0 -18   # Prydwen Keep from the south: assembly, LOD, helper shapes

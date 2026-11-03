@@ -80,6 +80,27 @@ public sealed class ZoneTerrain
         _terrain.At(cx, cy) * _scaleFactor + _offset.At(cx, cy) * _offsetFactor;
 
     /// <summary>
+    /// The ground's unit normal at cell (cx, cy) in region axes (X east, Y south, Z up), from the
+    /// slope to the neighbouring cells (central differences; one-sided at the map's edge). It comes
+    /// from the whole heightmap, not one tile, so a vertex on a tile seam gets the same normal in
+    /// both tiles and the lighting runs on across the seam.
+    /// </summary>
+    public System.Numerics.Vector3 NormalAtCell(int cx, int cy)
+    {
+        int n = Cells;
+        float step = (float)RegionWidth / (n - 1);
+        // The tiled mesh's last row and column sit one cell past the map (heights clamp to the edge);
+        // without clamping here their differences would be 0/0.
+        cx = Math.Clamp(cx, 0, n - 1);
+        cy = Math.Clamp(cy, 0, n - 1);
+        int x0 = Math.Max(cx - 1, 0), x1 = Math.Min(cx + 1, n - 1);
+        int y0 = Math.Max(cy - 1, 0), y1 = Math.Min(cy + 1, n - 1);
+        float dzdx = (HeightAtCell(x1, cy) - HeightAtCell(x0, cy)) / ((x1 - x0) * step);
+        float dzdy = (HeightAtCell(cx, y1) - HeightAtCell(cx, y0)) / ((y1 - y0) * step);
+        return System.Numerics.Vector3.Normalize(new System.Numerics.Vector3(-dzdx, -dzdy, 1));
+    }
+
+    /// <summary>
     /// Builds the terrain as a grid of per-tile sub-meshes in region-global coordinates: the zone's
     /// painted ground is an <paramref name="tiles"/>×<paramref name="tiles"/> grid of texture tiles
     /// (<c>texXX-YY.dds</c> in the zone's tex archive: XX the tile column, i.e. the cell-X block, and YY
@@ -96,8 +117,10 @@ public sealed class ZoneTerrain
     /// exporter instead applies the model convention (x,y,z)→(x,z,-y), which would reflect the ground
     /// across the X axis (north↔south) and drop it thousands of units away from the player. We
     /// pre-negate the region Y here so the exporter's -Y cancels to +Y and terrain lands under the
-    /// player; because negating one axis flips handedness, the winding is set opposite to BuildMesh's
-    /// so faces still point up after export.
+    /// player. Normals get the same treatment (Y negated), and the triangles are wound so they face
+    /// up in the exported file: measured on the glTF, since the axis maps make winding easy to get
+    /// backwards (until 2026-11-03 every terrain triangle faced down and every normal was the
+    /// exporter's default straight up, so the ground was lit as if facing away from the sun).
     /// </summary>
     public IReadOnlyList<Nif.NifMesh> BuildTiledMesh(int offsetX, int offsetY, int tiles)
     {
@@ -116,6 +139,7 @@ public sealed class ZoneTerrain
             int cx0 = tc * cellsPerTile, cy0 = tr * cellsPerTile;
             int side = cellsPerTile + 1;          // vertices per side of this tile (shares seam cells)
             var verts = new System.Numerics.Vector3[side * side];
+            var normals = new System.Numerics.Vector3[side * side];
             var uvs = new System.Numerics.Vector2[side * side];
             for (int ly = 0; ly < side; ly++)
             for (int lx = 0; lx < side; lx++)
@@ -124,6 +148,8 @@ public sealed class ZoneTerrain
                 int i = ly * side + lx;
                 // Pre-negate region Y (see summary): exporter's -Y then yields the client's +Y.
                 verts[i] = new System.Numerics.Vector3(offsetX + cx * step, -(offsetY + cy * step), HeightAtCell(cx, cy));
+                System.Numerics.Vector3 nrm = NormalAtCell(cx, cy);
+                normals[i] = nrm with { Y = -nrm.Y };
                 uvs[i] = new System.Numerics.Vector2(lx / (float)cellsPerTile, ly / (float)cellsPerTile);
             }
 
@@ -136,18 +162,16 @@ public sealed class ZoneTerrain
                 ushort b = (ushort)(ly * side + lx + 1);
                 ushort c = (ushort)((ly + 1) * side + lx);
                 ushort d = (ushort)((ly + 1) * side + lx + 1);
-                // Opposite winding to BuildMesh: the pre-negated Y flips handedness, so this order
-                // is the one that faces up after the exporter's Z-up→Y-up map. (Godot renders the
-                // ground double-sided anyway, so this is belt-and-suspenders, but kept correct.)
-                tris[t++] = (a, b, c);
-                tris[t++] = (b, d, c);
+                // Faces up in the exported glTF (TerrainTests checks the file itself).
+                tris[t++] = (a, c, b);
+                tris[t++] = (b, c, d);
             }
 
             meshes.Add(new Nif.NifMesh
             {
                 Name = $"tex{tc:00}-{tr:00}",
                 Vertices = verts,
-                Normals = null,
+                Normals = normals,
                 TexCoords = uvs,
                 Triangles = tris,
                 TextureFile = $"tex{tc:00}-{tr:00}.dds",

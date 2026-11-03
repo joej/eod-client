@@ -1,0 +1,11 @@
+# Fixed camera poses in Salisbury Plains (zone 1) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 1
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# The zone's middle is where play.sh --zone 1 lands, at the corner of four ground tiles. Open, gentle
+# slopes show how the terrain is lit: before 2026-11-03 every normal pointed straight up and every
+# triangle faced down, so the ground was lit as if facing away from the sun (flat and dull from above,
+# bright where the camera dipped under a slope).
+centre_low    581632 582432 2500   0 -10   # chase-camera height, looking north over the tile corner
+centre_high   581632 584632 4400   0 -30   # the slopes around the middle: hill shading should show
+tile_corner   581632 581632 5200   0 -85   # the four tiles meeting at the middle, from above: no seams
+west_hills    574000 590000 4800  45 -15   # rolling ground toward the north-east: relief over distance

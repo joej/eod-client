@@ -451,7 +451,9 @@ public partial class WorldView : Node3D
                 continue;
             for (int s = 0; s < mesh.GetSurfaceCount(); s++)
             {
-                // Render both sides regardless of winding; keep green only where no tile was applied.
+                // Both sides: a camera that dips under a slope still sees ground (the exported
+                // triangles face up, with normals from the heightmap, since 2026-11-03). Green only
+                // where no tile was applied.
                 if (mi.GetSurfaceOverrideMaterial(s) is BaseMaterial3D tile)
                     tile.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
                 else
@@ -459,13 +461,12 @@ public partial class WorldView : Node3D
             }
         }
         // Trimesh static collision on every terrain surface, so the ground raycast finds the real
-        // heightmap and the player walks on it (M4). The terrain .glb is exported with its triangles
-        // wound FACE-DOWN (why the render path above needs CullMode.Disabled), so a plain trimesh
-        // collider only reports hits from below: our downward ground ray passed straight through it
-        // (ground --, player floating). ConcavePolygonShape3D.BackfaceCollision = true makes the ray
-        // hit either winding — the fix (diagnosed with a down-vs-up ray sweep: DOWN 1, UP 49 -> 49/49).
-        // Build the shape explicitly (not MeshInstance3D.CreateTrimeshCollision) only so we can set
-        // that flag. Put every terrain body on its OWN collision layer so the ground ray can target
+        // heightmap and the player walks on it (M4). Until 2026-11-03 the terrain .glb's triangles
+        // faced DOWN, so a plain trimesh collider only reported hits from below and the downward ground
+        // ray passed through it (ground --, player floating); BackfaceCollision = true made the ray hit
+        // either winding. The triangles face up now, and the flag stays so terrain converted before
+        // that still works. Build the shape explicitly (not MeshInstance3D.CreateTrimeshCollision) only
+        // so we can set that flag. Put every terrain body on its OWN collision layer so the ground ray can target
         // terrain alone — otherwise a ray from high above hits a tall placed object (tree/keep) first
         // and snaps the player onto its roof ("spawned very high in the air").
         AddChild(terrain);
@@ -476,7 +477,7 @@ public partial class WorldView : Node3D
             if (mi.Mesh is null)
                 continue;
             ConcavePolygonShape3D shape = mi.Mesh.CreateTrimeshShape();
-            shape.BackfaceCollision = true;   // terrain faces point down; hit from above too
+            shape.BackfaceCollision = true;   // hit from either side (see above)
             var sb = new StaticBody3D { CollisionLayer = TerrainLayer, Transform = mi.GlobalTransform };
             sb.SetMeta("terrain_mesh", mi);   // so an inspect pick can name the tile it hit
             sb.AddChild(new CollisionShape3D { Shape = shape });

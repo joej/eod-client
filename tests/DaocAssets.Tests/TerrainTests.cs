@@ -125,6 +125,95 @@ public sealed class TerrainTests
         }
     }
 
+    [Fact]
+    public void ExportedGroundFacesUpAndIsLitByItsSlope()
+    {
+        // A tilted plane, rising along both region X (east) and region Y (south): cell (x, y) holds
+        // x + 2y. Checked in the exported glTF itself (Y up, Z = region Y), because the axis maps
+        // between heightmap, mesh and file are where the winding and normals once went wrong: every
+        // triangle faced down and every normal pointed straight up whatever the slope.
+        byte[] mpk = MpkBuilder.Build(
+            ("terrain.pcx", PcxOf(8, 8, (x, y) => (byte)(x + 2 * y))), ("offset.pcx", FlatPcx(8, 8, value: 0)),
+            ("SECTOR.DAT", System.Text.Encoding.Latin1.GetBytes("[terrain]\nscalefactor=8\noffsetfactor=32\n")));
+        string tmp = Path.Combine(Path.GetTempPath(), "daoc-terr-" + Guid.NewGuid().ToString("N") + ".mpk");
+        try
+        {
+            File.WriteAllBytes(tmp, mpk);
+            ZoneTerrain terrain = ZoneTerrain.Read(tmp, sizeX: 1, sizeY: 1);
+            var model = new DaocAssets.Nif.NifModel
+            {
+                Version = new DaocAssets.Nif.NifVersion(0, 0, 0, 0),
+                Meshes = [.. terrain.BuildTiledMesh(16384, 8192, tiles: 4)],
+            };
+            SharpGLTF.Schema2.ModelRoot gltf = DaocAssets.Nif.GltfExporter.BuildScene(model).ToGltf2();
+
+            // The plane in glTF axes: height rises 8 units per cell east (+X) and 16 per cell south (+Z).
+            float step = 8192f / 7;
+            var expected = System.Numerics.Vector3.Normalize(new(-8 / step, 1, -16 / step));
+            // The tiled mesh runs one cell past the heightmap (its last row and column take the edge's
+            // heights: open question W20), so the plane holds only inside the map.
+            float lastX = (16384 + 7 * step) * 0.025f + 0.01f, lastZ = (8192 + 7 * step) * 0.025f + 0.01f;
+            int triangles = 0;
+            foreach (var (a, b, c, _) in SharpGLTF.Schema2.Toolkit.EvaluateTriangles(gltf.DefaultScene))
+            {
+                System.Numerics.Vector3 pa = a.GetGeometry().GetPosition(), pb = b.GetGeometry().GetPosition(),
+                    pc = c.GetGeometry().GetPosition();
+                if (new[] { pa, pb, pc }.Any(p => p.X > lastX || p.Z > lastZ))
+                    continue;
+                triangles++;
+                // glTF front faces are counter-clockwise: this is the side the renderer lights.
+                var face = System.Numerics.Vector3.Normalize(System.Numerics.Vector3.Cross(pb - pa, pc - pa));
+                Assert.True(System.Numerics.Vector3.Dot(face, expected) > 0.9999f, $"face {face} vs ground {expected}");
+                foreach (var v in new[] { a, b, c })
+                {
+                    Assert.True(v.GetGeometry().TryGetNormal(out System.Numerics.Vector3 nrm));
+                    Assert.True(System.Numerics.Vector3.Dot(nrm, expected) > 0.9999f, $"normal {nrm} vs ground {expected}");
+                }
+            }
+            Assert.Equal(7 * 7 * 2, triangles);
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void TileSeamsShareTheirNormals()
+    {
+        // A bumpy heightmap: every vertex on a tile edge must get the same normal in each tile it
+        // belongs to, or the lighting steps at the seam.
+        byte[] mpk = MpkBuilder.Build(
+            ("terrain.pcx", PcxOf(8, 8, (x, y) => (byte)((x * 37 + y * 11) % 23))), ("offset.pcx", FlatPcx(8, 8, value: 0)),
+            ("SECTOR.DAT", System.Text.Encoding.Latin1.GetBytes("[terrain]\nscalefactor=8\noffsetfactor=32\n")));
+        string tmp = Path.Combine(Path.GetTempPath(), "daoc-terr-" + Guid.NewGuid().ToString("N") + ".mpk");
+        try
+        {
+            File.WriteAllBytes(tmp, mpk);
+            ZoneTerrain terrain = ZoneTerrain.Read(tmp, sizeX: 1, sizeY: 1);
+            var byPosition = new Dictionary<System.Numerics.Vector3, System.Numerics.Vector3>();
+            int shared = 0;
+            foreach (var tile in terrain.BuildTiledMesh(0, 0, tiles: 4))
+                for (int i = 0; i < tile.Vertices.Length; i++)
+                {
+                    Assert.Equal(1f, tile.Normals![i].Length(), 4);
+                    if (byPosition.TryGetValue(tile.Vertices[i], out var seen))
+                    {
+                        shared++;
+                        Assert.Equal(seen, tile.Normals[i]);
+                    }
+                    else
+                        byPosition[tile.Vertices[i]] = tile.Normals[i];
+                }
+            Assert.True(shared > 0, "the tiles share their edge vertices");
+            Assert.True(byPosition.Values.Distinct().Count() > 1, "a bumpy ground has more than one normal");
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
     // A flat w x h, 8-bit RLE PCX whose every pixel is `value` (one run per row).
     [Fact]
     public void HeightAtInterpolatesBetweenCellsAlongTheRightAxes()
@@ -180,6 +269,23 @@ public sealed class TerrainTests
     }
 
     // An 8-bit PCX whose cell (x, y) holds x.
+    // A w x h, 8-bit RLE PCX with cell (x, y) = value(x, y) (each pixel its own run of 1).
+    private static byte[] PcxOf(int w, int h, Func<int, int, byte> value)
+    {
+        var head = new byte[128];
+        head[0] = 0x0A; head[2] = 1; head[3] = 8;
+        W16(head, 8, w - 1); W16(head, 10, h - 1);
+        head[65] = 1; W16(head, 66, w);
+        var body = new List<byte>();
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                body.Add(0xC1);
+                body.Add(value(x, y));
+            }
+        return [.. head, .. body];
+    }
+
     private static byte[] RampPcx(int w, int h)
     {
         var head = new byte[128];
