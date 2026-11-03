@@ -233,6 +233,23 @@ public partial class ModelViewer : Node3D
 
         float radius = Mathf.Max(bounds.Size.X, Mathf.Max(bounds.Size.Y, bounds.Size.Z)) * 0.5f;
         _distance = Mathf.Max(radius * 2.5f, 1f);
+        // --orbit "YAW,PITCH,ZOOM[,BONE]" (degrees, degrees, distance factor, a skeleton bone to look at):
+        // fixed views for shots, e.g. "90,5,0.2,Bip01 Head" = a figure's head from its side.
+        if (ArgValue("--orbit")?.Split(',') is { Length: >= 3 } o
+            && float.TryParse(o[0], System.Globalization.CultureInfo.InvariantCulture, out float yaw)
+            && float.TryParse(o[1], System.Globalization.CultureInfo.InvariantCulture, out float pitch)
+            && float.TryParse(o[2], System.Globalization.CultureInfo.InvariantCulture, out float zoom))
+        {
+            (_yaw, _pitch, _distance) = (Mathf.DegToRad(yaw), Mathf.DegToRad(pitch), _distance * zoom);
+            if (o.Length > 3 && _pivot.FindChildren("*", "Skeleton3D", true, false).OfType<Skeleton3D>()
+                    .FirstOrDefault(k => k.FindBone(o[3]) >= 0) is { } skeleton)
+            {
+                Vector3 at = skeleton.GlobalTransform * skeleton.GetBoneGlobalPose(skeleton.FindBone(o[3])).Origin;
+                foreach (Node child in _pivot.GetChildren())
+                    if (child is Node3D n)
+                        n.GlobalPosition -= at - _pivot.GlobalPosition;
+            }
+        }
         UpdateCamera();
     }
 

@@ -104,6 +104,7 @@ public sealed class MonsterFigureTests
     [Fact]
     public void TheHairShellSitsUnderTheAlphaCutFace()
     {
+        Vector2[] set0 = [Vector2.Zero, Vector2.UnitX, Vector2.UnitY], set1 = [Vector2.One, Vector2.UnitY, Vector2.UnitX];
         // Face and hair are overlapping head shells. The face skin is an oval with a transparent rim, so
         // the face is alpha-tested on top and the hair moves in along its normals (no z-fighting).
         var head = new NifModel
@@ -112,12 +113,17 @@ public sealed class MonsterFigureTests
             Meshes =
             [
                 new NifMesh { Name = "face", ShapeName = "HeadA1:19", Vertices = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ],
-                    Normals = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ], Triangles = [(0, 1, 2)] },
+                    Normals = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ], Triangles = [(0, 1, 2)],
+                    TexCoords = set0, UvSets = [set0, set1] },
                 new NifMesh { Name = "hair", ShapeName = "HeadB1:24", Vertices = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ],
-                    Normals = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ], Triangles = [(0, 1, 2)] },
+                    Normals = [Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ], Triangles = [(0, 1, 2)],
+                    TexCoords = set0, UvSets = [set0, set1] },
             ],
         };
         NifModel dressed = MonsterFigure.Dress(head, MonsterTables.Parse(Monsters, Monnifs, Skins).Resolve(8)!);
+        // The face skin maps on the head's second UV set (set 0 wraps it round the whole head); hair keeps set 0.
+        Assert.Same(set1, dressed.Meshes[0].TexCoords);
+        Assert.Same(set0, dressed.Meshes[1].TexCoords);
         Assert.Equal((Vector3.UnitX, SurfaceAlpha.Cutout), (dressed.Meshes[0].Vertices[0], dressed.Meshes[0].Alpha));  // the face
         Assert.Equal((new Vector3(0.9f, 0, 0), SurfaceAlpha.Opaque), (dressed.Meshes[1].Vertices[0], dressed.Meshes[1].Alpha));  // the hair, 0.1 in
     }

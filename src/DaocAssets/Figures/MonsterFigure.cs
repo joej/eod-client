@@ -151,6 +151,7 @@ public static class MonsterFigure
                 Helper = mesh.Helper || !shown,
                 TextureFile = skin ?? mesh.TextureFile,
                 Vertices = slot == "HeadB" && shown ? TuckIn(mesh) : mesh.Vertices,
+                TexCoords = slot == "HeadA" && mesh.UvSets is { Length: > 1 } uv ? uv[1] : mesh.TexCoords,
                 Alpha = slot == "HeadA" && mesh.Alpha == SurfaceAlpha.Opaque ? SurfaceAlpha.Cutout : mesh.Alpha,
             });
         }
@@ -159,6 +160,9 @@ public static class MonsterFigure
 
     private const int FullFigureParts = 20;
 
+    // The face skin maps on the head's second UV set: on set 0 its mouth and eyes wrap round the cheeks
+    // and the back of the head (owner, 2026-11-03). Every classic head part carries both sets; the
+    // OfflineDAoC pipeline (GPL-3.0, nif_character.py: 'HeadA1@1') draws the face from set 1 too.
     // The face shell and the hair shell overlap almost everywhere (bcommonm: 61% of the hair's vertices
     // within 4 mm of the face's). The hair is the whole scalp; the face skin is an oval with the rest of
     // its texture transparent (213 of the install's 218 <race>_<sex>hed textures are DXT5 with about 30%
