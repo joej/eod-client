@@ -170,7 +170,7 @@ public static partial class NifFile
             Matrix4x4 local = ToMatrix(b.Local);
             Matrix4x4 world = local * parentWorld;
             bool underHelper = helper || IsHelperNodeName(b.Name) || IsHidden(b.Flags);
-            if (b.Type == "NiNode")
+            if (b.Type is "NiNode" or "NiBillboardNode" or "NiLODNode")
             {
                 int joint = Joints.Count;
                 Joints.Add(new NifJoint { Name = b.Name, Parent = parentJoint, Local = local });
@@ -178,7 +178,7 @@ public static partial class NifFile
                 _worldOf[index] = world;
                 int nodeAlpha = Find(b.Props, "NiAlphaProperty", alpha);
                 int nodeStencil = Find(b.Props, "NiStencilProperty", stencil);
-                foreach (int child in b.Children)
+                foreach (int child in b.Type == "NiLODNode" ? NearLevel(b) : b.Children)
                     Walk(child, joint, world, underHelper, nodeAlpha, nodeStencil);
                 if (parentJoint < 0)
                     BindSkins();
@@ -190,6 +190,23 @@ public static partial class NifFile
                     return;
                 Meshes.Add(mesh with { Helper = underHelper });
             }
+        }
+
+        // An LOD node draws one child at a time. Keep the nearest level, as the 4.x path does: from
+        // NiRangeLODData the child whose near extent is smallest, otherwise (screen-size LOD, or no
+        // data) child 0, the highest detail. A billboard node is walked like a plain node: it keeps
+        // its stored orientation instead of turning to the camera.
+        private int[] NearLevel(Gb10Block lod)
+        {
+            if (lod.Children.Length <= 1)
+                return lod.Children;
+            float[] near = lod.LodDataRef >= 0 ? blocks[lod.LodDataRef].LodNear : [];
+            if (near.Length != lod.Children.Length)
+                return [lod.Children[0]];
+            int best = 0;
+            for (int i = 1; i < near.Length; i++)
+                if (near[i] < near[best]) best = i;
+            return [lod.Children[best]];
         }
 
         private NifMesh? Shape(int index, Gb10Block shape, Matrix4x4 world, int alpha, int stencil)

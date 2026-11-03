@@ -40,8 +40,11 @@ internal sealed class Gb10Block
     public int[] Props = [];
     public int[] Extra = [];
     public int Controller = -1;
-    // NiNode
+    // NiNode (and NiBillboardNode, NiLODNode)
     public int[] Children = [];
+    // NiLODNode: its NiRangeLODData / NiScreenLODData. NiRangeLODData: each level's near extent.
+    public int LodDataRef = -1;
+    public float[] LodNear = [];
     // NiTriShape / NiTriStrips
     public int DataRef = -1;
     public int SkinRef = -1;
@@ -184,10 +187,207 @@ internal static class Gamebryo1010
         switch (type)
         {
             case "NiNode":
+                NodeBody(ref c, b, nb, f);
+                break;
+            case "NiBillboardNode":
+                NodeBody(ref c, b, nb, f);
+                Bump(f, $"NiBillboardNode: mode {c.U16()}");
+                break;
+            case "NiLODNode":
+            {
+                NodeBody(ref c, b, nb, f);
+                c.U16();                                // Switch Node Flags (NiSwitchNode)
+                c.U32();                                // Index
+                b.LodDataRef = Ref(ref c, nb);
+                break;
+            }
+            case "NiRangeLODData":
+            {
+                c.Vec3();                               // LOD Center
+                uint levels = c.U32();
+                if (levels > 64) throw new NifFormatException($"Implausible LOD level count {levels}.");
+                b.LodNear = new float[levels];
+                for (int l = 0; l < levels; l++) { b.LodNear[l] = c.F32(); c.F32(); }   // near, far extent
+                Bump(f, $"NiRangeLODData: {levels} level(s)");
+                break;
+            }
+            case "NiScreenLODData":
+            {
+                Skip(ref c, 16 + 16);                   // Bounding Sphere, World Bounding Sphere
+                uint n = c.U32();
+                if (n > 64) throw new NifFormatException($"Implausible LOD proportion count {n}.");
+                Skip(ref c, n * 4L);
+                Bump(f, "NiScreenLODData: screen-size LOD (near level = child 0)");
+                break;
+            }
+            // Particle systems (NiParticleSystemController era): read to their end so the rest of the
+            // file decodes; the converter draws no particles yet (roadmap M13).
+            case "NiParticles":
+            case "NiParticleMeshes":
             {
                 AvObject(ref c, b, nb, f);
-                b.Children = RefList(ref c, nb);
-                if (RefList(ref c, nb).Length > 0) Bump(f, "NiNode: has dynamic effects");
+                Ref(ref c, nb);                         // Data
+                Ref(ref c, nb);                         // Skin Instance
+                if (StrictBool(ref c)) { c.SizedString(); c.I32(); }   // Material Data: shader
+                Bump(f, $"{type}: particle system (not drawn)");
+                break;
+            }
+            case "NiParticlesData":
+            case "NiParticleMeshesData":
+            {
+                int nv = GeometryDataBase(ref c, b, f);
+                if (StrictBool(ref c)) Skip(ref c, nv * 4L);       // Radii
+                c.U16();                                            // Num Active
+                if (StrictBool(ref c)) Skip(ref c, nv * 4L);       // Sizes
+                if (StrictBool(ref c)) Skip(ref c, nv * 16L);      // Rotations (quaternions)
+                if (type == "NiParticleMeshesData") Ref(ref c, nb);   // Container Node
+                break;
+            }
+            case "NiParticleSystemController":
+            {
+                TimeController(ref c, nb);
+                Skip(ref c, 6 * 4 + 12 + 16 + 4 * 3);   // speed, declination, planar angle (+ variations); normal; colour; size, emit start/stop
+                c.U8();                                 // Reset Particle System
+                Skip(ref c, 3 * 4);                     // birth rate, lifetime, lifetime variation
+                c.U8(); c.U8();                         // Use Birth Rate, Spawn On Death
+                c.Vec3();                               // Emitter Dimensions
+                Ref(ref c, nb);                         // Emitter
+                c.U16(); c.F32(); c.U16(); c.F32(); c.F32();   // spawn generations, %, multiplier, speed/dir chaos
+                int particles = c.U16();
+                c.U16();                                // Num Valid
+                Skip(ref c, particles * 40L);           // NiParticleInfo
+                Ref(ref c, nb); Ref(ref c, nb); Ref(ref c, nb);   // emitter modifier, particle modifier, collider
+                c.U8();                                 // Static Target Bound
+                break;
+            }
+            case "NiParticleColorModifier":
+                ParticleModifier(ref c, nb);
+                Ref(ref c, nb);                         // Color Data
+                break;
+            case "NiParticleGrowFade":
+                ParticleModifier(ref c, nb);
+                Skip(ref c, 8);                         // Grow, Fade
+                break;
+            case "NiParticleRotation":
+                ParticleModifier(ref c, nb);
+                c.U8();                                 // Random Initial Axis
+                Skip(ref c, 12 + 4);                    // Initial Axis, Rotation Speed
+                break;
+            case "NiGravity":
+                ParticleModifier(ref c, nb);
+                Skip(ref c, 4 + 4 + 4 + 12 + 12);       // decay, force, field type, position, direction
+                break;
+            case "NiParticleBomb":
+                ParticleModifier(ref c, nb);
+                Skip(ref c, 4 * 4 + 4 + 4 + 12 + 12);   // decay, duration, delta V, start; decay type; symmetry; position; direction
+                break;
+            case "NiParticleMeshModifier":
+                ParticleModifier(ref c, nb);
+                RefList(ref c, nb);                     // Particle Meshes
+                break;
+            // Animation controllers and their key data: read past (no animation export for these yet).
+            case "NiUVController":
+                TimeController(ref c, nb);
+                c.U16();                                // Texture Set
+                Ref(ref c, nb);
+                break;
+            case "NiAlphaController":
+            case "NiVisController":
+                TimeController(ref c, nb);
+                Ref(ref c, nb);                         // Data
+                break;
+            case "NiMaterialColorController":
+            case "NiLightColorController":
+                TimeController(ref c, nb);
+                c.U16();                                // Target Color
+                Ref(ref c, nb);
+                break;
+            case "NiTextureTransformController":
+                TimeController(ref c, nb);
+                StrictBool(ref c);                      // Shader Map
+                c.U32(); c.U32();                       // Texture Slot, Operation
+                Ref(ref c, nb);
+                break;
+            case "NiFlipController":
+                TimeController(ref c, nb);
+                c.U32();                                // Texture Slot
+                Skip(ref c, 8);                         // Accum Time, Delta
+                RefList(ref c, nb);                     // Sources
+                break;
+            case "NiPathController":
+                TimeController(ref c, nb);
+                c.U16(); c.I32(); c.F32(); c.F32(); c.U16();   // path flags, bank dir, max bank, smoothing, follow axis
+                Ref(ref c, nb); Ref(ref c, nb);         // Path Data, Percent Data
+                break;
+            case "NiFloatData":
+                NifSurvey.KeyGroup(ref c, 4, f, null);
+                break;
+            case "NiPosData":
+                NifSurvey.KeyGroup(ref c, 12, f, null);
+                break;
+            case "NiColorData":
+                NifSurvey.KeyGroup(ref c, 16, f, null);
+                break;
+            case "NiUVData":
+                for (int g = 0; g < 4; g++) NifSurvey.KeyGroup(ref c, 4, f, null);
+                break;
+            case "NiVisData":
+            {
+                uint keys = c.U32();
+                if (keys > 100_000) throw new NifFormatException($"Implausible key count {keys}.");
+                Skip(ref c, keys * 5L);                 // time, byte
+                break;
+            }
+            // Dynamic effects: environment maps and lights (not drawn yet).
+            case "NiTextureEffect":
+            {
+                AvObject(ref c, b, nb, f);
+                RefList(ref c, nb);                     // Affected Nodes
+                Skip(ref c, 36 + 12);                   // model projection matrix, translation
+                c.U32(); c.U32();                       // filtering, clamping
+                Bump(f, $"NiTextureEffect: texture type {c.U32()}, coordinates {c.U32()}");
+                Ref(ref c, nb);                         // Source Texture
+                c.U8();                                 // Enable Plane
+                Skip(ref c, 16);                        // Plane
+                c.U16(); c.U16();                       // PS2 L, PS2 K
+                break;
+            }
+            case "NiAmbientLight":
+            case "NiDirectionalLight":
+            case "NiPointLight":
+            case "NiSpotLight":
+            {
+                AvObject(ref c, b, nb, f);
+                RefList(ref c, nb);                     // Affected Nodes
+                Skip(ref c, 4 + 3 * 12);                // dimmer; ambient, diffuse, specular colour
+                if (type is "NiPointLight" or "NiSpotLight") Skip(ref c, 3 * 4);   // attenuation
+                if (type == "NiSpotLight") Skip(ref c, 2 * 4);                      // outer angle, exponent
+                Bump(f, $"{type}: light (not drawn)");
+                break;
+            }
+            case "NiFogProperty":
+                ObjectNet(ref c, b, nb, f);
+                c.U16();                                // Flags
+                Skip(ref c, 4 + 12);                    // depth, colour
+                break;
+            case "NiPalette":
+            {
+                c.U8();                                 // Has Alpha
+                uint entries = c.U32();
+                Skip(ref c, (entries == 16 ? 16 : 256) * 4L);
+                break;
+            }
+            case "NiPixelData":
+            {
+                c.U32();                                // Pixel Format
+                Skip(ref c, 4 * 4 + 4 + 8 + 4);         // masks, bits per pixel, old fast compare, tiling
+                Ref(ref c, nb);                         // Palette
+                uint mips = c.U32();
+                if (mips > 32) throw new NifFormatException($"Implausible mipmap count {mips}.");
+                c.U32();                                // Bytes Per Pixel
+                Skip(ref c, mips * 12L);
+                Skip(ref c, c.U32());                   // Pixel Data
+                Bump(f, "NiPixelData: embedded texture pixels");
                 break;
             }
             case "NiTriShape":
@@ -459,6 +659,14 @@ internal static class Gamebryo1010
                 b.Name = c.SizedString();
                 Skip(ref c, 16);
                 break;
+            case "NiVectorExtraData":
+                b.Name = c.SizedString();
+                Skip(ref c, 16);
+                break;
+            case "NiBinaryExtraData":
+                b.Name = c.SizedString();
+                Skip(ref c, c.U32());
+                break;
             case "NiTextKeyExtraData":
             {
                 b.Name = c.SizedString();
@@ -471,6 +679,21 @@ internal static class Gamebryo1010
             default:
                 throw new NifFormatException($"No 10.1 decode for {type}.");
         }
+    }
+
+    // NiNode (10.1): NiAVObject, children, dynamic effects.
+    private static void NodeBody(ref NifCursor c, Gb10Block b, int nb, Dictionary<string, int> f)
+    {
+        AvObject(ref c, b, nb, f);
+        b.Children = RefList(ref c, nb);
+        if (RefList(ref c, nb).Length > 0) Bump(f, $"{b.Type}: has dynamic effects");
+    }
+
+    // NiParticleModifier (10.1): Next Modifier, Controller.
+    private static void ParticleModifier(ref NifCursor c, int nb)
+    {
+        Ref(ref c, nb);
+        Ref(ref c, nb);
     }
 
     // NiObjectNET (10.1): Name, Num Extra Data List + refs, Controller.
@@ -526,9 +749,9 @@ internal static class Gamebryo1010
         return (source, uvSet);
     }
 
-    // NiGeometryData + NiTriBasedGeomData + NiTriShapeData / NiTriStripsData at 10.1.0.0. The Data
-    // Flags u16 holds the UV-set count (low 6 bits) and "has tangents" (bit 12).
-    private static void GeometryData(ref NifCursor c, Gb10Block b, Dictionary<string, int> f)
+    // NiGeometryData at 10.1.0.0, shared by triangle and particle data: Num Vertices to Consistency
+    // Flags. The Data Flags u16 holds the UV-set count (low 6 bits) and "has tangents" (bit 12).
+    private static int GeometryDataBase(ref NifCursor c, Gb10Block b, Dictionary<string, int> f)
     {
         string type = b.Type;
         int nv = c.U16();
@@ -561,6 +784,14 @@ internal static class Gamebryo1010
             b.UvSets[s] = set;
         }
         c.U16();                                        // Consistency Flags
+        return nv;
+    }
+
+    // NiTriBasedGeomData + NiTriShapeData / NiTriStripsData at 10.1.0.0, after the NiGeometryData base.
+    private static void GeometryData(ref NifCursor c, Gb10Block b, Dictionary<string, int> f)
+    {
+        string type = b.Type;
+        int nv = GeometryDataBase(ref c, b, f);
         int triangles = c.U16();
         if (type == "NiTriShapeData")
         {

@@ -189,13 +189,77 @@ public class NifSurvey1010Tests
         Assert.Contains("Reference 7", b.StopReason);
     }
 
+    // NiTriShape at 10.1: NiAVObject (as Node, without children), data, skin, no shader.
+    private static void Shape(BinaryWriter w, string name, int data)
+    {
+        w.Write((uint)name.Length); w.Write(Encoding.ASCII.GetBytes(name));
+        w.Write(0u); w.Write(-1);
+        w.Write((ushort)0x000C);
+        for (int k = 0; k < 3 + 9; k++) w.Write(k is 3 or 7 or 11 ? 1f : 0f);
+        w.Write(1f);
+        w.Write(0u); w.Write(-1);
+        w.Write(data); w.Write(-1); w.Write((byte)0);
+    }
+
+    // NiTriShapeData at 10.1: one triangle, no normals, colours or UVs.
+    private static void Triangle(BinaryWriter w)
+    {
+        w.Write((ushort)3); w.Write((byte)0); w.Write((byte)0);
+        w.Write((byte)1); foreach (float v in new[] { 0f, 0, 0, 1, 0, 0, 0, 1, 0 }) w.Write(v);
+        w.Write((ushort)0); w.Write((byte)0);           // data flags (no UVs), no normals
+        for (int k = 0; k < 4; k++) w.Write(0f);        // bounding sphere
+        w.Write((byte)0);                               // no vertex colours
+        w.Write((ushort)0);                             // consistency flags
+        w.Write((ushort)1); w.Write(3u); w.Write((byte)1);
+        w.Write((ushort)0); w.Write((ushort)1); w.Write((ushort)2);
+        w.Write((ushort)0);                             // match groups
+    }
+
+    [Fact]
+    public void AnLodNodeKeepsItsNearestLevelAndParticlesAreReadPast()
+    {
+        // Root -> LOD node (range data lists the far level first) -> far and near child nodes, each
+        // with one triangle; a particle modifier sits in the file too. Before 2026-11-03 the decode
+        // stopped at the LOD node and the whole file fell back to the geometry scan.
+        string[] types = ["NiNode", "NiLODNode", "NiRangeLODData", "NiNode", "NiTriShape", "NiTriShapeData",
+            "NiNode", "NiTriShape", "NiTriShapeData", "NiParticleGrowFade"];
+        byte[] f = File1010(types,
+        [
+            (w, _) => Node(w, "Scene Root", [1]),
+            (w, _) =>
+            {
+                Node(w, "lod", [3, 6]);
+                w.Write((ushort)0); w.Write(0u); w.Write(2);   // switch flags, index, LOD data
+            },
+            (w, _) =>
+            {
+                for (int k = 0; k < 3; k++) w.Write(0f);       // centre
+                w.Write(2u);
+                w.Write(500f); w.Write(10000f);                 // level 0: far
+                w.Write(0f); w.Write(500f);                     // level 1: near
+            },
+            (w, _) => Node(w, "level a", [4]),
+            (w, _) => Shape(w, "far shape", 5),
+            (w, _) => Triangle(w),
+            (w, _) => Node(w, "level b", [7]),
+            (w, _) => Shape(w, "near shape", 8),
+            (w, _) => Triangle(w),
+            (w, _) => { w.Write(-1); w.Write(-1); w.Write(1f); w.Write(2f); },   // next, controller, grow, fade
+        ]);
+
+        Assert.Equal(NifSurvey.SequentialDecode.Complete, NifSurvey.Read(f).Sequential);
+        NifModel model = NifFile.Read(f);
+        NifMesh mesh = Assert.Single(model.Meshes, m => !m.Helper);
+        Assert.Equal("near shape", mesh.ShapeName);
+    }
+
     [Fact]
     public void ATypeWeDontDecodeStopsTheDecodeWithoutPassingAnything()
     {
-        byte[] f = File1010(["NiNode", "NiPixelData"], [(w, _) => Node(w, "Scene Root", [1]), (w, _) => w.Write(0u)]);
+        byte[] f = File1010(["NiNode", "NiMeshParticleSystem"], [(w, _) => Node(w, "Scene Root", [1]), (w, _) => w.Write(0u)]);
         NifSurvey s = NifSurvey.Read(f);
         Assert.Equal(NifSurvey.SequentialDecode.Stopped, s.Sequential);
-        Assert.Equal("NiPixelData", s.StopType);
+        Assert.Equal("NiMeshParticleSystem", s.StopType);
         Assert.Empty(s.ExactDecodes);
     }
 

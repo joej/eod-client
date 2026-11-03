@@ -22,6 +22,18 @@ public sealed partial class NifSurvey
         "NiKeyframeController", "NiKeyframeData", "NiGeomMorpherController", "NiMorphData",
         "NiStringExtraData", "NiStringsExtraData", "NiIntegerExtraData", "NiIntegersExtraData",
         "NiFloatExtraData", "NiBooleanExtraData", "NiColorExtraData", "NiTextKeyExtraData",
+        "NiVectorExtraData", "NiBinaryExtraData",
+        // Read to their end so the rest of the file decodes (2026-11-03): node kinds the walk follows,
+        // and particles, controllers, key data, effects, lights, fog and pixel data it doesn't draw.
+        "NiBillboardNode", "NiLODNode", "NiRangeLODData", "NiScreenLODData",
+        "NiParticles", "NiParticlesData", "NiParticleMeshes", "NiParticleMeshesData",
+        "NiParticleSystemController", "NiParticleColorModifier", "NiParticleGrowFade", "NiParticleRotation",
+        "NiGravity", "NiParticleBomb", "NiParticleMeshModifier",
+        "NiUVController", "NiUVData", "NiAlphaController", "NiVisController", "NiVisData",
+        "NiMaterialColorController", "NiLightColorController", "NiTextureTransformController",
+        "NiFlipController", "NiPathController", "NiFloatData", "NiPosData", "NiColorData",
+        "NiTextureEffect", "NiAmbientLight", "NiDirectionalLight", "NiPointLight", "NiSpotLight",
+        "NiFogProperty", "NiPalette", "NiPixelData",
     };
 
     /// <summary>How a sequential 10.1 decode ended.</summary>
@@ -102,7 +114,7 @@ public sealed partial class NifSurvey
         KeyGroup(ref c, 4, f, "scale");
     }
 
-    private static void KeyGroup(ref NifCursor c, int valueSize, Dictionary<string, int> f, string? what)
+    internal static void KeyGroup(ref NifCursor c, int valueSize, Dictionary<string, int> f, string? what)
     {
         uint n = c.U32();
         if (n == 0)

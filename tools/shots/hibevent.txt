@@ -1,0 +1,9 @@
+# Fixed camera poses in Hibernia Event (zone 335) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 335
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# The Darkness Rising town buildings (DR_*) are Gamebryo 10.1 files with particles, lights, billboard
+# and LOD nodes. Until 2026-11-03 their decode stopped at the first such block and a geometry scan
+# painted every mesh with one texture (houses all fire-glow orange, the keep all smoke white).
+town_south   37600 44400 5400   0 -20   # two houses and a tavern (the owner's first shot of this)
+town_north   42600 60400 5600   0 -20   # mage tower, houses, tavern
+keep         52122 35000 8000 180 -25   # DR_hib_keep from the north (the ground rises to its south)

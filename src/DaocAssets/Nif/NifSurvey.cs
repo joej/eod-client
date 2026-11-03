@@ -82,7 +82,7 @@ public sealed partial class NifSurvey
                 // 10.1 files that decode completely are read as a node tree (NifFile.Gamebryo.cs);
                 // the rest fall back to a geometry scan (see the notes).
                 "NiNode" or "NiTriShape" or "NiTriStrips" or "NiAlphaProperty" or "NiSkinInstance"
-                    or "NiSkinData" => NifCoverage.Partial,
+                    or "NiSkinData" or "NiBillboardNode" or "NiLODNode" or "NiRangeLODData" => NifCoverage.Partial,
                 "NiTriShapeData" or "NiTriStripsData" or "NiSourceTexture" or "NiTexturingProperty"
                     or "NiMaterialProperty" or "NiStencilProperty" => NifCoverage.Partial,
                 _ => NifCoverage.Unhandled,
@@ -109,6 +109,9 @@ public sealed partial class NifSurvey
                 "NiTriShapeData" or "NiTriStripsData" =>
                     "vertex colours dropped; one UV set (the base slot's); geometry-scanned if the file doesn't decode",
                 "NiSourceTexture" => "external file name only",
+                "NiBillboardNode" => "walked as a plain node: keeps its stored orientation, doesn't face the camera",
+                "NiLODNode" => "nearest level only (smallest near extent; child 0 for screen-size LOD)",
+                "NiRangeLODData" => "near extents only, to pick the nearest level",
                 "NiTexturingProperty" => "base texture only",
                 "NiMaterialProperty" => "diffuse and alpha only",
                 "NiStencilProperty" => "draw mode (sidedness) only",

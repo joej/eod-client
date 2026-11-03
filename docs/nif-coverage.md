@@ -22,13 +22,15 @@ wrong place. On the 2026-11-02 run, **every decoded block in the install ended e
 boundary**. The check can fail: a test feeds it a block with one stray byte (`NifSurveyTests`).
 
 Gamebryo 10.1 headers carry an exact block-type table but no block sizes, so the survey decodes a 10.1
-file's blocks **in sequence** (31 types, `NifSurvey.Gamebryo.cs`) and checks that the last one ends
+file's blocks **in sequence** (69 types, `NifSurvey.Gamebryo.cs`) and checks that the last one ends
 exactly at the footer; every reference must point at a real block and every bool must be 0 or 1, so
 a wrong layout fails near where it goes wrong. A file with a type we don't decode yet stops there and
 counts as unchecked, never as passed. One rule isn't in `nif.xml`: each 10.1 block starts with a u32
-zero. On 2026-11-02, **no 10.1 file in the install failed**: 6,168 decode completely to the footer
-(2,874 of 2,892 figures, all 1,542 10.1 animations, 1,185 items, 494 zone objects) and the rest stop
-at a type we don't decode yet. Tests: `NifSurvey1010Tests` (complete, stray byte, missing marker, bad
+zero. On 2026-11-03, **no 10.1 file in the install failed and all but one decode completely to the
+footer**: 7,097 files (all 2,892 figures, 1,542 animations, 1,259 items and 303 effects; 959 of 960
+zone objects). The one left stops at `NiMeshParticleSystem` (the `NiPSys*` particle family, used by
+one zone object). On 2026-11-02 only 6,168 did: 466 zone objects stopped at billboard, LOD, particle,
+controller, light and texture-effect blocks. Tests: `NifSurvey1010Tests` (complete, stray byte, missing marker, bad
 reference, undecoded type).
 
 Run it after any reader change; the integrity section must stay clean.
@@ -80,9 +82,13 @@ inhabitants look like DAoC).
    every mesh), and no alpha. Multi-part 10.1 world objects are probably assembled wrong today. 2,892
    of 2,934 figure files are 10.1, so M7b needs a real 10.1 reader anyway. Largest single gap.
    **The layouts are now known** (2026-11-02): the survey decodes 10.1 files block by block to the
-   footer, so a reader can be built on decodes already checked against the whole install. For zone
-   objects the remaining types are mostly `NiBillboardNode` and `NiLODNode` (281 and 53 files stop
-   there).
+   footer, so a reader can be built on decodes already checked against the whole install.
+   **Since 2026-11-03 every 10.1 file but one decodes completely**, so the converter reads them as a
+   node tree (`NifFile.Gamebryo.cs`): per-shape textures, transforms, helper/hidden rules, LOD (the
+   nearest level, from `NiRangeLODData`). Before, 466 zone objects fell back to the scan; 24 converted
+   models had every mesh painted with one texture (the Darkness Rising town buildings: houses in a fire
+   glow, a keep in smoke), now 3 (kelp, genuinely one texture). Particles, lights, texture effects and
+   controllers are read past, not drawn.
 2. **Multi-texturing is dropped.** We read only the base slot. 1,463 files use a **dark map**
    (`NiTexturingProperty` dark slot, almost always on UV set 1): baked lighting, the biggest visual
    difference on buildings and dungeons. Also detail (1,410 files), glow (506), gloss (397), bump (245)
@@ -96,7 +102,7 @@ inhabitants look like DAoC).
 5. **Animation is ignored**: keyframe controllers in 2,344 files (doors, windmills, flags; figures),
    skinning in 2,939 (M7b), UV scrolling in 768 (water, fire), morphs in 1,242 (mostly figures).
 6. **Billboards** (`NiBillboardNode`, 877 files): shapes that turn to face the camera (effect sprites,
-   some foliage) render as fixed planes.
+   some foliage) render as fixed planes (10.1: walked as plain nodes, keeping their stored orientation).
 7. **Render state we don't apply**: emissive materials (1,530 files), z-write off on 1,892 files
    (usually blended effects), texture apply modes REPLACE/HILIGHT2 (155 files), non-wrapping clamp
    modes (about 1,000 files).

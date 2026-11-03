@@ -1,0 +1,5 @@
+# Fixed camera poses in Cursed Forest (zone 208) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 208
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+middle_high  483328 520096 9600   0 -30   # the zone's middle (play.sh --zone 208): giant trees (W19), neon-green foliage clumps seen 2026-11-03
+river        505088 516000 9600   0 -35   # the river and HOldGrove trees the owner inspected
