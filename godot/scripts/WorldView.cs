@@ -73,9 +73,11 @@ public partial class WorldView : Node3D
     // are only reliable there). The hit mesh gets a translucent accent overlay until the next pick.
     private Vector2? _pendingClick;
     private MeshInstance3D? _selected;
+    // The inspect selection: a pulsing magenta wash, so it can't be taken for a surface's own colour
+    // (a steady green one on a whole cobbled square was, open question W26).
     private readonly StandardMaterial3D _highlight = new()
     {
-        AlbedoColor = new Color(DevOverlay.Accent, 0.35f),
+        AlbedoColor = new Color(1f, 0f, 1f, 0.3f),
         Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
         ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
         CullMode = BaseMaterial3D.CullModeEnum.Disabled,
@@ -1753,6 +1755,7 @@ public partial class WorldView : Node3D
 
     public override void _Process(double delta)
     {
+        _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)
         {
             _shotAt = -1;
