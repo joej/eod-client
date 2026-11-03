@@ -40,7 +40,8 @@ result, and CLAUDE.md requires them before an asset change is handed over:
 | Kind | Zones | How it's built | Converter |
 |---|---:|---|---|
 | Outdoor | 98 | heightmap (`terrain.pcx` + `offset.pcx`), placed NIFs (`nifs.csv` + `fixtures.csv`), terrain tile textures | **read** (87 convert; the zone table gives the extent, W14) |
-| Dungeon | 282 | `dungeon.chunk` (NIF pieces), `dungeon.place`, `dungeon.prop`, `dungeon.water`, `portals.csv` | not read (roadmap M11) |
+| Capital city | 4 | `city.csv` (a piece list, no positions: pieces laid out in city coordinates), the pieces in the zone's `nifs/` folder with `.nhd` cover grids and `_dm_` dark maps, `adjacency.csv` (a piece-to-piece table, probably visibility; unread), `ZONEJUMP.csv` (the gates), `lights.csv`; no terrain | **read** (2026-11-03): City of Camelot (26), Avalon City (50), Jordheim (120), Tir na Nog (209). The whole city sits at region (32000, 32000, 8000), turned 180°: under that placement the streets hold the server's NPCs (205/205 Jordheim, 1,020/1,020 Avalon City, 299/303 Tir na Nog, 243/250 Camelot; no other orientation holds half). `play.sh --zone` lands at the first gate |
+| Dungeon | 280 | `dungeon.chunk` (NIF pieces), `dungeon.place`, `dungeon.prop`, `dungeon.water`, `portals.csv` | not read (roadmap M11); listed by `play.sh zones` as "not convertible yet" |
 | "Skycity" | 17 | the same chunk files under `skycity.*` | not read (M11) |
 | Other / empty | 5 | | |
 

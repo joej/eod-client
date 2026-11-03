@@ -12,7 +12,7 @@
 #   build    build the .NET solution and prepare the Godot project
 #   play     start the client, log in and show your characters (or enter the world with --enter)
 #   all      assets, build, play
-#   zones [TEXT]  list the outdoor zones in your install (number, name, region, converted or not),
+#   zones [TEXT]  list the zones in your install (number, name, region, kind, converted or not),
 #            only those whose name contains TEXT if given; use one with --zone
 #   config   show the saved settings
 #
@@ -130,25 +130,36 @@ zone_list() {
     make -s -C "$REPO" CLIENT="$CLIENT" list | awk -v tsv="$TSV" -v f="$(printf %s "$filter" | tr '[:upper:]' '[:lower:]')" '
         BEGIN { FS = "\t"; while ((getline l < tsv) > 0) if (l !~ /^#/) { split(l, c, "\t"); region[c[1]] = c[2] } FS = " " }
         {
-            n = $1; name = substr($0, 7, 24); sub(/ +$/, "", name); rest = substr($0, 32)
+            n = $1; name = substr($0, 7, 30); sub(/ +$/, "", name); rest = substr($0, 38)
             if (f != "" && index(tolower(name), f) == 0) next
-            state = rest ~ /^not converted/ ? "not converted" : "converted"
-            if (rest ~ /[1-9][0-9]* error/) { match(rest, /[0-9]+ error/); state = state ", " substr(rest, RSTART, RLENGTH) "s in its check" }
-            printf "%4d  %-24s region %-4s %s\n", n, name, region[n], state
+            if (rest ~ /not convertible/) { sub(/:/, ",", rest); state = rest }
+            else {
+                kind = ""; if (rest ~ /^city: /) { kind = "city, "; rest = substr(rest, 7) }
+                state = kind (rest ~ /^not converted/ ? "not converted" : "converted")
+                if (rest ~ /[1-9][0-9]* error/) { match(rest, /[0-9]+ error/); state = state ", " substr(rest, RSTART, RLENGTH) "s in its check" }
+            }
+            printf "%4d  %-30s region %-4s %s\n", n, name, region[n], state
         }'
 }
 
 # --zone takes a number or part of a name; a name must match exactly one zone (an exact name wins).
 resolve_zone() {
     local want=$1 matches exact
-    [[ "$want" =~ ^[0-9]+$ ]] && { echo "$want"; return; }
-    matches=$(zone_list "$want")
+    if [[ "$want" =~ ^[0-9]+$ ]]; then
+        matches=$(zone_list | awk -v n="$((10#$want))" '$1 == n')
+        [ -n "$matches" ] || die "no zone $want in your install (see: tools/play.sh zones)"
+    else
+        matches=$(zone_list "$want")
+    fi
     exact=$(printf '%s\n' "$matches" | awk -v w="$(printf %s "$want" | tr '[:upper:]' '[:lower:]')" '
-        { name = substr($0, 7, 24); sub(/ +$/, "", name); if (tolower(name) == w) print $1 }')
-    if [ -n "$exact" ]; then echo "$exact"; return; fi
+        { name = substr($0, 7, 30); sub(/ +$/, "", name); if (tolower(name) == w) print $0 }')
+    [ -n "$exact" ] && matches=$exact
     case $(printf '%s' "$matches" | grep -c .) in
-        0) die "no outdoor zone named like '$want' (see: tools/play.sh zones)" ;;
-        1) printf '%s\n' "$matches" | awk '{ print $1 }' ;;
+        0) die "no zone named like '$want' (see: tools/play.sh zones)" ;;
+        1) if grep -q 'not convertible' <<<"$matches"; then
+               die "$(printf '%s' "$matches" | awk '{ $1 = $1; print }'): we can't convert that kind of zone yet"
+           fi
+           printf '%s\n' "$matches" | awk '{ print $1 }' ;;
         *) printf '%s\n' "$matches" >&2; die "'$want' matches several zones: give its number or more of its name" ;;
     esac
 }

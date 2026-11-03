@@ -66,6 +66,29 @@ public sealed class ZoneLayoutTests
     }
 
     [Fact]
+    public void ACitysPiecesGoToTheCityOriginTurnedHalfway()
+    {
+        // city.csv: a count line, then "index,piece.nif" rows; no positions. The city's pieces are laid
+        // out in city coordinates and placed together at region (32000, 32000, 8000), turned 180°: the
+        // placement under which each capital's streets hold where the server stands its NPCs.
+        ZoneLayout city = ZoneLayout.ParseCity("40,\n1,cam01.nif\n2,cam02.nif\n\n", 8192, 8192);
+        Assert.Equal(["cam01.nif", "cam02.nif"], city.Fixtures.Select(f => f.NifName));
+        Assert.All(city.Fixtures, f => Assert.Equal((32000f, 32000f, 8000f, 180, 1f, false),
+            (f.X, f.Y, f.Z, f.AngleDeg, f.Scale, f.OnGround)));
+        // The zone's own placement rules leave a city piece where it is (not at the zone origin, Z set).
+        Assert.Equal(8000f, ZoneExport.PlacementZ(city.Fixtures[0], 8192, 8192, (_, _) => 123f));
+    }
+
+    [Fact]
+    public void ACitysLandingSpotIsTheMiddleOfItsFirstGateJustAboveTheFloor()
+    {
+        // Camelot's ZONEJUMP.csv: id, target, x1, y1, x2, y2, z1 (floor), z2 (top), zone.
+        string gates = "1,CamHills,24438,24220,24438,24369,8000,8160,5\n2,CamHills,24438,24369,24438,24220,8000,8160,5\n";
+        Assert.Equal((32630f, 32486.5f, 8040f), ZoneExport.CityLanding(gates, 8192, 8192));
+        Assert.Null(ZoneExport.CityLanding("not,a,gate\n", 8192, 8192));
+    }
+
+    [Fact]
     public void PiecesAtTheZoneOriginKeepTheirHeightOthersAtZeroStandOnTheGround()
     {
         // Zone offset (8192, 16384); the ground is 500 everywhere. Cothrom Gorge's cliff pieces are

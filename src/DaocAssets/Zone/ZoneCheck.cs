@@ -96,10 +96,11 @@ public static class ZoneCheck
 
     /// <summary>
     /// Checks every placement. <paramref name="groundAt"/> gives the terrain height at a region-global
-    /// (x, y); <paramref name="bounds"/> gives a model's bounds (null = missing or empty);
+    /// (x, y), or is null for a zone without terrain (a capital city): the ground checks are skipped;
+    /// <paramref name="bounds"/> gives a model's bounds (null = missing or empty);
     /// the zone spans [originX, originX + width) x [originY, originY + height) in region units.
     /// </summary>
-    public static ZoneCheckReport Check(IReadOnlyList<ZonePlacement> placements, Func<float, float, float> groundAt,
+    public static ZoneCheckReport Check(IReadOnlyList<ZonePlacement> placements, Func<float, float, float>? groundAt,
         Func<string, ModelBounds?> bounds, float originX, float originY, float width, float height)
     {
         var findings = new List<ZoneFinding>();
@@ -118,7 +119,8 @@ public static class ZoneCheck
             // judge it vertex by vertex against the ground directly beneath each one.
             if (p.X == originX && p.Y == originY && b.Sample is { Length: > 0 } sample)
             {
-                CheckZoneSpacePiece(p, sample, groundAt, originX, originY, width, height, findings);
+                if (groundAt is not null)
+                    CheckZoneSpacePiece(p, sample, groundAt, originX, originY, width, height, findings);
                 continue;
             }
 
@@ -138,6 +140,9 @@ public static class ZoneCheck
                 corners.Add(new Vector3(gx, gz, gy) * UnitsPerMetre);   // region (dX, dY, dZ)
             }
             float bottom = p.Z + corners.Min(c => c.Z), top = p.Z + corners.Max(c => c.Z);
+
+            if (groundAt is null)
+                continue;   // no terrain: nothing to stand on or sink into
 
             // The ground under the object: its centre and the four corners of its footprint.
             float x0 = corners.Min(c => c.X), x1 = corners.Max(c => c.X), y0 = corners.Min(c => c.Y), y1 = corners.Max(c => c.Y);

@@ -4,12 +4,12 @@
 # out of date. Everything it writes is derived from your install and stays under private/ (git-ignored):
 # never commit it or hand it to anyone (see CLAUDE.md, "Game client and assets").
 #
-#   make list               the outdoor zones in your install: number, name, converted or not, check result
+#   make list               every zone in your install: number, name, kind, converted or not, check result
 #   make zone208            convert zone 208 (Cursed Forest): terrain, objects, water, sky, zone check
 #                           (zone8 and zone008 are the same zone; several at once: make zone0 zone208)
 #   make check-zone208      ... and fail if its zone check has errors
 #   make clean-zone208      delete zone 208's converted files (its models stay in the shared library)
-#   make zones              every outdoor zone, plus private/zones/summary.md
+#   make zones              every outdoor zone and capital city, plus private/zones/summary.md
 #   make check-zones        ... and fail if any zone check has errors
 #   make clean-library      delete every converted model and texture (they are redone on demand)
 #   make clean              delete everything this Makefile made
@@ -70,10 +70,10 @@ $(shell mkdir -p $(BUILD); [ "$$(cat $(CLIENT_FILE) 2>/dev/null)" = "$(CLIENT)" 
 -include $(BUILD)/zones.mk
 # Only the zones asked for get their model lists read (and made, on first use).
 ifneq ($(filter zones check-zones,$(MAKECMDGOALS)),)
-WANT := $(ZONES)
+WANT := $(ZONES) $(CITIES)
 else
 # zone8, zone08 and zone008 all mean zone 008.
-WANT := $(filter $(ZONES),$(shell printf '%s\n' $(patsubst check-zone%,%,$(patsubst zone%,%,$(NEEDS_INSTALL))) \
+WANT := $(filter $(ZONES) $(CITIES),$(shell printf '%s\n' $(patsubst check-zone%,%,$(patsubst zone%,%,$(NEEDS_INSTALL))) \
           | grep -E '^[0-9]+$$' | while read -r n; do printf '%03d ' $$(expr $$n + 0); done))
 endif
 -include $(foreach z,$(WANT),$(ZONEDIR)/zone$(z)/models.mk)
@@ -100,7 +100,7 @@ $(INDEX): $(BUILD)/index.done
 
 $(BUILD)/zones.mk: $(TSV) tools/lib/zones-mk.sh $(CLIENT_FILE) | $(TOOL)
 	@mkdir -p $(@D)
-	@echo "listing the install's outdoor zones…"
+	@echo "listing the install's zones…"
 	@tools/lib/zones-mk.sh $(CLIENT) $(MPK) $(TSV) > $@.tmp && mv $@.tmp $@
 
 # --- models: one target per model, shared by every zone that places it ------------------------------
@@ -139,7 +139,8 @@ $(ZONEDIR)/zone$(1)/zonecheck.md: $(ZONEDIR)/zone$(1)/zone.csv $(KNOWN) $(ZONE_S
 	@echo "zone $(1) $$(zone$(1)_NAME): $$$$(sed -n 3p $$@)"
 
 .PHONY: zone$(1) check-zone$(1)
-zone$(1): $(addprefix $(ZONEDIR)/zone$(1)/,terrain.glb zone.csv water.done sky.csv zonecheck.md)
+# A capital city is all models: no terrain, and no water in its SECTOR.DAT.
+zone$(1): $(addprefix $(ZONEDIR)/zone$(1)/,$(if $(filter city,$(zone$(1)_KIND)),zone.csv sky.csv zonecheck.md,terrain.glb zone.csv water.done sky.csv zonecheck.md))
 
 ifneq ($(2),$(1))
 .PHONY: zone$(2) check-zone$(2)
@@ -156,12 +157,12 @@ $(foreach z,$(WANT),$(eval $(call ZONE_RULES,$(z),$(shell expr $(z) + 0))))
 
 # --- every zone ----------------------------------------------------------------------------------------
 .PHONY: zones check-zones
-zones: $(foreach z,$(ZONES),zone$(z)) $(ZONEDIR)/summary.md
+zones: $(foreach z,$(ZONES) $(CITIES),zone$(z)) $(ZONEDIR)/summary.md
 
-$(ZONEDIR)/summary.md: $(foreach z,$(ZONES),$(ZONEDIR)/zone$(z)/zonecheck.md)
-	@{ echo "# Zone check, all outdoor zones"; echo; \
+$(ZONEDIR)/summary.md: $(foreach z,$(ZONES) $(CITIES),$(ZONEDIR)/zone$(z)/zonecheck.md)
+	@{ echo "# Zone check, every converted zone (outdoor and cities)"; echo; \
 	   echo "| Zone | Name | Result |"; echo "|---:|---|---|"; \
-	   $(foreach z,$(ZONES),echo "| $(z) | $(zone$(z)_NAME) | $$(sed -n 3p $(ZONEDIR)/zone$(z)/zonecheck.md) |";) \
+	   $(foreach z,$(sort $(ZONES) $(CITIES)),echo "| $(z) | $(zone$(z)_NAME) | $$(sed -n 3p $(ZONEDIR)/zone$(z)/zonecheck.md) |";) \
 	 } > $@.tmp && mv $@.tmp $@
 	@echo "summary -> $@ ($$(grep -c ': [1-9][0-9]* error(s)' $@) zone(s) with errors)"
 
@@ -174,10 +175,13 @@ check-zones: zones
 clean-zone%:
 	rm -rf $(ZONEDIR)/zone$$(printf %03d $$(expr $* + 0))
 
-# One line per outdoor zone in the install, with its state: not converted, or its zone check result.
+# One line per zone in the install, in zone order: outdoor zones and cities with their state (not
+# converted, or the zone check's result), then the kinds we don't convert yet (dungeons: roadmap M11).
 list:
-	@$(foreach z,$(ZONES),r=$$(sed -n 3p $(ZONEDIR)/zone$(z)/zonecheck.md 2>/dev/null); \
-	  printf '%4d  %-24s %s\n' $$(expr $(z) + 0) "$(zone$(z)_NAME)" "$${r:-not converted}";)
+	@$(foreach z,$(sort $(ZONES) $(CITIES) $(OTHERS)),r=$$(sed -n 3p $(ZONEDIR)/zone$(z)/zonecheck.md 2>/dev/null); \
+	  k="$(zone$(z)_KIND)"; if [ "$$k" = outdoor ]; then s="$${r:-not converted}"; \
+	  elif [ "$$k" = city ]; then s="city: $${r:-not converted}"; else s="$$k: not convertible yet"; fi; \
+	  printf '%4d  %-30s %s\n' $$(expr $(z) + 0) "$(zone$(z)_NAME)" "$$s";)
 
 clean-library:
 	rm -rf $(LIB)/models $(LIB)/textures

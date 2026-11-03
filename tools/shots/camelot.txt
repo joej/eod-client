@@ -1,0 +1,8 @@
+# Fixed camera poses in the City of Camelot (zone 26, region 10) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 26
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# A capital city is all models (40 pieces in city coordinates, placed at the zone's origin), no
+# terrain. The landing spot (private/zones/zone026/landing.txt) is the first gate, toward Camelot Hills.
+overview     32630 38487 13040   0 -35   # the city from above, south of the gate
+gate_east    32630 32487 8080  90   0   # at the gate, looking east
+gate_west    32630 32487 8080 270   0   # at the gate, looking west

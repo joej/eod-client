@@ -81,6 +81,52 @@ public sealed class ZoneLayout
         return new ZoneLayout { Fixtures = fixtures };
     }
 
+    /// <summary>
+    /// A capital city's layout (zone 26 City of Camelot, 50 Avalon City, 120 Jordheim, 209 Tir na Nog):
+    /// <c>city.csv</c> lists its pieces ("40," then "1,cam01.nif", …) with no positions. The pieces are
+    /// laid out side by side in the city's own coordinates; the whole city sits at region
+    /// <see cref="CityOrigin"/>, turned 180°. Measured 2026-11-03 against where the server stands each
+    /// city's NPCs (OpenDAoC database): with this placement the streets and floors hold 205 of 205 in
+    /// Jordheim, 1,020 of 1,020 in Avalon City, 299 of 303 in Tir na Nog and 243 of 250 in Camelot; no
+    /// other orientation holds even half. The cities' gate tables (ZONEJUMP.csv) use the same frame.
+    /// All four cities have the zone offset 8192, so whether the origin is fixed in the region or
+    /// relative to the zone (zone-local 23808) can't be told apart; the region value is used.
+    /// </summary>
+    public static ZoneLayout ParseCity(string cityCsv, int offsetX, int offsetY)
+    {
+        _ = (offsetX, offsetY);
+        var fixtures = new List<ZoneFixture>();
+        foreach (string[] cols in Rows(cityCsv))
+        {
+            if (cols.Length < 2 || cols[1].Trim().Length == 0
+                || !int.TryParse(cols[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+                continue;
+            string file = cols[1].Trim();
+            fixtures.Add(new ZoneFixture(file, Path.GetFileNameWithoutExtension(file),
+                CityOrigin.X, CityOrigin.Y, CityOrigin.Z, 180, 1f));
+        }
+        return new ZoneLayout { Fixtures = fixtures };
+    }
+
+    /// <summary>Where a capital city's pieces go, in region coordinates (they are turned 180°): see <see cref="ParseCity"/>.</summary>
+    public static readonly (float X, float Y, float Z) CityOrigin = (32000, 32000, 8000);
+
+    /// <summary>The layout in a zone's data archive: <c>city.csv</c> for a city, else <c>nifs.csv</c> + <c>fixtures.csv</c>.</summary>
+    public static ZoneLayout Read(Mpk.MpkArchive dat, int offsetX, int offsetY)
+    {
+        if (dat.TryGetEntry("city.csv", out Mpk.MpkEntry city))
+            return ParseCity(System.Text.Encoding.Latin1.GetString(dat.Extract(city)), offsetX, offsetY);
+        return Parse(Member(dat, "nifs.csv"), Member(dat, "fixtures.csv"), offsetX, offsetY);
+    }
+
+    /// <summary>True for a capital city's archive (it has <c>city.csv</c>).</summary>
+    public static bool IsCity(Mpk.MpkArchive dat) => dat.TryGetEntry("city.csv", out _);
+
+    private static string Member(Mpk.MpkArchive dat, string name) =>
+        dat.TryGetEntry(name, out Mpk.MpkEntry e)
+            ? System.Text.Encoding.Latin1.GetString(dat.Extract(e))
+            : throw new Mpk.MpkFormatException($"Zone archive has no member '{name}'.");
+
     // nifs.csv columns: NIF (index), Textual Name, Filename, ... We keep index -> (filename, label).
     private static Dictionary<int, (string, string)> ParseNifs(string nifsCsv)
     {

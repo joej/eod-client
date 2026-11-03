@@ -26,15 +26,21 @@ public static class ZoneExport
     public static ZoneExportReport Export(
         AssetLibrary library, string zoneDatMpk, int offsetX, int offsetY, string outDir, int sizeX = 8, int sizeY = 8)
     {
-        string nifsCsv, fixturesCsv;
+        ZoneLayout layout;
+        (float X, float Y, float Z)? landing = null;
         using (MpkArchive dat = MpkArchive.Open(zoneDatMpk))
         {
-            nifsCsv = ReadMember(dat, "nifs.csv");
-            fixturesCsv = ReadMember(dat, "fixtures.csv");
+            layout = ZoneLayout.Read(dat, offsetX, offsetY);
+            if (ZoneLayout.IsCity(dat) && dat.TryGetEntry("zonejump.csv", out MpkEntry jumps))
+                landing = CityLanding(Encoding.Latin1.GetString(dat.Extract(jumps)), offsetX, offsetY);
         }
-
-        ZoneLayout layout = ZoneLayout.Parse(nifsCsv, fixturesCsv, offsetX, offsetY);
         Directory.CreateDirectory(outDir);
+        // Where play.sh --zone puts the character: a city's middle can be inside a wall or on a roof.
+        string landingPath = Path.Combine(outDir, "landing.txt");
+        if (landing is { } l)
+            File.WriteAllText(landingPath, string.Create(CultureInfo.InvariantCulture, $"{l.X:0} {l.Y:0} {l.Z:0}\n"));
+        else if (File.Exists(landingPath))
+            File.Delete(landingPath);
 
         // "On Ground" objects stand on the terrain: their stored Z is stale (Camelot Hills: 546 are 0,
         // the other 975 sit a median 726 units, up to 1,583, below the ground), while objects without
@@ -110,15 +116,12 @@ public static class ZoneExport
     /// what <see cref="Export"/> converts. The Makefile builds one library target per name.</summary>
     public static IReadOnlyList<string> ModelNames(string zoneDatMpk)
     {
-        string nifsCsv, fixturesCsv;
+        ZoneLayout layout;
         using (MpkArchive dat = MpkArchive.Open(zoneDatMpk))
-        {
-            nifsCsv = ReadMember(dat, "nifs.csv");
-            fixturesCsv = ReadMember(dat, "fixtures.csv");
-        }
+            layout = ZoneLayout.Read(dat, 0, 0);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var names = new List<string>();
-        foreach (string nif in ZoneLayout.Parse(nifsCsv, fixturesCsv, 0, 0).Models)
+        foreach (string nif in layout.Models)
         {
             string bare = nif[(nif.LastIndexOfAny(['/', '\\']) + 1)..];
             if (seen.Add(bare))
@@ -132,6 +135,29 @@ public static class ZoneExport
         if (!mpk.TryGetEntry(name, out MpkEntry entry))
             throw new MpkFormatException($"Zone archive has no member '{name}'.");
         return Encoding.Latin1.GetString(mpk.Extract(entry));
+    }
+
+    /// <summary>
+    /// A landing spot in a capital city: its first gate. <c>ZONEJUMP.csv</c> rows are "id, target,
+    /// x1, y1, x2, y2, z1, z2, zone": a doorway line (zone-local, the same frame the city's NPCs
+    /// confirm for its pieces; see ZoneLayout.ParseCity) from floor (z1) to top (z2) that
+    /// leads out of the city. The spot is the doorway's middle, 1 m above its floor (so a ray looking
+    /// for the floor starts under the arch). Region-global; null if no row parses.
+    /// </summary>
+    public static (float X, float Y, float Z)? CityLanding(string zoneJumpCsv, int offsetX, int offsetY)
+    {
+        foreach (string raw in zoneJumpCsv.Split('\n'))
+        {
+            string[] c = raw.Trim().Split(',');
+            if (c.Length < 8) continue;
+            float[] v = new float[6];
+            bool ok = true;
+            for (int k = 0; k < 6; k++)
+                ok &= float.TryParse(c[2 + k], NumberStyles.Float, CultureInfo.InvariantCulture, out v[k]);
+            if (ok)
+                return (offsetX + (v[0] + v[2]) / 2, offsetY + (v[1] + v[3]) / 2, v[4] + 40);
+        }
+        return null;
     }
 
     /// <summary>

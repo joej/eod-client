@@ -240,7 +240,10 @@ public partial class WorldView : Node3D
 
         // Ground: the zone's real terrain mesh if given (its vertices are absolute region coords, so
         // it loads at the origin with the usual region→Godot scale), otherwise a flat placeholder.
-        if (!TryAddTerrain())
+        // A capital city has no terrain (it is all models): no placeholder plane cutting through it.
+        bool modelsOnly = !string.IsNullOrEmpty(_zonePath) && Godot.FileAccess.FileExists(_zonePath)
+            && (string.IsNullOrEmpty(_terrainPath) || !Godot.FileAccess.FileExists(_terrainPath));
+        if (!TryAddTerrain() && !modelsOnly)
             AddChild(new MeshInstance3D
             {
                 Mesh = new PlaneMesh { Size = new Vector2(1000, 1000) },
@@ -1292,7 +1295,10 @@ public partial class WorldView : Node3D
     private void SnapToGround()
     {
         if (_terrain is null)
+        {
+            SnapToFloor();
             return;
+        }
 
         // Cast from above the terrain's whole height range straight down past its bottom, so a steep
         // descent is always found (a ray only ±100 m of the body's current Y missed the ground once
@@ -1312,6 +1318,25 @@ public partial class WorldView : Node3D
         {
             _groundHit = false;   // over a gap / no terrain under this column
         }
+    }
+
+    // With no terrain (a capital city, all models) the character stands on the models: a ray from a
+    // little above the body down to whatever floor, street or stair is below it. Starting just above
+    // the body (not high up, as for terrain) keeps it from landing on a roof or an arch overhead.
+    private void SnapToFloor()
+    {
+        if (_zoneRoot is null)
+            return;
+        Vector3 at = _body.Position;
+        var ray = PhysicsRayQueryParameters3D.Create(at + new Vector3(0, 1.5f, 0), at - new Vector3(0, 60f, 0));
+        var exclude = new Godot.Collections.Array<Rid>();
+        foreach (Node n in _body.FindChildren("*", "CollisionObject3D", true, false))
+            exclude.Add(((CollisionObject3D)n).GetRid());
+        ray.Exclude = exclude;
+        Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
+        _groundHit = hit.Count > 0;
+        if (_groundHit)
+            _body.Position = new Vector3(at.X, hit["position"].AsVector3().Y, at.Z);
     }
 
     private void SendMove(float speed)

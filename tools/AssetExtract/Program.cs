@@ -203,7 +203,10 @@ internal static class Cli
         if (zoneDir is null || libDir is null || offX is null || offY is null)
             return Usage();
 
-        var terrain = DaocAssets.Zone.ZoneTerrain.Read(datMpk, ZoneSize.X, ZoneSize.Y);
+        // A capital city has no terrain (it is all models): checked without ground.
+        DaocAssets.Zone.ZoneTerrain? terrain;
+        using (var dat = DaocAssets.Mpk.MpkArchive.Open(datMpk))
+            terrain = DaocAssets.Zone.ZoneLayout.IsCity(dat) ? null : DaocAssets.Zone.ZoneTerrain.Read(datMpk, ZoneSize.X, ZoneSize.Y);
         var placements = DaocAssets.Zone.ZoneCheck.ReadManifest(File.ReadAllText(Path.Combine(zoneDir, "zone.csv")));
         var cache = new Dictionary<string, DaocAssets.Zone.ModelBounds?>(StringComparer.OrdinalIgnoreCase);
         DaocAssets.Zone.ModelBounds? Bounds(string glb)
@@ -214,8 +217,8 @@ internal static class Cli
             return cache[glb] = path.Length == 0 ? null : DaocAssets.Zone.ZoneCheck.GlbBounds(path);
         }
         var report = DaocAssets.Zone.ZoneCheck.Check(placements,
-            (x, y) => terrain.HeightAt(x - offX.Value, y - offY.Value), Bounds,
-            offX.Value, offY.Value, terrain.RegionWidth, terrain.RegionHeight);
+            terrain is null ? null : (x, y) => terrain.HeightAt(x - offX.Value, y - offY.Value), Bounds,
+            offX.Value, offY.Value, ZoneSize.X * 8192, ZoneSize.Y * 8192);
         if (knownPath is not null)
             report = DaocAssets.Zone.ZoneCheck.ApplyKnown(report, DaocAssets.Zone.ZoneCheck.ReadKnown(File.ReadAllText(knownPath)));
         Console.WriteLine($"Zone check: {report.Summary()}");

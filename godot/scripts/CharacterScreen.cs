@@ -312,11 +312,22 @@ public partial class CharacterScreen : Control
             return from;
         }
         (float x, float y) = zone.Centre;
-        GD.Print($"--goto {zoneId}: jumping to the middle of {zone.Name} (region {zone.RegionId})");
+        float z = from.Position.Z;
+        string where = "the middle";
+        // The converter writes a landing spot where the middle is a bad place (a city: its first gate).
+        if (ResolvedPath(OS.GetCmdlineUserArgs(), "--zones") is string zonesDir
+            && System.IO.File.Exists(System.IO.Path.Combine(zonesDir, $"zone{zoneId:D3}", "landing.txt"))
+            && System.IO.File.ReadAllText(System.IO.Path.Combine(zonesDir, $"zone{zoneId:D3}", "landing.txt"))
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries) is [var sx, var sy, var sz, ..]
+            && float.TryParse(sx, System.Globalization.CultureInfo.InvariantCulture, out float lx)
+            && float.TryParse(sy, System.Globalization.CultureInfo.InvariantCulture, out float ly)
+            && float.TryParse(sz, System.Globalization.CultureInfo.InvariantCulture, out float lz))
+            (x, y, z, where) = (lx, ly, lz, "its landing spot");
+        GD.Print($"--goto {zoneId}: jumping to {where} in {zone.Name} (region {zone.RegionId})");
         try
         {
-            // Z is the server's to keep until the view snaps the body onto the terrain and reports it.
-            return await _session.JumpAsync(zone.RegionId, x, y, from.Position.Z);
+            // Z is the server's to keep until the view snaps the body onto the ground and reports it.
+            return await _session.JumpAsync(zone.RegionId, x, y, z);
         }
         catch (Exception e) when (e is TimeoutException or IOException or InvalidDataException)
         {

@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# zones-mk.sh CLIENT MPK ZONES_TSV: writes (to stdout) the Makefile's zone table: for every zone in
-# the zone table whose archive is in this install and has a heightmap (an outdoor zone; dungeons and
-# cities come with M11), its archive and its placement arguments:
+# zones-mk.sh CLIENT MPK ZONES_TSV: writes (to stdout) the Makefile's zone table: every zone in the
+# zone table whose data archive is in this install, by kind:
 #
-#   ZONES += 208
+#   ZONES += 208          outdoor (a heightmap): converted
+#   CITIES += 026         a capital city (city.csv: pieces in city coordinates, no terrain): converted
+#   OTHERS += 019         a dungeon, a "skycity" or other: listed, not converted yet (roadmap M11)
+#   zone208_NAME := Cursed Forest
+#   zone208_KIND := outdoor | city | dungeon | skycity | other
 #   zone208_DAT := /path/to/zones/zone208/dat208.mpk
 #   zone208_POS := --offset 450560 483328 --size 8 8
 #
@@ -22,8 +25,14 @@ grep -v '^#' "$tsv" | while IFS=$'\t' read -r zone region ox oy w h name; do
     dat=$(find "$client/zones" -maxdepth 2 -ipath "*/zone$n/dat$n.mpk" | head -1)
     [ -n "$dat" ] || continue
     case "$dat" in *[[:space:]]*) echo "zones-mk.sh: '$dat' has a space (make can't take it)" >&2; exit 1 ;; esac
-    "$mpk" list "$dat" 2>/dev/null | grep -qi 'terrain\.pcx' || continue
-    echo "ZONES += $n"
+    members=$("$mpk" list "$dat" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    if grep -q 'terrain\.pcx' <<<"$members"; then kind=outdoor; echo "ZONES += $n"
+    elif grep -q 'city\.csv' <<<"$members"; then kind=city; echo "CITIES += $n"
+    elif grep -q 'skycity\.' <<<"$members"; then kind=skycity; echo "OTHERS += $n"
+    elif grep -q 'dungeon\.' <<<"$members"; then kind=dungeon; echo "OTHERS += $n"
+    else kind=other; echo "OTHERS += $n"
+    fi
+    echo "zone${n}_KIND := $kind"
     echo "zone${n}_NAME := $name"
     echo "zone${n}_DAT := $dat"
     echo "zone${n}_POS := --offset $((ox * 8192)) $((oy * 8192)) --size $w $h"
