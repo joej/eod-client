@@ -162,7 +162,8 @@ public static partial class NifFile
         private readonly List<(int Shape, int Joint)> _pendingSkins = [];
         private readonly HashSet<int> _seen = [];
 
-        public void Walk(int index, int parentJoint, Matrix4x4 parentWorld, bool helper, int alpha, int stencil)
+        public void Walk(int index, int parentJoint, Matrix4x4 parentWorld, bool helper, int alpha, int stencil,
+            bool numberedHelper = false)
         {
             if (index < 0 || index >= blocks.Length || !_seen.Add(index))
                 return;
@@ -170,6 +171,7 @@ public static partial class NifFile
             Matrix4x4 local = ToMatrix(b.Local);
             Matrix4x4 world = local * parentWorld;
             bool underHelper = helper || IsHelperNodeName(b.Name) || IsHidden(b.Flags);
+            bool underNumbered = numberedHelper || IsNumberedHelperName(b.Name);
             if (b.Type is "NiNode" or "NiBillboardNode" or "NiLODNode")
             {
                 int joint = Joints.Count;
@@ -179,7 +181,7 @@ public static partial class NifFile
                 int nodeAlpha = Find(b.Props, "NiAlphaProperty", alpha);
                 int nodeStencil = Find(b.Props, "NiStencilProperty", stencil);
                 foreach (int child in b.Type == "NiLODNode" ? NearLevel(b) : b.Children)
-                    Walk(child, joint, world, underHelper, nodeAlpha, nodeStencil);
+                    Walk(child, joint, world, underHelper, nodeAlpha, nodeStencil, underNumbered);
                 if (parentJoint < 0)
                     BindSkins();
             }
@@ -188,7 +190,7 @@ public static partial class NifFile
                 NifMesh? mesh = Shape(index, b, world, alpha, stencil);
                 if (mesh is null)
                     return;
-                Meshes.Add(mesh with { Helper = underHelper });
+                Meshes.Add(mesh with { Helper = underHelper || (underNumbered && mesh.TextureFile is null) });
             }
         }
 

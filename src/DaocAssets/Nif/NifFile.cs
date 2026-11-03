@@ -222,36 +222,37 @@ public static partial class NifFile
     // ancestors (-1 = none): a property on a node applies to its subtree unless a descendant carries
     // its own of the same type.
     private static void Walk4x(ReadOnlySpan<byte> bytes, Block[] blocks, int index, Xform world,
-        HashSet<int> seen, List<NifMesh> meshes, bool helper = false, int alpha = -1, int stencil = -1)
+        HashSet<int> seen, List<NifMesh> meshes, bool helper = false, int alpha = -1, int stencil = -1,
+        bool numberedHelper = false)
     {
         if (index < 0 || index >= blocks.Length || !seen.Add(index))
             return;
         Block b = blocks[index];
         Xform w = world.Compose(b.Local);
         bool underHelper = helper || IsHelperNodeName(b.Name) || IsHidden(b.Flags);
+        bool underNumbered = numberedHelper || IsNumberedHelperName(b.Name);
         if (b.Type is "NiNode" or "NiLODNode")
         {
             // A NiLODNode holds alternative detail levels of the same object; the engine draws exactly
-            // ONE child, by distance (near child range 0-N, far child range N-100000). We bake a single
-            // static mesh, so drawing every level stacks the near and far geometry and they z-fight
-            // (daoc-re confirmed Btavern/keep carry real NiLODNodes). Keep only the near/full-detail
-            // child and drop the far one(s). DAoC names them consistently — far children carry "far"
-            // in the name (BarnLODfar, keepFar, BTavernFar); the near child is "near"/"visible". We
-            // can't read the NiRangeLODData ranges here, so we select by that naming, and fall back to
-            // the first child if none is clearly "near". NiRangeLODData itself isn't a renderable child.
+            // ONE child, by distance. We bake a single static mesh, so drawing every level stacks the
+            // near and far geometry and they z-fight. Keep only the nearest level (SelectLodChildren:
+            // by the node's distance ranges, by name when it has none).
             int[] children = b.Type == "NiLODNode" ? SelectLodChildren(blocks, b) : b.Children;
             int nodeAlpha = FindProperty(blocks, b.Props, "NiAlphaProperty", alpha);
             int nodeStencil = FindProperty(blocks, b.Props, "NiStencilProperty", stencil);
             foreach (int child in children)
-                Walk4x(bytes, blocks, child, w, seen, meshes, underHelper, nodeAlpha, nodeStencil);
+                Walk4x(bytes, blocks, child, w, seen, meshes, underHelper, nodeAlpha, nodeStencil, underNumbered);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
         {
             NifMesh? geom = ReadGeometryAt(bytes, blocks, b.DataRef);
             if (geom is not null)
+            {
+                string? texture = ShapeTexture(blocks, b);
                 meshes.Add(WithSurface(BakeTransform(geom, w, $"mesh{index}",
-                    ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b)), blocks, b, alpha, stencil)
-                    with { Helper = underHelper });
+                    texture, ShapeMaterialColor(blocks, b)), blocks, b, alpha, stencil)
+                    with { Helper = underHelper || (underNumbered && texture is null) });
+            }
         }
     }
 
@@ -267,6 +268,17 @@ public static partial class NifFile
     // likely source of the placeholder-coloured (purple/aqua) shapes.
     private static readonly string[] HiddenNodeNames =
         ["collidee", "pickee", "ladder", "climb", "sclimb", "shadowcaster"];
+
+    // A helper word plus digits only ("climb001", "collidee01", "ladder2"): numbered collision and climb
+    // volumes. The exact-name rule above doesn't hide them, and in retail a ladder shows its rungs, not
+    // the flat green climb panel in front of them (owner, Llyn Barfog, 2026-11-03; open question W3f).
+    // Untextured shapes under such a node are hidden; textured ones are kept, in case they are art.
+    internal static bool IsNumberedHelperName(string name) =>
+        !string.IsNullOrEmpty(name) && NumberedHelper.IsMatch(name);
+
+    private static readonly System.Text.RegularExpressions.Regex NumberedHelper = new(
+        "^(collidee|pickee|ladder|climb|sclimb|shadowcaster)[0-9]+$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     private static bool IsHelperNodeName(string name)
     {

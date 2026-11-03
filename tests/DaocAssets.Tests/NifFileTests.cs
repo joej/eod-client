@@ -287,6 +287,54 @@ public sealed class NifFileTests
         Assert.Equal("mesh4", Assert.Single(model.Meshes, m => !m.Helper).Name);
     }
 
+    [Fact]
+    public void AnUntexturedShapeUnderANumberedClimbNodeIsHidden()
+    {
+        // A ladder's climb panel: untextured, under "climb001". The exact-name rule (`climb`) missed it,
+        // and it was drawn as a flat green panel over the rungs (Llyn Barfog, 2026-11-03). A shape under
+        // "climbwall" (a name, not a numbered helper) and one under the root stay.
+        var ms = new MemoryStream();
+        var w = new BinaryWriter(ms);
+        w.Write(System.Text.Encoding.ASCII.GetBytes("NetImmerse File Format, Version 4.2.1.0\n"));
+        w.Write(0x04020100u);
+        w.Write(9u);
+        void Sized(string t) { w.Write((uint)t.Length); w.Write(System.Text.Encoding.ASCII.GetBytes(t)); }
+        void Av(string name)
+        {
+            Sized(name);
+            w.Write(-1); w.Write(-1);
+            w.Write((ushort)0x000C);
+            for (int k = 0; k < 3 + 9; k++) w.Write(k is 3 or 7 or 11 ? 1f : 0f);
+            w.Write(1f);
+            for (int k = 0; k < 3; k++) w.Write(0f);
+            w.Write(0u); w.Write((byte)0);
+        }
+        void Triangle()
+        {
+            w.Write((ushort)3); w.Write((byte)1);
+            foreach (float v in new[] { 0f, 0, 0, 1, 0, 0, 0, 1, 0 }) w.Write(v);
+            w.Write((byte)0);
+            for (int k = 0; k < 4; k++) w.Write(0f);
+            w.Write((byte)0); w.Write((ushort)0);
+            w.Write((ushort)1); w.Write(3u);
+            w.Write((ushort)0); w.Write((ushort)1); w.Write((ushort)2);
+            w.Write((ushort)0);
+        }
+        void Node(string name, params int[] children) { Sized("NiNode"); Av(name); w.Write((uint)children.Length); foreach (int c in children) w.Write(c); w.Write(0u); }
+        void Shape(string name, int data) { Sized("NiTriShape"); Av(name); w.Write(data); w.Write(-1); }
+        Node("Scene Root", 1, 4, 7);                                  // 0
+        Node("climb001", 2);                                          // 1
+        Shape("ladder panel", 3); Sized("NiTriShapeData"); Triangle(); // 2, 3
+        Node("climbwall", 5);                                         // 4
+        Shape("wall", 6); Sized("NiTriShapeData"); Triangle();        // 5, 6
+        Shape("floor", 8); Sized("NiTriShapeData"); Triangle();       // 7, 8
+        w.Write(1u); w.Write(0);
+
+        NifModel model = NifFile.Read(ms.ToArray());
+        Assert.Equal(["mesh2"], model.Meshes.Where(m => m.Helper).Select(m => m.Name));
+        Assert.Equal(["mesh5", "mesh7"], model.Meshes.Where(m => !m.Helper).Select(m => m.Name).Order());
+    }
+
     private static bool Near(System.Numerics.Vector4 a, System.Numerics.Vector4 b) =>
         Math.Abs(a.X - b.X) < 0.004 && Math.Abs(a.Y - b.Y) < 0.004
         && Math.Abs(a.Z - b.Z) < 0.004 && Math.Abs(a.W - b.W) < 0.004;
