@@ -215,12 +215,20 @@ public partial class WorldView : Node3D
     public static (float X, float Y, float Z) ToRegion(Vector3 g) =>
         (g.X / RegionMetresPerUnit, g.Z / RegionMetresPerUnit, g.Y / RegionMetresPerUnit);
 
-    /// <summary>Heading 0–4095 = a full turn. The direction of heading 0 isn't checked yet.</summary>
-    public static float HeadingRadians(ushort heading) => (heading & 0x0FFF) / 4096f * Mathf.Tau;
+    /// <summary>
+    /// A DAoC heading (0–4095; 0 faces south, 1024 west: <see cref="Heading"/>) to the yaw of a body that
+    /// faces its local -Z. Godot X/Z are region X/Y, and yaw θ turns -Z to (-sin θ, -cos θ), so
+    /// θ = atan2(-dx, -dy). (Until 2026-11-03 this was -heading, half a turn off: NPCs faced away
+    /// from where the server points them, guards at the walls.)
+    /// </summary>
+    public static float YawFromHeading(ushort heading)
+    {
+        (double dx, double dy) = Heading.ToDirection(heading);
+        return (float)Math.Atan2(-dx, -dy);
+    }
 
-    /// <summary>A Godot facing (yaw about Y, as the body's -rotation) back to a 0–4095 DAoC heading.</summary>
-    public static ushort HeadingFromYaw(float yaw) =>
-        (ushort)(Mathf.PosMod(-yaw / Mathf.Tau, 1f) * 4096f);
+    /// <summary>The inverse of <see cref="YawFromHeading"/>: the heading a body with this yaw faces.</summary>
+    public static ushort HeadingFromYaw(float yaw) => Heading.FromDirection(-Math.Sin(yaw), -Math.Cos(yaw));
 
     public override void _Ready()
     {
@@ -267,7 +275,7 @@ public partial class WorldView : Node3D
         // Character: at its world position, facing its heading, with a nose showing facing. The body
         // is a loaded .glb when one was supplied (first meeting of the asset pipeline and the live
         // world), otherwise the MVC capsule — the client still runs with no assets at all.
-        _bodyYaw = -HeadingRadians(p.Heading);
+        _bodyYaw = YawFromHeading(p.Heading);
         var body = new Node3D { Position = at, Rotation = new Vector3(0, _bodyYaw, 0) };
         _body = body;
         // The body: a --model override, else the character's own DAoC figure, else the MVC capsule
@@ -1450,7 +1458,7 @@ public partial class WorldView : Node3D
         _world = moved;
         PositionAndObjectId p = moved.Position;
         _body.Position = ToGodot(p.X, p.Y, p.Z);
-        _bodyYaw = -HeadingRadians(p.Heading);
+        _bodyYaw = YawFromHeading(p.Heading);
         _body.Rotation = new Vector3(0, _bodyYaw, 0);
     }
 
@@ -1498,7 +1506,7 @@ public partial class WorldView : Node3D
         if (u.ObjectId == _world.Position.ObjectId)
             return;
         Vector3 pos = ZoneLocalToGodot(u.XOffsetInZone, u.YOffsetInZone, u.Z, u.ZoneSkinId);
-        float yaw = -HeadingRadians(u.HeadingOnly);
+        float yaw = YawFromHeading(u.HeadingOnly);
         if (_entities.TryGetValue(u.ObjectId, out Entity? e))
         {
             e.TargetPosition = pos;
@@ -1515,14 +1523,14 @@ public partial class WorldView : Node3D
     private void OnNpcSpawned(NpcCreate npc)
     {
         Vector3 pos = ToGodot(npc.X, npc.Y, npc.Z);
-        SpawnEntity(npc.ObjectId, pos, -HeadingRadians(npc.HeadingOnly), RealmColor(npc.Flags >> 6), npc.Model, npc.Size);
+        SpawnEntity(npc.ObjectId, pos, YawFromHeading(npc.HeadingOnly), RealmColor(npc.Flags >> 6), npc.Model, npc.Size);
     }
 
     private void OnPlayerSpawned(PlayerCreate p)
     {
         Vector3 pos = ToGodot(p.X, p.Y, p.Z);
         // A different, brighter tint so other players read as players, not mobs.
-        SpawnEntity(p.ObjectId, pos, -HeadingRadians(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f));
+        SpawnEntity(p.ObjectId, pos, YawFromHeading(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f));
     }
 
     private void OnObjectRemoved(ushort objectId)

@@ -212,7 +212,7 @@ of state packets that includes **0x20** and ends with **0x4E** ControlledHorse.
 ```
 f32 LE x, y, z          region-global coordinates
 u16 BE object id        the player's object id (not the session id)
-u16 BE heading          0–4095 = a full turn (direction of 0 unchecked; W2)
+u16 BE heading          0–4095 = a full turn; 0 faces +Y (south), 1024 west (OpenDAoC Point2D)
 u16 BE, u16 BE          dungeon zone offsets / 8192 (0 outside dungeons)
 u16 BE region           the region's "skin": its id, except for instances
 u8     flags            0x80 diving enabled, 0x01 underwater
