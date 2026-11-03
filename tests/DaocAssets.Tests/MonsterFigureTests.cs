@@ -37,7 +37,8 @@ public sealed class MonsterFigureTests
         119,m,m1_legs1.tga
         120,m,m1_boot1.tga
         1020,hair,hair_dirtblonde.tga
-        200,face,b_mhed4.tga
+        8,Briton Male Head,b_mhed1.tga
+        9,Briton Male Head,b_mhed2.tga
         """;
 
     [Fact]
@@ -48,7 +49,7 @@ public sealed class MonsterFigureTests
         Assert.Equal(("bcommonm.nif", 0, 1f, 8), (spec.Nif, spec.Version, spec.Scale, spec.Face));
         Assert.Equal("m1_tunic1.tga", spec.Skins["LBody"]);
         Assert.Equal("hair_dirtblonde.tga", spec.Skins["Head"]);
-        Assert.Equal("b_mhed4.tga", spec.Skins["Face"]);     // face 8 folds onto the 4 Briton male faces
+        Assert.Equal("b_mhed1.tga", spec.Skins["Face"]);     // Face is a skin id: 8 = b_mhed1
         Assert.False(spec.Skins.ContainsKey("Cloak"));       // skin 0: none
 
         Assert.Equal(3, tables.Resolve(9)!.Version);           // a Catacombs figure, flagged for the caller
@@ -76,7 +77,7 @@ public sealed class MonsterFigureTests
         Assert.Equal(new Dictionary<string, string?>
         {
             ["Body1:0"] = "m1_bodym.tga",
-            ["HeadA1:19"] = "b_mhed4.tga",          // the face
+            ["HeadA1:19"] = "b_mhed1.tga",          // the face
             ["HeadB1:24"] = "hair_dirtblonde.tga",  // the hair
             ["LBody1:6"] = "m1_tunic1.tga",
         }, shown);
@@ -84,10 +85,27 @@ public sealed class MonsterFigureTests
     }
 
     [Fact]
-    public void TheFaceShellIsTuckedInUnderTheHair()
+    public void AHeadWithNoSkinIsLeftOff()
     {
-        // Face and hair are overlapping head shells; the face moves in along its normals so the hair
-        // wins where both are (no z-fighting) and the face shows where it is alone.
+        // "Headless Elf": Head and Face are 0, and the head shapes have no texture of their own.
+        const string headless = """
+            ID,name,#,Body,Head,Arms,Gloves,Lbody,Legs,Boots,Cloak,Helm,Scale,Tall,Shdw,Set,Kilt,Sarac.,Face
+            2222,Headless Elf,206,114,0,116,117,118,119,120,0,0,100,80,1,1,0,0,0
+            """;
+        static NifMesh Part(string shape) => new()
+        {
+            Name = shape, ShapeName = shape, Vertices = [Vector3.Zero, Vector3.UnitX, Vector3.UnitY], Triangles = [(0, 1, 2)],
+        };
+        var figure = new NifModel { Version = new NifVersion(10, 1, 0, 0), Meshes = [Part("Body1:0"), Part("HeadA1:19"), Part("HeadB1:24")] };
+        NifModel dressed = MonsterFigure.Dress(figure, MonsterTables.Parse(headless, Monnifs, Skins).Resolve(2222)!);
+        Assert.Equal(["Body1:0"], dressed.Meshes.Where(m => !m.Helper).Select(m => m.ShapeName));
+    }
+
+    [Fact]
+    public void TheHairShellSitsUnderTheAlphaCutFace()
+    {
+        // Face and hair are overlapping head shells. The face skin is an oval with a transparent rim, so
+        // the face is alpha-tested on top and the hair moves in along its normals (no z-fighting).
         var head = new NifModel
         {
             Version = new NifVersion(10, 1, 0, 0),
@@ -100,8 +118,27 @@ public sealed class MonsterFigureTests
             ],
         };
         NifModel dressed = MonsterFigure.Dress(head, MonsterTables.Parse(Monsters, Monnifs, Skins).Resolve(8)!);
-        Assert.Equal(new Vector3(0.9f, 0, 0), dressed.Meshes[0].Vertices[0]);   // the face, 0.1 in
-        Assert.Equal(Vector3.UnitX, dressed.Meshes[1].Vertices[0]);             // the hair, unmoved
+        Assert.Equal((Vector3.UnitX, SurfaceAlpha.Cutout), (dressed.Meshes[0].Vertices[0], dressed.Meshes[0].Alpha));  // the face
+        Assert.Equal((new Vector3(0.9f, 0, 0), SurfaceAlpha.Opaque), (dressed.Meshes[1].Vertices[0], dressed.Meshes[1].Alpha));  // the hair, 0.1 in
+    }
+
+    [Fact]
+    public void AFullFiguresUnnamedBodiesAreItsLods()
+    {
+        // HSharF: the parts are "Figure:<id>" and the four low-detail bodies are "Editable Mesh".
+        static NifMesh Shape(string shape) => new()
+        {
+            Name = shape, ShapeName = shape, Vertices = [Vector3.Zero, Vector3.UnitX, Vector3.UnitY], Triangles = [(0, 1, 2)],
+        };
+        var parts = Enumerable.Range(0, 40).Where(i => i != 17 && i != 18 && i != 29).Select(i => Shape($"Figure:{i}"));
+        var shar = new NifModel
+        {
+            Version = new NifVersion(10, 1, 0, 0),
+            Meshes = [Shape("Editable Mesh"), Shape("Editable Mesh"), .. parts],
+        };
+        NifModel dressed = MonsterFigure.Dress(shar, MonsterTables.Parse(Monsters, Monnifs, Skins).Resolve(8)!);
+        Assert.Equal(["Figure:0", "Figure:6", "Figure:9", "Figure:13", "Figure:14", "Figure:15", "Figure:19", "Figure:24"],
+            dressed.Meshes.Where(m => !m.Helper).Select(m => m.ShapeName));
     }
 
     [Fact]
@@ -122,6 +159,11 @@ public sealed class MonsterFigureTests
     [InlineData("LBody2:6", "LBody", "2")]
     [InlineData("HeadA1:19", "HeadA", "1")]
     [InlineData("Lod1a", "Lod", "1a")]
+    [InlineData("Lbody3:8", "LBody", "3")]
+    [InlineData("Figure:6", "LBody", "1")]
+    [InlineData("Figure:19", "HeadA", "1")]
+    [InlineData("Figure:41", "Lod", "1b")]
+    [InlineData("Figure:99", "", "")]
     [InlineData("Editable Mesh", "", "")]
     [InlineData("Bodyguard", "", "")]
     public void PartNamesSplitIntoSlotAndVariant(string shape, string slot, string variant) =>

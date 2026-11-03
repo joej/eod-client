@@ -91,18 +91,12 @@ public sealed class MonsterTables
             if (int.TryParse(m[3 + s], out int skin) && skin > 0 && _skins.TryGetValue(skin, out string? file))
                 skins[Slots[s]] = file;
         int version = n.Length > 12 && int.TryParse(n[12], out int v) ? v : 0;
-        // The face (column 18, "Face"): a classic head's face texture is <race>_<sex>hed<n>
-        // (b_mhed1..4: Briton male), chosen by the face number. Provisional: faces run 1-8 against
-        // four textures per race and sex, so the number is folded onto them (how the other half
-        // differs, perhaps by head shape, is unknown).
+        // The face (column 18, "Face") is a skin id like the slot columns: 8 = b_mhed1.tga "Briton Male
+        // Head", 1606 = HO_fhed1.tga "Half Ogre Female Head 1"; 0 = none.
         int face = m.Length > 18 && int.TryParse(m[18], out int f) ? f : 0;
+        if (face > 0 && _skins.TryGetValue(face, out string? faceSkin))
+            skins["Face"] = faceSkin;
         string nifName = n[2].Trim();
-        if (face > 0 && nifName.Length > 1)
-        {
-            string guess = $"{nifName[0]}_{nifName[^1]}hed{(face - 1) % 4 + 1}.tga";
-            if (_skins.Values.Contains(guess, StringComparer.OrdinalIgnoreCase))
-                skins["Face"] = guess;
-        }
         float scale = m.Length > 12 && float.TryParse(m[12], NumberStyles.Float, CultureInfo.InvariantCulture, out float sc) && sc > 0
             ? sc / 100f : 1f;
         // The figure's animation set (monnifs column 3) -> a clip id per action -> its .kfa file.
@@ -121,56 +115,94 @@ public static class MonsterFigure
     /// <summary>
     /// Dresses a classic figure: of each slot's variants only variant 1 stays visible (hidden ones
     /// become helpers, which the exporter drops), wearing that slot's skin. Head variants A and B both
-    /// stay (A the face, B the hair); low-detail bodies (Lod*) and, unless the model has
-    /// a cloak skin, cloaks are hidden.
+    /// stay (A the face, B the hair) unless neither has a skin or texture; low-detail bodies (Lod*) and,
+    /// unless the model has a cloak skin, cloaks are hidden.
     /// </summary>
     public static NifModel Dress(NifModel figure, FigureSpec spec)
     {
         var meshes = new List<NifMesh>(figure.Meshes.Count);
+        // A full player figure (every variant of every slot: 44 parts) whose low-detail bodies aren't
+        // named Lod*: HSharF/M, NSvartalfF/M and BHalfOgreM carry them as four whole-body "Editable Mesh"
+        // shapes where the others have Lod1a-d. The small class figures (BScoutM: 5 parts and 2
+        // unnamed shapes) are left as read.
+        var slots = figure.Meshes.Select(m => SlotOf(m.ShapeName).Slot).ToList();
+        bool unnamedAreLods = slots.Count(s => s.Length > 0) >= FullFigureParts && !slots.Contains("Lod");
         foreach (NifMesh mesh in figure.Meshes)
         {
             (string slot, string variant) = SlotOf(mesh.ShapeName);
             bool shown = slot switch
             {
-                "" => !mesh.Helper,                    // not a part shape: leave as read
+                "" => !mesh.Helper && !unnamedAreLods,  // not a part shape: leave as read
                 "Lod" => false,
                 "Cloak" => variant == "1" && spec.Skins.ContainsKey("Cloak"),
                 _ => variant == "1",
             };
-            // HeadA is the face (its skin from the face number), HeadB the hair (the "Head" skin).
+            // HeadA is the face (the "Face" skin), HeadB the hair (the "Head" skin).
             // A creature is one shape, not named parts (Wolf.nif's "Editable Mesh"): it wears the Body skin.
             string skinSlot = slot switch { "HeadA" => "Face", "HeadB" => "Head", "" => "Body", _ => slot };
+            // A head part with no skin and no texture of its own is left off: "Headless Elf" (model 2222)
+            // sets Head and Face to 0.
+            if (slot is "HeadA" or "HeadB" && mesh.TextureFile is null && !spec.Skins.ContainsKey(skinSlot))
+                shown = false;
             string? skin = shown && (slot.Length > 0 || mesh.TextureFile is null)
                 && spec.Skins.TryGetValue(skinSlot, out string? s) ? s : null;
             meshes.Add(mesh with
             {
                 Helper = mesh.Helper || !shown,
                 TextureFile = skin ?? mesh.TextureFile,
-                Vertices = slot == "HeadA" && shown ? TuckIn(mesh) : mesh.Vertices,
+                Vertices = slot == "HeadB" && shown ? TuckIn(mesh) : mesh.Vertices,
+                Alpha = slot == "HeadA" && mesh.Alpha == SurfaceAlpha.Opaque ? SurfaceAlpha.Cutout : mesh.Alpha,
             });
         }
         return new NifModel { Version = figure.Version, Joints = figure.Joints, Meshes = meshes };
     }
 
+    private const int FullFigureParts = 20;
+
     // The face shell and the hair shell overlap almost everywhere (bcommonm: 61% of the hair's vertices
-    // within 4 mm of the face's, most at the back of the head), so they z-fought: the back of the head
-    // shimmered (owner, 2026-11-03). The hair belongs on top where both are; the face shows where the
-    // hair has no surface (the front). Moving the face 0.1 NIF units (2.5 mm) in along its normals
-    // keeps that order at any distance.
-    private const float FaceTuck = 0.1f;
+    // within 4 mm of the face's). The hair is the whole scalp; the face skin is an oval with the rest of
+    // its texture transparent (213 of the install's 218 <race>_<sex>hed textures are DXT5 with about 30%
+    // of the area cut out), though the NIFs carry no NiAlphaProperty on it. So the face is drawn
+    // alpha-tested, and the hair moves 0.1 NIF units (2.5 mm) in along its normals so the face wins
+    // where both are opaque: no z-fighting (the back of the head shimmered, owner 2026-11-03) and the
+    // hair shows through the face's cut-out rim.
+    private const float HairTuck = 0.1f;
 
-    private static System.Numerics.Vector3[] TuckIn(NifMesh face) =>
-        face.Normals is { } n && n.Length == face.Vertices.Length
-            ? face.Vertices.Select((v, i) => v - n[i] * FaceTuck).ToArray()
-            : face.Vertices;
+    private static System.Numerics.Vector3[] TuckIn(NifMesh hair) =>
+        hair.Normals is { } n && n.Length == hair.Vertices.Length
+            ? hair.Vertices.Select((v, i) => v - n[i] * HairTuck).ToArray()
+            : hair.Vertices;
 
-    // "Body1b:3" -> ("Body", "1b"); "HeadA1:19" -> ("HeadA", "1"); "Lod1a" -> ("Lod", "1a"); else ("", "").
+    // The number after the colon is one part numbering shared by every classic figure (surveyed over the
+    // install's figures: each id carries the same part name in 30-51 files, a handful of outliers aside).
+    // Some figures (HFirbolgF, HSharM/F) name their shapes only "Figure:<id>"; the id gives the part.
+    private static readonly string[] PartIds =
+    [
+        "Body1", "Body1b", "Body2", "Body2b", "Body3", "Body3b", "LBody1", "LBody2", "LBody3", "Arms1",      //  0- 9
+        "Arms2", "Arms3", "Arms4", "Gloves1", "Legs1", "Boots1", "Boots2", "Cloak1", "Cloak2", "HeadA1",     // 10-19
+        "HeadA2", "HeadA3", "HeadA4", "HeadA5", "HeadB1", "HeadB2", "HeadB3", "HeadB4", "HeadB5", "Cloak3",  // 20-29
+        "Body4", "Body4b", "Arms5", "Arms6", "Gloves2", "Gloves3", "Legs2", "Boots3", "Legs3", "LBody4",     // 30-39
+        "Lod1a", "Lod1b", "Lod1c", "Lod1d", "Body5", "Body5b", "Legs4", "Boots4", "Boots5",                  // 40-48
+    ];
+
+    // "Body1b:3" -> ("Body", "1b"); "HeadA1:19" -> ("HeadA", "1"); "Lod1a" -> ("Lod", "1a");
+    // "Figure:6" -> ("LBody", "1") by its part id; else ("", "").
     internal static (string Slot, string Variant) SlotOf(string shapeName)
     {
-        string part = shapeName.Split(':')[0];
-        foreach (string slot in new[] { "HeadA", "HeadB", "LBody", "Body", "Arms", "Gloves", "Legs", "Boots", "Cloak", "Lod" })
-            if (part.StartsWith(slot, StringComparison.Ordinal) && part.Length > slot.Length && char.IsDigit(part[slot.Length]))
-                return (slot, part[slot.Length..]);
+        string[] split = shapeName.Split(':');
+        (string, string)? named = Named(split[0]);
+        if (named is { } n) return n;
+        if (split.Length == 2 && split[0] == "Figure" && int.TryParse(split[1], out int id) && id >= 0 && id < PartIds.Length
+            && Named(PartIds[id]) is { } byId)
+            return byId;
         return ("", "");
+
+        static (string, string)? Named(string part)
+        {
+            foreach (string slot in new[] { "HeadA", "HeadB", "LBody", "Body", "Arms", "Gloves", "Legs", "Boots", "Cloak", "Lod" })
+                if (part.StartsWith(slot, StringComparison.OrdinalIgnoreCase) && part.Length > slot.Length && char.IsDigit(part[slot.Length]))
+                    return (slot, part[slot.Length..]);
+            return null;
+        }
     }
 }
