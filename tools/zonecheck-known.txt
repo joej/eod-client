@@ -21,3 +21,6 @@ coralarea2.glb        | sunk into the ground | coral bed set into the sea floor 
 coralarea4.glb        | sunk into the ground | coral bed set into the sea floor (unverified)
 rock_formation_27.glb | sunk into the ground | rock formation set into the sea floor (unverified)
 largenettingsystem.glb| sunk into the ground | netting set into the sea floor (unverified)
+
+# Giant trees (open question W19): one 345-vertex mesh, 228 m tall in its own units, placed at 1.1-1.4x.
+Iarnwood.glb          | implausible size | Iarnwood's giant forest trees, very tall in retail (owner's recollection, 2026-11-03; no screenshot yet)
