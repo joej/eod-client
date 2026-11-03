@@ -6,3 +6,4 @@
 # up: rock mesas floated over the hills, and from the lake bed they hung in the sky.
 overview     311296 320000 16000   0 -35   # the middle of the zone from the south, high: cliffs, lakes
 lake_bed     311296 294912  3500   0  25   # play.sh --zone 184 lands here, on the Central Lake's bed, looking up
+waterfall    310700 292500  4200 180  12   # the waterfall in cothpiece3, from the lake, as in the retail video (2026-11-03)
