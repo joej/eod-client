@@ -522,12 +522,28 @@ internal static class Cli
         foreach (string skin in spec.Skins.Values.Distinct(StringComparer.OrdinalIgnoreCase))
             if (library.GatherTexture(skin) is null)
                 Console.Error.WriteLine($"  skin {skin}: not found");
+        // The clips (anims/<name>.kfa), bone names from figures/animnode.dat beside the install's figures.
+        var clips = new Dictionary<string, KfaClip>();
+        string install = Path.GetDirectoryName(Path.GetFullPath(gamedata))!;
+        string animNode = Path.Combine(install, "figures", "animnode.dat");
+        if (File.Exists(animNode))
+        {
+            string[] boneNames = File.ReadAllLines(animNode, System.Text.Encoding.Latin1).Select(l => l.Trim()).ToArray();
+            foreach ((string clip, string kfa) in spec.Clips)
+            {
+                string? path = Directory.EnumerateFiles(Path.Combine(install, "anims"))
+                    .FirstOrDefault(f => string.Equals(Path.GetFileName(f), kfa, StringComparison.OrdinalIgnoreCase));
+                try { if (path is not null) clips[clip] = KfaClip.Read(File.ReadAllBytes(path), boneNames); }
+                catch (NifFormatException e) { Console.Error.WriteLine($"  clip {clip} ({kfa}): {e.Message}"); }
+            }
+        }
         string outPath = Path.Combine(libDir, "models", $"model{modelId}.glb");
         Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
-        GltfExporter.SaveGlb(dressed, outPath);
+        GltfExporter.SaveGlb(dressed, outPath, clips);
         int parts = dressed.Meshes.Count(m => !m.Helper);
         Console.WriteLine($"figure {modelId} ({spec.Name}): {spec.Nif}, {parts} parts, scale {spec.Scale:0.##}, " +
-            $"skins {string.Join(" ", spec.Skins.Select(kv => kv.Key + "=" + kv.Value))} -> {outPath}");
+            $"skins {string.Join(" ", spec.Skins.Select(kv => kv.Key + "=" + kv.Value))}, " +
+            $"clips {string.Join(" ", clips.Select(kv => $"{kv.Key}={spec.Clips[kv.Key]}({kv.Value.Duration:0.#}s)"))} -> {outPath}");
         return 0;
     }
 

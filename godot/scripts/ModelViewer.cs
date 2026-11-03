@@ -144,6 +144,7 @@ public partial class ModelViewer : Node3D
         string textureDir = TextureDirFromArgs() ?? System.IO.Path.GetDirectoryName(path) ?? "";
         int textured = ModelTexturing.Apply(scene, textureDir);
         string parts = ChooseFigureParts(scene, ArgValue("--parts"));
+        string anim = PlayClip(scene, ArgValue("--anim"), ArgValue("--anim-time"));
 
         Aabb bounds = ComputeBounds(scene);
         FrameBounds(bounds);
@@ -152,7 +153,29 @@ public partial class ModelViewer : Node3D
             $"size {bounds.Size.X:F1} x {bounds.Size.Y:F1} x {bounds.Size.Z:F1}" +
             (textured > 0 ? $" · {textured} textured" : " · untextured") + "\n" +
             (parts.Length > 0 ? $"parts: {parts}\n" : "") +
+            (anim.Length > 0 ? $"clip: {anim}\n" : "") +
             "left-drag orbit · wheel zoom";
+    }
+
+    // Plays one of the model's animation clips (a figure converted with mpk figure has idle, walk, run,
+    // back): --anim names it (default idle, else the first); --anim-time T holds it at T seconds, so a
+    // --shot shows a chosen frame. Returns "name (n clips)", or "" for a model with none.
+    private static string PlayClip(Node scene, string? want, string? at)
+    {
+        if (scene.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() is not AnimationPlayer player)
+            return "";
+        string[] clips = player.GetAnimationList();
+        if (clips.Length == 0)
+            return "";
+        string clip = want is not null && clips.Contains(want) ? want : clips.Contains("idle") ? "idle" : clips[0];
+        player.GetAnimation(clip).LoopMode = Animation.LoopModeEnum.Linear;
+        player.Play(clip);
+        if (float.TryParse(at, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float t))
+        {
+            player.Seek(t, true);
+            player.Pause();
+        }
+        return $"{clip} ({string.Join(", ", clips)})";
     }
 
     private static readonly System.Text.RegularExpressions.Regex PartName =

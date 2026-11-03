@@ -21,14 +21,16 @@ namespace DaocAssets.Nif;
 public static class GltfExporter
 {
     /// <summary>Writes the model's meshes to a .glb file at <paramref name="path"/>.</summary>
-    public static void SaveGlb(NifModel model, string path)
+    public static void SaveGlb(NifModel model, string path, IReadOnlyDictionary<string, KfaClip>? clips = null)
     {
-        SceneBuilder scene = BuildScene(model);
+        SceneBuilder scene = BuildScene(model, clips);
         scene.ToGltf2().SaveGLB(path);
     }
 
-    /// <summary>Builds a glTF scene from the model (exposed for tests that inspect it in memory).</summary>
-    public static SceneBuilder BuildScene(NifModel model)
+    /// <summary>Builds a glTF scene from the model (exposed for tests that inspect it in memory).
+    /// <paramref name="clips"/> (a skinned model only) become glTF animations of that name, each
+    /// driving the joints its tracks name.</summary>
+    public static SceneBuilder BuildScene(NifModel model, IReadOnlyDictionary<string, KfaClip>? clips = null)
     {
         // A NaN vertex would be dropped silently by the glTF writer, leaving an empty or holed model
         // that looks like a successful conversion. Fail loudly instead (the library reports it).
@@ -36,7 +38,7 @@ public static class GltfExporter
             if (!mesh.Helper && mesh.Vertices.Any(v => float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z)))
                 throw new InvalidOperationException($"{mesh.Name} ({mesh.ShapeName}) has NaN vertex positions.");
         if (model.Joints.Count > 0)
-            return BuildSkinnedScene(model);
+            return BuildSkinnedScene(model, clips);
         var scene = new SceneBuilder();
         foreach (NifMesh mesh in model.Meshes)
         {
@@ -56,7 +58,7 @@ public static class GltfExporter
     // matrices from NiSkinData (glTF ignores a skinned mesh's own node transform, and the root's
     // conversion reaches the vertices through the joints' world transforms). Rigid shapes in such a
     // file are already baked to NIF world space and hang off the root.
-    private static SceneBuilder BuildSkinnedScene(NifModel model)
+    private static SceneBuilder BuildSkinnedScene(NifModel model, IReadOnlyDictionary<string, KfaClip>? clips)
     {
         var scene = new SceneBuilder();
         var root = new NodeBuilder("nif_root") { LocalMatrix = NifToGltf };
@@ -90,6 +92,36 @@ public static class GltfExporter
         }
         if (model.Meshes.All(m => m.Helper || m.SkinJoints is not { Length: > 0 }))
             scene.AddNode(root);   // no skin pulled the skeleton in; keep it in the scene anyway
+
+        // Animation clips: keys are bone-local in NIF space, like the joints' own transforms, so each
+        // track drives its joint directly (the root's NIF -> glTF conversion applies above them).
+        if (clips is not null)
+        {
+            var byName = new Dictionary<string, NodeBuilder>(StringComparer.OrdinalIgnoreCase);
+            for (int j = 0; j < nodes.Length; j++)
+                byName.TryAdd(model.Joints[j].Name, nodes[j]);
+            foreach ((string clip, KfaClip kfa) in clips)
+                foreach (KfaTrack track in kfa.Tracks)
+                {
+                    if (!byName.TryGetValue(track.Bone, out NodeBuilder? node))
+                        continue;
+                    if (track.Rotations.Length > 0)
+                    {
+                        var curve = node.UseRotation(clip);
+                        foreach ((float t, Quaternion q) in track.Rotations) curve.SetPoint(t, q);
+                    }
+                    if (track.Translations.Length > 0)
+                    {
+                        var curve = node.UseTranslation(clip);
+                        foreach ((float t, Vector3 v) in track.Translations) curve.SetPoint(t, v);
+                    }
+                    if (track.Scales.Length > 0)
+                    {
+                        var curve = node.UseScale(clip);
+                        foreach ((float t, float v) in track.Scales) curve.SetPoint(t, new Vector3(v));
+                    }
+                }
+        }
         return scene;
     }
 

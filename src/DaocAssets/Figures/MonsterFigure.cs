@@ -20,7 +20,11 @@ namespace DaocAssets.Figures;
 
 /// <summary>A server model id resolved to its figure file and per-slot skins.</summary>
 public sealed record FigureSpec(int ModelId, string Name, string Nif, int Version,
-    IReadOnlyDictionary<string, string> Skins, float Scale, int Face = 0);
+    IReadOnlyDictionary<string, string> Skins, float Scale, int Face = 0)
+{
+    /// <summary>Clip name (idle, walk, run, back) -> .kfa file in anims/, from the figure's animation set.</summary>
+    public IReadOnlyDictionary<string, string> Clips { get; init; } = new Dictionary<string, string>();
+}
 
 public sealed class MonsterTables
 {
@@ -30,9 +34,15 @@ public sealed class MonsterTables
     private readonly Dictionary<int, string[]> _monsters;
     private readonly Dictionary<int, string[]> _monnifs;
     private readonly Dictionary<int, string> _skins;
+    private readonly Dictionary<int, string[]> _anims;
+    private readonly Dictionary<int, string[]> _animnifs;
 
-    private MonsterTables(Dictionary<int, string[]> monsters, Dictionary<int, string[]> monnifs, Dictionary<int, string> skins) =>
-        (_monsters, _monnifs, _skins) = (monsters, monnifs, skins);
+    // anims.csv columns of the clips the client view uses (ID, name, Walk, Back, Run, ..., Idle at 10).
+    private static readonly (string Clip, int Column)[] ClipColumns = [("walk", 2), ("back", 3), ("run", 4), ("idle", 10)];
+
+    private MonsterTables(Dictionary<int, string[]> monsters, Dictionary<int, string[]> monnifs, Dictionary<int, string> skins,
+        Dictionary<int, string[]> anims, Dictionary<int, string[]> animnifs) =>
+        (_monsters, _monnifs, _skins, _anims, _animnifs) = (monsters, monnifs, skins, anims, animnifs);
 
     /// <summary>Reads the three tables from the install's <c>gamedata.mpk</c>.</summary>
     public static MonsterTables Read(string gamedataMpk)
@@ -41,11 +51,13 @@ public sealed class MonsterTables
         string Text(string name) => mpk.TryGetEntry(name, out MpkEntry e)
             ? System.Text.Encoding.Latin1.GetString(mpk.Extract(e))
             : throw new MpkFormatException($"gamedata.mpk has no {name}.");
-        return Parse(Text("monsters.csv"), Text("monnifs.csv"), Text("skins.csv"));
+        return Parse(Text("monsters.csv"), Text("monnifs.csv"), Text("skins.csv"), Text("anims.csv"), Text("animnifs.csv"));
     }
 
-    /// <summary>Parses the three CSV texts (rows keyed by their numeric ID column; headers skipped).</summary>
-    public static MonsterTables Parse(string monstersCsv, string monnifsCsv, string skinsCsv)
+    /// <summary>Parses the CSV texts (rows keyed by their numeric ID column; headers skipped).
+    /// <c>anims.csv</c> (animation set -> clip ids) and <c>animnifs.csv</c> (clip id -> .kfa) are optional.</summary>
+    public static MonsterTables Parse(string monstersCsv, string monnifsCsv, string skinsCsv,
+        string animsCsv = "", string animnifsCsv = "")
     {
         static Dictionary<int, string[]> ById(string csv)
         {
@@ -61,7 +73,8 @@ public sealed class MonsterTables
         Dictionary<int, string[]> skins = ById(skinsCsv);
         return new MonsterTables(ById(monstersCsv), ById(monnifsCsv),
             skins.Where(kv => kv.Value.Length > 2 && kv.Value[2].Trim().Length > 0)
-                 .ToDictionary(kv => kv.Key, kv => kv.Value[2].Trim()));
+                 .ToDictionary(kv => kv.Key, kv => kv.Value[2].Trim()),
+            ById(animsCsv), ById(animnifsCsv));
     }
 
     /// <summary>The figure for server model id <paramref name="modelId"/>, or null if a table lacks it.</summary>
@@ -89,7 +102,14 @@ public sealed class MonsterTables
         }
         float scale = m.Length > 12 && float.TryParse(m[12], NumberStyles.Float, CultureInfo.InvariantCulture, out float sc) && sc > 0
             ? sc / 100f : 1f;
-        return new FigureSpec(modelId, m[1].Trim(), nifName + ".nif", version, skins, scale, face);
+        // The figure's animation set (monnifs column 3) -> a clip id per action -> its .kfa file.
+        var clips = new Dictionary<string, string>();
+        if (int.TryParse(n[3], out int set) && _anims.TryGetValue(set, out string[]? a))
+            foreach ((string clip, int col) in ClipColumns)
+                if (col < a.Length && int.TryParse(a[col], out int id) && id > 0
+                    && _animnifs.TryGetValue(id, out string[]? kfa) && kfa.Length > 2 && kfa[2].Trim().Length > 0)
+                    clips[clip] = kfa[2].Trim();
+        return new FigureSpec(modelId, m[1].Trim(), nifName + ".nif", version, skins, scale, face) { Clips = clips };
     }
 }
 
