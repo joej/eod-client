@@ -61,6 +61,42 @@ public sealed class AssetLibraryTests : IDisposable
     }
 
     [Fact]
+    public void ReconvertRewritesTheCachedGlbAndLeavesNoTemporaryFiles()
+    {
+        // The Makefile's `mpk model` reconverts when the converter changed: a cached glb must not be
+        // returned as-is, and the atomic write must leave nothing but the glb behind.
+        string? fixture = BowspritFixture();
+        if (fixture is null)
+            return;
+        Directory.CreateDirectory(_client);
+        File.Copy(fixture, Path.Combine(_client, "thing.nif"));
+        var library = new AssetLibrary(AssetIndex.Build(_client), _lib);
+        string glb = library.GetModel("thing.nif").GlbPath!;
+        File.WriteAllText(glb, "stale");
+
+        Assert.Equal("stale", File.ReadAllText(glb));   // the cache is trusted without reconvert
+        library.GetModel("thing.nif");
+        Assert.Equal("stale", File.ReadAllText(glb));
+
+        ModelResult r = library.GetModel("thing.nif", reconvert: true);
+        Assert.Equal(AssetOrigin.Converted, r.Origin);
+        Assert.Equal("glTF"u8.ToArray(), File.ReadAllBytes(glb)[..4]);
+        Assert.Equal([glb], Directory.GetFiles(Path.GetDirectoryName(glb)!));
+    }
+
+    [Fact]
+    public void ANifTheReaderDoesNotTakeIsUnsupportedNotMissing()
+    {
+        // In the install but not readable: the Makefile records it as a result instead of failing,
+        // and it must not be confused with a model the install doesn't have.
+        var library = new AssetLibrary(IndexWith(("old.nif", "NetImmerse File Format, Version 3.1\n"u8.ToArray())), _lib);
+        ModelResult r = library.GetModel("old.nif");
+        Assert.Equal(AssetOrigin.Unsupported, r.Origin);
+        Assert.Null(r.GlbPath);
+        Assert.Contains("old.nif", r.Error);
+    }
+
+    [Fact]
     public void AnOverrideWinsOverConversion()
     {
         var library = new AssetLibrary(IndexWith(("x.nif", "whatever"u8.ToArray())), _lib);

@@ -6,10 +6,11 @@
 #   tools/play.sh [command] [options]
 #
 # Commands (default: all):
-#   assets   convert your own DAoC install into private/ (models, textures, terrain, water, sky)
+#   assets   convert your own DAoC install into private/ (models, textures, terrain, water, sky);
+#            this runs the Makefile (make check-zoneNNN), which redoes only what is out of date
 #   build    build the .NET solution and prepare the Godot project
 #   play     start the client, log in and show your characters (or enter the world with --enter)
-#   all      assets (only when missing or the converter changed since the last run), build, play
+#   all      assets, build, play
 #   config   show the saved settings
 #
 # Options (saved to private/play.conf, so you give each one once):
@@ -23,7 +24,7 @@
 # Per run only:
 #   --enter SLOT    enter the world with the character in this slot (Albion 0-9, Midgard 10-19,
 #                   Hibernia 20-29) instead of stopping at the character list
-#   --fresh         re-index the install and reconvert everything, even if the converter hasn't changed
+#   --fresh         re-index the install and reconvert all models and this zone, even if nothing changed
 #
 # The password is never saved: it comes from DAOC_PASSWORD in the environment, else from the saved
 # --password-cmd, else the script asks for it. It reaches the client through the environment, not
@@ -37,8 +38,6 @@ REPO=$(cd -- "$(dirname -- "$0")/.." && pwd)
 PRIV="$REPO/private"
 CONF="$PRIV/play.conf"
 LIB="$PRIV/library"
-INDEX="$PRIV/asset-index/index.json"
-ZONES_TSV="$REPO/src/DaocProtocol/World/zones.tsv"
 
 die() { echo "play.sh: $*" >&2; exit 1; }
 step() { printf '\n== %s\n' "$*"; }
@@ -60,7 +59,7 @@ while [ $# -gt 0 ]; do
         --password-cmd) PASSWORD_CMD=${2:?}; CHANGED=1; shift 2 ;;
         --enter)   ENTER=${2:?}; shift 2 ;;
         --fresh)   FRESH=1; shift ;;
-        -h|--help) sed -n '4,33p' "$0"; exit 0 ;;
+        -h|--help) sed -n '4,34p' "$0"; exit 0 ;;
         *) die "unknown option: $1 (see tools/play.sh --help)" ;;
     esac
 done
@@ -112,66 +111,26 @@ find_godot() {
     die "Godot 4 .NET not found (install it, or set GODOT=/path/to/godot)"
 }
 
-MPK="$REPO/tools/AssetExtract/bin/Debug/net10.0/mpk"
-build_mpk() { dotnet build "$REPO/tools/AssetExtract/AssetExtract.csproj" -v q --nologo >/dev/null; }
-
 # --- zone lookup ------------------------------------------------------------------------------
 zone_dir()  { printf '%s/zones/zone%03d' "$PRIV" "$ZONE"; }
-zone_info() { awk -F'\t' -v z="$ZONE" '!/^#/ && $1 == z { print; exit }' "$ZONES_TSV"; }
 
-# What the converter is made of right now: the committed trees plus any uncommitted edits. When it
-# changes, previously converted models may be wrong (the library otherwise reuses them forever).
-. "$REPO/tools/lib/converter-stamp.sh"
-STAMP_FILE="$LIB/.converter"
-
-assets_current() {
-    local z; z=$(zone_dir)
-    [ -f "$INDEX" ] && [ -f "$z/zone.csv" ] && [ -f "$z/terrain.glb" ] && [ -f "$z/sky.csv" ] \
-        && [ -f "$z/water.csv" ] && [ -f "$STAMP_FILE" ] && [ "$(cat "$STAMP_FILE")" = "$(converter_stamp)" ]
-}
-
+# The conversion itself is the Makefile: it redoes only the outputs whose inputs (the install, or the
+# part of the converter that makes them) changed, so this is a no-op when everything is current.
 do_assets() {
     need CLIENT "DAoC client folder (holds game.dll and zones/)"
     [ -d "$CLIENT/zones" ] || die "no zones/ folder in $CLIENT: is that the client's root folder?"
-    local info name x y w h dat z
-    info=$(zone_info) || true
-    [ -n "$info" ] || die "zone $ZONE is not in $ZONES_TSV"
-    name=$(cut -f7 <<<"$info")
-    x=$(( $(cut -f3 <<<"$info") * 8192 ))
-    y=$(( $(cut -f4 <<<"$info") * 8192 ))
-    w=$(cut -f5 <<<"$info"); h=$(cut -f6 <<<"$info")   # zone size in sectors (the heightmap spans it)
-    # Folder and archive names vary in case between installs (Zone000 vs zone001).
-    dat=$(find "$CLIENT/zones" -maxdepth 2 -ipath "*/zone$(printf %03d "$ZONE")/dat$(printf %03d "$ZONE").mpk" | head -1)
-    [ -n "$dat" ] || die "no dat$(printf %03d "$ZONE").mpk for zone $ZONE under $CLIENT/zones"
-    z=$(zone_dir)
-
-    step "assets: zone $ZONE ($name) from $CLIENT"
-    build_mpk
-    mkdir -p "$LIB" "$z" "$(dirname "$INDEX")"
-
-    # When the converter changed (or --fresh), everything derived from it is redone: the index (it
-    # decides which file a name resolves to), and the converted models and textures.
-    local stamp stale=0; stamp=$(converter_stamp)
-    if [ "$FRESH" = 1 ] || [ ! -f "$STAMP_FILE" ] || [ "$(cat "$STAMP_FILE")" != "$stamp" ]; then
-        stale=1
-        echo "converter changed since the last run (or --fresh): re-indexing and reconverting"
-        rm -rf "$LIB/models" "$LIB/textures"
+    local n; n=$(printf %03d "$ZONE")
+    command -v make >/dev/null || die "make not found (macOS: xcode-select --install)"
+    step "assets: zone $ZONE from $CLIENT"
+    if [ "$FRESH" = 1 ]; then
+        echo "--fresh: re-indexing the install and reconverting everything"
+        make -C "$REPO" clean-library "clean-zone$n" >/dev/null
+        rm -f "$PRIV/build/index.done"
     fi
-    if [ "$stale" = 1 ] || [ ! -f "$INDEX" ]; then
-        echo "indexing the install (where every model and texture lives)…"
-        "$MPK" index "$CLIENT" --out "$INDEX"
-    fi
-
-    "$MPK" terrain "$dat" --offset "$x" "$y" --size "$w" "$h" --index "$INDEX" --library "$LIB" --out "$z/terrain.glb"
-    "$MPK" zone    "$dat" --offset "$x" "$y" --size "$w" "$h" --index "$INDEX" --library "$LIB" --out "$z"
-    "$MPK" water   "$dat" --offset "$x" "$y" --size "$w" "$h" --index "$INDEX" --library "$LIB" --out "$z"
-    "$MPK" sky     "$dat" --index "$INDEX" --library "$LIB" --out "$z"
-    # Check the converted zone as the client will draw it (objects under/into/above the ground,
-    # missing models, sizes). Errors stop here, before anyone has to find them in the world.
-    "$MPK" zonecheck "$dat" --zone "$z" --library "$LIB" --offset "$x" "$y" --size "$w" "$h" --known "$REPO/tools/zonecheck-known.txt" --out "$z/zonecheck.md" \
-        || die "zone check found errors: see $z/zonecheck.md"
-    echo "$stamp" > "$STAMP_FILE"
-    echo "assets ready in $z (library: $LIB)"
+    local jobs; jobs=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+    make -C "$REPO" -j"$jobs" CLIENT="$CLIENT" "check-zone$n" \
+        || die "zone $ZONE: conversion failed or its zone check found errors (see $(zone_dir)/zonecheck.md)"
+    echo "assets ready in $(zone_dir) (library: $LIB)"
 }
 
 do_build() {
@@ -217,7 +176,7 @@ case "$CMD" in
     build)  do_build ;;
     play)   do_play ;;
     all)
-        if [ "$FRESH" = 1 ] || ! assets_current; then do_assets; else step "assets: up to date"; fi
+        do_assets
         do_build
         do_play ;;
 esac

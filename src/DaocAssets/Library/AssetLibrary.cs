@@ -15,10 +15,10 @@ using DaocAssets.Nif;
 
 namespace DaocAssets.Library;
 
-/// <summary>Where a resolved asset came from.</summary>
-/// <summary>Where a model came from: an override, a conversion, not in the install (Missing), or
-/// in the install but the conversion threw (Failed: a converter bug to fix, not missing content).</summary>
-public enum AssetOrigin { Override, Converted, Missing, Failed }
+/// <summary>Where a model came from: an override, a conversion, not in the install (Missing), in the
+/// install but in a form the reader doesn't take (Unsupported: an old NIF version, or no geometry we
+/// read), or in the install but the conversion threw (Failed: a converter bug to fix).</summary>
+public enum AssetOrigin { Override, Converted, Missing, Unsupported, Failed }
 
 /// <summary>A resolved model: its .glb path (or null if missing) and whether it was an override.</summary>
 public readonly record struct ModelResult(string? GlbPath, AssetOrigin Origin, string? Error = null);
@@ -51,7 +51,9 @@ public sealed class AssetLibrary
     /// as-is. Returns <see cref="AssetOrigin.Missing"/> if the model isn't in the index and has no
     /// override. Textures the model references are gathered into <c>textures/</c> as a side effect.
     /// </summary>
-    public ModelResult GetModel(string nifName)
+    /// <remarks>With <paramref name="reconvert"/> the cached glb and textures are ignored and converted
+    /// again (the Makefile asks for this when the converter changed).</remarks>
+    public ModelResult GetModel(string nifName, bool reconvert = false)
     {
         string stem = Path.GetFileNameWithoutExtension(BareName(nifName));
         string glbName = stem + ".glb";
@@ -61,7 +63,7 @@ public sealed class AssetLibrary
             return new ModelResult(overridePath, AssetOrigin.Override);
 
         string glbPath = Path.Combine(_models, glbName);
-        if (File.Exists(glbPath))
+        if (!reconvert && File.Exists(glbPath))
             return new ModelResult(glbPath, AssetOrigin.Converted);
 
         byte[]? nifBytes = _index.Read(nifName);
@@ -72,15 +74,16 @@ public sealed class AssetLibrary
         {
             NifModel model = NifFile.Read(nifBytes);
             Directory.CreateDirectory(_models);
-            GltfExporter.SaveGlb(model, glbPath);
+            // Textures first, the glb last: a glb on disk means its model converted completely.
             foreach (NifMesh mesh in model.Meshes)
                 if (!string.IsNullOrEmpty(mesh.TextureFile))
-                    GatherTexture(mesh.TextureFile!);
+                    GatherTexture(mesh.TextureFile!, reconvert);
+            WriteAtomically(glbPath, tmp => GltfExporter.SaveGlb(model, tmp));
             return new ModelResult(glbPath, AssetOrigin.Converted);
         }
-        catch (NifFormatException)
+        catch (NifFormatException e)
         {
-            return new ModelResult(null, AssetOrigin.Missing);
+            return new ModelResult(null, AssetOrigin.Unsupported, $"{nifName}: {e.Message}");
         }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or IndexOutOfRangeException)
         {
@@ -96,7 +99,8 @@ public sealed class AssetLibrary
     /// <c>.dds</c>) and the file is written under its real on-disk name so the stem-based Godot loader
     /// finds it. Copies the client's texture bytes verbatim (no transcode) so the client can load it.
     /// </summary>
-    public string? GatherTexture(string textureName)
+    /// <remarks>With <paramref name="refresh"/> an already gathered copy is replaced.</remarks>
+    public string? GatherTexture(string textureName, bool refresh = false)
     {
         string stem = Path.GetFileNameWithoutExtension(BareName(textureName));
 
@@ -110,7 +114,7 @@ public sealed class AssetLibrary
             }
 
         // Already gathered? (match by stem — we store under the real on-disk name).
-        if (Directory.Exists(_textures))
+        if (!refresh && Directory.Exists(_textures))
             foreach (string ext in TextureExts)
             {
                 string ep = Path.Combine(_textures, stem + ext);
@@ -126,8 +130,30 @@ public sealed class AssetLibrary
         // filesystems too (the NIF reference, the on-disk file and the glTF material name disagree on
         // case; the loader lower-cases the stem it looks up, so we lower-case what we write).
         string dest = Path.Combine(_textures, found.Value.FileName.ToLowerInvariant());
-        File.WriteAllBytes(dest, found.Value.Bytes);
+        WriteAtomically(dest, tmp => File.WriteAllBytes(tmp, found.Value.Bytes));
         return dest;
+    }
+
+    /// <summary>
+    /// Writes <paramref name="path"/> through a temporary file in the same folder, then renames it.
+    /// A file that exists is therefore complete: an interrupted run leaves no half-written file
+    /// that a build tool would take as up to date, and parallel conversions that gather the same
+    /// texture never see each other's partial writes.
+    /// </summary>
+    private static void WriteAtomically(string path, Action<string> write)
+    {
+        string tmp = Path.Combine(Path.GetDirectoryName(path)!,
+            $".{Path.GetFileNameWithoutExtension(path)}.{Environment.ProcessId}.{Guid.NewGuid():N}{Path.GetExtension(path)}");
+        try
+        {
+            write(tmp);
+            File.Move(tmp, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tmp))
+                File.Delete(tmp);
+        }
     }
 
     private static readonly string[] TextureExts = [".dds", ".tga", ".bmp"];

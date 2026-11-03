@@ -104,6 +104,27 @@ public static class ZoneExport
         };
     }
 
+    /// <summary>The distinct models (bare NIF names, first spelling wins) the zone's fixtures place:
+    /// what <see cref="Export"/> converts. The Makefile builds one library target per name.</summary>
+    public static IReadOnlyList<string> ModelNames(string zoneDatMpk)
+    {
+        string nifsCsv, fixturesCsv;
+        using (MpkArchive dat = MpkArchive.Open(zoneDatMpk))
+        {
+            nifsCsv = ReadMember(dat, "nifs.csv");
+            fixturesCsv = ReadMember(dat, "fixtures.csv");
+        }
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var names = new List<string>();
+        foreach (string nif in ZoneLayout.Parse(nifsCsv, fixturesCsv, 0, 0).Models)
+        {
+            string bare = nif[(nif.LastIndexOfAny(['/', '\\']) + 1)..];
+            if (seen.Add(bare))
+                names.Add(bare);
+        }
+        return names;
+    }
+
     private static string ReadMember(MpkArchive mpk, string name)
     {
         if (!mpk.TryGetEntry(name, out MpkEntry entry))

@@ -9,6 +9,13 @@
     <RootNamespace>AssetExtract</RootNamespace>
   </PropertyGroup>
 
+  <!-- The tool only reads the install, and the Makefile runs several copies at once. .NET's
+       advisory lock on every open makes a network share (SMB) refuse a second reader of the same
+       file ("being used by another process"), so the tool doesn't take those locks. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.IO.DisableFileLocking" Value="true" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\DaocAssets\DaocAssets.csproj" />
   </ItemGroup>

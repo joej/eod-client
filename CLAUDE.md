@@ -349,7 +349,10 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │                                  #   `audit` (NIF coverage report; see docs/nif-coverage.md)
 ├── tools/Launcher/                # Windows launcher for pointing a real client at a server (built,
 │                                  #   not yet validated)
-├── tools/play.sh                  # clone → assets → build → play in one command (README Quick start)
+├── Makefile                       # asset conversion: `make zoneNNN` / `check-zoneNNN` / `clean-zoneNNN`,
+│                                  #   `make zones`; each output lists the install files and the converter
+│                                  #   sources it is made from, so only what changed is redone
+├── tools/play.sh                  # clone → assets (via make) → build → play in one command (README Quick start)
 ├── tools/pipeline.sh, reconvert-zone.sh  # owner-run conversion of their own install
 └── godot/                         # ✓ Godot 4.7.2 .NET project (EodClient.csproj, net8.0, in the
     │                              #   solution); references DaocProtocol
@@ -380,8 +383,10 @@ are found by measurement (`docs/nif-coverage.md`), not by waiting for them to sh
 Rule: an asset change is checked by its **result**, not by counts ("1,536 placements converted" said
 nothing about 546 of them being underground). Before handing any converter or rendering change to the
 owner:
-1. `tools/zonecheck-all.sh`: every outdoor zone converted and each placement checked against the
-   terrain (under/sunk/floating/outside/size/missing; `mpk zonecheck`). Errors are fixed or explained.
+1. `make check-zones` (or `tools/zonecheck-all.sh`): every outdoor zone converted and each placement
+   checked against the terrain (under/sunk/floating/outside/size/missing; `mpk zonecheck`). Errors are
+   fixed or explained. When a converter step starts reading another source file, add that file to the
+   step's `*_SRC` list in the Makefile: a missing one means stale output that looks current.
 2. `tools/shots.sh <label>`: the fixed camera poses (`tools/shots/camhills.txt`, offline, no server)
    before and after; look at every shot. Add a pose for every bug the owner reports, so it stays fixed.
 3. When the converter starts reading a new file, column or key, add it to `ZoneAudit.UsedSectorKeys` /

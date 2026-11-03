@@ -21,8 +21,9 @@ Reading every byte correctly is not the same as building the world correctly: un
 all outdoor objects were placed underground while every count looked right. Three checks now judge the
 result, and CLAUDE.md requires them before an asset change is handed over:
 
-- **`mpk zonecheck`** (`tools/zonecheck-all.sh` for every outdoor zone, about 3 minutes; `tools/play.sh
-  assets` for the zone being played, stopping on errors) places each object as the client does, with
+- **`mpk zonecheck`** (`make check-zones` or `tools/zonecheck-all.sh` for every outdoor zone, 80 s from
+  scratch and seconds when little changed; `make check-zoneNNN`, which `tools/play.sh assets` runs, for
+  the zone being played, stopping on errors) places each object as the client does, with
   its converted model's real bounds, and compares it with the terrain: under the ground, origin sunk,
   floating, outside the zone, implausible size, missing or empty model. Findings reviewed and believed
   intended are listed in `tools/zonecheck-known.txt` (unverified until compared with retail).
