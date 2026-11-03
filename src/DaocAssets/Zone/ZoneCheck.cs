@@ -21,7 +21,9 @@ namespace DaocAssets.Zone;
 public readonly record struct ZonePlacement(string Glb, float X, float Y, float Z, float AngleDeg, float Scale);
 
 /// <summary>A model's bounds in its glb (metres, glTF axes: Y up), as the client draws it.</summary>
-public readonly record struct ModelBounds(Vector3 Min, Vector3 Max);
+/// <param name="Sample">Up to a few thousand of the model's vertices (metres, as drawn), for pieces too
+/// large to judge by their box: landscape pieces modelled in zone coordinates.</param>
+public readonly record struct ModelBounds(Vector3 Min, Vector3 Max, Vector3[]? Sample = null);
 
 public enum CheckSeverity { Warning, Error }
 
@@ -111,6 +113,15 @@ public static class ZoneCheck
             if (p.X < originX || p.Y < originY || p.X >= originX + width || p.Y >= originY + height)
                 findings.Add(new(CheckSeverity.Warning, "outside its zone", p, "position is outside the zone's square"));
 
+            // A piece at the zone's origin is modelled in zone coordinates (cliffs, harbours, castles
+            // laid into the landscape): its origin and box say nothing about the ground it meets, so
+            // judge it vertex by vertex against the ground directly beneath each one.
+            if (p.X == originX && p.Y == originY && b.Sample is { Length: > 0 } sample)
+            {
+                CheckZoneSpacePiece(p, sample, groundAt, originX, originY, width, height, findings);
+                continue;
+            }
+
             Vector3 size = (b.Max - b.Min) * p.Scale;
             float largest = Math.Max(size.X, Math.Max(size.Y, size.Z));
             if (largest > MaxSizeMetres || largest < MinSizeMetres)
@@ -153,6 +164,33 @@ public static class ZoneCheck
         return new ZoneCheckReport { Placements = placements.Count, Findings = findings };
     }
 
+    // A landscape piece should meet the terrain: floating if every vertex is above the ground under
+    // it, under the ground if every vertex is below. Vertices outside the zone are skipped.
+    private static void CheckZoneSpacePiece(ZonePlacement p, Vector3[] sample, Func<float, float, float> groundAt,
+        float originX, float originY, float width, float height, List<ZoneFinding> findings)
+    {
+        float th = -p.AngleDeg * MathF.PI / 180f, cos = MathF.Cos(th), sin = MathF.Sin(th);
+        float lowest = float.MaxValue, highest = float.MinValue;
+        foreach (Vector3 v in sample)
+        {
+            float x = p.X + (v.X * cos + v.Z * sin) * p.Scale * UnitsPerMetre;
+            float y = p.Y + (-v.X * sin + v.Z * cos) * p.Scale * UnitsPerMetre;
+            if (x < originX || y < originY || x >= originX + width || y >= originY + height)
+                continue;
+            float dz = p.Z + v.Y * p.Scale * UnitsPerMetre - groundAt(x, y);
+            lowest = Math.Min(lowest, dz);
+            highest = Math.Max(highest, dz);
+        }
+        if (lowest == float.MaxValue)
+            findings.Add(new(CheckSeverity.Warning, "outside its zone", p, "no vertex over the zone's ground"));
+        else if (lowest > FloatUnits)
+            findings.Add(new(CheckSeverity.Warning, "floating", p,
+                $"every vertex above the ground beneath it, the lowest by {lowest / UnitsPerMetre:0.#} m (a zone-coordinate piece)"));
+        else if (highest < -BuriedUnits)
+            findings.Add(new(CheckSeverity.Error, "under the ground", p,
+                $"every vertex below the ground above it, the highest by {-highest / UnitsPerMetre:0.#} m (a zone-coordinate piece)"));
+    }
+
     /// <summary>
     /// Reads the reviewed-findings list: lines "model.glb | kind | reason" ('#' comments). A finding
     /// whose model and kind match is reported as known, not counted, so a clean check means "nothing
@@ -192,14 +230,19 @@ public static class ZoneCheck
     {
         var model = SharpGLTF.Schema2.ModelRoot.Load(glbPath);
         Vector3 min = new(float.MaxValue), max = new(float.MinValue);
-        bool any = false;
+        var all = new List<Vector3>();
         foreach (var (a, b, c, _) in SharpGLTF.Schema2.Toolkit.EvaluateTriangles(model.DefaultScene))
             foreach (Vector3 v in new[] { a.GetGeometry().GetPosition(), b.GetGeometry().GetPosition(), c.GetGeometry().GetPosition() })
             {
                 min = Vector3.Min(min, v);
                 max = Vector3.Max(max, v);
-                any = true;
+                all.Add(v);
             }
-        return any ? new ModelBounds(min, max) : null;
+        if (all.Count == 0)
+            return null;
+        // An even spread of at most 4,096 vertices (every vertex appears once per triangle using it).
+        int stride = Math.Max(1, all.Count / 4096);
+        Vector3[] sample = all.Where((_, i) => i % stride == 0).ToArray();
+        return new ModelBounds(min, max, sample);
     }
 }

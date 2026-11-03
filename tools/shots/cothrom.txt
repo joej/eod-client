@@ -1,0 +1,8 @@
+# Fixed camera poses in Cothrom Gorge (zone 184) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 184
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# The gorge's cliffs (cothpiece1-15) are modelled in zone coordinates and placed at the zone's origin
+# with Z = 0. Until 2026-11-03 the converter lifted them onto the ground at the zone's corner, 212 m
+# up: rock mesas floated over the hills, and from the lake bed they hung in the sky.
+overview     311296 320000 16000   0 -35   # the middle of the zone from the south, high: cliffs, lakes
+lake_bed     311296 294912  3500   0  25   # play.sh --zone 184 lands here, on the Central Lake's bed, looking up

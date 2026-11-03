@@ -41,17 +41,19 @@ public static class ZoneExport
         // the flag match the terrain to within ~40 units. So an On Ground object gets the terrain
         // height under its position; the rest keep their Z (a bridgehouse sits 315 below on purpose).
         // A Z of 0 means the ground too, flag or not: across all 87 outdoor zones 287 unflagged rows
-        // have Z = 0, and they are dead trees, coral, catacomb entrances, ant hills and stones.
+        // have Z = 0, and they are dead trees, coral, catacomb entrances, ant hills and stones. Except
+        // at the zone's origin (X = Y = 0): 104 of those rows, in 11 zones, are pieces modelled in zone
+        // coordinates (Cothrom Gorge's cliffs, Aegir's Landing, Caer Sidi) and belong exactly there.
+        // Lifted onto the ground at the zone's corner they floated up to 200 m in the air (2026-11-03).
         ZoneTerrain? terrain = null;
         try { terrain = ZoneTerrain.Read(zoneDatMpk, sizeX, sizeY); }
         catch (Exception e) when (e is FormatException or InvalidDataException or MpkFormatException or KeyNotFoundException) { }
         int grounded = 0;
         float Z(ZoneFixture f)
         {
-            if (!(f.OnGround || f.Z == 0) || terrain is null)
-                return f.Z;
-            grounded++;
-            return terrain.HeightAt(f.X - offsetX, f.Y - offsetY);
+            float z = PlacementZ(f, offsetX, offsetY, terrain is null ? null : terrain.HeightAt);
+            if (z != f.Z) grounded++;
+            return z;
         }
 
         // Ensure each distinct model is in the library (converted once, or an override); the library
@@ -130,6 +132,19 @@ public static class ZoneExport
         if (!mpk.TryGetEntry(name, out MpkEntry entry))
             throw new MpkFormatException($"Zone archive has no member '{name}'.");
         return Encoding.Latin1.GetString(mpk.Extract(entry));
+    }
+
+    /// <summary>
+    /// A placement's height: the terrain under it (<paramref name="groundAt"/>, zone-local X and Y) when
+    /// it is flagged On Ground or stored at Z = 0, except a piece at the zone's origin, which is modelled
+    /// in zone coordinates and keeps its Z (see the rule's notes where it is used).
+    /// </summary>
+    internal static float PlacementZ(ZoneFixture f, int offsetX, int offsetY, Func<float, float, float>? groundAt)
+    {
+        bool zoneSpacePiece = f.X == offsetX && f.Y == offsetY;
+        if (groundAt is null || !(f.OnGround || (f.Z == 0 && !zoneSpacePiece)))
+            return f.Z;
+        return groundAt(f.X - offsetX, f.Y - offsetY);
     }
 }
 

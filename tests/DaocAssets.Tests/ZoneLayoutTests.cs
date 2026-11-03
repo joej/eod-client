@@ -66,6 +66,25 @@ public sealed class ZoneLayoutTests
     }
 
     [Fact]
+    public void PiecesAtTheZoneOriginKeepTheirHeightOthersAtZeroStandOnTheGround()
+    {
+        // Zone offset (8192, 16384); the ground is 500 everywhere. Cothrom Gorge's cliff pieces are
+        // stored at the zone's origin with Z = 0: they are modelled in zone coordinates. Treated like a
+        // Z = 0 tree they were lifted onto the ground at the zone's corner and floated in the air.
+        static float Ground(float x, float y) => 500f;
+        var flagged = new ZoneFixture("keep.nif", "keep", 9000, 17000, 1234, 0, 1, OnGround: true);
+        var zeroTree = new ZoneFixture("tree.nif", "tree", 9000, 17000, 0, 0, 1);
+        var placed = new ZoneFixture("bridge.nif", "bridge", 9000, 17000, 777, 0, 1);
+        var originPiece = new ZoneFixture("cothpiece1.nif", "cothpiece1", 8192, 16384, 0, 0, 1);
+
+        Assert.Equal(500f, ZoneExport.PlacementZ(flagged, 8192, 16384, Ground));
+        Assert.Equal(500f, ZoneExport.PlacementZ(zeroTree, 8192, 16384, Ground));
+        Assert.Equal(777f, ZoneExport.PlacementZ(placed, 8192, 16384, Ground));
+        Assert.Equal(0f, ZoneExport.PlacementZ(originPiece, 8192, 16384, Ground));
+        Assert.Equal(0f, ZoneExport.PlacementZ(zeroTree, 8192, 16384, null));   // no terrain: as stored
+    }
+
+    [Fact]
     public void ReadsTheOnGroundColumn()
     {
         // The real header: ..., Scale, Collide, Collide Radius, Animate, On Ground, Flip, Cave, Unique Id.

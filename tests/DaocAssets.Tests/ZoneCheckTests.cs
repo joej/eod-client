@@ -41,6 +41,24 @@ public sealed class ZoneCheckTests
     }
 
     [Fact]
+    public void APieceAtTheZoneOriginIsJudgedByItsVerticesNotItsBox()
+    {
+        // A 400 m cliff modelled in zone coordinates, placed at the zone's origin (0, 0): it lies over
+        // x 100-500 m (4000-20000 units, partly outside this 8192-unit zone), from 10 m under the
+        // ground to 30 m over it. Ground is 1000 at x < 150 m and 3000 beyond: the origin's ground
+        // says nothing about the ground the piece meets. Its box alone would call it implausibly big.
+        Vector3[] sample = [new(100, 15, 50), new(120, -5, 60), new(160, 50 + 30, 70), new(180, 50 - 10, 80)];
+        var piece = new ModelBounds(new Vector3(100, -10, 0), new Vector3(500, 80, 100), sample);
+        static float Ground(float x, float y) => x < 150 * 40 ? 1000 : 3000;
+        ZoneCheckReport Check(float z) =>
+            ZoneCheck.Check([new ZonePlacement("cliff.glb", 0, 0, z, 0, 1)], Ground, _ => piece, 0, 0, 8192, 8192);
+
+        Assert.Empty(Check(1000).Findings);                                       // meets the ground
+        Assert.Equal("floating", Assert.Single(Check(1000 + 8472).Findings).Kind);  // lifted (the old rule)
+        Assert.Equal("under the ground", Assert.Single(Check(1000 - 8000).Findings).Kind);
+    }
+
+    [Fact]
     public void GeometryBelowTheOriginIsArtNotAPlacementFault()
     {
         // A 40 m tree whose trunk reaches 10 m below its origin (DAoC trees do, to stay planted on
