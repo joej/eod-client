@@ -221,9 +221,11 @@ public sealed class NifFileTests
         // reference it as a texture — not smeared across the untextured towers.
         Assert.Contains("bpaldor1.tga", textured.Select(m => m.TextureFile));
 
-        // glTF side: the base colour reaches the material and no texture bytes are embedded. Read the
+        // glTF side: no texture bytes are embedded, and the tan collision hull doesn't reach the export.
+        // The 38 tan shapes are the keep's collision hull (W3e), all helpers: since 2026-11-03 that
+        // includes mesh133, under a numbered collision node, which used to be drawn (W3f). Read the
         // base-colour factors back out of the written glTF JSON (stable across SharpGLTF's material-
-        // channel API churn) and assert the tan factor is present.
+        // channel API churn).
         var gltf = GltfExporter.BuildScene(model).ToGltf2();
         Assert.Empty(gltf.LogicalImages);
         using var doc = System.Text.Json.JsonDocument.Parse(gltf.GetJsonPreview());
@@ -236,7 +238,8 @@ public sealed class NifFileTests
                     f[0].GetSingle(), f[1].GetSingle(), f[2].GetSingle(), f[3].GetSingle());
             })
             .ToArray();
-        Assert.Contains(factors, f => Near(f, tan));
+        Assert.All(model.Meshes.Where(m => m.BaseColor is { } c && Near(c, tan)), m => Assert.True(m.Helper, m.Name));
+        Assert.DoesNotContain(factors, f => Near(f, tan));
     }
 
     [Fact]
