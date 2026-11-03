@@ -119,7 +119,7 @@ public sealed partial class NifSurvey
             };
         return type switch
         {
-            "NiLODNode" => "near level picked by node name; LOD ranges not read",
+            "NiLODNode" => "nearest level only (smallest near extent; by node name if a node has no ranges)",
             "NiTriShapeData" or "NiTriStripsData" => "vertex colours and extra UV sets dropped",
             "NiTexturingProperty" => "base texture only; dark/detail/gloss/glow/bump/decal slots, " +
                 "apply mode and clamp/filter/UV-set dropped",

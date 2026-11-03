@@ -239,6 +239,54 @@ public sealed class NifFileTests
         Assert.Contains(factors, f => Near(f, tan));
     }
 
+    [Fact]
+    public void A4xLodNodeKeepsTheLevelWithTheNearestRangeNotEveryUnnamedLevel()
+    {
+        // Shaped like HBirchsingle.nif (4.2.1.0): an LOD node whose two levels are named neither near
+        // nor far, the far level first: a flat card picture of the tree, then the tree. Going by name
+        // kept both, and the card was drawn over the tree (Cursed Forest, 2026-11-03).
+        var ms = new MemoryStream();
+        var w = new BinaryWriter(ms);
+        w.Write(System.Text.Encoding.ASCII.GetBytes("NetImmerse File Format, Version 4.2.1.0\n"));
+        w.Write(0x04020100u);
+        w.Write(6u);
+        void Type(string t) { w.Write((uint)t.Length); w.Write(System.Text.Encoding.ASCII.GetBytes(t)); }
+        void Av(string name)
+        {
+            Type(name);                                 // a name is a sized string like a type
+            w.Write(-1); w.Write(-1);                   // extra data, controller
+            w.Write((ushort)0x000C);
+            for (int k = 0; k < 3 + 9; k++) w.Write(k is 3 or 7 or 11 ? 1f : 0f);
+            w.Write(1f);
+            for (int k = 0; k < 3; k++) w.Write(0f);    // velocity
+            w.Write(0u); w.Write((byte)0);              // properties, no bounding volume
+        }
+        void Triangle()
+        {
+            w.Write((ushort)3); w.Write((byte)1);
+            foreach (float v in new[] { 0f, 0, 0, 1, 0, 0, 0, 1, 0 }) w.Write(v);
+            w.Write((byte)0);                           // no normals
+            for (int k = 0; k < 4; k++) w.Write(0f);    // bounding sphere
+            w.Write((byte)0); w.Write((ushort)0);       // no vertex colours, no UV sets
+            w.Write((ushort)1); w.Write(3u);
+            w.Write((ushort)0); w.Write((ushort)1); w.Write((ushort)2);
+            w.Write((ushort)0);                         // match groups
+        }
+        Type("NiNode"); Av("Scene Root"); w.Write(1u); w.Write(1); w.Write(0u);
+        Type("NiLODNode"); Av("lod"); w.Write(2u); w.Write(2); w.Write(4); w.Write(0u);
+        w.Write(0);                                     // NiSwitchNode u32
+        for (int k = 0; k < 3; k++) w.Write(0f);        // LOD centre
+        w.Write(2u); w.Write(500f); w.Write(10000f); w.Write(0f); w.Write(500f);
+        Type("NiTriShape"); Av("card"); w.Write(3); w.Write(-1);
+        Type("NiTriShapeData"); Triangle();
+        Type("NiTriShape"); Av("tree"); w.Write(5); w.Write(-1);
+        Type("NiTriShapeData"); Triangle();
+        w.Write(1u); w.Write(0);                        // footer: one root
+
+        NifModel model = NifFile.Read(ms.ToArray());
+        Assert.Equal("mesh4", Assert.Single(model.Meshes, m => !m.Helper).Name);
+    }
+
     private static bool Near(System.Numerics.Vector4 a, System.Numerics.Vector4 b) =>
         Math.Abs(a.X - b.X) < 0.004 && Math.Abs(a.Y - b.Y) < 0.004
         && Math.Abs(a.Z - b.Z) < 0.004 && Math.Abs(a.W - b.W) < 0.004;

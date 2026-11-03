@@ -109,8 +109,11 @@ inhabitants look like DAoC).
 8. **Smaller**: embedded `NiPixelData` textures (16 files), `NiTextureEffect` environment or projected
    maps (667 files), lights inside models, particle systems (effects; post-MVP).
 
-**Free improvement found:** 4.x `NiLODNode` stores its real distance ranges, and the survey decodes
-them exactly (567 blocks). The reader picks the near level by node name today; it can use the ranges.
+**LOD by range (done 2026-11-03):** 4.x `NiLODNode` stores its real distance ranges, and the survey
+decodes them exactly (567 blocks). The reader now keeps the level with the smallest near extent (by
+name only for a node without ranges). Going by name had kept every level of nodes named neither near
+nor far: 50 converted models drew their far version over the near one (whole buildings twice, e.g.
+`camwall` 36 meshes to 18, and a flat card picture over trees such as Cursed Forest's birches).
 
 **Confirmed safe:** no 4.x scene object in the install carries the optional bounding box, so the
 reader's bail-out on that field never triggers.

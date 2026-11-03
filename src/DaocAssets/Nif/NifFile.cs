@@ -90,6 +90,7 @@ public static partial class NifFile
         public ushort Flags;          // NiAVObject.Flags; bit 0 = Hidden (app-culled, drop subtree)
         public Xform Local = Xform.Identity;
         public int[] Children = [];
+        public float[] LodNear = [];  // NiLODNode -> each level's near extent (same order as Children)
         public int DataRef = -1;      // NiTriShape -> its NiTriShapeData/NiTriStripsData block
         public int[] Props = [];      // NiTriShape -> its property refs (one is a NiTexturingProperty)
         public int BaseTextureRef = -1; // NiTexturingProperty -> its base NiSourceTexture block
@@ -131,6 +132,8 @@ public static partial class NifFile
                         var ch = new int[Math.Clamp(nch, 0, 100000)];
                         for (int k = 0; k < ch.Length; k++) ch[k] = c.I32();
                         b.Children = ch;
+                        if (b.Type == "NiLODNode")
+                            b.LodNear = ReadLodRanges(ref c);
                     }
                     break;
                 case "NiTriShape":
@@ -236,7 +239,7 @@ public static partial class NifFile
             // in the name (BarnLODfar, keepFar, BTavernFar); the near child is "near"/"visible". We
             // can't read the NiRangeLODData ranges here, so we select by that naming, and fall back to
             // the first child if none is clearly "near". NiRangeLODData itself isn't a renderable child.
-            int[] children = b.Type == "NiLODNode" ? SelectLodChildren(blocks, b.Children) : b.Children;
+            int[] children = b.Type == "NiLODNode" ? SelectLodChildren(blocks, b) : b.Children;
             int nodeAlpha = FindProperty(blocks, b.Props, "NiAlphaProperty", alpha);
             int nodeStencil = FindProperty(blocks, b.Props, "NiStencilProperty", stencil);
             foreach (int child in children)
@@ -285,7 +288,47 @@ public static partial class NifFile
     // far level with "far" (BarnLODfar/keepFar/BTavernFar); the near level is "near"/"visible". Prefer a
     // child whose name marks it near; otherwise keep every child that is NOT a far level (so a model
     // without the naming convention is unchanged); if that leaves nothing, keep the first child.
-    private static int[] SelectLodChildren(Block[] blocks, int[] children)
+    // NiLODNode after the children (4.x, as NifSurvey decodes it): effects list, NiSwitchNode's u32,
+    // LOD Center, then each level's near/far extent. Empty if it doesn't read cleanly.
+    private static float[] ReadLodRanges(ref NifCursor c)
+    {
+        try
+        {
+            uint effects = c.U32();
+            if (effects > 1000) return [];
+            for (int k = 0; k < effects; k++) c.I32();
+            c.I32();
+            c.Vec3();
+            uint levels = c.U32();
+            if (levels > 64) return [];
+            var near = new float[levels];
+            for (int l = 0; l < levels; l++) { near[l] = c.F32(); c.F32(); }
+            return near;
+        }
+        catch (NifFormatException)
+        {
+            return [];
+        }
+    }
+
+    // An LOD node draws one child at a time; we keep the nearest. With LOD ranges (every 4.x LOD node
+    // in the install has them) that is the child with the smallest near extent. Until 2026-11-03 we
+    // went by name only, and children named neither near nor far (HBirchsingle, HOldGrove: the tree
+    // and a flat far-distance card picture of it) were all kept, drawing the card over the tree.
+    private static int[] SelectLodChildren(Block[] blocks, Block lod)
+    {
+        int[] children = lod.Children;
+        if (lod.LodNear.Length == children.Length && children.Length > 1)
+        {
+            int best = 0;
+            for (int i = 1; i < children.Length; i++)
+                if (lod.LodNear[i] < lod.LodNear[best]) best = i;
+            return [children[best]];
+        }
+        return SelectLodChildrenByName(blocks, children);
+    }
+
+    private static int[] SelectLodChildrenByName(Block[] blocks, int[] children)
     {
         static bool IsFar(string n) => n.Contains("far", StringComparison.OrdinalIgnoreCase);
         static bool IsNear(string n) =>
