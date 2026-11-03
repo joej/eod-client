@@ -455,7 +455,13 @@ public partial class WorldView : Node3D
                 // triangles face up, with normals from the heightmap, since 2026-11-03). Green only
                 // where no tile was applied.
                 if (mi.GetSurfaceOverrideMaterial(s) is BaseMaterial3D tile)
+                {
                     tile.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
+                    // Each tile's UVs run exactly 0..1, edge to edge. With the default repeat, filtering
+                    // and mipmaps at a tile's edge blend in the texture's OPPOSITE edge: thin lines
+                    // along every tile border, clearest at low angles (W21). Clamp instead.
+                    tile.TextureRepeat = false;
+                }
                 else
                     mi.SetSurfaceOverrideMaterial(s, green);
             }
