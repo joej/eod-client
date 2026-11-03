@@ -90,6 +90,7 @@ public sealed partial class NifSurvey
         return type switch
         {
             "NiNode" or "NiTriShape" or "NiTriStrips" or "NiAlphaProperty" => NifCoverage.Handled,
+            "NiBillboardNode" => NifCoverage.Partial,
             "NiLODNode" or "NiTriShapeData" or "NiTriStripsData" or "NiTexturingProperty"
                 or "NiSourceTexture" or "NiMaterialProperty" or "NiStencilProperty" => NifCoverage.Partial,
             _ => NifCoverage.Unhandled,
@@ -120,6 +121,7 @@ public sealed partial class NifSurvey
         return type switch
         {
             "NiLODNode" => "nearest level only (smallest near extent; by node name if a node has no ranges)",
+            "NiBillboardNode" => "walked as a plain node: keeps its stored orientation, doesn't face the camera",
             "NiTriShapeData" or "NiTriStripsData" => "vertex colours and extra UV sets dropped",
             "NiTexturingProperty" => "base texture only; dark/detail/gloss/glow/bump/decal slots, " +
                 "apply mode and clamp/filter/UV-set dropped",

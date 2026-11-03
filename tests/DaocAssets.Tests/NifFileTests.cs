@@ -291,6 +291,55 @@ public sealed class NifFileTests
     }
 
     [Fact]
+    public void AFarLevelUnderABillboardNodeIsLeftOutNotLaidFlatOnTheGround()
+    {
+        // Shaped like BSpanMoss.nif (4.2.1.0): an LOD node whose far level is a NiBillboardNode holding
+        // a picture card of the tree. The reader didn't know billboard nodes, so the card looked outside
+        // the hierarchy and a fallback added it at its raw transform: a flat tree picture on the ground
+        // under every such tree (Vanern Swamp, Cursed Forest, 2026-11-03).
+        var ms = new MemoryStream();
+        var w = new BinaryWriter(ms);
+        w.Write(System.Text.Encoding.ASCII.GetBytes("NetImmerse File Format, Version 4.2.1.0\n"));
+        w.Write(0x04020100u);
+        w.Write(7u);
+        void Sized(string t) { w.Write((uint)t.Length); w.Write(System.Text.Encoding.ASCII.GetBytes(t)); }
+        void Av(string name)
+        {
+            Sized(name);
+            w.Write(-1); w.Write(-1);
+            w.Write((ushort)0x000C);
+            for (int k = 0; k < 3 + 9; k++) w.Write(k is 3 or 7 or 11 ? 1f : 0f);
+            w.Write(1f);
+            for (int k = 0; k < 3; k++) w.Write(0f);
+            w.Write(0u); w.Write((byte)0);
+        }
+        void Triangle()
+        {
+            w.Write((ushort)3); w.Write((byte)1);
+            foreach (float v in new[] { 0f, 0, 0, 1, 0, 0, 0, 1, 0 }) w.Write(v);
+            w.Write((byte)0);
+            for (int k = 0; k < 4; k++) w.Write(0f);
+            w.Write((byte)0); w.Write((ushort)0);
+            w.Write((ushort)1); w.Write(3u);
+            w.Write((ushort)0); w.Write((ushort)1); w.Write((ushort)2);
+            w.Write((ushort)0);
+        }
+        Sized("NiNode"); Av("Scene Root"); w.Write(1u); w.Write(1); w.Write(0u);                    // 0
+        Sized("NiLODNode"); Av("lod"); w.Write(2u); w.Write(2); w.Write(4); w.Write(0u);             // 1
+        w.Write(0); for (int k = 0; k < 3; k++) w.Write(0f);
+        w.Write(2u); w.Write(0f); w.Write(500f); w.Write(500f); w.Write(10000f);                      // near, then far
+        Sized("NiTriShape"); Av("tree"); w.Write(3); w.Write(-1);                                     // 2
+        Sized("NiTriShapeData"); Triangle();                                                           // 3
+        Sized("NiBillboardNode"); Av("treeF"); w.Write(1u); w.Write(5); w.Write(0u); w.Write((ushort)0);  // 4
+        Sized("NiTriShape"); Av("card"); w.Write(6); w.Write(-1);                                     // 5
+        Sized("NiTriShapeData"); Triangle();                                                           // 6
+        w.Write(1u); w.Write(0);
+
+        NifModel model = NifFile.Read(ms.ToArray());
+        Assert.Equal("mesh2", Assert.Single(model.Meshes, m => !m.Helper).Name);
+    }
+
+    [Fact]
     public void AnUntexturedShapeUnderANumberedClimbNodeIsHidden()
     {
         // A ladder's climb panel: untextured, under "climb001". The exact-name rule (`climb`) missed it,

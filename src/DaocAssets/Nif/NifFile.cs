@@ -122,6 +122,9 @@ public static partial class NifFile
             {
                 case "NiNode":
                 case "NiLODNode":
+                case "NiBillboardNode":   // a NiNode whose layout differs only after the children
+                                          // (billboard mode); until 2026-11-03 unread, so the far-level
+                                          // picture cards under it lay flat on the ground (BSpanMoss)
                     if (TryReadAvObject(ref c, out Xform nx, out int[] nprops, out string nname, out ushort nflags))
                     {
                         b.Name = nname;
@@ -231,8 +234,11 @@ public static partial class NifFile
         Xform w = world.Compose(b.Local);
         bool underHelper = helper || IsHelperNodeName(b.Name) || IsHidden(b.Flags);
         bool underNumbered = numberedHelper || IsNumberedHelperName(b.Name);
-        if (b.Type is "NiNode" or "NiLODNode")
+        if (b.Type is "NiNode" or "NiLODNode" or "NiBillboardNode")
         {
+            // A billboard node is walked like a plain node: it keeps its stored orientation instead of
+            // turning to the camera. In DAoC's trees it holds the far LOD level's picture card, which
+            // the LOD selection then leaves out.
             // A NiLODNode holds alternative detail levels of the same object; the engine draws exactly
             // ONE child, by distance. We bake a single static mesh, so drawing every level stacks the
             // near and far geometry and they z-fight. Keep only the nearest level (SelectLodChildren:

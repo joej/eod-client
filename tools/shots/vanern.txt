@@ -1,0 +1,6 @@
+# Fixed camera poses in Vanern Swamp (zone 107) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 107
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# BSpanMoss trees: until 2026-11-03 their far-level picture card (under a NiBillboardNode the 4.x
+# reader didn't walk) lay flat on the ground beside each tree, as a tree-shaped picture.
+spanmoss     651008 888896 2424   0 -15   # a Spanish-moss tree from the south
