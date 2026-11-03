@@ -74,10 +74,14 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 | Folder | Contents | Roadmap |
 |---|---|---|
 | `anims/` | 4,060 `.kfa` animations | M7b (audit the format first) |
-| `light/` | `.tra`, `.col`, `.pcx`: probably day/night lighting tables (unconfirmed) | M13 |
+| `light/` | `SYSPAL.PCX`, `SYSTEM.COL`, `TRAN555/565.TRA`: legacy palette/translucency tables, not referenced by the client (checked 2026-11-03). Day/night lighting comes from `terrain/lights.csv` and the zones' light settings | none |
 | `zones/sky/` | `sky.mpk` (25 `sky_<name>.dat`: sun, moon, stars, cloud layers, per weather × time of day canopy and cloud gradients, ambient/sun light, fog colour, storms, rain, snow) and its textures | M7d (day), M13 (clock, weather) |
 | `zones/zones.mpk` | `zones.dat`: every zone's name, region, offsets, size, type, entry music, sky; each region's sky, grass (`grass_alb.csv`/`.dds`) and expansion | M7d, M8, M12 |
-| `water/` | water textures and 3 NIFs | M7d |
+| `water/` | the shader water's parts (2026-11-03): always loaded `lavabase/lavadetail/lavaglow.dds`, `water_wake.dds`, `footsplash.NIF`, `lava1/2_sfx.NIF`; Shrouded Isles and Reflective water add `Displacement1.bmp`, `Droplet1.bmp`; Reflective adds `bump3.tga`. `acidcloud/flame000/hotglow.tga`: no known user. Modes and settings: open question W24 | M12 |
+| `.nhd` files (1,087: beside zone models in `zones/Nifs/`, in `frontiers/nifs/`, and per city piece) | **weather cover grids**, not walk heights: per model, where rain and snow are blocked (drop spawn height, and hiding drops under a roof). Format: `NHD`, u16 version 1, u16 name length + name, u16 cell size (model units), i32 x0, x1, y0, y1 (cells), then (x1−x0)×(y1−y0) i16 heights, row-major; −2500 = no surface. Loaded for any zone model whose `.nhd` exists beside it (no CSV column). Nothing in movement or collision reads them: walking on objects (M9) needs the models' collision geometry. Sign of the heights in model Z: to confirm visually | M13 (weather) |
+| `stylemap/` | weapon swing trails (`metaledge.bmp` generic, `flameedge.bmp` flame; IDs in `gamedata.mpk` `stylemap.csv`), `SHADOW.BMP` (shadow texture, likely the blob shadow), `target.bmp` (ground-target spell ring), `cloak.nif` (a template model; user not traced) | M10 |
+| `charman/` | `names.dat`: the random name generator (`[<race>-first/second/third]` fragment lists). `summary.mpk`, `startlocs.mpk` (class and start-location texts): not referenced, leftovers of an old character creation | character screen |
+| `shaders/` | `vcalphatextureblender.nsb`: a shader a NIF material can name (per material, not a global switch); which NIFs use it, and any tie to Atlantis terrain (W8), unchecked | M12 |
 | `effects/` | 1,575 effect NIFs, 573 DDS | M13 |
 | `sounds/` | 2,703 `.wav`, 49 music `.mp3`, 12 CSVs | M13 |
 | `ui/` | 151 XML layouts, 502 DDS, fonts | M9 (UI direction), later |

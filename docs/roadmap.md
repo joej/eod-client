@@ -431,8 +431,9 @@ Enabling work (do the small part before override content piles up):
 
 ### M13 — Atmosphere: effects, sound and music
 *The world moves and makes noise.*
-- **Day and night**, and weather: the client's `light/` folder holds lighting tables (`.tra`, `.col`;
-  unconfirmed) and the server sends the time.
+- **Day and night**, and weather: lighting from `terrain/lights.csv` and the zones' light settings
+  (the `light/` folder is legacy and unused), and the server sends the time. Rain and snow stop under
+  roofs by each model's `.nhd` cover grid (`docs/world-coverage.md`).
 - **Spell and visual effects**: 1,575 effect NIFs, particles (unhandled in the NIF audit), UV-scrolling
   and keyframe animation; doors and windmills.
 - **Sound and music**: `sounds/` (2,703 `.wav`, 49 music `.mp3`, 12 CSVs) and each zone's `sounds.dat`
