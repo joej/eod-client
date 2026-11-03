@@ -58,6 +58,9 @@ internal static class Cli
         if (command == "zonedeps")
             return ZoneDepsCmd(args);
 
+        if (command == "figure")
+            return FigureCmd(args);
+
         string inputPath = args[1];
         if (!File.Exists(inputPath))
         {
@@ -491,6 +494,43 @@ internal static class Cli
     // into the library, always afresh. One step, one result, for the Makefile: prints one status
     // line; exit 0 converted / override / unsupported (a NIF form the reader doesn't take: recorded,
     // not an error), 1 failed (a converter bug), 3 not in the install.
+    // A server model id as the client draws it (classic figures): the figure file with one variant per
+    // body slot, each wearing its skin from gamedata.mpk; written to the library as model<id>.glb.
+    private static int FigureCmd(string[] args)
+    {
+        if (args.Length < 2 || !int.TryParse(args[1], out int modelId)) return Usage();
+        string? gamedata = null, indexPath = null, libDir = null;
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] == "--gamedata" && i + 1 < args.Length) gamedata = args[++i];
+            else if (args[i] == "--index" && i + 1 < args.Length) indexPath = args[++i];
+            else if (args[i] == "--library" && i + 1 < args.Length) libDir = args[++i];
+            else return Usage();
+        }
+        if (gamedata is null || indexPath is null || libDir is null) return Usage();
+
+        DaocAssets.Figures.FigureSpec? spec = DaocAssets.Figures.MonsterTables.Read(gamedata).Resolve(modelId);
+        if (spec is null) { Console.Error.WriteLine($"figure: no model {modelId} in gamedata.mpk"); return 3; }
+        if (spec.Version >= 3) { Console.Error.WriteLine($"figure: model {modelId} ({spec.Name}) is a Catacombs figure, not supported yet"); return 2; }
+
+        var index = AssetIndex.Load(indexPath);
+        byte[]? bytes = index.Read(spec.Nif);
+        if (bytes is null) { Console.Error.WriteLine($"figure: {spec.Nif} is not in the install index"); return 3; }
+        NifModel dressed = DaocAssets.Figures.MonsterFigure.Dress(NifFile.Read(bytes), spec);
+
+        var library = new AssetLibrary(index, libDir);
+        foreach (string skin in spec.Skins.Values.Distinct(StringComparer.OrdinalIgnoreCase))
+            if (library.GatherTexture(skin) is null)
+                Console.Error.WriteLine($"  skin {skin}: not found");
+        string outPath = Path.Combine(libDir, "models", $"model{modelId}.glb");
+        Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
+        GltfExporter.SaveGlb(dressed, outPath);
+        int parts = dressed.Meshes.Count(m => !m.Helper);
+        Console.WriteLine($"figure {modelId} ({spec.Name}): {spec.Nif}, {parts} parts, scale {spec.Scale:0.##}, " +
+            $"skins {string.Join(" ", spec.Skins.Select(kv => kv.Key + "=" + kv.Value))} -> {outPath}");
+        return 0;
+    }
+
     private static int ModelCmd(string[] args)
     {
         string name = args[1];
@@ -902,6 +942,7 @@ internal static class Cli
               mpk textures <client-dir> <model.nif | dir-of-nifs> --out DIR
               mpk index    <client-dir> --out index.json
               mpk model    <name.nif> --index index.json --library LIBDIR
+              mpk figure   <model-id> --gamedata gamedata.mpk --index index.json --library LIBDIR
               mpk zonedeps <dat<NNN>.mpk> --index index.json --var NAME
               mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR [--size W H]
               mpk terrain  <dat<NNN>.mpk> --offset X Y --out FILE.glb [--size W H] [--tiles N] [--index index.json --library LIBDIR]
