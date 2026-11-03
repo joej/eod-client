@@ -19,6 +19,12 @@ questions. Reviewed 2026-11-03 against `godot/project.godot` and `godot/scripts/
   trimesh collision for the ground and the camera spring arm.
 - **Frame rate** in the status line (dev overlay), to judge each of these by its cost.
 
+**Measured 2026-11-03** (owner, live, Apple M2, maximized 1920-wide window, 4x MSAA, sun shadows on,
+view distance x4): 60 fps (the display's cap) in towns and open land; 50 fps over Vigilant Rock's
+forested hills; 31 fps at the worst spot in dense forest. Playable everywhere; the dense-forest cost
+is leaf overdraw, shadow cascades and ~1,800 separate objects, which MultiMesh instancing (below)
+addresses, and the x4 view distance (classic is x1).
+
 ## Not used yet
 
 | Feature | What it would give us | Where |
