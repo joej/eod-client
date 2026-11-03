@@ -128,6 +128,10 @@ public partial class WorldView : Node3D
         public Vector3 TargetPosition;
         public float TargetYaw;
         public double Age;            // seconds since spawn, for a brief "is this real" grace period
+        public AnimationPlayer? Player;   // a DAoC figure's clips (idle, walk, run), or null for a capsule
+        public string Clip = "";
+        public Vector3 LastPosition;
+        public float Speed;           // smoothed metres per second, to pick the clip
     }
 
     /// <summary>Raised when the player presses Quit (connected).</summary>
@@ -1444,7 +1448,7 @@ public partial class WorldView : Node3D
     private void OnNpcSpawned(NpcCreate npc)
     {
         Vector3 pos = ToGodot(npc.X, npc.Y, npc.Z);
-        SpawnEntity(npc.ObjectId, pos, -HeadingRadians(npc.HeadingOnly), RealmColor(npc.Flags >> 6));
+        SpawnEntity(npc.ObjectId, pos, -HeadingRadians(npc.HeadingOnly), RealmColor(npc.Flags >> 6), npc.Model, npc.Size);
     }
 
     private void OnPlayerSpawned(PlayerCreate p)
@@ -1552,7 +1556,7 @@ public partial class WorldView : Node3D
         _ => new Color(0.55f, 0.55f, 0.6f), // neutral
     };
 
-    private void SpawnEntity(ushort objectId, Vector3 pos, float yaw, Color color)
+    private void SpawnEntity(ushort objectId, Vector3 pos, float yaw, Color color, ushort model = 0, byte size = 50)
     {
         // Free any node we already have for this id before replacing it. This happens normally: an
         // entity first seen via a bare 0xA1 update spawns grey (OnObjectMoved), then its 0xDA/0x4B
@@ -1563,14 +1567,83 @@ public partial class WorldView : Node3D
             existing.Node.QueueFree();
 
         var node = new Node3D { Position = pos, Rotation = new Vector3(0, yaw, 0) };
-        node.AddChild(new MeshInstance3D
+        AnimationPlayer? player = null;
+        if (model != 0 && Figure(model) is { } figure)
         {
-            Mesh = new CapsuleMesh { Radius = 0.4f, Height = 2f },
-            Position = new Vector3(0, 1, 0),
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = color },
-        });
+            // The server's model id is the client's monsters.csv row; mpk figures converted it to
+            // models/model<id>.glb. Size 50 is normal; the table's own scale applies on top.
+            var inst = (Node3D)figure.Template.Duplicate();
+            float scale = figure.Scale * Mathf.Max(size, 1) / 50f;
+            inst.Scale = new Vector3(scale, scale, scale);
+            node.AddChild(inst);
+            player = inst.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() as AnimationPlayer;
+        }
+        else
+        {
+            node.AddChild(new MeshInstance3D
+            {
+                Mesh = new CapsuleMesh { Radius = 0.4f, Height = 2f },
+                Position = new Vector3(0, 1, 0),
+                MaterialOverride = new StandardMaterial3D { AlbedoColor = color },
+            });
+        }
         _entityRoot.AddChild(node);
-        _entities[objectId] = new Entity { Node = node, TargetPosition = pos, TargetYaw = yaw };
+        var entity = new Entity { Node = node, TargetPosition = pos, TargetYaw = yaw, Player = player, LastPosition = pos };
+        _entities[objectId] = entity;
+        PlayClip(entity, "idle");
+    }
+
+    // A figure's clip, looping; a no-op for a capsule or a clip the figure lacks.
+    private static void PlayClip(Entity e, string clip)
+    {
+        if (e.Player is null || e.Clip == clip || !e.Player.HasAnimation(clip))
+            return;
+        e.Player.GetAnimation(clip).LoopMode = Animation.LoopModeEnum.Linear;
+        e.Player.Play(clip, customBlend: 0.2);
+        e.Clip = clip;
+    }
+
+    // Converted figures by model id (null: none for that id), loaded once each and duplicated per NPC.
+    private readonly Dictionary<ushort, (Node3D Template, float Scale)?> _figures = new();
+    private Dictionary<int, float>? _figureScales;
+
+    private (Node3D Template, float Scale)? Figure(ushort model)
+    {
+        if (_figures.TryGetValue(model, out var cached))
+            return cached;
+        (Node3D, float)? result = null;
+        string lib = string.IsNullOrEmpty(_libraryPath) ? "" : _libraryPath;
+        _figureScales ??= ReadFigureScales(lib.PathJoin("models").PathJoin("figures.csv"));
+        string path = lib.PathJoin("models").PathJoin($"model{model}.glb");
+        if (lib.Length > 0 && _figureScales.TryGetValue(model, out float scale) && Godot.FileAccess.FileExists(path))
+        {
+            var doc = new GltfDocument();
+            var state = new GltfState();
+            if (doc.AppendFromFile(path, state) == Error.Ok && doc.GenerateScene(state) is Node3D m)
+            {
+                ModelTexturing.TagLayers(state);
+                ModelTexturing.Apply(m, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
+                result = (m, scale);
+            }
+        }
+        _figures[model] = result;
+        return result;
+    }
+
+    // models/figures.csv (written by mpk figures): "id,scale,figure" per converted model id.
+    private static Dictionary<int, float> ReadFigureScales(string path)
+    {
+        var scales = new Dictionary<int, float>();
+        if (!Godot.FileAccess.FileExists(path))
+            return scales;
+        foreach (string line in Godot.FileAccess.GetFileAsString(path).Split('\n'))
+        {
+            string[] c = line.Split(',');
+            if (c.Length >= 2 && int.TryParse(c[0], out int id)
+                && float.TryParse(c[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float s))
+                scales[id] = s;
+        }
+        return scales;
     }
 
     // Ease each entity toward the last position/facing the server reported. The per-NPC update rate
@@ -1585,6 +1658,17 @@ public partial class WorldView : Node3D
             e.Node.Position = e.Node.Position.Lerp(e.TargetPosition, t);
             float yaw = e.Node.Rotation.Y;
             e.Node.Rotation = new Vector3(0, yaw + Mathf.AngleDifference(yaw, e.TargetYaw) * t, 0);
+
+            // The clip follows how fast the figure is gliding (metres per second, smoothed): DAoC's
+            // walk is about 2 m/s, its run about 4.8.
+            if (e.Player is not null && delta > 0)
+            {
+                Vector3 step = e.Node.Position - e.LastPosition;
+                step.Y = 0;
+                e.Speed = Mathf.Lerp(e.Speed, step.Length() / (float)delta, Mathf.Min(1f, (float)delta * 4f));
+                e.LastPosition = e.Node.Position;
+                PlayClip(e, e.Speed > 3.2f ? "run" : e.Speed > 0.4f ? "walk" : "idle");
+            }
         }
     }
 
@@ -1613,6 +1697,11 @@ public partial class WorldView : Node3D
         else
             UpdateDebugCamera(delta);
         _seconds += delta;
+        // First what the session passed over while entering the world or moving us (the NPCs announced
+        // then), then the connection's own queue.
+        if (_draining && _session is not null)
+            foreach (ServerPacket skipped in _session.TakeSkipped())
+                _bridge.Dispatch(skipped);
         while (_draining && _connection is not null && _connection.TryReceive(out ServerPacket packet))
             _bridge.Dispatch(packet);
         _packets = _bridge.PacketCount;
@@ -1630,7 +1719,7 @@ public partial class WorldView : Node3D
         _dev.Status =
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
             (AssetsNote.Length > 0 ? AssetsNote + "\n" : "") +
-            $"{Engine.GetFramesPerSecond():0} fps   {_seconds:0} s in world   {_packets} packets   {_pings} ping replies   {_entities.Count} entities   {_chatReceived} chat   " +
+            $"{Engine.GetFramesPerSecond():0} fps   {_seconds:0} s in world   {_packets} packets   {_pings} ping replies   {_entities.Count} entities ({_entities.Values.Count(e => e.Player is not null)} figures)   {_chatReceived} chat   " +
             (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + "\n" +
             $"W {(Input.IsKeyPressed(Key.W) ? 1 : 0)} S {(Input.IsKeyPressed(Key.S) ? 1 : 0)} " +
             $"A {(Input.IsKeyPressed(Key.A) ? 1 : 0)} D {(Input.IsKeyPressed(Key.D) ? 1 : 0)}   " +

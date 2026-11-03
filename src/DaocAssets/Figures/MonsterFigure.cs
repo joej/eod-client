@@ -77,6 +77,9 @@ public sealed class MonsterTables
             ById(animsCsv), ById(animnifsCsv));
     }
 
+    /// <summary>Every model id in monsters.csv, in order.</summary>
+    public IEnumerable<int> ModelIds => _monsters.Keys.Order();
+
     /// <summary>The figure for server model id <paramref name="modelId"/>, or null if a table lacks it.</summary>
     public FigureSpec? Resolve(int modelId)
     {

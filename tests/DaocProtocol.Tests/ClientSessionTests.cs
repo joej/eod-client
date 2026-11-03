@@ -373,6 +373,30 @@ public class ClientSessionTests
     }
 
     [Fact]
+    public async Task TheWorldPacketsPassedOverDuringEntryAreKeptForTheWorldView()
+    {
+        // The recorded entry burst (0xD4 -> packets 10-36) holds more than the 0x20 and 0x4E the session
+        // waits for: object creates and state the world view must see. Until 2026-11-03 they were
+        // dropped, so NPCs announced during entry never appeared as themselves.
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await session.GetCharactersAsync(Realm.Albion);
+            Assert.Empty(session.TakeSkipped());   // nothing kept before the world
+
+            await session.EnterWorldAsync(Realm.Albion, slot: 0);
+            byte[] expected = Recorded[10..37].Select(p => p.Code)
+                .Where(c => c is not PositionAndObjectId.Code and not WorldInitRequest.EndOfBurstCode).ToArray();
+            Assert.NotEmpty(expected);
+            Assert.Equal(expected, session.TakeSkipped().Where(p => p.Code != PingRequest.ReplyCode).Select(p => p.Code).ToArray());
+            Assert.Empty(session.TakeSkipped());   // handed over once
+        }
+    }
+
+    [Fact]
     public async Task MoveToSendsOneUpdateAtTheNewPositionAndAdvancesWorld()
     {
         await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));

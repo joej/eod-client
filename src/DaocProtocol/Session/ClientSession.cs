@@ -46,6 +46,24 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     private readonly Dictionary<Realm, CharacterOverview> _overviews = [];
     private Realm _lastListedRealm;
     private (Realm Realm, int Slot) _inWorldAs;
+    private readonly List<ServerPacket> _skipped = [];
+    private bool _enteringWorld;
+    private const int MaxSkipped = 10_000;
+
+    /// <summary>
+    /// The world packets a session method passed over while it waited for its reply (world entry, a
+    /// jump, a region change): NPC and player creates, positions, chat. The world view processes these
+    /// before its own reads, or it would never see the NPCs announced during entry. Clears the list.
+    /// </summary>
+    public IReadOnlyList<ServerPacket> TakeSkipped()
+    {
+        lock (_skipped)
+        {
+            ServerPacket[] taken = [.. _skipped];
+            _skipped.Clear();
+            return taken;
+        }
+    }
     // Taken while checking the state and sending a 0xA9, and while entering Relocating and sending
     // the move: otherwise a heartbeat that saw "in world" could send the old position just after
     // the /jump, and the server, handling packets in order, would move us back.
@@ -197,6 +215,15 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// </summary>
     private async Task<WorldPosition> InitWorldAsync(CancellationToken cancellationToken)
     {
+        _enteringWorld = true;
+        try { return await InitWorldCoreAsync(cancellationToken).ConfigureAwait(false); }
+        finally { _enteringWorld = false; }
+    }
+
+    private async Task<WorldPosition> InitWorldCoreAsync(CancellationToken cancellationToken)
+    {
+        // A new world entry (login or a region change): what was skipped before belongs to the old one.
+        lock (_skipped) _skipped.Clear();
         (Realm realm, int slot) = _inWorldAs;
         await connection.SendAsync(WorldInitRequest.Code, WorldInitRequest.Payload(realm, slot), cancellationToken).ConfigureAwait(false);
         PositionAndObjectId position = PositionAndObjectId.Parse((await ExpectAsync(cancellationToken, PositionAndObjectId.Code).ConfigureAwait(false)).Payload);
@@ -469,6 +496,10 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
                 ServerPacket packet = await connection.ReceiveAsync(timeout.Token).ConfigureAwait(false);
                 if (codes.Contains(packet.Code))
                     return packet;
+                // Not the reply: kept in the world (NPC creates, positions, chat that arrive during
+                // world entry or a move), for whoever handles world packets to take with TakeSkipped.
+                if (State is SessionState.InWorld or SessionState.Relocating || _enteringWorld)
+                    lock (_skipped) { if (_skipped.Count < MaxSkipped) _skipped.Add(packet); }
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)

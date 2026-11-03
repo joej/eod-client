@@ -61,6 +61,9 @@ internal static class Cli
         if (command == "figure")
             return FigureCmd(args);
 
+        if (command == "figures")
+            return FiguresCmd(args);
+
         string inputPath = args[1];
         if (!File.Exists(inputPath))
         {
@@ -547,6 +550,85 @@ internal static class Cli
         return 0;
     }
 
+    // Every classic-figure model id in monsters.csv as models/model<id>.glb, plus models/figures.csv
+    // (id, scale, figure) for the client. Figure files and clips are read once each.
+    private static int FiguresCmd(string[] args)
+    {
+        string? gamedata = null, indexPath = null, libDir = null;
+        for (int i = 1; i < args.Length; i++)
+        {
+            if (args[i] == "--gamedata" && i + 1 < args.Length) gamedata = args[++i];
+            else if (args[i] == "--index" && i + 1 < args.Length) indexPath = args[++i];
+            else if (args[i] == "--library" && i + 1 < args.Length) libDir = args[++i];
+            else return Usage();
+        }
+        if (gamedata is null || indexPath is null || libDir is null) return Usage();
+
+        var tables = DaocAssets.Figures.MonsterTables.Read(gamedata);
+        var index = AssetIndex.Load(indexPath);
+        var library = new AssetLibrary(index, libDir);
+        string install = Path.GetDirectoryName(Path.GetFullPath(gamedata))!;
+        string animNode = Path.Combine(install, "figures", "animnode.dat");
+        string[] boneNames = File.Exists(animNode)
+            ? File.ReadAllLines(animNode, System.Text.Encoding.Latin1).Select(l => l.Trim()).ToArray() : [];
+        var animFiles = Directory.Exists(Path.Combine(install, "anims"))
+            ? Directory.EnumerateFiles(Path.Combine(install, "anims")).ToDictionary(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var figures = new Dictionary<string, NifModel?>(StringComparer.OrdinalIgnoreCase);
+        var clipCache = new Dictionary<string, KfaClip?>(StringComparer.OrdinalIgnoreCase);
+        var skins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string models = Path.Combine(libDir, "models");
+        Directory.CreateDirectory(models);
+        var table = new System.Text.StringBuilder("id,scale,figure\n");
+        int made = 0, catacombs = 0, missing = 0, failed = 0;
+        foreach (int id in tables.ModelIds)
+        {
+            DaocAssets.Figures.FigureSpec? spec = tables.Resolve(id);
+            if (spec is null) { missing++; continue; }
+            if (spec.Version >= 3) { catacombs++; continue; }
+            if (!figures.TryGetValue(spec.Nif, out NifModel? figure))
+            {
+                try { figure = index.Read(spec.Nif) is byte[] b ? NifFile.Read(b) : null; }
+                catch (NifFormatException) { figure = null; }
+                figures[spec.Nif] = figure;
+            }
+            if (figure is null || figure.Joints.Count == 0) { missing++; continue; }
+            var clips = new Dictionary<string, KfaClip>();
+            foreach ((string clip, string kfa) in spec.Clips)
+            {
+                if (!clipCache.TryGetValue(kfa, out KfaClip? k))
+                {
+                    try { k = animFiles.TryGetValue(kfa, out string? path) ? KfaClip.Read(File.ReadAllBytes(path), boneNames) : null; }
+                    catch (NifFormatException) { k = null; }
+                    clipCache[kfa] = k;
+                }
+                if (k is not null) clips[clip] = k;
+            }
+            try
+            {
+                NifModel dressed = DaocAssets.Figures.MonsterFigure.Dress(figure, spec);
+                string outPath = Path.Combine(models, $"model{id}.glb");
+                GltfExporter.SaveGlb(dressed, outPath + ".tmp", clips);
+                File.Move(outPath + ".tmp", outPath, overwrite: true);
+                foreach (string skin in spec.Skins.Values)
+                    if (skins.Add(skin)) library.GatherTexture(skin);
+                table.Append(System.FormattableString.Invariant($"{id},{spec.Scale},{Path.GetFileNameWithoutExtension(spec.Nif)}\n"));
+                made++;
+            }
+            catch (Exception e) when (e is NifFormatException or InvalidOperationException or ArgumentException)
+            {
+                failed++;
+                Console.Error.WriteLine($"  model {id} ({spec.Name}): {e.Message}");
+            }
+        }
+        File.WriteAllText(Path.Combine(models, "figures.csv"), table.ToString());
+        Console.WriteLine($"figures: {made} model ids converted ({figures.Count(f => f.Value is not null)} figure files, " +
+            $"{clipCache.Count(c => c.Value is not null)} clips, {skins.Count} skins); {catacombs} Catacombs (not yet), " +
+            $"{missing} without a figure, {failed} failed");
+        return failed == 0 ? 0 : 1;
+    }
+
     private static int ModelCmd(string[] args)
     {
         string name = args[1];
@@ -959,6 +1041,7 @@ internal static class Cli
               mpk index    <client-dir> --out index.json
               mpk model    <name.nif> --index index.json --library LIBDIR
               mpk figure   <model-id> --gamedata gamedata.mpk --index index.json --library LIBDIR
+              mpk figures  --gamedata gamedata.mpk --index index.json --library LIBDIR   (every classic model id)
               mpk zonedeps <dat<NNN>.mpk> --index index.json --var NAME
               mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR [--size W H]
               mpk terrain  <dat<NNN>.mpk> --offset X Y --out FILE.glb [--size W H] [--tiles N] [--index index.json --library LIBDIR]
