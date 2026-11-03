@@ -10,7 +10,7 @@ namespace DaocAssets.Nif;
 /// separately once decoded. Unknown block types are skipped by walking to the next recognised
 /// block, so a file we don't fully model still yields the geometry we do understand.
 /// </summary>
-public static class NifFile
+public static partial class NifFile
 {
     private static readonly NifVersion V4000 = new(4, 0, 0, 2);
     private static readonly NifVersion V1010 = new(10, 1, 0, 0);
@@ -36,7 +36,7 @@ public static class NifFile
         if (version >= V1020)
             throw new NifFormatException($"NIF version {version} is newer than supported (4.2.x and 10.1.0.0 only).");
         if (version >= V1010)
-            return ReadGamebryo1010(bytes, c, version);
+            return ReadGamebryoTree(bytes, version) ?? ReadGamebryo1010(bytes, c, version);
         if (version <= V4000)
             throw new NifFormatException($"NIF version {version} is older than supported (4.1.0.1+).");
 
@@ -865,6 +865,9 @@ public static class NifFile
     // Converts one triangle strip to triangles: triangle i is (p[i], p[i+1], p[i+2]) with winding
     // flipped on odd i to keep consistent facing. Degenerate triangles (a repeated index, used to
     // stitch strips together, plus the 0xFFFF restart sentinel) are dropped.
+    internal static void AppendStrip(ushort[] strip, List<(ushort, ushort, ushort)> into) =>
+        AppendStripTriangles(strip, into);
+
     private static void AppendStripTriangles(ushort[] strip, List<(ushort, ushort, ushort)> into)
     {
         for (int i = 0; i + 2 < strip.Length; i++)

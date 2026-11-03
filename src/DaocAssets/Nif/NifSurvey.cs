@@ -79,9 +79,12 @@ public sealed partial class NifSurvey
         if (version >= V1010)
             return type switch
             {
-                // 10.1 is a geometry scan: no node tree, transforms or per-shape properties.
-                "NiTriShapeData" or "NiTriStripsData" => NifCoverage.Partial,
-                "NiSourceTexture" => NifCoverage.Partial,
+                // 10.1 files that decode completely are read as a node tree (NifFile.Gamebryo.cs);
+                // the rest fall back to a geometry scan (see the notes).
+                "NiNode" or "NiTriShape" or "NiTriStrips" or "NiAlphaProperty" or "NiSkinInstance"
+                    or "NiSkinData" => NifCoverage.Partial,
+                "NiTriShapeData" or "NiTriStripsData" or "NiSourceTexture" or "NiTexturingProperty"
+                    or "NiMaterialProperty" or "NiStencilProperty" => NifCoverage.Partial,
                 _ => NifCoverage.Unhandled,
             };
         return type switch
@@ -99,9 +102,16 @@ public sealed partial class NifSurvey
         if (version >= V1010)
             return type switch
             {
+                "NiNode" or "NiTriShape" or "NiTriStrips" or "NiAlphaProperty" =>
+                    "read as a tree only when the whole file decodes; otherwise the file is geometry-scanned",
+                "NiSkinInstance" or "NiSkinData" =>
+                    "self-contained skins exported (top 4 weights); a Catacombs part's bones (by name) are not bound yet",
                 "NiTriShapeData" or "NiTriStripsData" =>
-                    "found by scanning, not through the node tree: no transforms, first UV set only",
-                "NiSourceTexture" => "the file's first texture name is given to every mesh",
+                    "vertex colours dropped; one UV set (the base slot's); geometry-scanned if the file doesn't decode",
+                "NiSourceTexture" => "external file name only",
+                "NiTexturingProperty" => "base texture only",
+                "NiMaterialProperty" => "diffuse and alpha only",
+                "NiStencilProperty" => "draw mode (sidedness) only",
                 _ => "",
             };
         return type switch
@@ -131,7 +141,7 @@ public sealed partial class NifSurvey
             return ReadLegacy(bytes, (byte)(legacy.Groups[1].Value[0] - '0'), (byte)(legacy.Groups[2].Value[0] - '0'));
         uint packed = c.U32();
         var version = new NifVersion((byte)(packed >> 24), (byte)(packed >> 16), (byte)(packed >> 8), (byte)packed);
-        return version >= V1010 ? Read1010(bytes, ref c, version) : Read4x(bytes, ref c, version);
+        return version >= V1010 ? Read1010(bytes, version) : Read4x(bytes, ref c, version);
     }
 
     // NetImmerse 2.x/3.x: no block count; list the type strings that follow the header.

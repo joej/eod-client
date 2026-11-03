@@ -30,6 +30,8 @@ public static class GltfExporter
     /// <summary>Builds a glTF scene from the model (exposed for tests that inspect it in memory).</summary>
     public static SceneBuilder BuildScene(NifModel model)
     {
+        if (model.Joints.Count > 0)
+            return BuildSkinnedScene(model);
         var scene = new SceneBuilder();
         foreach (NifMesh mesh in model.Meshes)
         {
@@ -37,12 +39,114 @@ public static class GltfExporter
                 continue; // collision/climb/shadow-caster proxy — the client never draws it
             // Name the node after the mesh, so the client can tell meshes apart (water surfaces are
             // matched to their water.csv row by it; the inspect readout shows it).
-            scene.AddRigidMesh(BuildMesh(mesh), Matrix4x4.Identity).WithName(mesh.Name);
+            scene.AddRigidMesh(BuildMesh(mesh, nifSpace: false), Matrix4x4.Identity).WithName(NodeName(mesh));
         }
         return scene;
     }
 
-    private static IMeshBuilder<MaterialBuilder> BuildMesh(NifMesh m)
+    // A model with a skeleton (a 10.1 figure or creature). The skeleton stays in NIF space under one
+    // root node that turns NIF (Z-up, NIF units) into glTF (Y-up, metres): (x, y, z) -> (x, z, -y)
+    // scaled by UnitsToMetres. Every NIF node becomes a glTF node with its own local transform;
+    // skinned shapes keep their skin-space vertices and bind to their bones with the inverse bind
+    // matrices from NiSkinData (glTF ignores a skinned mesh's own node transform, and the root's
+    // conversion reaches the vertices through the joints' world transforms). Rigid shapes in such a
+    // file are already baked to NIF world space and hang off the root.
+    private static SceneBuilder BuildSkinnedScene(NifModel model)
+    {
+        var scene = new SceneBuilder();
+        var root = new NodeBuilder("nif_root") { LocalMatrix = NifToGltf };
+        var nodes = new NodeBuilder[model.Joints.Count];
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        for (int j = 0; j < nodes.Length; j++)
+        {
+            NifJoint joint = model.Joints[j];
+            NodeBuilder parent = joint.Parent < 0 ? root : nodes[joint.Parent];
+            // glTF tolerates repeated node names but SharpGLTF refuses them among joints; NIF files
+            // repeat helper names (several "collidee" nodes), so keep the first and number the rest.
+            string name = joint.Name;
+            for (int k = 2; !used.Add(name); k++)
+                name = $"{joint.Name}#{k}";
+            nodes[j] = parent.CreateNode(name);
+            nodes[j].LocalMatrix = joint.Local;
+        }
+        foreach (NifMesh mesh in model.Meshes)
+        {
+            if (mesh.Helper)
+                continue;
+            if (mesh.SkinJoints is { Length: > 0 } bones && mesh.Skin is not null)
+            {
+                var joints = bones.Select(b => (nodes[b.Joint], b.InverseBind)).ToArray();
+                scene.AddSkinnedMesh(BuildSkinnedMesh(mesh), joints).WithName(NodeName(mesh));
+            }
+            else
+            {
+                scene.AddRigidMesh(BuildMesh(mesh, nifSpace: true), root).WithName(NodeName(mesh));
+            }
+        }
+        if (model.Meshes.All(m => m.Helper || m.SkinJoints is not { Length: > 0 }))
+            scene.AddNode(root);   // no skin pulled the skeleton in; keep it in the scene anyway
+        return scene;
+    }
+
+    // NIF (Z-up, NIF units) -> glTF (Y-up, metres), as a row-vector matrix: p' = p * M.
+    private static readonly Matrix4x4 NifToGltf = new(
+        UnitsToMetres, 0, 0, 0,
+        0, 0, -UnitsToMetres, 0,
+        0, UnitsToMetres, 0, 0,
+        0, 0, 0, 1);
+
+    // The glTF node name: the NIF shape's own name when it has one (a figure's part variants, e.g.
+    // "Body1:0", are chosen by it), else the mesh name (water00, mesh12).
+    private static string NodeName(NifMesh m) => string.IsNullOrEmpty(m.ShapeName) ? m.Name : m.ShapeName;
+
+    private static IMeshBuilder<MaterialBuilder> BuildSkinnedMesh(NifMesh m)
+    {
+        MaterialBuilder material = Material(m);
+        bool hasNormals = m.Normals is not null && m.Normals.Length == m.Vertices.Length;
+        bool hasUv = m.TexCoords is not null && m.TexCoords.Length == m.Vertices.Length;
+        var builder = new MeshBuilder<VertexPositionNormal, VertexTexture1, VertexJoints4>(m.Name);
+        var prim = builder.UsePrimitive(material);
+        VertexBuilder<VertexPositionNormal, VertexTexture1, VertexJoints4> V(int i)
+        {
+            Vector3 nrm = hasNormals ? m.Normals![i] : Vector3.UnitZ;
+            Vector2 uv = hasUv ? m.TexCoords![i] : Vector2.Zero;
+            (int, float)[] w = m.Skin![i].Length > 0 ? m.Skin[i] : [(0, 1f)];
+            return new VertexBuilder<VertexPositionNormal, VertexTexture1, VertexJoints4>(
+                new VertexPositionNormal(m.Vertices[i], nrm), new VertexTexture1(uv), new VertexJoints4(w));
+        }
+        foreach (var (a, b, c) in m.Triangles)
+            prim.AddTriangle(V(a), V(b), V(c));
+        return builder;
+    }
+
+    private static IMeshBuilder<MaterialBuilder> BuildMesh(NifMesh m, bool nifSpace)
+    {
+        MaterialBuilder material = Material(m);
+        bool hasNormals = m.Normals is not null && m.Normals.Length == m.Vertices.Length;
+        bool hasUv = m.TexCoords is not null && m.TexCoords.Length == m.Vertices.Length;
+
+        var builder = new MeshBuilder<VertexPositionNormal, VertexTexture1>(m.Name);
+        var prim = builder.UsePrimitive(material);
+
+        for (int t = 0; t < m.Triangles.Length; t++)
+        {
+            var (a, b, c) = m.Triangles[t];
+            // Keep the NIF's own winding (a, b, c). Although the Z-up→Y-up map (x,z,-y) is a
+            // handedness change that would normally invert front/back, the exporter also carries the
+            // NIF's real per-vertex normals through the same map, and we bind them as the glTF NORMAL
+            // attribute. Measured against those normals on the keep, the NIF winding is the one that
+            // faces OUT (an extra flip to (a,c,b) left ~99% of faces inverted, so back-face culling
+            // removed the outside and the model read inside-out — see-through tower walls). So we do
+            // not flip here; winding agrees with the normals and front faces point outward.
+            prim.AddTriangle(
+                Vertex(m, a, hasNormals, hasUv, nifSpace),
+                Vertex(m, b, hasNormals, hasUv, nifSpace),
+                Vertex(m, c, hasNormals, hasUv, nifSpace));
+        }
+        return builder;
+    }
+
+    private static MaterialBuilder Material(NifMesh m)
     {
         // Name the glTF material after the NIF's texture file (without extension) when there is one,
         // so the Godot side can resolve it to <name>.dds in the owner's extracted-texture folder and
@@ -95,36 +199,14 @@ public static class GltfExporter
         }
         if (m.DoubleSided)
             material.WithDoubleSide(true);
-
-        bool hasNormals = m.Normals is not null && m.Normals.Length == m.Vertices.Length;
-        bool hasUv = m.TexCoords is not null && m.TexCoords.Length == m.Vertices.Length;
-
-        var builder = new MeshBuilder<VertexPositionNormal, VertexTexture1>(m.Name);
-        var prim = builder.UsePrimitive(material);
-
-        for (int t = 0; t < m.Triangles.Length; t++)
-        {
-            var (a, b, c) = m.Triangles[t];
-            // Keep the NIF's own winding (a, b, c). Although the Z-up→Y-up map (x,z,-y) is a
-            // handedness change that would normally invert front/back, the exporter also carries the
-            // NIF's real per-vertex normals through the same map, and we bind them as the glTF NORMAL
-            // attribute. Measured against those normals on the keep, the NIF winding is the one that
-            // faces OUT (an extra flip to (a,c,b) left ~99% of faces inverted, so back-face culling
-            // removed the outside and the model read inside-out — see-through tower walls). So we do
-            // not flip here; winding agrees with the normals and front faces point outward.
-            prim.AddTriangle(
-                Vertex(m, a, hasNormals, hasUv),
-                Vertex(m, b, hasNormals, hasUv),
-                Vertex(m, c, hasNormals, hasUv));
-        }
-        return builder;
+        return material;
     }
 
     private static VertexBuilder<VertexPositionNormal, VertexTexture1, VertexEmpty> Vertex(
-        NifMesh m, int i, bool hasNormals, bool hasUv)
+        NifMesh m, int i, bool hasNormals, bool hasUv, bool nifSpace)
     {
-        Vector3 pos = ToYUp(m.Vertices[i]);
-        Vector3 nrm = hasNormals ? DirToYUp(m.Normals![i]) : Vector3.UnitY;
+        Vector3 pos = nifSpace ? m.Vertices[i] : ToYUp(m.Vertices[i]);
+        Vector3 nrm = hasNormals ? (nifSpace ? m.Normals![i] : DirToYUp(m.Normals![i])) : (nifSpace ? Vector3.UnitZ : Vector3.UnitY);
         Vector2 uv = hasUv ? m.TexCoords![i] : Vector2.Zero;
         return new VertexBuilder<VertexPositionNormal, VertexTexture1, VertexEmpty>(
             new VertexPositionNormal(pos, nrm), new VertexTexture1(uv));

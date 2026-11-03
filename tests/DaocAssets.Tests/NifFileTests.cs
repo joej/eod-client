@@ -410,17 +410,19 @@ public sealed class NifFileTests
         // whole scale pipeline (exporter bakes metres; WorldView/zone trust the .glb as metres, no
         // re-scaling) rests on that, so guard it with a readable range: a wrong UnitsToMetres makes a
         // "0.72 m dwarf" or "72 m titan" fail here, not silently mis-size the world.
+        // The fixture is skinned: its vertices stay in skin space and reach metres through the
+        // skeleton (root conversion, joints, inverse bind matrices), so measure the model as glTF
+        // poses it, not the raw vertex buffer.
         NifModel model = NifFile.Read(File.ReadAllBytes(path));
         var gltf = GltfExporter.BuildScene(model).ToGltf2();
 
         float minY = float.MaxValue, maxY = float.MinValue;
-        foreach (var mesh in gltf.LogicalMeshes)
-            foreach (var prim in mesh.Primitives)
-                foreach (var v in prim.GetVertexAccessor("POSITION").AsVector3Array())
-                {
-                    if (v.Y < minY) minY = v.Y;
-                    if (v.Y > maxY) maxY = v.Y;
-                }
+        foreach (var (a, b, c, _) in SharpGLTF.Schema2.Toolkit.EvaluateTriangles(gltf.DefaultScene))
+            foreach (var v in new[] { a.GetGeometry().GetPosition(), b.GetGeometry().GetPosition(), c.GetGeometry().GetPosition() })
+            {
+                if (v.Y < minY) minY = v.Y;
+                if (v.Y > maxY) maxY = v.Y;
+            }
         float heightMetres = maxY - minY;
         Assert.InRange(heightMetres, 1.2f, 2.6f); // a humanoid, in metres — not raw units, not ×0.0025
     }

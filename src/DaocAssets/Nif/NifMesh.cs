@@ -38,12 +38,34 @@ public sealed record NifMesh
     /// draw mode 3.</summary>
     public bool DoubleSided { get; init; }
 
+    /// <summary>Skinned shapes: the skin's bones, as (joint index into <see cref="NifModel.Joints"/>,
+    /// inverse bind matrix in NIF space, row-vector convention). Null for rigid shapes. A skinned
+    /// shape's vertices are in its skin's bind space (not baked to world): the joints move them.</summary>
+    public (int Joint, System.Numerics.Matrix4x4 InverseBind)[]? SkinJoints { get; init; }
+
+    /// <summary>Skinned shapes: per vertex, up to four (index into <see cref="SkinJoints"/>, weight)
+    /// influences, strongest first, weights summing to 1 (empty if no bone weights the vertex).</summary>
+    public (int Bone, float Weight)[][]? Skin { get; init; }
+
+    /// <summary>The NIF shape (NiTriShape) name, e.g. a body-part variant in a classic figure.</summary>
+    public string ShapeName { get; init; } = "";
+
     public override string ToString() =>
         $"{Name}: {Vertices.Length} verts, {Triangles.Length} tris" +
         (TextureFile is null ? "" : $", tex {TextureFile}") +
         (BaseColor is { } c ? $", rgba({c.X:0.##},{c.Y:0.##},{c.Z:0.##},{c.W:0.##})" : "") +
         (Alpha == SurfaceAlpha.Opaque ? "" : $", {Alpha.ToString().ToLowerInvariant()} {AlphaCutoff:0.###}") +
-        (DoubleSided ? ", two-sided" : "") + (Helper ? ", helper" : "");
+        (DoubleSided ? ", two-sided" : "") + (Helper ? ", helper" : "") + (Skin is null ? "" : ", skinned");
+}
+
+/// <summary>One skeleton node of a skinned model, in NIF space (Z-up, NIF units).</summary>
+public sealed record NifJoint
+{
+    public required string Name { get; init; }
+    /// <summary>Index of the parent joint in <see cref="NifModel.Joints"/>, or -1 for a root.</summary>
+    public required int Parent { get; init; }
+    /// <summary>Local transform relative to the parent (row-vector convention: p' = p * M).</summary>
+    public required System.Numerics.Matrix4x4 Local { get; init; }
 }
 
 /// <summary>How a surface uses its texture's alpha.</summary>
@@ -62,4 +84,30 @@ public sealed class NifModel
 {
     public required NifVersion Version { get; init; }
     public required IReadOnlyList<NifMesh> Meshes { get; init; }
+    /// <summary>The skeleton, parents before children; empty for a static model.</summary>
+    public IReadOnlyList<NifJoint> Joints { get; init; } = [];
+
+    /// <summary>Each joint's world transform in the file's rest pose (NIF space, row vectors).</summary>
+    public System.Numerics.Matrix4x4[] JointWorlds()
+    {
+        var world = new System.Numerics.Matrix4x4[Joints.Count];
+        for (int j = 0; j < world.Length; j++)
+            world[j] = Joints[j].Parent < 0 ? Joints[j].Local : Joints[j].Local * world[Joints[j].Parent];
+        return world;
+    }
+
+    /// <summary>A mesh's vertices placed by its skin in the rest pose (NIF space): what the glTF
+    /// skin will draw before any animation. A rigid mesh's vertices are returned as they are.</summary>
+    public System.Numerics.Vector3[] Posed(NifMesh mesh)
+    {
+        if (mesh.SkinJoints is null || mesh.Skin is null)
+            return mesh.Vertices;
+        System.Numerics.Matrix4x4[] world = JointWorlds();
+        var posed = new System.Numerics.Vector3[mesh.Vertices.Length];
+        for (int v = 0; v < posed.Length; v++)
+            foreach ((int bone, float w) in mesh.Skin[v])
+                posed[v] += System.Numerics.Vector3.Transform(mesh.Vertices[v],
+                    mesh.SkinJoints[bone].InverseBind * world[mesh.SkinJoints[bone].Joint]) * w;
+        return posed;
+    }
 }

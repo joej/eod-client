@@ -11,7 +11,13 @@
 // tools/pipeline.sh puts them); each material's <name>.dds is loaded and set as its albedo.
 // --shot <path.png> renders one frame of the framed model and writes it to <path>, then quits —
 // a headless-friendly way to capture the converted model (combine with --headless for CI).
+// A classic figure (e.g. bcommonm.glb) holds every body-part variant as its own mesh, named
+// "<Slot><n>[b]:<id>" (Body1:0, Legs2:36, HeadA1:19). By default the viewer shows the first variant
+// of each slot and hides the low-detail bodies (Lod*) and cloaks; --parts Body2,Legs1,... shows
+// exactly the named variants instead (the part before ':').
 
+using System;
+using System.Linq;
 using Godot;
 
 namespace EodClient;
@@ -137,6 +143,7 @@ public partial class ModelViewer : Node3D
         // asset pipeline (tools/pipeline.sh) gathers textures beside the .glb; --textures overrides.
         string textureDir = TextureDirFromArgs() ?? System.IO.Path.GetDirectoryName(path) ?? "";
         int textured = ModelTexturing.Apply(scene, textureDir);
+        string parts = ChooseFigureParts(scene, ArgValue("--parts"));
 
         Aabb bounds = ComputeBounds(scene);
         FrameBounds(bounds);
@@ -144,7 +151,53 @@ public partial class ModelViewer : Node3D
         _status.Text = $"{System.IO.Path.GetFileName(path)}\n" +
             $"size {bounds.Size.X:F1} x {bounds.Size.Y:F1} x {bounds.Size.Z:F1}" +
             (textured > 0 ? $" · {textured} textured" : " · untextured") + "\n" +
+            (parts.Length > 0 ? $"parts: {parts}\n" : "") +
             "left-drag orbit · wheel zoom";
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex PartName =
+        new(@"^([A-Za-z]+?)(\d+)(b?)(?:[:_]\d+)?$");
+
+    // For a figure with part variants (mesh names like "Body1:0"): shows one variant per slot and
+    // hides the rest. Returns the shown parts, or "" when the model isn't a figure.
+    private static string ChooseFigureParts(Node scene, string? wanted)
+    {
+        var meshes = FindMeshes(scene).ToList();
+        var named = meshes.Select(m => (Mesh: m, Match: PartName.Match(m.Name.ToString())))
+            .Where(x => x.Match.Success).ToList();
+        if (named.Count < meshes.Count / 2 || named.Count < 4)
+            return "";
+        var show = new System.Collections.Generic.HashSet<MeshInstance3D>();
+        if (!string.IsNullOrEmpty(wanted))
+        {
+            var want = wanted.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var x in named)
+                if (want.Contains(PartOf(x.Mesh)))
+                    show.Add(x.Mesh);
+        }
+        else
+        {
+            foreach (var slot in named.GroupBy(x => x.Match.Groups[1].Value, StringComparer.OrdinalIgnoreCase))
+            {
+                if (slot.Key.Equals("Lod", StringComparison.OrdinalIgnoreCase)
+                    || slot.Key.Equals("Cloak", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var first = slot.OrderBy(x => x.Match.Groups[3].Value)          // "1" before "1b"
+                    .ThenBy(x => int.Parse(x.Match.Groups[2].Value)).First();
+                show.Add(first.Mesh);
+            }
+        }
+        foreach (var x in named)
+            x.Mesh.Visible = show.Contains(x.Mesh);
+        return string.Join(", ", show.Select(PartOf).Order());
+    }
+
+    // "Body1:0" (or "Body1_0" once Godot has sanitised the ':') -> "Body1".
+    private static string PartOf(MeshInstance3D m)
+    {
+        var x = PartName.Match(m.Name.ToString());
+        return x.Success ? x.Groups[1].Value + x.Groups[2].Value + x.Groups[3].Value : m.Name.ToString();
     }
 
     // Recentre the model on the pivot and set the orbit distance to fit it in view.
@@ -166,6 +219,8 @@ public partial class ModelViewer : Node3D
         bool any = false;
         foreach (MeshInstance3D mi in FindMeshes(node))
         {
+            if (!mi.IsVisibleInTree())
+                continue;
             Aabb a = mi.GlobalTransform * mi.GetAabb();
             total = any ? total.Merge(a) : a;
             any = true;

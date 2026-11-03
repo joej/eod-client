@@ -256,3 +256,71 @@ public class NifBlockScanTests
         Assert.Equal(1, s.ExactDecodes["NiAlphaProperty"]);
     }
 }
+
+/// <summary>
+/// Skinned 10.1 figures: the tree reader, skin weights and inverse bind matrices, checked on a classic
+/// figure from the owner's client (git-ignored fixture; skipped when absent).
+/// </summary>
+public class NifSkinTests
+{
+    private static string Fixture => Path.Combine(AppContext.BaseDirectory, "live-nif", "bcommonm-1010.nif");
+
+    [Fact]
+    public void AClassicFigureStandsAssembledInItsBindPose()
+    {
+        if (!File.Exists(Fixture))
+            return;   // private fixture (the owner's figures/bcommonm.nif) not present
+        byte[] bytes = File.ReadAllBytes(Fixture);
+        NifModel model = NifFile.Read(bytes);
+        Assert.True(model.Joints.Count > 100);
+        Assert.Contains(model.Joints, j => j.Name == "Bip01 Head");
+
+        // Every bone's bind * world lands on its skinned shape's world transform (NIF units).
+        Assert.InRange(NifFile.BindPoseError(bytes)!.Value, 0f, 0.5f);
+
+        // Parts stored around the origin are placed on the body by their skin: the torso and head
+        // must come out at body height, not at the feet (which is what including NiSkinData's overall
+        // Skin Transform in the inverse bind matrix did).
+        float MinZ(string part) => model.Posed(model.Meshes.Single(m => m.ShapeName.StartsWith(part + ":"))).Min(v => v.Z);
+        float MaxZ(string part) => model.Posed(model.Meshes.Single(m => m.ShapeName.StartsWith(part + ":"))).Max(v => v.Z);
+        Assert.True(model.Meshes.Single(m => m.ShapeName.StartsWith("Body1:")).Vertices.Min(v => v.Z) < 0);
+        Assert.InRange(MinZ("Body1"), 40f, 50f);
+        Assert.InRange(MaxZ("HeadA1"), 65f, 75f);
+        Assert.InRange(MinZ("Boots1"), -1f, 2f);
+
+        // Weights: at most four per vertex, normalised.
+        foreach (NifMesh m in model.Meshes.Where(m => m.Skin is not null))
+            foreach (var w in m.Skin!)
+            {
+                Assert.InRange(w.Length, 1, 4);
+                Assert.InRange(w.Sum(x => x.Weight), 0.999f, 1.001f);
+            }
+    }
+
+    [Fact]
+    public void TheExportedSkinPosesTheFigureToHumanHeight()
+    {
+        if (!File.Exists(Fixture))
+            return;
+        NifModel model = NifFile.Read(File.ReadAllBytes(Fixture));
+        // Keep one variant per slot, as the viewer does, and measure through glTF's own skinning.
+        string[] parts = ["Body1:", "LBody1:", "Legs1:", "Boots1:", "Arms1:", "Gloves1:", "HeadA1:"];
+        var one = new NifModel
+        {
+            Version = model.Version,
+            Joints = model.Joints,
+            Meshes = model.Meshes.Where(m => parts.Any(p => m.ShapeName.StartsWith(p))).ToList(),
+        };
+        var gltf = GltfExporter.BuildScene(one).ToGltf2();
+        Assert.Equal(parts.Length, gltf.LogicalSkins.Count);
+        float minY = float.MaxValue, maxY = float.MinValue;
+        foreach (var (a, b, c, _) in SharpGLTF.Schema2.Toolkit.EvaluateTriangles(gltf.DefaultScene))
+            foreach (var v in new[] { a.GetGeometry().GetPosition(), b.GetGeometry().GetPosition(), c.GetGeometry().GetPosition() })
+            {
+                minY = Math.Min(minY, v.Y);
+                maxY = Math.Max(maxY, v.Y);
+            }
+        Assert.InRange(minY, -0.05f, 0.05f);          // feet on the ground
+        Assert.InRange(maxY - minY, 1.6f, 2.0f);      // a ~1.8 m Briton
+    }
+}

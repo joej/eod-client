@@ -62,6 +62,8 @@ internal static class Cli
         if (command == "convert")
             return Convert(inputPath, args);
 
+        if (command == "nifinfo")
+            return NifInfo(inputPath);
 
         try
         {
@@ -76,6 +78,48 @@ internal static class Cli
         catch (MpkFormatException e)
         {
             Console.Error.WriteLine($"{inputPath}: {e.Message}");
+            return 1;
+        }
+    }
+
+    // nifinfo <model.nif>: what the converter reads from one model: meshes (shape name, texture,
+    // skinned or not, helper), the skeleton, and for skinned 10.1 files the bind-pose check.
+    private static int NifInfo(string nifPath)
+    {
+        byte[] bytes = File.ReadAllBytes(nifPath);
+        try
+        {
+            NifModel model = NifFile.Read(bytes);
+            Console.WriteLine($"NIF {model.Version}: {model.Meshes.Count} mesh(es), {model.Joints.Count} joint(s)");
+            foreach (NifMesh m in model.Meshes)
+                Console.WriteLine($"  {m.ShapeName,-28} {m}" + (m.SkinJoints is { } sj ? $" ({sj.Length} bones)" : ""));
+            for (int j = 0; j < model.Joints.Count; j++)
+            {
+                NifJoint joint = model.Joints[j];
+                int depth = 0;
+                for (int p = joint.Parent; p >= 0; p = model.Joints[p].Parent) depth++;
+                Console.WriteLine($"  joint {j,3} {new string(' ', depth * 2)}{joint.Name}");
+            }
+            // Per skinned mesh: where the skin puts its vertices in the file's rest pose, against the
+            // stored vertices. A part whose skinned box is far from its stored box binds wrongly.
+            foreach (NifMesh m in model.Meshes.Where(m => m.SkinJoints is not null))
+            {
+                System.Numerics.Vector3[] skinned = model.Posed(m);
+                string Box(System.Numerics.Vector3[] p) =>
+                    $"({p.Min(q => q.X):F0},{p.Min(q => q.Y):F0},{p.Min(q => q.Z):F0})..({p.Max(q => q.X):F0},{p.Max(q => q.Y):F0},{p.Max(q => q.Z):F0})";
+                Console.WriteLine($"  skin {m.ShapeName,-14} stored {Box(m.Vertices)} skinned {Box(skinned)}" +
+                    $" unweighted {m.Skin!.Count(x => x.Length == 0)}");
+            }
+            if (Environment.GetEnvironmentVariable("NIFINFO_SKINS") == "1")
+                foreach (string line in NifFile.SkinReport(bytes))
+                    Console.WriteLine("  " + line);
+            if (NifFile.BindPoseError(bytes) is { } err)
+                Console.WriteLine($"Bind-pose check: max difference {err:G4} (near 0 = skeleton in bind pose)");
+            return 0;
+        }
+        catch (NifFormatException e)
+        {
+            Console.Error.WriteLine($"{nifPath}: {e.Message}");
             return 1;
         }
     }
@@ -772,6 +816,7 @@ internal static class Cli
               mpk list     <archive.mpk>
               mpk extract  <archive.mpk> [member] [--out DIR]
               mpk convert  <model.nif> [--out FILE.glb]
+              mpk nifinfo  <model.nif>
               mpk textures <client-dir> <model.nif | dir-of-nifs> --out DIR
               mpk index    <client-dir> --out index.json
               mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR [--size W H]
