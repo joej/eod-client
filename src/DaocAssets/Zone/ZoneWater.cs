@@ -49,14 +49,13 @@ public static class ZoneWater
 
     /// <summary>
     /// Parses every [riverNN] section of a SECTOR.DAT. Bank points are scaled from the 256-cell grid
-    /// to region units using the zone's size ([sectorsize] sizex × 8192 / 256). Sections without at
-    /// least two bank pairs (some zones carry empty placeholders) are skipped.
+    /// to region units using the zone's size from the zone table (<paramref name="sizeX"/> sectors of
+    /// 8192; all zones are 8), not SECTOR.DAT's [sectorsize] (see ZoneTerrain.Read). Sections without
+    /// at least two bank pairs (some zones carry empty placeholders) are skipped.
     /// </summary>
-    public static IReadOnlyList<WaterBody> Parse(string sectorDat)
+    public static IReadOnlyList<WaterBody> Parse(string sectorDat, int sizeX = 8)
     {
         var sections = IniFile.Parse(sectorDat).Sections;
-        int sizeX = sections.TryGetValue("sectorsize", out var size) && size.TryGetValue("sizex", out string? sx)
-            && int.TryParse(sx, out int n) && n > 0 ? n : 8;
         float cell = sizeX * 8192f / 256f;
 
         var bodies = new List<WaterBody>();

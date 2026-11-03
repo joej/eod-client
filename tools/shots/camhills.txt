@@ -1,0 +1,11 @@
+# Fixed camera poses in Camelot Hills (zone 0) for tools/shots.sh: name X Y Z YAW PITCH
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# Each pose looks at a place where something has gone wrong before, so a change that breaks it shows.
+keep          574208 532832 3696   0 -18   # Prydwen Keep from the south: assembly, LOD, helper shapes
+bridge        585472 535872 2308   0 -20   # river under the bridge: water surface, bridge placement
+shop          559872 515392 3168   0 -18   # village shop and houses: textures, walls from outside
+graveyard     566400 529984 2870   0 -22   # gyard1, well, fences: On Ground objects on the terrain
+gatehouse     554560 525632 4912   0 -55   # A_PhouseGatein (was 50 m underground before 0478b56)
+tile_corner   581632 491520 4580   0 -85   # ground tiles meeting at a corner, from above: tile order
+vista         574208 538432 6896   0 -25   # the zone around the keep: fog, sky, trees, overall placement
+underground   566400 529584 1570   0  20   # 15 m under the graveyard looking up: nothing should be down here

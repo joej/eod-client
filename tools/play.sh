@@ -138,12 +138,13 @@ assets_current() {
 do_assets() {
     need CLIENT "DAoC client folder (holds game.dll and zones/)"
     [ -d "$CLIENT/zones" ] || die "no zones/ folder in $CLIENT: is that the client's root folder?"
-    local info name x y dat z
+    local info name x y w h dat z
     info=$(zone_info) || true
     [ -n "$info" ] || die "zone $ZONE is not in $ZONES_TSV"
     name=$(cut -f7 <<<"$info")
     x=$(( $(cut -f3 <<<"$info") * 8192 ))
     y=$(( $(cut -f4 <<<"$info") * 8192 ))
+    w=$(cut -f5 <<<"$info"); h=$(cut -f6 <<<"$info")   # zone size in sectors (the heightmap spans it)
     # Folder and archive names vary in case between installs (Zone000 vs zone001).
     dat=$(find "$CLIENT/zones" -maxdepth 2 -ipath "*/zone$(printf %03d "$ZONE")/dat$(printf %03d "$ZONE").mpk" | head -1)
     [ -n "$dat" ] || die "no dat$(printf %03d "$ZONE").mpk for zone $ZONE under $CLIENT/zones"
@@ -166,10 +167,14 @@ do_assets() {
         "$MPK" index "$CLIENT" --out "$INDEX"
     fi
 
-    "$MPK" terrain "$dat" --offset "$x" "$y" --index "$INDEX" --library "$LIB" --out "$z/terrain.glb"
-    "$MPK" zone    "$dat" --offset "$x" "$y" --index "$INDEX" --library "$LIB" --out "$z"
-    "$MPK" water   "$dat" --offset "$x" "$y" --index "$INDEX" --library "$LIB" --out "$z"
+    "$MPK" terrain "$dat" --offset "$x" "$y" --size "$w" "$h" --index "$INDEX" --library "$LIB" --out "$z/terrain.glb"
+    "$MPK" zone    "$dat" --offset "$x" "$y" --size "$w" "$h" --index "$INDEX" --library "$LIB" --out "$z"
+    "$MPK" water   "$dat" --offset "$x" "$y" --size "$w" "$h" --index "$INDEX" --library "$LIB" --out "$z"
     "$MPK" sky     "$dat" --index "$INDEX" --library "$LIB" --out "$z"
+    # Check the converted zone as the client will draw it (objects under/into/above the ground,
+    # missing models, sizes). Errors stop here, before anyone has to find them in the world.
+    "$MPK" zonecheck "$dat" --zone "$z" --library "$LIB" --offset "$x" "$y" --size "$w" "$h" --known "$REPO/tools/zonecheck-known.txt" --out "$z/zonecheck.md" \
+        || die "zone check found errors: see $z/zonecheck.md"
     echo "$stamp" > "$STAMP_FILE"
     echo "assets ready in $z (library: $LIB)"
 }

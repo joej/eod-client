@@ -19,11 +19,29 @@ public sealed partial class ZoneAudit
         "nifs.csv", "fixtures.csv", "terrain.pcx", "offset.pcx", "sector.dat",
     };
 
-    /// <summary>SECTOR.DAT keys the converter reads today, as "section.key" (normalised).</summary>
+    /// <summary>SECTOR.DAT keys the converter reads today, as "section.key" (normalised). Keep in step
+    /// with ZoneTerrain, ZoneWater and `mpk sky` (fog): the audit's review list is everything in a
+    /// section we read that is NOT here, so a key missing from this list shows up as unreviewed.</summary>
     public static readonly IReadOnlySet<string> UsedSectorKeys = new HashSet<string>
     {
-        "sectorsize.sizex", "sectorsize.sizey", "terrain.scalefactor", "terrain.offsetfactor",
+        "terrain.scalefactor", "terrain.offsetfactor",
+        "river#.name", "river#.type", "river#.height", "river#.texture", "river#.multitexture",
+        "river#.flow", "river#.color", "river#.left#", "river#.right#",
+        "fog.clip", "fog.amount", "fog.red", "fog.green", "fog.blue",
     };
+
+    /// <summary>CSV columns the converter reads, by file pattern: column index -> what it is used
+    /// for (ZoneLayout). Every other column of these files is on the review list.</summary>
+    public static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<int, string>> UsedCsvColumns =
+        new Dictionary<string, IReadOnlyDictionary<int, string>>
+        {
+            ["fixtures.csv"] = new Dictionary<int, string>
+            {
+                [1] = "model (NIF #)", [3] = "x", [4] = "y", [5] = "z (unless On Ground)", [6] = "angle",
+                [7] = "scale", [11] = "On Ground",
+            },
+            ["nifs.csv"] = new Dictionary<int, string> { [0] = "NIF #", [1] = "label", [2] = "model file" },
+        };
 
     private sealed class FileStats
     {
@@ -33,12 +51,15 @@ public sealed partial class ZoneAudit
         public readonly Dictionary<string, int> Heads = [];   // leading bytes (hex) -> files
         public readonly Dictionary<string, int> CsvHeaders = [];
         public long CsvRows;
+        public string[] ColumnNames = [];
+        public readonly List<Dictionary<string, int>> ColumnValues = [];
     }
 
     private sealed class KeyStats
     {
         public readonly HashSet<string> Zones = [];
         public readonly List<string> Examples = [];
+        public readonly Dictionary<string, int> Values = [];
     }
 
     private readonly Dictionary<string, FileStats> _files = [];
@@ -136,6 +157,7 @@ public sealed partial class ZoneAudit
             string value = line[(eq + 1)..].Trim();
             if (k.Examples.Count < 3 && !k.Examples.Contains(value))
                 k.Examples.Add(value.Length > 40 ? value[..40] + "…" : value);
+            CountValue(k.Values, value);
         }
     }
 
@@ -149,7 +171,41 @@ public sealed partial class ZoneAudit
         string header = string.Join(" / ", lines.Take(2).Select(l => l.Length > 160 ? l[..160] + "…" : l));
         Bump(s.CsvHeaders, header);
         s.CsvRows += Math.Max(0, lines.Length - 2);
+        // Column names from the second header line; values per column from the data rows.
+        if (lines.Length >= 2 && s.ColumnNames.Length == 0)
+            s.ColumnNames = lines[1].Split(',').Select(c => c.Trim()).ToArray();
+        foreach (string line in lines.Skip(2))
+        {
+            string[] cells = line.Split(',');
+            for (int c = 0; c < cells.Length; c++)
+            {
+                while (s.ColumnValues.Count <= c) s.ColumnValues.Add([]);
+                CountValue(s.ColumnValues[c], cells[c].Trim());
+            }
+        }
     }
+
+    // Distinct values with counts, capped so free-text columns don't grow without bound.
+    private static void CountValue(Dictionary<string, int> values, string value)
+    {
+        if (values.ContainsKey(value) || values.Count < 200)
+            Bump(values, value);
+        else
+            Bump(values, "(other)");
+    }
+
+    // "0 ×546, 1 ×990" — the most common values; "(n distinct)" when there are many.
+    private static string Distribution(Dictionary<string, int> values, int top = 6)
+    {
+        string list = string.Join(", ", values.OrderByDescending(kv => kv.Value).Take(top)
+            .Select(kv => $"`{Md(kv.Key.Length == 0 ? "(empty)" : kv.Key.Length > 24 ? kv.Key[..24] + "…" : kv.Key)}` ×{kv.Value}"));
+        return values.Count > top ? $"{list} … ({values.Count}{(values.ContainsKey("(other)") ? "+" : "")} distinct)" : list;
+    }
+
+    // A value a field we read probably doesn't mean literally: zero, empty, negative.
+    private static IEnumerable<string> Degenerate(Dictionary<string, int> values) =>
+        values.Where(kv => kv.Key.Length == 0 || kv.Key == "0" || kv.Key.StartsWith('-'))
+            .Select(kv => $"`{Md(kv.Key.Length == 0 ? "(empty)" : kv.Key)}` ×{kv.Value}");
 
     private static string Head(byte[] bytes)
     {
@@ -172,6 +228,8 @@ public sealed partial class ZoneAudit
         foreach (var (kind, zones) in _kinds.OrderByDescending(kv => kv.Value.Count))
             sb.AppendLine($"| {kind} | {zones.Count} |");
         sb.AppendLine();
+
+        AppendFieldReview(sb);
 
         sb.AppendLine("## Files in zone archives").AppendLine();
         sb.AppendLine("\"Used\" means the converter reads it today. Sizes and leading bytes are recorded " +
@@ -209,6 +267,46 @@ public sealed partial class ZoneAudit
                     $"{string.Join(" · ", k.Examples.Select(e => $"`{Md(e)}`"))} |");
         }
         return sb.ToString();
+    }
+
+    // The fields-level part of the report: for every file the converter reads, what each field holds,
+    // which fields it ignores (to review: "On Ground" sat here unread), and degenerate values in the
+    // fields it does read (to review: sizex=0 made a zone 0 units wide).
+    private void AppendFieldReview(StringBuilder sb)
+    {
+        sb.AppendLine("## Fields in the files we read").AppendLine();
+        sb.AppendLine("Every column and key of the files the converter reads. **Ignored** fields are a review " +
+            "list: each should be understood and either used or recorded as irrelevant. **Check** marks a " +
+            "field we read that holds zero, empty or negative values, which may not mean what they say.").AppendLine();
+        foreach (var (file, cols) in UsedCsvColumns)
+        {
+            if (!_files.TryGetValue(file, out FileStats? s) || s.ColumnValues.Count == 0)
+                continue;
+            sb.AppendLine($"### {file}").AppendLine();
+            sb.AppendLine("| # | Column | Converter | Values |").AppendLine("|---:|---|---|---|");
+            for (int c = 0; c < s.ColumnValues.Count; c++)
+            {
+                string name = c < s.ColumnNames.Length ? s.ColumnNames[c] : "";
+                string use = cols.TryGetValue(c, out string? u) ? $"reads: {u}" : "**ignored**";
+                string check = cols.ContainsKey(c) && Degenerate(s.ColumnValues[c]).Any()
+                    ? " **check:** " + string.Join(", ", Degenerate(s.ColumnValues[c])) : "";
+                sb.AppendLine($"| {c} | {Md(name)} | {use}{check} | {Distribution(s.ColumnValues[c])} |");
+            }
+            sb.AppendLine();
+        }
+
+        // SECTOR.DAT: the sections the converter reads some key of.
+        var readSections = UsedSectorKeys.Select(k => k[..k.IndexOf('.')]).ToHashSet();
+        sb.AppendLine("### SECTOR.DAT (sections we read)").AppendLine();
+        sb.AppendLine("| Key | Zones | Converter | Values |").AppendLine("|---|---:|---|---|");
+        foreach (var (key, k) in _keys.Where(kv => readSections.Contains(kv.Key[..kv.Key.IndexOf('.')]))
+                     .OrderBy(kv => kv.Key, StringComparer.Ordinal))
+        {
+            bool used = UsedSectorKeys.Contains(key);
+            string check = used && Degenerate(k.Values).Any() ? " **check:** " + string.Join(", ", Degenerate(k.Values)) : "";
+            sb.AppendLine($"| {Md(key)} | {k.Zones.Count} | {(used ? "reads" : "**ignored**")}{check} | {Distribution(k.Values)} |");
+        }
+        sb.AppendLine();
     }
 
     private static string Md(string s) => s.Replace("|", "\\|").Replace("`", "'");

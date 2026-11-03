@@ -16,10 +16,12 @@ using DaocAssets.Nif;
 namespace DaocAssets.Library;
 
 /// <summary>Where a resolved asset came from.</summary>
-public enum AssetOrigin { Override, Converted, Missing }
+/// <summary>Where a model came from: an override, a conversion, not in the install (Missing), or
+/// in the install but the conversion threw (Failed: a converter bug to fix, not missing content).</summary>
+public enum AssetOrigin { Override, Converted, Missing, Failed }
 
 /// <summary>A resolved model: its .glb path (or null if missing) and whether it was an override.</summary>
-public readonly record struct ModelResult(string? GlbPath, AssetOrigin Origin);
+public readonly record struct ModelResult(string? GlbPath, AssetOrigin Origin, string? Error = null);
 
 /// <summary>
 /// A convert-once library over a client install. <c>models/</c> and <c>textures/</c> hold the
@@ -79,6 +81,11 @@ public sealed class AssetLibrary
         catch (NifFormatException)
         {
             return new ModelResult(null, AssetOrigin.Missing);
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException or IndexOutOfRangeException)
+        {
+            // One model the converter can't export must not take the whole zone down with it.
+            return new ModelResult(null, AssetOrigin.Failed, $"{nifName}: {e.GetType().Name}: {e.Message}");
         }
     }
 

@@ -83,7 +83,7 @@ public sealed class TerrainTests
         try
         {
             File.WriteAllBytes(tmp, mpk);
-            ZoneTerrain terrain = ZoneTerrain.Read(tmp);
+            ZoneTerrain terrain = ZoneTerrain.Read(tmp, sizeX: 1, sizeY: 1);
             var tiles = terrain.BuildTiledMesh(0, 0, 4);
 
             Assert.Equal(16, tiles.Count);
@@ -138,12 +138,40 @@ public sealed class TerrainTests
         try
         {
             File.WriteAllBytes(tmp, mpk);
-            ZoneTerrain terrain = ZoneTerrain.Read(tmp);
+            ZoneTerrain terrain = ZoneTerrain.Read(tmp, sizeX: 1, sizeY: 1);
             float step = 8192f / 7;                                  // 8 cells span the zone's 8192 units
             Assert.Equal(0f, terrain.HeightAt(0, 5000), 3);
             Assert.Equal(3 * 8f, terrain.HeightAt(3 * step, 100), 3);  // on cell 3
             Assert.Equal(3.5f * 8f, terrain.HeightAt(3.5f * step, 4000), 3);   // halfway to cell 4
             Assert.Equal(7 * 8f, terrain.HeightAt(99999, 0), 3);      // clamped at the far edge
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void TheHeightmapSpansTheZoneTablesSizeNotSectorSize()
+    {
+        // Dartmoor and others write sizex=0 (read literally, the zone was 0 units wide and its terrain
+        // collapsed to a point); Snowdonia writes 4 (its terrain covered half the zone). The zone
+        // table's size (8 for every zone) is the extent.
+        byte[] mpk = MpkBuilder.Build(
+            ("terrain.pcx", FlatPcx(8, 8, value: 1)), ("offset.pcx", FlatPcx(8, 8, value: 0)),
+            ("SECTOR.DAT", System.Text.Encoding.Latin1.GetBytes("[sectorsize]\nsizex=0\nsizey=0\n[terrain]\nscalefactor=8\noffsetfactor=32\n")));
+        string tmp = Path.Combine(Path.GetTempPath(), "daoc-terr-" + Guid.NewGuid().ToString("N") + ".mpk");
+        try
+        {
+            File.WriteAllBytes(tmp, mpk);
+            ZoneTerrain terrain = ZoneTerrain.Read(tmp);
+            Assert.Equal(8 * 8192, terrain.RegionWidth);
+            Assert.Equal(8 * 8192, terrain.RegionHeight);
+            File.WriteAllBytes(tmp, MpkBuilder.Build(
+                ("terrain.pcx", FlatPcx(8, 8, value: 1)), ("offset.pcx", FlatPcx(8, 8, value: 0)),
+                ("SECTOR.DAT", System.Text.Encoding.Latin1.GetBytes("[sectorsize]\nsizex=4\nsizey=4\n"))));
+            Assert.Equal(8 * 8192, ZoneTerrain.Read(tmp).RegionWidth);
+            Assert.Equal(4 * 8192, ZoneTerrain.Read(tmp, sizeX: 4, sizeY: 4).RegionWidth);
         }
         finally
         {

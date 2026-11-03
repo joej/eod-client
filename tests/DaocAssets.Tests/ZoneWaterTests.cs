@@ -59,9 +59,11 @@ public class ZoneWaterTests
     }
 
     [Fact]
-    public void SmallerZonesScaleTheGridToTheirSize()
+    public void TheGridSpansTheZoneTablesSizeNotSectorSize()
     {
-        var bodies = ZoneWater.Parse(Sector.Replace("sizex=8", "sizex=4"));
+        // SECTOR.DAT's sizex=4 (Snowdonia) is not the zone's extent: the zone table's 8 is.
+        Assert.Equal(ZoneWater.Parse(Sector)[0].Left[0], ZoneWater.Parse(Sector.Replace("sizex=8", "sizex=4"))[0].Left[0]);
+        var bodies = ZoneWater.Parse(Sector, sizeX: 4);
         Assert.Equal(new Vector2(1280, 0), bodies[0].Left[0]);   // 4 * 8192 / 256 = 128 per point
     }
 

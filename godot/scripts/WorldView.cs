@@ -29,8 +29,8 @@ public partial class WorldView : Node3D
     // 0.025 — a double-scale that put the terrain at 1/40th size, 5 km from the player (W1 follow-up).
     private const float RegionMetresPerUnit = 0.025f;
 
-    private DaocConnection _connection = null!;
-    private ClientSession _session = null!;
+    private DaocConnection? _connection;
+    private ClientSession? _session;   // null offline (--offline): no server, nothing sent
     private WorldPosition _world = null!;
     private Node3D _body = null!;        // the controlled character
     private Node3D? _terrain;            // terrain root with trimesh collision, for ground raycasts
@@ -155,7 +155,7 @@ public partial class WorldView : Node3D
     /// stand in for the character; null or missing falls back to the capsule (MVC needs no assets).
     /// <paramref name="zoneManifest"/> is an optional zone.csv (from `mpk zone`) whose static objects
     /// are placed around the character; null or missing just shows the flat ground.</summary>
-    public void Init(DaocConnection connection, ClientSession session, WorldPosition world,
+    public void Init(DaocConnection? connection, ClientSession? session, WorldPosition world,
         string? modelPath = null, string? zoneManifest = null, string? libraryPath = null, string? terrainPath = null)
     {
         _connection = connection;
@@ -1045,10 +1045,64 @@ public partial class WorldView : Node3D
             _camYaw = -Mathf.DegToRad(c[3]);
             _camPitch = Mathf.DegToRad(c[4]);
         }
+        int set = System.Array.IndexOf(args, "--shots");
+        int dir = System.Array.IndexOf(args, "--shots-out");
+        if (set >= 0 && set + 1 < args.Length && dir >= 0 && dir + 1 < args.Length)
+            _ = RunShotSet(ResolveArgPath(args[set + 1]), ResolveArgPath(args[dir + 1]));
         int s = System.Array.IndexOf(args, "--shot");
         if (s >= 0 && s + 1 < args.Length && double.TryParse(args[s + 1], System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out double at))
             _shotAt = at;
+    }
+
+    // A fixed shot set (--shots FILE --shots-out DIR): each line of FILE is "name X Y Z YAW PITCH"
+    // (region units, degrees; '#' starts a comment). The camera visits each pose in turn, the frame
+    // is saved as DIR/name.png, and the client quits when the set is done. Run the same set before and
+    // after an asset change and compare: the world checked the same way every time, not by walking.
+    private async System.Threading.Tasks.Task RunShotSet(string file, string dir)
+    {
+        DirAccess.MakeDirRecursiveAbsolute(dir);
+        var poses = new System.Collections.Generic.List<(string Name, float[] P)>();
+        foreach (string raw in System.IO.File.ReadAllLines(file))
+        {
+            string line = raw.Split('#')[0].Trim();
+            if (line.Length == 0) continue;
+            string[] f = line.Split((char[])[' ', '\t'], System.StringSplitOptions.RemoveEmptyEntries);
+            if (f.Length == 6 && Floats(string.Join(' ', f[1..])) is { Length: 5 } c)
+                poses.Add((f[0], c));
+            else
+                GD.PrintErr($"[shots] skipped line: {raw}");
+        }
+        // Let the zone finish loading and settle for a moment first.
+        for (int k = 0; k < 10; k++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        foreach ((string name, float[] c) in poses)
+        {
+            SetChase(false);
+            _camera.GlobalPosition = ToGodot(c[0], c[1], c[2]);
+            _camYaw = -Mathf.DegToRad(c[3]);
+            _camPitch = Mathf.DegToRad(c[4]);
+            for (int k = 0; k < 4; k++)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            Image img = GetViewport().GetTexture().GetImage();
+            string path = dir.PathJoin(name + ".png");
+            Error err = img.SavePng(path);
+            GD.Print(err == Error.Ok ? $"[shots] {name} -> {path}" : $"[shots] {name} failed: {err}");
+        }
+        GD.Print($"[shots] {poses.Count} shot(s) done");
+        if (_session is null)
+            GetTree().Quit();
+        else
+            QuitPressed?.Invoke();
+    }
+
+    // Like CharacterScreen's paths: relative to the shell's working directory, not godot/.
+    private static string ResolveArgPath(string path)
+    {
+        if (System.IO.Path.IsPathRooted(path)) return path;
+        string cwd = OS.GetEnvironment("PWD");
+        return System.IO.Path.GetFullPath(System.IO.Path.Combine(string.IsNullOrEmpty(cwd) ? System.IO.Directory.GetCurrentDirectory() : cwd, path));
     }
 
     private async System.Threading.Tasks.Task SaveScreenshot()
@@ -1222,7 +1276,8 @@ public partial class WorldView : Node3D
         // Reflect it locally at once so the overlay and keep-alive see the new position without
         // waiting for the async send; MoveToAsync sets the same values on the session.
         _world = _world with { Position = _world.Position with { X = rx, Y = ry, Z = rz, Heading = heading } };
-        _ = _session.MoveToAsync(rx, ry, rz, heading, speed);
+        if (_session is not null)
+            _ = _session.MoveToAsync(rx, ry, rz, heading, speed);
     }
 
     // Pivot height on the body (shoulder/eye), metres — OfflineDAoC uses 1.55.
@@ -1330,6 +1385,11 @@ public partial class WorldView : Node3D
         if (line.Length == 0 || _closedReason is not null)
             return;
 
+        if (_session is null)
+        {
+            AppendChat("(offline: nothing is sent)", new Color(0.8f, 0.5f, 0.5f));
+            return;
+        }
         try
         {
             if (line.StartsWith('/'))
@@ -1450,12 +1510,12 @@ public partial class WorldView : Node3D
         else
             UpdateDebugCamera(delta);
         _seconds += delta;
-        while (_draining && _connection.TryReceive(out ServerPacket packet))
+        while (_draining && _connection is not null && _connection.TryReceive(out ServerPacket packet))
             _bridge.Dispatch(packet);
         _packets = _bridge.PacketCount;
         InterpolateEntities(delta);
 
-        if (_closedReason is null && _connection.Completion.IsCompleted)
+        if (_closedReason is null && _connection is not null && _connection.Completion.IsCompleted)
         {
             _closedReason = _connection.Completion.Exception?.InnerException?.Message ?? "connection closed";
             _note = "";

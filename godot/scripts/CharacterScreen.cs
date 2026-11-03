@@ -46,6 +46,14 @@ public partial class CharacterScreen : Control
         LoadSettings();
 
         string[] args = OS.GetCmdlineUserArgs();
+        // --offline X Y Z [REGION]: the world view at that position with no server (no login, no
+        // entities, nothing sent). For checking converted assets (with --shots) any time.
+        int o = Array.IndexOf(args, "--offline");
+        if (o >= 0 && o + 3 < args.Length)
+        {
+            EnterOffline(args, o);
+            return;
+        }
         int i = Array.IndexOf(args, "--autologin");
         if (i >= 0 && args.Length >= i + 3)
         {
@@ -55,6 +63,26 @@ public partial class CharacterScreen : Control
             // stay in the world indefinitely for interactive play (close the window or press Quit).
             _ = AutoLogin(args[i + 1], args[i + 2], port, enter, Option(args, "--stay"));
         }
+    }
+
+    private void EnterOffline(string[] args, int o)
+    {
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        float x = float.Parse(args[o + 1], inv), y = float.Parse(args[o + 2], inv), z = float.Parse(args[o + 3], inv);
+        ushort region = o + 4 < args.Length && ushort.TryParse(args[o + 4], out ushort r) ? r : (ushort)1;
+        DaocProtocol.World.Zone? zone = DaocProtocol.World.Zones.Find(region, x, y);
+        if (zone is null)
+        {
+            _status.Text = $"--offline: no zone at {x} {y} in region {region}";
+            return;
+        }
+        var world = new WorldPosition(new PositionAndObjectId(x, y, z, 0, 0, region, 0), zone);
+        _world = new WorldView();
+        _world.Init(null, null, world, ResolvedPath(args, "--model"),
+            ResolvedPath(args, "--zone"), ResolvedPath(args, "--library"), ResolvedPath(args, "--terrain"));
+        _world.QuitPressed += () => GetTree().Quit();
+        GetTree().Root.CallDeferred(Node.MethodName.AddChild, _world);
+        Visible = false;
     }
 
     private static int? Option(string[] args, string name)

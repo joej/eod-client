@@ -24,7 +24,7 @@ public static class ZoneExport
     /// offset (from the zone table), in region units.
     /// </summary>
     public static ZoneExportReport Export(
-        AssetLibrary library, string zoneDatMpk, int offsetX, int offsetY, string outDir)
+        AssetLibrary library, string zoneDatMpk, int offsetX, int offsetY, string outDir, int sizeX = 8, int sizeY = 8)
     {
         string nifsCsv, fixturesCsv;
         using (MpkArchive dat = MpkArchive.Open(zoneDatMpk))
@@ -40,13 +40,15 @@ public static class ZoneExport
         // the other 975 sit a median 726 units, up to 1,583, below the ground), while objects without
         // the flag match the terrain to within ~40 units. So an On Ground object gets the terrain
         // height under its position; the rest keep their Z (a bridgehouse sits 315 below on purpose).
+        // A Z of 0 means the ground too, flag or not: across all 87 outdoor zones 287 unflagged rows
+        // have Z = 0, and they are dead trees, coral, catacomb entrances, ant hills and stones.
         ZoneTerrain? terrain = null;
-        try { terrain = ZoneTerrain.Read(zoneDatMpk); }
+        try { terrain = ZoneTerrain.Read(zoneDatMpk, sizeX, sizeY); }
         catch (Exception e) when (e is FormatException or InvalidDataException or MpkFormatException or KeyNotFoundException) { }
         int grounded = 0;
         float Z(ZoneFixture f)
         {
-            if (!f.OnGround || terrain is null)
+            if (!(f.OnGround || f.Z == 0) || terrain is null)
                 return f.Z;
             grounded++;
             return terrain.HeightAt(f.X - offsetX, f.Y - offsetY);
@@ -56,10 +58,17 @@ public static class ZoneExport
         // also gathers each model's textures. Lookups are index-backed — no install scan.
         var glbByNif = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         int converted = 0, missingModel = 0, failed = 0;
+        var failures = new List<string>();
 
         foreach (string nif in layout.Models)
         {
             ModelResult r = library.GetModel(nif);
+            if (r.Origin == AssetOrigin.Failed)
+            {
+                failed++;
+                failures.Add(r.Error!);
+                continue;
+            }
             if (r.GlbPath is null)
             {
                 missingModel++;
@@ -91,6 +100,7 @@ public static class ZoneExport
         return new ZoneExportReport(layout.Fixtures.Count, layout.Models.Count, converted, missingModel, failed, placed)
         {
             Grounded = grounded,
+            Failures = failures,
         };
     }
 
@@ -108,4 +118,6 @@ public readonly record struct ZoneExportReport(
 {
     /// <summary>Placements stood on the terrain because they are flagged "On Ground".</summary>
     public int Grounded { get; init; }
+    /// <summary>Models whose conversion threw (converter bugs), one line each.</summary>
+    public IReadOnlyList<string> Failures { get; init; } = [];
 }

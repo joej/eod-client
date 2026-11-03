@@ -377,6 +377,18 @@ private/audit/nif-audit.md` and keep its integrity section clean (every decoded 
 boundary); update `NifSurvey.Coverage` when the reader starts or stops using a block type. Asset gaps
 are found by measurement (`docs/nif-coverage.md`), not by waiting for them to show up in the world.
 
+Rule: an asset change is checked by its **result**, not by counts ("1,536 placements converted" said
+nothing about 546 of them being underground). Before handing any converter or rendering change to the
+owner:
+1. `tools/zonecheck-all.sh`: every outdoor zone converted and each placement checked against the
+   terrain (under/sunk/floating/outside/size/missing; `mpk zonecheck`). Errors are fixed or explained.
+2. `tools/shots.sh <label>`: the fixed camera poses (`tools/shots/camhills.txt`, offline, no server)
+   before and after; look at every shot. Add a pose for every bug the owner reports, so it stays fixed.
+3. When the converter starts reading a new file, column or key, add it to `ZoneAudit.UsedSectorKeys` /
+   `UsedCsvColumns`, rerun `mpk worldaudit`, and work through the "Fields in the files we read" review
+   list: every ignored field is understood and either used or recorded as irrelevant.
+The owner walking the world confirms; it is not how faults are found.
+
 Rule: nothing under `src/` may reference `GodotSharp`. If protocol code needs
 something from the engine, it belongs in the Godot project instead.
 

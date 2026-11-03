@@ -40,8 +40,15 @@ public sealed class ZoneTerrain
         RegionHeight = sizeY * 8192;
     }
 
-    /// <summary>Reads the terrain for the zone whose data archive is <paramref name="zoneDatMpk"/>.</summary>
-    public static ZoneTerrain Read(string zoneDatMpk)
+    /// <summary>
+    /// Reads the terrain for the zone whose data archive is <paramref name="zoneDatMpk"/>. The heightmap
+    /// spans the zone's size from the zone table (<paramref name="sizeX"/> x <paramref name="sizeY"/>
+    /// sectors of 8192 units; every zone in the table is 8 x 8), NOT SECTOR.DAT's [sectorsize]: that
+    /// says 4 in Snowdonia and one other zone and 0 in nine, and only the table's 8 makes the stored Z
+    /// of Snowdonia's objects match the ground (median gap 58 units, against 6,016 with 4). What
+    /// sizex means is open question W14.
+    /// </summary>
+    public static ZoneTerrain Read(string zoneDatMpk, int sizeX = 8, int sizeY = 8)
     {
         using MpkArchive dat = MpkArchive.Open(zoneDatMpk);
         Pcx terrain = Pcx.Read(ReadMember(dat, "terrain.pcx"));
@@ -49,7 +56,6 @@ public sealed class ZoneTerrain
         string sector = System.Text.Encoding.Latin1.GetString(ReadMember(dat, "SECTOR.DAT"));
 
         (int scale, int off) = ParseFactors(sector);
-        (int sizeX, int sizeY) = ParseSize(sector);
         return new ZoneTerrain(terrain, offset, scale, off, sizeX, sizeY);
     }
 
@@ -212,13 +218,6 @@ public sealed class ZoneTerrain
         int scale = Ini(ini, "scalefactor") ?? 1;
         int offset = Ini(ini, "offsetfactor") ?? 0;
         return (scale, offset);
-    }
-
-    private static (int sizeX, int sizeY) ParseSize(string ini)
-    {
-        int sx = Ini(ini, "sizex") ?? 8;
-        int sy = Ini(ini, "sizey") ?? 8;
-        return (sx, sy);
     }
 
     // First "key=value" (case-insensitive key) whose value parses as an int, anywhere in the INI.

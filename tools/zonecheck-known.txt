@@ -1,0 +1,23 @@
+# Zone-check findings reviewed and believed intended: model | kind | why.
+# mpk zonecheck reports these as "known" and does not count them, so a clean check means nothing NEW.
+# Each entry is a judgement from the data, not yet confirmed against the retail client: mark it
+# "confirmed (retail, <date>)" once a retail screenshot shows the same, and remove any entry that
+# turns out wrong. Kinds: under the ground, sunk into the ground, floating, implausible size,
+# outside its zone, missing or empty model.
+
+# Floating by design: magic and portal effects hover; rafts and lily pads float on water.
+magprtl1.glb        | floating | magic portal, hovers (unverified)
+N_entryportal.glb   | floating | portal, hovers (unverified)
+H_entryportal.glb   | floating | portal, hovers (unverified)
+b_entryportal.glb   | floating | portal, hovers (unverified)
+RAFT1.glb           | floating | raft on water (unverified)
+lillypads.glb       | floating | lily pads on water (unverified)
+
+# Atlantis sea floor (zones 70-77): ruins, coral and rock formations half-buried in the sea bed.
+ruins_ocean_01.glb    | sunk into the ground | half-buried sea-floor ruin, Atlantis (unverified)
+ruins_ocean_04.glb    | sunk into the ground | half-buried sea-floor ruin, Atlantis (unverified)
+ruins_land_06.glb     | sunk into the ground | half-buried ruin, Atlantis (unverified)
+coralarea2.glb        | sunk into the ground | coral bed set into the sea floor (unverified)
+coralarea4.glb        | sunk into the ground | coral bed set into the sea floor (unverified)
+rock_formation_27.glb | sunk into the ground | rock formation set into the sea floor (unverified)
+largenettingsystem.glb| sunk into the ground | netting set into the sea floor (unverified)

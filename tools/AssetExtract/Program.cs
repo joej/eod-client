@@ -14,6 +14,10 @@ return Cli.Run(args);
 
 internal static class Cli
 {
+    // --size W H: the zone's size in 8192-unit sectors from the zone table (default 8 x 8, which every
+    // zone is). Terrain and water span this, not SECTOR.DAT's [sectorsize] (see ZoneTerrain.Read).
+    private static (int X, int Y) ZoneSize = (8, 8);
+
     public static int Run(string[] args)
     {
         if (args.Length < 2)
@@ -39,6 +43,9 @@ internal static class Cli
         if (command == "worldaudit")
             return WorldAuditCmd(args);
 
+        if (command == "zonecheck")
+            return ZoneCheckCmd(args);
+
         if (command == "water")
             return WaterCmd(args);
 
@@ -54,6 +61,7 @@ internal static class Cli
 
         if (command == "convert")
             return Convert(inputPath, args);
+
 
         try
         {
@@ -116,6 +124,57 @@ internal static class Cli
             Console.WriteLine($"  {(c == NifCoverage.Unhandled ? "skipped" : "partial")} {g.Key} x{g.Count()}" +
                 (note.Length > 0 ? $": {note}" : ""));
         }
+    }
+
+    // zonecheck <dat<NNN>.mpk> --zone DIR --library LIBDIR --offset X Y [--out FILE.md]: places every
+    // object of a converted zone (DIR/zone.csv) as the client does and checks it against the terrain:
+    // missing models, objects under the ground, sunk, floating, outside the zone, implausible sizes.
+    // Exit code 1 when there are errors, so scripts can stop on them.
+    private static int ZoneCheckCmd(string[] args)
+    {
+        if (args.Length < 2) return Usage();
+        string datMpk = args[1];
+        string? zoneDir = null, libDir = null, outPath = null, knownPath = null;
+        int? offX = null, offY = null;
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] == "--zone" && i + 1 < args.Length) zoneDir = args[++i];
+            else if (args[i] == "--known" && i + 1 < args.Length) knownPath = args[++i];
+            else if (args[i] == "--library" && i + 1 < args.Length) libDir = args[++i];
+            else if (args[i] == "--out" && i + 1 < args.Length) outPath = args[++i];
+            else if (args[i] == "--size" && i + 2 < args.Length
+                     && int.TryParse(args[i + 1], out int zsx) && int.TryParse(args[i + 2], out int zsy))
+            { ZoneSize = (zsx, zsy); i += 2; }
+            else if (args[i] == "--offset" && i + 2 < args.Length
+                     && int.TryParse(args[i + 1], out int ox) && int.TryParse(args[i + 2], out int oy))
+            { offX = ox; offY = oy; i += 2; }
+            else return Usage();
+        }
+        if (zoneDir is null || libDir is null || offX is null || offY is null)
+            return Usage();
+
+        var terrain = DaocAssets.Zone.ZoneTerrain.Read(datMpk, ZoneSize.X, ZoneSize.Y);
+        var placements = DaocAssets.Zone.ZoneCheck.ReadManifest(File.ReadAllText(Path.Combine(zoneDir, "zone.csv")));
+        var cache = new Dictionary<string, DaocAssets.Zone.ModelBounds?>(StringComparer.OrdinalIgnoreCase);
+        DaocAssets.Zone.ModelBounds? Bounds(string glb)
+        {
+            if (cache.TryGetValue(glb, out var b)) return b;
+            string path = new[] { Path.Combine(libDir!, "overrides", glb), Path.Combine(libDir!, "models", glb), Path.Combine(libDir!, glb) }
+                .FirstOrDefault(File.Exists) ?? "";
+            return cache[glb] = path.Length == 0 ? null : DaocAssets.Zone.ZoneCheck.GlbBounds(path);
+        }
+        var report = DaocAssets.Zone.ZoneCheck.Check(placements,
+            (x, y) => terrain.HeightAt(x - offX.Value, y - offY.Value), Bounds,
+            offX.Value, offY.Value, terrain.RegionWidth, terrain.RegionHeight);
+        if (knownPath is not null)
+            report = DaocAssets.Zone.ZoneCheck.ApplyKnown(report, DaocAssets.Zone.ZoneCheck.ReadKnown(File.ReadAllText(knownPath)));
+        Console.WriteLine($"Zone check: {report.Summary()}");
+        if (outPath is not null)
+        {
+            File.WriteAllText(outPath, report.ToMarkdown($"Zone check: {Path.GetFileName(Path.GetFullPath(zoneDir))}"));
+            Console.WriteLine($"  report -> {Path.GetFullPath(outPath)}");
+        }
+        return report.Errors > 0 ? 1 : 0;
     }
 
     // audit <client-dir> --out FILE.md: surveys every NIF and .kfa animation (also NIF format) in the
@@ -388,6 +447,9 @@ internal static class Cli
             if (args[i] == "--out" && i + 1 < args.Length) outDir = args[++i];
             else if (args[i] == "--index" && i + 1 < args.Length) indexPath = args[++i];
             else if (args[i] == "--library" && i + 1 < args.Length) libDir = args[++i];
+            else if (args[i] == "--size" && i + 2 < args.Length
+                     && int.TryParse(args[i + 1], out int zsx) && int.TryParse(args[i + 2], out int zsy))
+            { ZoneSize = (zsx, zsy); i += 2; }
             else if (args[i] == "--offset" && i + 2 < args.Length
                      && int.TryParse(args[i + 1], out int ox) && int.TryParse(args[i + 2], out int oy))
             { offX = ox; offY = oy; i += 2; }
@@ -406,12 +468,14 @@ internal static class Cli
         try
         {
             var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir);
-            ZoneExportReport r = ZoneExport.Export(library, datMpk, offX.Value, offY.Value, outDir);
+            ZoneExportReport r = ZoneExport.Export(library, datMpk, offX.Value, offY.Value, outDir, ZoneSize.X, ZoneSize.Y);
             Console.WriteLine($"Zone: {r.Fixtures} fixtures, {r.Models} distinct models -> " +
                 $"{r.Converted} in library, {r.MissingModel} not found; " +
-                $"{r.Placed} placements written to {Path.GetFullPath(outDir)}/zone.csv " +
+                $"{r.Placed} placements ({r.Grounded} stood on the terrain) written to {Path.GetFullPath(outDir)}/zone.csv " +
                 $"(library: {Path.GetFullPath(libDir)})");
-            return 0;
+            foreach (string failure in r.Failures)
+                Console.WriteLine($"  FAILED to convert {failure}");
+            return r.Failed > 0 ? 1 : 0;
         }
         catch (Exception e) when (e is MpkFormatException or DirectoryNotFoundException or InvalidDataException)
         {
@@ -435,6 +499,9 @@ internal static class Cli
             if (args[i] == "--out" && i + 1 < args.Length) outDir = args[++i];
             else if (args[i] == "--index" && i + 1 < args.Length) indexPath = args[++i];
             else if (args[i] == "--library" && i + 1 < args.Length) libDir = args[++i];
+            else if (args[i] == "--size" && i + 2 < args.Length
+                     && int.TryParse(args[i + 1], out int zsx) && int.TryParse(args[i + 2], out int zsy))
+            { ZoneSize = (zsx, zsy); i += 2; }
             else if (args[i] == "--offset" && i + 2 < args.Length
                      && int.TryParse(args[i + 1], out int ox) && int.TryParse(args[i + 2], out int oy))
             { offX = ox; offY = oy; i += 2; }
@@ -452,7 +519,7 @@ internal static class Cli
             Console.Error.WriteLine("water: no SECTOR.DAT in this archive.");
             return 1;
         }
-        var bodies = ZoneWater.Parse(System.Text.Encoding.Latin1.GetString(dat.Extract(sectorEntry)));
+        var bodies = ZoneWater.Parse(System.Text.Encoding.Latin1.GetString(dat.Extract(sectorEntry)), ZoneSize.X);
         Directory.CreateDirectory(outDir);
         File.WriteAllLines(Path.Combine(outDir, "water.csv"),
             [ZoneWater.CsvHeader, .. bodies.Select(ZoneWater.CsvRow)]);
@@ -602,6 +669,9 @@ internal static class Cli
             else if (args[i] == "--index" && i + 1 < args.Length) indexPath = args[++i];
             else if (args[i] == "--library" && i + 1 < args.Length) libDir = args[++i];
             else if (args[i] == "--tiles" && i + 1 < args.Length && int.TryParse(args[i + 1], out int tn)) { tiles = tn; i++; }
+            else if (args[i] == "--size" && i + 2 < args.Length
+                     && int.TryParse(args[i + 1], out int zsx) && int.TryParse(args[i + 2], out int zsy))
+            { ZoneSize = (zsx, zsy); i += 2; }
             else if (args[i] == "--offset" && i + 2 < args.Length
                      && int.TryParse(args[i + 1], out int ox) && int.TryParse(args[i + 2], out int oy))
             { offX = ox; offY = oy; i += 2; }
@@ -623,7 +693,7 @@ internal static class Cli
 
         try
         {
-            ZoneTerrain terrain = ZoneTerrain.Read(datMpk);
+            ZoneTerrain terrain = ZoneTerrain.Read(datMpk, ZoneSize.X, ZoneSize.Y);
             var meshes = terrain.BuildTiledMesh(offX.Value, offY.Value, tiles);
             var model = new NifModel { Version = new NifVersion(0, 0, 0, 0), Meshes = [.. meshes] };
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outPath))!);
@@ -704,11 +774,12 @@ internal static class Cli
               mpk convert  <model.nif> [--out FILE.glb]
               mpk textures <client-dir> <model.nif | dir-of-nifs> --out DIR
               mpk index    <client-dir> --out index.json
-              mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR
-              mpk terrain  <dat<NNN>.mpk> --offset X Y --out FILE.glb [--tiles N] [--index index.json --library LIBDIR]
+              mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR [--size W H]
+              mpk terrain  <dat<NNN>.mpk> --offset X Y --out FILE.glb [--size W H] [--tiles N] [--index index.json --library LIBDIR]
               mpk audit    <client-dir> --out FILE.md
               mpk worldaudit <client-dir> --out FILE.md
-              mpk water    <dat<NNN>.mpk> --offset X Y --out DIR [--index index.json --library LIBDIR]
+              mpk zonecheck <dat<NNN>.mpk> --zone DIR --library LIBDIR --offset X Y [--size W H] [--known FILE] [--out FILE.md]
+              mpk water    <dat<NNN>.mpk> --offset X Y --out DIR [--size W H] [--index index.json --library LIBDIR]
               mpk sky      <dat<NNN>.mpk> --out DIR [--name albion] [--skympk <zones/sky/sky.mpk>] [--index index.json --library LIBDIR]
 
             With no member, extract writes every member. Default --out is the current directory.
