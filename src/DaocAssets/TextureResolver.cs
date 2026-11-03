@@ -51,8 +51,9 @@ public sealed class TextureResolver
         var names = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (NifMesh mesh in model.Meshes)
-            if (!string.IsNullOrEmpty(mesh.TextureFile) && seen.Add(mesh.TextureFile))
-                names.Add(mesh.TextureFile);
+            foreach (string? texture in new[] { mesh.TextureFile, mesh.DarkTextureFile, mesh.DetailTextureFile })
+                if (!string.IsNullOrEmpty(texture) && seen.Add(texture!))
+                    names.Add(texture!);
         return names;
     }
 

@@ -60,11 +60,53 @@ public static class ModelTexturing
                 // of leaving them stair-stepped and shimmering.
                 if (copy.Transparency == BaseMaterial3D.TransparencyEnum.AlphaScissor)
                     copy.AlphaAntialiasingMode = BaseMaterial3D.AlphaAntiAliasing.AlphaToCoverage;
+                ApplyLayers(copy, material, dirs, cache);
                 mi.SetSurfaceOverrideMaterial(s, copy);
                 textured++;
             }
         }
         return textured;
+    }
+
+    private const string LayersMeta = "eod_layers";
+
+    /// <summary>
+    /// Copies each material's glTF <c>extras</c> (the converter's extra layers: dark and detail map
+    /// names, vertex colours) onto the Godot material as metadata, read straight from the file's JSON.
+    /// Call after <c>GenerateScene</c>, before <see cref="Apply"/>.
+    /// </summary>
+    public static void TagLayers(GltfState state)
+    {
+        if (!state.Json.TryGetValue("materials", out Variant mats) || mats.VariantType != Variant.Type.Array)
+            return;
+        Godot.Collections.Array list = mats.AsGodotArray();
+        Godot.Collections.Array<Material> materials = state.GetMaterials();
+        for (int i = 0; i < list.Count && i < materials.Count; i++)
+            if (list[i].AsGodotDictionary().TryGetValue("extras", out Variant extras)
+                && extras.VariantType == Variant.Type.Dictionary)
+                materials[i].SetMeta(LayersMeta, extras);
+    }
+
+    // DAoC's extra texture layers, as Godot's material detail layer (its own UV set, multiplied):
+    // the dark map (mostly baked shading; the moss and rock of Domnann's standing stones), else the
+    // detail map. Vertex colours, where the model says to use them, tint the base colour.
+    private static void ApplyLayers(BaseMaterial3D copy, Material original, System.Collections.Generic.List<string> dirs,
+        System.Collections.Generic.Dictionary<string, ImageTexture?> cache)
+    {
+        if (!original.HasMeta(LayersMeta))
+            return;
+        Godot.Collections.Dictionary layers = original.GetMeta(LayersMeta).AsGodotDictionary();
+        string? layer = layers.TryGetValue("dark", out Variant d) ? d.AsString()
+            : layers.TryGetValue("detail", out Variant t) ? t.AsString() : null;
+        if (layer is not null && LoadTexture(dirs, layer, cache) is { } tex)
+        {
+            copy.DetailEnabled = true;
+            copy.DetailAlbedo = tex;
+            copy.DetailUVLayer = BaseMaterial3D.DetailUV.UV2;
+            copy.DetailBlendMode = BaseMaterial3D.BlendModeEnum.Mul;
+        }
+        if (layers.ContainsKey("vertexColors"))
+            copy.VertexColorUseAsAlbedo = true;
     }
 
     /// <summary>Loads one texture by stem (e.g. "watery") from the first dir that has it, or null.</summary>

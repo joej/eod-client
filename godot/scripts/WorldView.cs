@@ -746,6 +746,7 @@ public partial class WorldView : Node3D
             var state = new GltfState();
             if (doc.AppendFromFile(path, state) == Error.Ok && doc.GenerateScene(state) is Node3D m)
             {
+                ModelTexturing.TagLayers(state);
                 // Texture search dirs, in priority order: overrides, textures, library root.
                 int t = ModelTexturing.Apply(m, libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir);
                 _zoneTexturedModels += t > 0 ? 1 : 0;

@@ -242,6 +242,50 @@ public sealed class NifFileTests
         Assert.DoesNotContain(factors, f => Near(f, tan));
     }
 
+    public static IEnumerable<object[]> DomnanGrove()
+    {
+        string p = Path.Combine(AppContext.BaseDirectory, "live-nif", "domnangrove-422.nif");
+        if (File.Exists(p))
+            yield return [p];
+    }
+
+    [Theory]
+    [MemberData(nameof(DomnanGrove))]
+    public void TheGrovesStandingStonesCarryTheirDarkMapOnTheSecondUvSet(string path)
+    {
+        // zones/Nifs HDomnanGrove.nif, NetImmerse 4.2.2.0: the standing stones (mesh425) are a white
+        // overlay texture (Hbasevine) times a dark map (cliff02) on UV set 1. Reading only the base
+        // slot drew them pure white (open question W25).
+        NifModel model = NifFile.Read(File.ReadAllBytes(path));
+        NifMesh stones = Assert.Single(model.Meshes, m => m.Name == "mesh425");
+        Assert.Equal(("Hbasevine.dds", "cliff02.dds"), (stones.TextureFile, stones.DarkTextureFile));
+        Assert.NotNull(stones.DarkTexCoords);
+        Assert.NotSame(stones.TexCoords, stones.DarkTexCoords);
+        Assert.NotNull(stones.VertexColors);   // the shape's NiVertexColorProperty uses them
+
+        // In the glb: the second UV set and the colours as vertex attributes, the layer by name.
+        var gltf = GltfExporter.BuildScene(model).ToGltf2();
+        var prim = gltf.LogicalMeshes.Single(m => m.Name == "mesh425").Primitives.Single();
+        Assert.NotNull(prim.GetVertexAccessor("TEXCOORD_1"));
+        Assert.NotNull(prim.GetVertexAccessor("COLOR_0"));
+        using var doc = System.Text.Json.JsonDocument.Parse(gltf.GetJsonPreview());
+        var material = doc.RootElement.GetProperty("materials")[prim.Material.LogicalIndex];
+        Assert.Equal("cliff02", material.GetProperty("extras").GetProperty("dark").GetString());
+    }
+
+    [Fact]
+    public void APlainShapeKeepsTheSmallVertexFormatAndNoExtras()
+    {
+        // No dark map, no vertex colours: one UV set, no COLOR_0, no extras (nothing for the client to bind).
+        var model = new NifModel { Version = new NifVersion(4, 2, 2, 0), Meshes = [TriMesh("wall", "stone.dds", null)] };
+        var gltf = GltfExporter.BuildScene(model).ToGltf2();
+        var prim = gltf.LogicalMeshes.Single().Primitives.Single();
+        Assert.Null(prim.GetVertexAccessor("TEXCOORD_1"));
+        Assert.Null(prim.GetVertexAccessor("COLOR_0"));
+        using var doc = System.Text.Json.JsonDocument.Parse(gltf.GetJsonPreview());
+        Assert.False(doc.RootElement.GetProperty("materials")[0].TryGetProperty("extras", out _));
+    }
+
     [Fact]
     public void A4xLodNodeKeepsTheLevelWithTheNearestRangeNotEveryUnnamedLevel()
     {

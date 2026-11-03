@@ -163,7 +163,7 @@ public static partial class NifFile
         private readonly HashSet<int> _seen = [];
 
         public void Walk(int index, int parentJoint, Matrix4x4 parentWorld, bool helper, int alpha, int stencil,
-            bool numberedHelper = false)
+            bool numberedHelper = false, int vertexColor = -1)
         {
             if (index < 0 || index >= blocks.Length || !_seen.Add(index))
                 return;
@@ -180,14 +180,15 @@ public static partial class NifFile
                 _worldOf[index] = world;
                 int nodeAlpha = Find(b.Props, "NiAlphaProperty", alpha);
                 int nodeStencil = Find(b.Props, "NiStencilProperty", stencil);
+                int nodeVertexColor = Find(b.Props, "NiVertexColorProperty", vertexColor);
                 foreach (int child in b.Type == "NiLODNode" ? NearLevel(b) : b.Children)
-                    Walk(child, joint, world, underHelper, nodeAlpha, nodeStencil, underNumbered);
+                    Walk(child, joint, world, underHelper, nodeAlpha, nodeStencil, underNumbered, nodeVertexColor);
                 if (parentJoint < 0)
                     BindSkins();
             }
             else if (b.Type is "NiTriShape" or "NiTriStrips")
             {
-                NifMesh? mesh = Shape(index, b, world, alpha, stencil);
+                NifMesh? mesh = Shape(index, b, world, alpha, stencil, vertexColor);
                 if (mesh is null)
                     return;
                 Meshes.Add(mesh with { Helper = underHelper || (underNumbered && mesh.TextureFile is null) });
@@ -211,23 +212,34 @@ public static partial class NifFile
             return [lod.Children[best]];
         }
 
-        private NifMesh? Shape(int index, Gb10Block shape, Matrix4x4 world, int alpha, int stencil)
+        private NifMesh? Shape(int index, Gb10Block shape, Matrix4x4 world, int alpha, int stencil, int vertexColor)
         {
             if (shape.DataRef < 0 || blocks[shape.DataRef] is not { Vertices.Length: > 0 } data
                 || data.Triangles.Length == 0)
                 return null;
 
-            string? texture = null;
-            uint uvSet = 0;
+            string? texture = null, dark = null, detail = null;
+            uint uvSet = 0, darkUv = 0, detailUv = 0;
             Vector4? color = null;
             foreach (int p in shape.Props)
             {
                 Gb10Block prop = blocks[p];
-                if (prop.Type == "NiTexturingProperty" && prop.BaseSourceRef >= 0)
-                    (texture, uvSet) = (blocks[prop.BaseSourceRef].TextureFile, prop.BaseUvSet);
+                if (prop.Type == "NiTexturingProperty")
+                {
+                    if (prop.BaseSourceRef >= 0)
+                        (texture, uvSet) = (blocks[prop.BaseSourceRef].TextureFile, prop.BaseUvSet);
+                    if (prop.DarkSourceRef >= 0)
+                        (dark, darkUv) = (blocks[prop.DarkSourceRef].TextureFile, prop.DarkUvSet);
+                    if (prop.DetailSourceRef >= 0)
+                        (detail, detailUv) = (blocks[prop.DetailSourceRef].TextureFile, prop.DetailUvSet);
+                }
                 else if (prop.Type == "NiMaterialProperty")
                     color = prop.MaterialColor;
             }
+            Vector2[]? Set(uint i) => i < data.UvSets.Length ? data.UvSets[i] : null;
+            int vc = Find(shape.Props, "NiVertexColorProperty", vertexColor);
+            Vector4[]? colors = vc >= 0 && blocks[vc].VertexMode == 2 && data.Colors?.Length == data.Vertices.Length
+                ? data.Colors : null;
             Vector2[]? uvs = data.UvSets.Length == 0 ? null
                 : data.UvSets[uvSet < data.UvSets.Length ? (int)uvSet : 0];
 
@@ -259,6 +271,12 @@ public static partial class NifFile
                 TexCoords = uvs,
                 Triangles = data.Triangles,
                 TextureFile = texture,
+                UvSets = data.UvSets,
+                VertexColors = colors,
+                DarkTextureFile = Set(darkUv) is null ? null : dark,
+                DarkTexCoords = dark is null ? null : Set(darkUv),
+                DetailTextureFile = Set(detailUv) is null ? null : detail,
+                DetailTexCoords = detail is null ? null : Set(detailUv),
                 BaseColor = color,
                 Alpha = mode,
                 AlphaCutoff = cutoff,

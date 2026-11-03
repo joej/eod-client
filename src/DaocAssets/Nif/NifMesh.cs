@@ -47,12 +47,30 @@ public sealed record NifMesh
     /// influences, strongest first, weights summing to 1 (empty if no bone weights the vertex).</summary>
     public (int Bone, float Weight)[][]? Skin { get; init; }
 
+    /// <summary>Every UV set the shape's data carries (set 0 is <see cref="TexCoords"/>); the extra
+    /// texture slots name which set they use.</summary>
+    public Vector2[][]? UvSets { get; init; }
+    /// <summary>Per-vertex RGBA (0..1), only when the shape's (or an ancestor's)
+    /// <c>NiVertexColorProperty</c> says they give the ambient and diffuse colour (vertex mode 2):
+    /// baked shading, e.g. darker leaves inside a tree's crown. Null when they're ignored or absent.</summary>
+    public Vector4[]? VertexColors { get; init; }
+    /// <summary>The dark map (a texture multiplied over the base, mostly baked lighting) and its UV set,
+    /// from the shape's <c>NiTexturingProperty</c> dark slot.</summary>
+    public string? DarkTextureFile { get; init; }
+    public Vector2[]? DarkTexCoords { get; init; }
+    /// <summary>The detail map (a finely repeating texture layered over the base) and its UV set.</summary>
+    public string? DetailTextureFile { get; init; }
+    public Vector2[]? DetailTexCoords { get; init; }
+
     /// <summary>The NIF shape (NiTriShape) name, e.g. a body-part variant in a classic figure.</summary>
     public string ShapeName { get; init; } = "";
 
     public override string ToString() =>
         $"{Name}: {Vertices.Length} verts, {Triangles.Length} tris" +
         (TextureFile is null ? "" : $", tex {TextureFile}") +
+        (DarkTextureFile is null ? "" : $", dark {DarkTextureFile}") +
+        (DetailTextureFile is null ? "" : $", detail {DetailTextureFile}") +
+        (VertexColors is null ? "" : ", vertex colours") +
         (BaseColor is { } c ? $", rgba({c.X:0.##},{c.Y:0.##},{c.Z:0.##},{c.W:0.##})" : "") +
         (Alpha == SurfaceAlpha.Opaque ? "" : $", {Alpha.ToString().ToLowerInvariant()} {AlphaCutoff:0.###}") +
         (DoubleSided ? ", two-sided" : "") + (Helper ? ", helper" : "") + (Skin is null ? "" : ", skinned");

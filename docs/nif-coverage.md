@@ -89,12 +89,12 @@ inhabitants look like DAoC).
    models had every mesh painted with one texture (the Darkness Rising town buildings: houses in a fire
    glow, a keep in smoke), now 3 (kelp, genuinely one texture). Particles, lights, texture effects and
    controllers are read past, not drawn.
-2. **Multi-texturing is dropped.** We read only the base slot. 1,463 files use a **dark map**
+2. **Multi-texturing: base, dark and detail are read (2026-11-03), the rest dropped.** The dark map (else the detail map) is drawn as Godot's detail layer on its UV set; a shape with both loses its detail map. Glow, gloss, bump and decal maps are still dropped. Before: we read only the base slot. 1,463 files use a **dark map**
    (`NiTexturingProperty` dark slot, almost always on UV set 1): baked lighting, the biggest visual
    difference on buildings and dungeons. Also detail (1,410 files), glow (506), gloss (397), bump (245)
    and decal (127) maps. The second UV sets they need are dropped too (geometry with two or more UV sets
    occurs in about 3,000 files).
-3. **Vertex colours are dropped** (about 3,200 files, mostly shading baked into zone objects), along
+3. **Vertex colours: used since 2026-11-03 where `NiVertexColorProperty` says vertex mode 2** (653 converted models); with no property, or mode 0, they stay unused. Before: **vertex colours were dropped** (about 3,200 files, mostly shading baked into zone objects), along
    with `NiVertexColorProperty`, which decides whether they replace or modulate lighting (vertex mode 2
    + lighting mode 1 in 2,366 files).
 4. **2.x/3.x NIFs are unreadable** (W6). 45 zone files. Some are in zones' NIF tables (barrows in 8

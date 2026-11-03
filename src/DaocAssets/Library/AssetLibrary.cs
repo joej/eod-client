@@ -75,9 +75,11 @@ public sealed class AssetLibrary
             NifModel model = NifFile.Read(nifBytes);
             Directory.CreateDirectory(_models);
             // Textures first, the glb last: a glb on disk means its model converted completely.
+            // Base textures and the extra layers (dark and detail maps) the client binds by name.
             foreach (NifMesh mesh in model.Meshes)
-                if (!string.IsNullOrEmpty(mesh.TextureFile))
-                    GatherTexture(mesh.TextureFile!, reconvert);
+                foreach (string? texture in new[] { mesh.TextureFile, mesh.DarkTextureFile, mesh.DetailTextureFile })
+                    if (!string.IsNullOrEmpty(texture))
+                        GatherTexture(texture!, reconvert);
             WriteAtomically(glbPath, tmp => GltfExporter.SaveGlb(model, tmp));
             return new ModelResult(glbPath, AssetOrigin.Converted);
         }

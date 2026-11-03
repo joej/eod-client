@@ -1,0 +1,7 @@
+# Fixed camera poses in Domnann (zone 181) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 181
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# The Grove of Domnann's standing stones (HDomnanGrove mesh425): base Hbasevine (white, vines at the
+# foot) times a dark map cliff02 (rock). Until the dark map was drawn (2026-11-03) they were pure white.
+stones       423844 443600  6900   0 -12   # the stones and the wall of the grove, from the south
+grove_high   423296 452000 10000   0 -30   # the grove from above: giant trees, huts, the stone ring

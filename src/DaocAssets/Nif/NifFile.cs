@@ -15,6 +15,7 @@ public static partial class NifFile
     private static readonly NifVersion V4000 = new(4, 0, 0, 2);
     private static readonly NifVersion V1010 = new(10, 1, 0, 0);
     private static readonly NifVersion V1020 = new(10, 2, 0, 0);
+    private static readonly NifVersion V41012 = new(4, 1, 0, 12);   // TexDesc has Unknown1 up to here
 
     public static NifModel Read(ReadOnlySpan<byte> bytes)
     {
@@ -94,6 +95,9 @@ public static partial class NifFile
         public int DataRef = -1;      // NiTriShape -> its NiTriShapeData/NiTriStripsData block
         public int[] Props = [];      // NiTriShape -> its property refs (one is a NiTexturingProperty)
         public int BaseTextureRef = -1; // NiTexturingProperty -> its base NiSourceTexture block
+        public int DarkTextureRef = -1, DarkUvSet;     // NiTexturingProperty dark slot (baked shading)
+        public int DetailTextureRef = -1, DetailUvSet; // NiTexturingProperty detail slot
+        public int VertexMode = -1;   // NiVertexColorProperty: 0 ignore, 1 emissive, 2 ambient + diffuse
         public string? TextureFile;   // for NiSourceTexture blocks
         public Vector4? MaterialColor; // NiMaterialProperty -> diffuse RGB + alpha (0..1)
         public ushort AlphaFlags;     // NiAlphaProperty -> flags (bit 0 blend, bits 5-8 dest, bit 9 test)
@@ -151,7 +155,10 @@ public static partial class NifFile
                     }
                     break;
                 case "NiTexturingProperty":
-                    b.BaseTextureRef = ReadTexturingPropertyBaseRef(ref c);
+                    ReadTexturingProperty(ref c, b, version);
+                    break;
+                case "NiVertexColorProperty":
+                    ReadVertexColorProperty(ref c, b);
                     break;
                 case "NiSourceTexture":
                     b.TextureFile = ReadSourceTextureFileName(ref c, bytes);
@@ -226,7 +233,7 @@ public static partial class NifFile
     // its own of the same type.
     private static void Walk4x(ReadOnlySpan<byte> bytes, Block[] blocks, int index, Xform world,
         HashSet<int> seen, List<NifMesh> meshes, bool helper = false, int alpha = -1, int stencil = -1,
-        bool numberedHelper = false)
+        bool numberedHelper = false, int vertexColor = -1)
     {
         if (index < 0 || index >= blocks.Length || !seen.Add(index))
             return;
@@ -246,8 +253,10 @@ public static partial class NifFile
             int[] children = b.Type == "NiLODNode" ? SelectLodChildren(blocks, b) : b.Children;
             int nodeAlpha = FindProperty(blocks, b.Props, "NiAlphaProperty", alpha);
             int nodeStencil = FindProperty(blocks, b.Props, "NiStencilProperty", stencil);
+            int nodeVertexColor = FindProperty(blocks, b.Props, "NiVertexColorProperty", vertexColor);
             foreach (int child in children)
-                Walk4x(bytes, blocks, child, w, seen, meshes, underHelper, nodeAlpha, nodeStencil, underNumbered);
+                Walk4x(bytes, blocks, child, w, seen, meshes, underHelper, nodeAlpha, nodeStencil, underNumbered,
+                    nodeVertexColor);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
         {
@@ -256,7 +265,7 @@ public static partial class NifFile
             {
                 string? texture = ShapeTexture(blocks, b);
                 meshes.Add(WithSurface(BakeTransform(geom, w, $"mesh{index}",
-                    texture, ShapeMaterialColor(blocks, b)), blocks, b, alpha, stencil)
+                    texture, ShapeMaterialColor(blocks, b)), blocks, b, alpha, stencil, vertexColor)
                     with { Helper = underHelper || (underNumbered && texture is null) });
             }
         }
@@ -411,8 +420,11 @@ public static partial class NifFile
 
     // Attaches the shape's transparency and sidedness, from its own NiAlphaProperty/NiStencilProperty
     // or the nearest ancestor's.
+    // Also attaches the shape's dark and detail maps (its own NiTexturingProperty) and its vertex
+    // colours, kept only when the shape's or an ancestor's NiVertexColorProperty uses them (vertex
+    // mode 2: they give the ambient and diffuse colour).
     private static NifMesh WithSurface(NifMesh mesh, Block[] blocks, Block shape, int inheritedAlpha,
-        int inheritedStencil)
+        int inheritedStencil, int inheritedVertexColor = -1)
     {
         int a = FindProperty(blocks, shape.Props, "NiAlphaProperty", inheritedAlpha);
         int st = FindProperty(blocks, shape.Props, "NiStencilProperty", inheritedStencil);
@@ -420,7 +432,28 @@ public static partial class NifFile
             ? (SurfaceAlpha.Opaque, 0.5f)
             : AlphaMode(blocks[a].AlphaFlags, blocks[a].AlphaThreshold);
         bool bothSides = mode != SurfaceAlpha.Opaque || (st >= 0 && blocks[st].StencilDrawMode == 3);
-        return mesh with { Alpha = mode, AlphaCutoff = cutoff, DoubleSided = bothSides };
+
+        int vc = FindProperty(blocks, shape.Props, "NiVertexColorProperty", inheritedVertexColor);
+        Vector4[]? colors = vc >= 0 && blocks[vc].VertexMode == 2 ? mesh.VertexColors : null;
+
+        int tp = FindProperty(blocks, shape.Props, "NiTexturingProperty", -1);
+        (string? dark, Vector2[]? darkUv) = tp < 0 ? (null, null) : Slot(blocks, mesh, blocks[tp].DarkTextureRef, blocks[tp].DarkUvSet);
+        (string? detail, Vector2[]? detailUv) = tp < 0 ? (null, null) : Slot(blocks, mesh, blocks[tp].DetailTextureRef, blocks[tp].DetailUvSet);
+        return mesh with
+        {
+            Alpha = mode, AlphaCutoff = cutoff, DoubleSided = bothSides, VertexColors = colors,
+            DarkTextureFile = dark, DarkTexCoords = darkUv, DetailTextureFile = detail, DetailTexCoords = detailUv,
+        };
+    }
+
+    // A texture slot's file name and the UV set it uses, if both exist.
+    private static (string?, Vector2[]?) Slot(Block[] blocks, NifMesh mesh, int sourceRef, int uvSet)
+    {
+        if (sourceRef < 0 || sourceRef >= blocks.Length || blocks[sourceRef].TextureFile is not { } file)
+            return (null, null);
+        if (mesh.UvSets is not { } sets || uvSet < 0 || uvSet >= sets.Length)
+            return (null, null);
+        return (file, sets[uvSet]);
     }
 
     /// <summary>
@@ -619,7 +652,11 @@ public static partial class NifFile
     // (Name + Extra Data ref + Controller ref), Flags u16, Apply Mode u32, Texture Count u32,
     // then Has Base Texture (1-byte bool); if set, a base TexDesc whose first field is the Source
     // ref (i32 -> a NiSourceTexture). We take only that base source ref (the shape's main skin).
-    private static int ReadTexturingPropertyBaseRef(ref NifCursor c)
+    // NiTexturingProperty body (4.x, as NifSurvey decodes it): NiObjectNET, Flags u16, Apply Mode u32,
+    // Texture Count u32, then the slots in order (base, dark, detail, ...), each a bool and, if set, a
+    // TexDesc: Source ref, Clamp u32, Filter u32, UV Set u32, PS2 L/K u16, and Unknown1 u16 up to
+    // 4.1.0.12. Base, dark and detail are kept; reading stops after detail.
+    private static void ReadTexturingProperty(ref NifCursor c, Block b, NifVersion version)
     {
         try
         {
@@ -628,14 +665,37 @@ public static partial class NifFile
             c.U16();           // Flags
             c.U32();           // Apply Mode
             c.U32();           // Texture Count
-            if (!c.Bool())     // Has Base Texture
-                return -1;
-            return c.I32();    // base TexDesc: Source ref
+            for (int slot = 0; slot < 3; slot++)
+            {
+                if (!c.Bool())
+                    continue;
+                int source = c.I32();
+                c.U32(); c.U32();                       // Clamp, Filter
+                int uvSet = (int)c.U32();
+                c.U16(); c.U16();                       // PS2 L, PS2 K
+                if (version <= V41012) c.U16();         // Unknown1
+                if (slot == 0) b.BaseTextureRef = source;
+                else if (slot == 1) (b.DarkTextureRef, b.DarkUvSet) = (source, uvSet);
+                else (b.DetailTextureRef, b.DetailUvSet) = (source, uvSet);
+            }
         }
         catch (NifFormatException)
         {
-            return -1;
+            // Keep whatever slots were read; a truncated property still names its base texture.
         }
+    }
+
+    // NiVertexColorProperty body (4.x): NiObjectNET, Flags u16, Vertex Mode u32, Lighting Mode u32.
+    private static void ReadVertexColorProperty(ref NifCursor c, Block b)
+    {
+        try
+        {
+            c.SizedString();
+            c.I32(); c.I32();
+            c.U16();
+            b.VertexMode = (int)c.U32();
+        }
+        catch (NifFormatException) { b.VertexMode = -1; }
     }
 
     // NiAlphaProperty body (4.x, nif.xml): NiObjectNET (Name, Extra Data ref, Controller ref), Flags
@@ -995,24 +1055,28 @@ public static partial class NifFile
     //   Consistency Flags (those are `since 10.x`); no Has-UV byte (that is `until=4.0.0.2`).
     private static void ReadGeometryCommon4x(
         ref NifCursor c, out int numVertices, out Vector3[] vertices,
-        out Vector3[]? normals, out Vector2[]? texCoords, out int numTriangles)
+        out Vector3[]? normals, out Vector2[][] uvSets, out Vector4[]? colors, out int numTriangles)
     {
         numVertices = c.U16();
         vertices = c.Bool() ? ReadVec3Array(ref c, numVertices) : [];
         normals = c.Bool() ? ReadVec3Array(ref c, numVertices) : null;
         c.Vec3(); c.F32();           // Bounding sphere: centre + radius
-        if (c.Bool())                // vertex colours (Color4), read and discard
-            for (int k = 0; k < numVertices * 4; k++)
-                c.F32();
+        colors = null;
+        if (c.Bool())                // vertex colours (Color4); whether they're used is the property's call
+        {
+            colors = new Vector4[numVertices];
+            for (int v = 0; v < numVertices; v++)
+                colors[v] = new Vector4(c.F32(), c.F32(), c.F32(), c.F32());
+        }
 
-        int uvSets = c.U16() & 0x3F; // Data Flags (until=4.2.2.0): low 6 bits = UV-set count
-        texCoords = null;
-        for (int s = 0; s < uvSets; s++)
+        int setCount = c.U16() & 0x3F; // Data Flags (until=4.2.2.0): low 6 bits = UV-set count
+        uvSets = new Vector2[setCount][];
+        for (int s = 0; s < setCount; s++)
         {
             Vector2[] set = new Vector2[numVertices];
             for (int v = 0; v < numVertices; v++)
                 set[v] = new Vector2(c.F32(), c.F32());
-            texCoords ??= set;       // keep the first UV set
+            uvSets[s] = set;
         }
 
         numTriangles = c.U16();      // NiTriBasedGeomData
@@ -1023,7 +1087,7 @@ public static partial class NifFile
     private static NifMesh ReadTriShapeData(ref NifCursor c, NifVersion version, string name)
     {
         ReadGeometryCommon4x(ref c, out int numVertices, out Vector3[] vertices,
-            out Vector3[]? normals, out Vector2[]? texCoords, out int numTriangles);
+            out Vector3[]? normals, out Vector2[][] uvSets, out Vector4[]? colors, out int numTriangles);
 
         uint numTrianglePoints = c.U32();
         if (numTrianglePoints != (uint)numTriangles * 3)
@@ -1043,7 +1107,9 @@ public static partial class NifFile
             Name = name,
             Vertices = vertices,
             Normals = normals,
-            TexCoords = texCoords,
+            TexCoords = uvSets.Length > 0 ? uvSets[0] : null,
+            UvSets = uvSets,
+            VertexColors = colors,
             Triangles = triangles,
         };
     }
@@ -1054,7 +1120,7 @@ public static partial class NifFile
     private static NifMesh ReadTriStripsData4x(ref NifCursor c, string name)
     {
         ReadGeometryCommon4x(ref c, out int numVertices, out Vector3[] vertices,
-            out Vector3[]? normals, out Vector2[]? texCoords, out int _);
+            out Vector3[]? normals, out Vector2[][] uvSets, out Vector4[]? colors, out int _);
 
         int numStrips = c.U16();
         var lengths = new int[numStrips];
@@ -1081,7 +1147,9 @@ public static partial class NifFile
             Name = name,
             Vertices = vertices,
             Normals = normals,
-            TexCoords = texCoords,
+            TexCoords = uvSets.Length > 0 ? uvSets[0] : null,
+            UvSets = uvSets,
+            VertexColors = colors,
             Triangles = triangles.ToArray(),
         };
     }

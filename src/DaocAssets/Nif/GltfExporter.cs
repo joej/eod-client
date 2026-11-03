@@ -130,6 +130,24 @@ public static class GltfExporter
         bool hasNormals = m.Normals is not null && m.Normals.Length == m.Vertices.Length;
         bool hasUv = m.TexCoords is not null && m.TexCoords.Length == m.Vertices.Length;
 
+        // A second texture layer (the dark map, else the detail map) rides on TEXCOORD_1, and vertex
+        // colours the NIF says to use on COLOR_0; a plain shape keeps the smaller vertex format.
+        Vector2[]? uv2 = m.DarkTexCoords ?? m.DetailTexCoords;
+        bool hasUv2 = uv2 is not null && uv2.Length == m.Vertices.Length;
+        bool hasColors = m.VertexColors is not null && m.VertexColors.Length == m.Vertices.Length;
+        if (hasUv2 || hasColors)
+        {
+            var layered = new MeshBuilder<VertexPositionNormal, VertexColor1Texture2>(m.Name);
+            var lp = layered.UsePrimitive(material);
+            VertexBuilder<VertexPositionNormal, VertexColor1Texture2, VertexEmpty> LV(int i) => new(
+                Vertex(m, i, hasNormals, hasUv, nifSpace).Geometry,
+                new VertexColor1Texture2(hasColors ? m.VertexColors![i] : Vector4.One,
+                    hasUv ? m.TexCoords![i] : Vector2.Zero, hasUv2 ? uv2![i] : Vector2.Zero));
+            foreach (var (a, b, c) in m.Triangles)
+                lp.AddTriangle(LV(a), LV(b), LV(c));
+            return layered;
+        }
+
         var builder = new MeshBuilder<VertexPositionNormal, VertexTexture1>(m.Name);
         var prim = builder.UsePrimitive(material);
 
@@ -204,6 +222,18 @@ public static class GltfExporter
         }
         if (m.DoubleSided)
             material.WithDoubleSide(true);
+
+        // The extra layers, by texture name (no image goes into the file): the client binds the dark
+        // map (else the detail map) on the second UV set, and multiplies in the vertex colours.
+        var extras = new System.Text.Json.Nodes.JsonObject();
+        if (!string.IsNullOrEmpty(m.DarkTextureFile))
+            extras["dark"] = System.IO.Path.GetFileNameWithoutExtension(m.DarkTextureFile);
+        if (!string.IsNullOrEmpty(m.DetailTextureFile))
+            extras["detail"] = System.IO.Path.GetFileNameWithoutExtension(m.DetailTextureFile);
+        if (m.VertexColors is not null)
+            extras["vertexColors"] = true;
+        if (extras.Count > 0)
+            material.Extras = extras;
         return material;
     }
 

@@ -61,9 +61,15 @@ internal sealed class Gb10Block
     public NifTransform SkinTransform = NifTransform.Identity;
     public NifTransform[] BoneBinds = [];
     public (ushort Vertex, float Weight)[][] BoneWeights = [];
-    // NiTexturingProperty (base slot)
+    // NiTexturingProperty (base, dark and detail slots)
     public int BaseSourceRef = -1;
     public uint BaseUvSet;
+    public int DarkSourceRef = -1, DetailSourceRef = -1;
+    public uint DarkUvSet, DetailUvSet;
+    // NiVertexColorProperty vertex mode (2 = vertex colours give ambient + diffuse), -1 when not one
+    public int VertexMode = -1;
+    // NiTriShapeData / NiTriStripsData vertex colours, if any
+    public Vector4[]? Colors;
     // NiSourceTexture
     public string? TextureFile;
     // NiMaterialProperty
@@ -517,6 +523,10 @@ internal static class Gamebryo1010
                     (int source, uint uvSet) = TexDesc(ref c, nb, slot, f);
                     if (slot == "base")
                         (b.BaseSourceRef, b.BaseUvSet) = (source, uvSet);
+                    else if (slot == "dark")
+                        (b.DarkSourceRef, b.DarkUvSet) = (source, uvSet);
+                    else if (slot == "detail")
+                        (b.DetailSourceRef, b.DetailUvSet) = (source, uvSet);
                     if (slot == "bump")
                         Skip(ref c, 2 * 4 + 4 * 4);     // luma scale, luma offset, 2x2 matrix
                 }
@@ -558,6 +568,7 @@ internal static class Gamebryo1010
                 ObjectNet(ref c, b, nb, f);
                 c.U16();
                 uint vertexMode = c.U32(), lightingMode = c.U32();
+                b.VertexMode = (int)vertexMode;
                 Bump(f, $"NiVertexColorProperty: vertex mode {vertexMode}, lighting mode {lightingMode}");
                 break;
             }
@@ -772,7 +783,8 @@ internal static class Gamebryo1010
         if (StrictBool(ref c))
         {
             Bump(f, $"{type}: vertex colours");
-            Skip(ref c, nv * 16L);
+            b.Colors = new Vector4[nv];
+            for (int v = 0; v < nv; v++) b.Colors[v] = new Vector4(c.F32(), c.F32(), c.F32(), c.F32());
         }
         if (uvSets == 0) Bump(f, $"{type}: no UVs");
         if (uvSets > 1) Bump(f, $"{type}: {uvSets} UV sets");
