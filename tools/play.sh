@@ -12,6 +12,8 @@
 #   build    build the .NET solution and prepare the Godot project
 #   play     start the client, log in and show your characters (or enter the world with --enter)
 #   all      assets, build, play
+#   zones [TEXT]  list the outdoor zones in your install (number, name, region, converted or not),
+#            only those whose name contains TEXT if given; use one with --zone
 #   config   show the saved settings
 #
 # Options (saved to private/play.conf, so you give each one once):
@@ -24,9 +26,9 @@
 # Per run only:
 #   --enter SLOT    enter the world with the character in this slot (Albion 0-9, Midgard 10-19,
 #                   Hibernia 20-29) instead of stopping at the character list
-#   --zone N        go to zone N (src/DaocProtocol/World/zones.tsv; 0 = Camelot Hills): convert only
-#                   that zone, and with --enter move the character to its middle (GM command /jump:
-#                   the account must be a GM). Without --zone the character starts where it was
+#   --zone Z        go to zone Z, a number or part of a name ("salis", "cursed forest"; see
+#                   tools/play.sh zones): convert only that zone, and with --enter move the character
+#                   to its middle (GM command /jump: the account must be a GM). Without --zone the character starts where it was
 #                   saved, and the client shows whichever zone the server puts it in.
 #   --fresh         re-index the install and reconvert everything, even if nothing changed
 #
@@ -48,7 +50,9 @@ step() { printf '\n== %s\n' "$*"; }
 
 # --- arguments and saved settings -------------------------------------------------------------
 CMD=all
-case "${1:-}" in assets|build|play|all|config) CMD=$1; shift ;; esac
+case "${1:-}" in assets|build|play|all|config|zones) CMD=$1; shift ;; esac
+FILTER=""
+if [ "$CMD" = zones ] && [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then FILTER=$1; shift; fi
 
 CLIENT="" HOST="" PORT="" ACCOUNT="" ZONE="" PASSWORD_CMD=""
 [ -f "$CONF" ] && . "$CONF"
@@ -63,14 +67,13 @@ while [ $# -gt 0 ]; do
         --password-cmd) PASSWORD_CMD=${2:?}; CHANGED=1; shift 2 ;;
         --enter)   ENTER=${2:?}; shift 2 ;;
         --fresh)   FRESH=1; shift ;;
-        -h|--help) sed -n '4,38p' "$0"; exit 0 ;;
+        -h|--help) sed -n '4,40p' "$0"; exit 0 ;;
         *) die "unknown option: $1 (see tools/play.sh --help)" ;;
     esac
 done
 PORT=${PORT:-10300}
 # Older play.conf files saved a ZONE; it is per run now (--zone), so a saved one is ignored.
 unset ZONE
-[ -z "$GOTO" ] || [[ "$GOTO" =~ ^[0-9]+$ ]] || die "--zone takes a zone number (see src/DaocProtocol/World/zones.tsv)"
 
 save_conf() {
     mkdir -p "$PRIV"
@@ -117,6 +120,47 @@ find_godot() {
 }
 
 ZONES="$PRIV/zones"
+TSV="$REPO/src/DaocProtocol/World/zones.tsv"
+
+# The outdoor zones in this install, one per line: number, name, region, converted or not (from the
+# Makefile's zone table and each zone's check), whose name contains $1 (any case) if given.
+zone_list() {
+    need CLIENT "DAoC client folder (holds game.dll and zones/)"
+    local filter=${1:-}
+    make -s -C "$REPO" CLIENT="$CLIENT" list | awk -v tsv="$TSV" -v f="$(printf %s "$filter" | tr '[:upper:]' '[:lower:]')" '
+        BEGIN { FS = "\t"; while ((getline l < tsv) > 0) if (l !~ /^#/) { split(l, c, "\t"); region[c[1]] = c[2] } FS = " " }
+        {
+            n = $1; name = substr($0, 7, 24); sub(/ +$/, "", name); rest = substr($0, 32)
+            if (f != "" && index(tolower(name), f) == 0) next
+            state = rest ~ /^not converted/ ? "not converted" : "converted"
+            if (rest ~ /[1-9][0-9]* error/) { match(rest, /[0-9]+ error/); state = state ", " substr(rest, RSTART, RLENGTH) "s in its check" }
+            printf "%4d  %-24s region %-4s %s\n", n, name, region[n], state
+        }'
+}
+
+# --zone takes a number or part of a name; a name must match exactly one zone (an exact name wins).
+resolve_zone() {
+    local want=$1 matches exact
+    [[ "$want" =~ ^[0-9]+$ ]] && { echo "$want"; return; }
+    matches=$(zone_list "$want")
+    exact=$(printf '%s\n' "$matches" | awk -v w="$(printf %s "$want" | tr '[:upper:]' '[:lower:]')" '
+        { name = substr($0, 7, 24); sub(/ +$/, "", name); if (tolower(name) == w) print $1 }')
+    if [ -n "$exact" ]; then echo "$exact"; return; fi
+    case $(printf '%s' "$matches" | grep -c .) in
+        0) die "no outdoor zone named like '$want' (see: tools/play.sh zones)" ;;
+        1) printf '%s\n' "$matches" | awk '{ print $1 }' ;;
+        *) printf '%s\n' "$matches" >&2; die "'$want' matches several zones: give its number or more of its name" ;;
+    esac
+}
+
+if [ "$CMD" = zones ]; then
+    zone_list "$FILTER"
+    exit 0
+fi
+if [ -n "$GOTO" ]; then
+    GOTO=$(resolve_zone "$GOTO")
+    echo "zone $GOTO"
+fi
 
 # The conversion itself is the Makefile: it redoes only the outputs whose inputs (the install, or the
 # part of the converter that makes them) changed, so this is a no-op when everything is current.
