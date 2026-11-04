@@ -126,6 +126,9 @@ internal static class Cli
                 Console.WriteLine($"  skin {m.ShapeName,-14} stored {Box(m.Vertices)} skinned {Box(skinned)}" +
                     $" unweighted {m.Skin!.Count(x => x.Length == 0)}");
             }
+            if (model.Joints.Count == 0)
+                foreach ((string name, System.Numerics.Matrix4x4 w) in model.NodeWorlds)
+                    Console.WriteLine($"  node {name,-28} at ({w.M41:F1},{w.M42:F1},{w.M43:F1})");
             if (Environment.GetEnvironmentVariable("NIFINFO_SKINS") == "1")
                 foreach (string line in NifFile.SkinReport(bytes))
                     Console.WriteLine("  " + line);
@@ -646,6 +649,7 @@ internal static class Cli
             }),
             default_hair = spec.DefaultHair,
             female = spec.Skeleton.Contains("_f_", StringComparison.OrdinalIgnoreCase),
+            prefix = spec.Skeleton.Replace("_skeleton.nif", "", StringComparison.OrdinalIgnoreCase).ToLowerInvariant(),
             variants = spec.Variants.ToDictionary(kv => DaocAssets.Figures.CataSlots.Names[kv.Key],
                 kv => kv.Value.Select((p, i) => p is null ? 0 : i + 1).Where(n => n > 0).ToArray()),
             defaults = spec.DefaultVariants.ToDictionary(kv => DaocAssets.Figures.CataSlots.Names[kv.Key], kv => kv.Value),
@@ -656,6 +660,82 @@ internal static class Cli
         foreach (string t in looks.Faces.Concat(looks.Eyes).Concat(looks.HairColours.SelectMany(h => h.Select(c => c.Texture))).OfType<string>())
             if (gathered.Add(t) && library.GatherTexture(t) is null)
                 Console.Error.WriteLine($"  look texture {t}: not found");
+    }
+
+    // models/cata_gear.json: every held item and helm (CataGear): {"items": {model: {nif, belt, shield,
+    // stance, left, helms: {prefix: nif}, helm_hair}}, "nifs": {nif: {held, belt, back}}}, each NIF
+    // converted into the library (models/<nif>.glb) and its frames given as the transform that hangs the
+    // converted model on a bone by that frame: undo the glTF conversion, then the frame's own placement
+    // (row vectors, 12 floats: the 3x3 by rows, then the translation).
+    private static void WriteCataGear(string gamedata, string modelsDir, AssetLibrary library, AssetIndex index)
+    {
+        using MpkArchive mpk = MpkArchive.Open(gamedata);
+        string Text(string name) => System.Text.Encoding.Latin1.GetString(mpk.Extract(name));
+        var gear = DaocAssets.Figures.CataGear.Parse(Text("objects.csv"), Text("items.csv"), Text("pskins.csv"));
+        foreach (string t in gear.Values.SelectMany(g => new[] { g.Texture, g.HelmTexture }).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
+            library.GatherTexture(t);
+        System.Numerics.Matrix4x4.Invert(GltfExporter.NifToGltfMatrix, out var fromGltf);
+        static double[] Row(System.Numerics.Matrix4x4 m) =>
+            [m.M11, m.M12, m.M13, m.M21, m.M22, m.M23, m.M31, m.M32, m.M33, m.M41, m.M42, m.M43];
+        var nifs = new SortedDictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        // The converted file's own name, case kept (albHelm01_Bri_m.glb): a case-sensitive file system
+        // finds it only by that.
+        var stems = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        int failed = 0;
+        foreach (string nif in gear.Values.SelectMany(g => g.Helms.Values.Prepend(g.Nif ?? "")).Where(n => n.Length > 0)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            ModelResult converted = library.GetModel(nif);
+            if (converted.GlbPath is null || index.Read(nif) is not byte[] bytes) { failed++; continue; }
+            string stem = Path.GetFileNameWithoutExtension(converted.GlbPath);
+            stems[Path.GetFileNameWithoutExtension(nif)] = stem;
+            NifModel model;
+            try { model = NifFile.Read(bytes); }
+            catch (NifFormatException) { failed++; continue; }
+            // As the client hangs items (OfflineDAoC's findings, GPL-3.0, citing the client): sheathed, the
+            // BELT / BACK node's transform is where the item's root sits on the bone (a two-hander's BACK, 12
+            // units down its length, lifts the hilt over the shoulder); in the hand the item sits as it is,
+            // unless its mesh is turned under the 'item' node and the HELD node turns it back.
+            var frames = new Dictionary<string, double[]>();
+            var identity = System.Numerics.Matrix4x4.Identity;
+            foreach (string frame in new[] { "belt", "back" })
+                frames[frame] = Row(fromGltf * (model.NodeWorlds.TryGetValue(frame, out var w) ? w : identity));
+            var grip = identity;
+            if (model.NodeWorlds.TryGetValue("held", out var held) && model.NodeWorlds.TryGetValue("item", out var itemNode)
+                && !Near(Rotation(itemNode), identity) && Near(Rotation(held), Rotation(itemNode)))
+                System.Numerics.Matrix4x4.Invert(held, out grip);
+            frames["held"] = Row(fromGltf * grip);
+            nifs[stem] = frames;
+        }
+        string? Stem(string? nif) => nif is not null && stems.TryGetValue(Path.GetFileNameWithoutExtension(nif), out string? s) ? s : null;
+        var json = new
+        {
+            items = gear.OrderBy(kv => kv.Key).ToDictionary(kv => kv.Key.ToString(CultureInfo.InvariantCulture), kv => new
+            {
+                nif = Stem(kv.Value.Nif),
+                belt = kv.Value.Belt,
+                shield = kv.Value.Shield,
+                stance = kv.Value.Stance,
+                left = kv.Value.LeftHand,
+                helms = kv.Value.Helms.Where(h => Stem(h.Value) is not null).ToDictionary(h => h.Key, h => Stem(h.Value)),
+                helm_hair = kv.Value.HelmHair,
+                texture = kv.Value.Texture,
+                helm_texture = kv.Value.HelmTexture,
+            }),
+            nifs,
+        };
+        File.WriteAllText(Path.Combine(modelsDir, "cata_gear.json"), System.Text.Json.JsonSerializer.Serialize(json));
+        Console.WriteLine($"cata gear: {gear.Count} held items and helms, {nifs.Count} item models converted, {failed} failed");
+    }
+
+    private static System.Numerics.Matrix4x4 Rotation(System.Numerics.Matrix4x4 m) => m with { M41 = 0, M42 = 0, M43 = 0 };
+
+    private static bool Near(System.Numerics.Matrix4x4 a, System.Numerics.Matrix4x4 b)
+    {
+        for (int r = 0; r < 4; r++)
+            for (int c = 0; c < 4; c++)
+                if (Math.Abs(a[r, c] - b[r, c]) > 1e-3f) return false;
+        return true;
     }
 
     // models/cata_items.json: every item's Catacombs look (CataItems), {model: {robe, name_variant, m: {slot:
@@ -934,6 +1014,7 @@ internal static class Cli
                 cataModels.Add((id, cspec));
         cata.WriteModels(cataModels);
         WriteCataItems(gamedata, models, library, cata.Gathered);
+        WriteCataGear(gamedata, models, library, index);
         int cataFailed = cata.Failed;
         Console.WriteLine($"figures: {cataModels.Count} model ids on {cata.FigureCount} Catacombs figures, " +
             $"{cata.MissingParts} parts missing, {cataFailed} failed");

@@ -125,6 +125,12 @@ public sealed class NifModel
     /// <summary>The skeleton, parents before children; empty for a static model.</summary>
     public IReadOnlyList<NifJoint> Joints { get; init; } = [];
 
+    /// <summary>Every named node's world transform in the file's rest pose (NIF space, row vectors), by
+    /// lower-case name (the first of a repeated name): an item's grip and sheath frames ("held", "belt",
+    /// "back") for hanging it on a figure's bone.</summary>
+    public IReadOnlyDictionary<string, System.Numerics.Matrix4x4> NodeWorlds { get; init; } =
+        new Dictionary<string, System.Numerics.Matrix4x4>();
+
     /// <summary>Each joint's world transform in the file's rest pose (NIF space, row vectors).</summary>
     public System.Numerics.Matrix4x4[] JointWorlds()
     {

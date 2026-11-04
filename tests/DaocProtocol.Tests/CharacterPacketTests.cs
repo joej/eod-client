@@ -64,12 +64,15 @@ public class CharacterPacketTests
         // Expected values decoded independently from the recording.
         CharacterSummary character = Assert.Single(overview.Characters);
         // Worn (read off the recording by hand): models helm 0, gloves 85, boots 84, (colour), torso 81,
-        // cloak 1722, legs 82, arms 83; colours all 0; extensions byte pair 00 00; hood down.
+        // cloak 1722, legs 82, arms 83; colours all 0; extensions byte pair 00 00; hood down; weapons
+        // right 3 (short sword), left 59 (round shield), active bytes 00 01 (sword and shield in hand).
         Assert.Equal(
             [new WornItem(WornSlot.Hands, 85), new WornItem(WornSlot.Feet, 84), new WornItem(WornSlot.Torso, 81),
-             new WornItem(WornSlot.Cloak, 1722), new WornItem(WornSlot.Legs, 82), new WornItem(WornSlot.Arms, 83)],
+             new WornItem(WornSlot.Cloak, 1722), new WornItem(WornSlot.Legs, 82), new WornItem(WornSlot.Arms, 83),
+             new WornItem(WornSlot.RightHand, 3), new WornItem(WornSlot.LeftHand, 59)],
             character.Worn);
         Assert.False(character.HoodUp);
+        Assert.Equal(0x10, character.ActiveWeapons);
         Assert.Equal(new CharacterSummary(
             Slot: 0, Level: 50, Name: "Lilillyn", Location: "Camelot Hills", ClassName: "Paladin",
             RaceName: "Highlander", Model: 55562, Region: 1, ClassId: 1, Realm: Realm.Albion, Race: 3, Female: false)
@@ -78,6 +81,7 @@ public class CharacterPacketTests
             Look = new CharacterLook(0x44, 0x44, 0x20, 0x01, 0x00, 0x20, 0x00),
             CustomisationStep = 2,
             Worn = character.Worn,   // checked above (a list compares by reference)
+            ActiveWeapons = 0x10,
         },
             character);
     }
@@ -108,6 +112,16 @@ public class CharacterPacketTests
         EquipmentUpdate dyed = EquipmentUpdate.Parse(Server()[46].Payload);
         Assert.Equal(new WornItem(25, 0x3A, 0, 0x25), Assert.Single(dyed.Items));
         Assert.Equal((false, false, false), (dyed.CloakHidden, dyed.HelmHidden, dyed.HoodUp));
+    }
+
+    [Fact]
+    public void TheActiveWeaponsByteNamesTheSlotInEachHand()
+    {
+        Assert.Equal(((byte?)WornSlot.RightHand, (byte?)WornSlot.LeftHand), WornSlot.Active(0x10));
+        Assert.Equal(((byte?)WornSlot.TwoHand, (byte?)WornSlot.TwoHand), WornSlot.Active(0x22));
+        Assert.Equal(((byte?)WornSlot.Ranged, (byte?)WornSlot.Ranged), WornSlot.Active(0x33));
+        Assert.Equal(((byte?)null, (byte?)null), WornSlot.Active(0xFF));
+        Assert.Equal(0x22, EquipmentUpdate.Parse(Server()[44].Payload).ActiveWeapons);   // the recording's 0x15 (22)
     }
 
     [Fact]

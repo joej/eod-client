@@ -126,6 +126,10 @@ public static class GltfExporter
     }
 
     // NIF (Z-up, NIF units) -> glTF (Y-up, metres), as a row-vector matrix: p' = p * M.
+    /// <summary>NIF space (Z up, NIF units) to glTF (Y up, metres), row vectors: what static models are
+    /// exported in, and what a figure's skeleton root applies.</summary>
+    public static Matrix4x4 NifToGltfMatrix => NifToGltf;
+
     private static readonly Matrix4x4 NifToGltf = new(
         UnitsToMetres, 0, 0, 0,
         0, 0, -UnitsToMetres, 0,

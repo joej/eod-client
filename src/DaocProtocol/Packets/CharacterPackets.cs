@@ -71,6 +71,8 @@ public sealed record CharacterSummary(
     public IReadOnlyList<WornItem> Worn { get; init; } = [];
     /// <summary>The cloak's hood is up.</summary>
     public bool HoodUp { get; init; }
+    /// <summary>The weapon slots in use, encoded as 0x15's byte (<see cref="WornSlot.Active"/>).</summary>
+    public byte ActiveWeapons { get; init; } = 0xFF;
 }
 
 /// <summary>0xFC (server → client): the characters on one realm's page, 1.126+ layout.</summary>
@@ -142,7 +144,14 @@ public sealed record CharacterOverview(uint Flags, IReadOnlyList<CharacterSummar
         Wear(WornSlot.Cloak, 5, 0);
         Wear(WornSlot.Legs, 6, 0);
         Wear(WornSlot.Arms, 7, 0);
-        reader.Skip(4 * 2);  // weapon models
+        // Weapon models, u16 LE: right hand, left hand, two-hand, ranged. Their colours: the right hand's
+        // sits in the armour models' fourth place, the left hand's in the colours' fourth.
+        for (int i = 0; i < 4; i++)
+        {
+            ushort weapon = reader.U16LE();
+            ushort colour = i == 0 ? models[3] : i == 1 ? colours[3] : (ushort)0;
+            if (weapon != 0) worn.Add(new WornItem((byte)(WornSlot.RightHand + i), weapon, 0, colour));
+        }
         reader.Skip(8);      // stats: str dex con qui int pie emp cha
         byte classId = reader.U8();
         var realm = (Realm)reader.U8();
@@ -150,7 +159,9 @@ public sealed record CharacterOverview(uint Flags, IReadOnlyList<CharacterSummar
         byte raceGender = reader.U8();
         byte race = (byte)((raceGender & 0x0F) | ((raceGender & 0x40) >> 2));
         bool female = (raceGender & 0x80) != 0;
-        reader.Skip(2);      // active weapon slots
+        // Active weapon slots: right then left, 0/1 (that hand), 2 two-hand, 3 ranged, 0xFF none.
+        byte activeRight = reader.U8(), activeLeft = reader.U8();
+        byte activeWeapons = (byte)(((activeLeft > 3 ? 0xF : activeLeft) << 4) | (activeRight > 3 ? 0xF : activeRight));
         reader.Skip(3);      // SI flag, constitution, unknown
         return new CharacterSummary(slot, level, name, location, className, raceName, model, region, classId, realm, race, female)
         {
@@ -158,6 +169,7 @@ public sealed record CharacterOverview(uint Flags, IReadOnlyList<CharacterSummar
             CustomisationStep = step,
             Worn = worn,
             HoodUp = (torsoHood & 0x01) != 0,
+            ActiveWeapons = activeWeapons,
         };
     }
 }

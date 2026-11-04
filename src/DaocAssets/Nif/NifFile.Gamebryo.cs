@@ -56,7 +56,11 @@ public static partial class NifFile
         // meshes like a 4.x one (its nodes would otherwise become joints, and repeated helper names
         // such as "collidee" made the glTF writer refuse the file).
         bool skinned = b.Meshes.Any(m => m.SkinJoints is { Length: > 0 });
-        return new NifModel { Version = version, Meshes = b.Meshes, Joints = skinned ? b.Joints : [] };
+        var nodeWorlds = new Dictionary<string, Matrix4x4>(StringComparer.Ordinal);
+        foreach ((int i, Matrix4x4 w) in WorldTransforms(g))
+            if (!string.IsNullOrEmpty(blocks[i].Name) && blocks[i].Type is "NiNode" or "NiLODNode" or "NiBillboardNode" or "NiTriShape" or "NiTriStrips")
+                nodeWorlds.TryAdd(blocks[i].Name.Trim().ToLowerInvariant(), w);
+        return new NifModel { Version = version, Meshes = b.Meshes, Joints = skinned ? b.Joints : [], NodeWorlds = nodeWorlds };
     }
 
     /// <summary>

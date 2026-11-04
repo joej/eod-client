@@ -291,6 +291,11 @@ public static partial class CatacombsFigure
                     float sum = list.Sum(x => x.Item2);
                     weights[v] = sum > 0 ? list.Select(x => (x.Item1, x.Item2 / sum)).ToArray() : [(Slot(root), 1f)];
                 }
+                // Every other joint too, unweighted: an importer makes skeleton bones only of a skin's
+                // joints, and the attachment bones nothing is weighted to (Bip01 R/L Held, Belt, Back,
+                // Shield, Helmet) are where weapons and helms hang.
+                for (int j = 0; j < skeleton.Count; j++)
+                    Slot(j);
                 string shape = label.Length == 0 ? mesh.ShapeName : shapeNo == 0 ? label : $"{label}_{shapeNo}";
                 shapeNo++;
                 meshes.Add(mesh with

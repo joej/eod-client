@@ -15,15 +15,27 @@ public static class WornSlot
 {
     public const byte RightHand = 10, LeftHand = 11, TwoHand = 12, Ranged = 13;
     public const byte Helm = 21, Hands = 22, Feet = 23, Torso = 25, Cloak = 26, Legs = 27, Arms = 28;
+
+    /// <summary>
+    /// The weapon slots in use, from an active-weapons byte (OpenDAoC VisibleActiveWeaponSlots): the low
+    /// half the right hand's, the high half the left's, each 0 right hand, 1 left hand, 2 two-hand,
+    /// 3 ranged, 0xF none (0x10: sword and shield, 0x22: a two-hander, 0x33: a bow, 0xFF: none).
+    /// </summary>
+    public static (byte? Right, byte? Left) Active(byte activeWeapons)
+    {
+        static byte? Slot(int n) => n <= 3 ? (byte)(RightHand + n) : null;
+        return (Slot(activeWeapons & 0x0F), Slot(activeWeapons >> 4));
+    }
 }
 
 /// <summary>One visible item: its slot, model (an objects.csv row), extension (an armour piece's look
 /// variant), dye colour or guild emblem (0 = none) and effect.</summary>
 public readonly record struct WornItem(byte Slot, ushort Model, byte Extension = 0, ushort Color = 0, ushort Effect = 0);
 
-/// <summary>0x15 EquipmentUpdate: a living's visible items.</summary>
+/// <summary>0x15 EquipmentUpdate: a living's visible items. <see cref="ActiveWeapons"/> says which weapon
+/// slots are in use (see <see cref="WornSlot.Active"/>).</summary>
 public sealed record EquipmentUpdate(ushort ObjectId, bool CloakHidden, bool HelmHidden, bool HoodUp,
-    IReadOnlyList<WornItem> Items)
+    IReadOnlyList<WornItem> Items, byte ActiveWeapons = 0xFF)
 {
     public const byte Code = 0x15;
 
@@ -37,7 +49,7 @@ public sealed record EquipmentUpdate(ushort ObjectId, bool CloakHidden, bool Hel
     {
         var r = new PayloadReader(payload);
         ushort objectId = r.U16BE();
-        r.U8();                                  // active weapon slots
+        byte active = r.U8();                    // active weapon slots
         r.U8();                                  // speed
         byte visibility = r.U8();
         byte hood = r.U8();
@@ -52,6 +64,6 @@ public sealed record EquipmentUpdate(ushort ObjectId, bool CloakHidden, bool Hel
             ushort effect = (raw & 0x2000) != 0 ? r.U16BE() : (ushort)0;
             items.Add(new WornItem(slot, (ushort)(raw & 0x1FFF), extension, color, effect));
         }
-        return new EquipmentUpdate(objectId, (visibility & 0x01) != 0, (visibility & 0x02) != 0, (hood & 0x01) != 0, items);
+        return new EquipmentUpdate(objectId, (visibility & 0x01) != 0, (visibility & 0x02) != 0, (hood & 0x01) != 0, items, active);
     }
 }

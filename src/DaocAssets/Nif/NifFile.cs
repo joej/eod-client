@@ -209,7 +209,36 @@ public static partial class NifFile
         if (meshes.Count == 0)
             throw new NifFormatException("No NiTriShapeData geometry found in NIF.");
 
-        return new NifModel { Version = version, Meshes = meshes };
+        return new NifModel { Version = version, Meshes = meshes, NodeWorlds = NodeWorlds4x(blocks) };
+    }
+
+    // Every named node's world transform, walking every child from the root (LOD levels and helpers
+    // included): row-vector matrices, p' = p * M, as the 10.1 path's ToMatrix.
+    private static Dictionary<string, Matrix4x4> NodeWorlds4x(Block[] blocks)
+    {
+        var worlds = new Dictionary<string, Matrix4x4>(StringComparer.Ordinal);
+        var stack = new Stack<(int, Xform)>();
+        var seen = new HashSet<int>();
+        stack.Push((0, Xform.Identity));
+        while (stack.Count > 0)
+        {
+            (int i, Xform parent) = stack.Pop();
+            if (i < 0 || i >= blocks.Length || !seen.Add(i))
+                continue;
+            Block b = blocks[i];
+            if (b.Type is not ("NiNode" or "NiLODNode" or "NiBillboardNode" or "NiTriShape" or "NiTriStrips"))
+                continue;
+            Xform w = parent.Compose(b.Local);
+            if (!string.IsNullOrEmpty(b.Name))
+                worlds.TryAdd(b.Name.Trim().ToLowerInvariant(), new Matrix4x4(
+                    w.Rot[0] * w.Scale, w.Rot[3] * w.Scale, w.Rot[6] * w.Scale, 0,
+                    w.Rot[1] * w.Scale, w.Rot[4] * w.Scale, w.Rot[7] * w.Scale, 0,
+                    w.Rot[2] * w.Scale, w.Rot[5] * w.Scale, w.Rot[8] * w.Scale, 0,
+                    w.Trans.X, w.Trans.Y, w.Trans.Z, 1));
+            foreach (int c in b.Children)
+                stack.Push((c, w));
+        }
+        return worlds;
     }
 
     // Every block reachable from `root` through node children, regardless of LOD selection or

@@ -107,6 +107,121 @@ public static class FigureLook
             .Select(kv => $"{kv.Key} {kv.Value}{(textures.TryGetValue(kv.Key, out string? t) ? $"={t}" : "")}"));
     }
 
+    // Item models (models/<nif>.glb), loaded and textured once each, duplicated per figure.
+    private static readonly System.Collections.Generic.Dictionary<string, Node3D?> ItemModels = new();
+
+    /// <summary>
+    /// Hangs a Catacombs figure's weapons, shield and helm on its skeleton (models/cata_gear.json, from mpk
+    /// figures), replacing any it had. Out of combat (we don't track attack mode yet): a weapon in an active
+    /// slot that sheathes, and any sheathable one not in use, hangs by its belt frame on the opposite hip
+    /// (right hand: "Bip01 L Belt") or, two-handed and ranged, by its back frame ("Bip01 L/R Back"); an
+    /// active one that doesn't sheathe (staves, most polearms and bows) stays in the hand by its grip
+    /// ("Bip01 R Held", the left hand and ranged "Bip01 L Held"); an active shield on "Bip01 L Shield", an
+    /// unused one not drawn; the helm on "Bip01 Helmet", hiding the hair, unless hidden or under a raised
+    /// hood. Rules as OfflineDAoC (GPL-3.0) published them from the client. Returns a log description.
+    /// </summary>
+    public static string Gear(Node3D figure, string optionsPath, string gearPath, string modelsDir,
+        System.Collections.Generic.IReadOnlyList<WornItem> worn, byte activeWeapons, bool helmHidden, bool hoodUp, params string[] dirs)
+    {
+        if (Options(optionsPath) is not { } o || Json(Items, gearPath) is not { } gear
+            || figure.FindChildren("*", "Skeleton3D", true, false).FirstOrDefault() is not Skeleton3D skel)
+        {
+            GD.PrintErr($"[gear] nothing hung: options {Options(optionsPath) is not null}, gear table {Json(Items, gearPath) is not null}, " +
+                $"skeleton {figure.FindChildren("*", "Skeleton3D", true, false).Count > 0}");
+            return "";
+        }
+        foreach (Node old in skel.GetChildren())
+            if (old.Name.ToString().StartsWith("Gear_", StringComparison.Ordinal))
+            {
+                skel.RemoveChild(old);
+                old.QueueFree();
+            }
+        string prefix = o.TryGetProperty("prefix", out var pf) ? pf.GetString() ?? "" : "";
+        (byte? right, byte? left) = WornSlot.Active(activeWeapons);
+        var hung = new System.Collections.Generic.List<string>();
+        bool helmed = false;
+        foreach (WornItem item in worn)
+        {
+            if (!gear.GetProperty("items").TryGetProperty(item.Model.ToString(System.Globalization.CultureInfo.InvariantCulture), out var entry))
+                continue;
+            string? nif = null, bone = null, frame = "held";
+            string? retexture = null;
+            if (item.Slot == WornSlot.Helm)
+            {
+                if (helmHidden || hoodUp || !entry.GetProperty("helms").TryGetProperty(prefix, out var h))
+                    continue;
+                (nif, bone) = (h.GetString(), "Bip01 Helmet");
+                retexture = entry.TryGetProperty("helm_texture", out var ht) ? ht.GetString() : null;
+            }
+            else if (item.Slot is >= WornSlot.RightHand and <= WornSlot.Ranged)
+            {
+                nif = entry.GetProperty("nif").GetString();
+                retexture = entry.TryGetProperty("texture", out var tt) ? tt.GetString() : null;
+                bool inUse = item.Slot == right || item.Slot == left;
+                bool lefty = item.Slot is WornSlot.LeftHand or WornSlot.Ranged;
+                if (entry.GetProperty("shield").GetBoolean())
+                    bone = inUse ? "Bip01 L Shield" : null;
+                else if (entry.GetProperty("belt").GetBoolean())
+                    (bone, frame) = item.Slot switch
+                    {
+                        WornSlot.RightHand => ("Bip01 L Belt", "belt"),
+                        WornSlot.LeftHand => ("Bip01 R Belt", "belt"),
+                        WornSlot.TwoHand => ("Bip01 L Back", "back"),
+                        _ => ("Bip01 R Back", "back"),
+                    };
+                else if (inUse)
+                    bone = lefty ? "Bip01 L Held" : "Bip01 R Held";
+            }
+            if (nif is null || bone is null)
+                continue;
+            if (skel.FindBone(bone) < 0 || !gear.GetProperty("nifs").TryGetProperty(nif, out var frames)
+                || ItemModel(modelsDir, nif, dirs) is not { } template)
+            {
+                GD.PrintErr($"[gear] item {item.Model} slot {item.Slot}: {(skel.FindBone(bone) < 0 ? $"no bone '{bone}' in {skel.Name}" : $"no model {nif}")}");
+                continue;
+            }
+            var f = frames.GetProperty(frame);
+            float F(int i) => f[i].GetSingle();
+            var model = (Node3D)template.Duplicate();
+            if (retexture is not null && ModelTexturing.Load(System.IO.Path.GetFileNameWithoutExtension(retexture), dirs) is { } swap)
+                foreach (Node mn in model.FindChildren("*", "MeshInstance3D", true, false))
+                    if (mn is MeshInstance3D mmi && mmi.GetActiveMaterial(0)?.Duplicate() is BaseMaterial3D mat)
+                    {
+                        mat.AlbedoTexture = swap;
+                        mmi.MaterialOverride = mat;
+                    }
+            model.Transform = new Transform3D(new Basis(new Vector3(F(0), F(1), F(2)), new Vector3(F(3), F(4), F(5)), new Vector3(F(6), F(7), F(8))),
+                new Vector3(F(9), F(10), F(11)));
+            var attach = new BoneAttachment3D { Name = $"Gear_{item.Slot}", BoneName = bone };
+            skel.AddChild(attach);
+            attach.AddChild(model);
+            helmed |= item.Slot == WornSlot.Helm;
+            hung.Add($"{nif}@{bone}");
+        }
+        if (helmed)
+            foreach (Node n in figure.FindChildren("hair*", "MeshInstance3D", true, false))
+                ((MeshInstance3D)n).Visible = false;   // under the helm (its "Helm Hair" squash shapes: W33)
+        return hung.Count == 0 ? "" : " holding " + string.Join(" ", hung);
+    }
+
+    private static Node3D? ItemModel(string modelsDir, string nif, string[] dirs)
+    {
+        string path = System.IO.Path.Combine(modelsDir, nif + ".glb");
+        if (ItemModels.TryGetValue(path, out Node3D? cached))
+            return cached;
+        Node3D? result = null;
+        var doc = new GltfDocument();
+        var state = new GltfState();
+        if (Godot.FileAccess.FileExists(path) && doc.AppendFromFile(path, state) == Error.Ok && doc.GenerateScene(state) is Node3D m)
+        {
+            ModelTexturing.TagLayers(state);
+            ModelTexturing.Apply(m, dirs);
+            result = m;
+        }
+        ItemModels[path] = result;
+        return result;
+    }
+
     private static System.Text.Json.JsonElement? Json(System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement?> cache, string path)
     {
         if (!cache.TryGetValue(path, out System.Text.Json.JsonElement? e))

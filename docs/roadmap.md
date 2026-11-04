@@ -246,8 +246,10 @@ become real figures:
   pair in the head's "FM" labels). **Worn items (2026-11-04):** players wear their body, arms, legs,
   gloves, boots and cloak (0x15 for others, the character list for you; `objects.csv`'s Catacombs columns;
   robes on the long body; hood up). One figure per race and sex (`cata_fig<N>.glb`, 36 in all, 58 MB)
-  carries every mesh variant; each model id's own skins are in `cata_models.json`. Not yet: skin tone
-  (W30), mood, tattoos, dyes, cloak emblems, helms and weapons, NPC gear on classic figures (W31).
+  carries every mesh variant; each model id's own skins are in `cata_models.json`. **Helms and weapons
+  (2026-11-04):** the helm on the head (hair hidden), weapons sheathed on the hip or back or in the hand,
+  a shield on the arm, by the item NIFs' own frames (`cata_gear.json`, 1,815 item models). Not yet: skin
+  tone (W30), mood, tattoos, dyes, emblems, weapons drawn in combat, NPC gear on classic figures (W31, W33).
 
 **M7c — strafe (small, but MVP).** ~~Done 2026-10-31~~ (commit 87c7d90). Add strafe-left/right (Q/E) to the existing WASD + turn rig: with
 the mouse-chase camera, forward + strafe is how you actually navigate. A couple of input reads and a

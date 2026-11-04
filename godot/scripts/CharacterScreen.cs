@@ -54,6 +54,7 @@ public partial class CharacterScreen : Control
     private CharacterLook _playerLook;   // ... and its face and hair
     private IReadOnlyList<WornItem> _playerWorn = [];   // ... and its armour (the server sends ours only here)
     private bool _playerHoodUp;
+    private byte _playerActiveWeapons = 0xFF;
     private CancellationTokenSource? _keepAlive;
 
     public override void _Ready()
@@ -530,6 +531,7 @@ public partial class CharacterScreen : Control
             _playerLook = entered?.Look ?? default;
             _playerWorn = entered?.Worn ?? [];
             _playerHoodUp = entered?.HoodUp ?? false;
+            _playerActiveWeapons = entered?.ActiveWeapons ?? 0xFF;
             if (entered is not null && Current() is LoginProfile p && p.Account == _account.Text.Trim())
             {
                 LoginProfiles.Save(p with { Realm = _listedRealm, Character = entered.Name });
@@ -641,7 +643,7 @@ public partial class CharacterScreen : Control
         var view = new WorldView
         {
             AssetsNote = note, PlayerModel = _playerModel, PlayerLook = _playerLook,
-            PlayerWorn = _playerWorn, PlayerHoodUp = _playerHoodUp, ZonesDir = ZonesDir(),
+            PlayerWorn = _playerWorn, PlayerHoodUp = _playerHoodUp, PlayerActiveWeapons = _playerActiveWeapons, ZonesDir = ZonesDir(),
             PacketLogging = (() => _packetLog.Enabled, on => _logPackets.ButtonPressed = on),
         };
         view.Init(offline ? null : _connection, offline ? null : _session, world, ResolvedPath(a, "--model"),

@@ -19,9 +19,10 @@
 // <model id> (default: the first using it) gives the model's own skins, and --look takes the
 // seven appearance bytes in hex, in the character list's order (eye size, lip size, eye colour, hair
 // colour, face, hair style, mood), e.g. --look 44,44,20,01,00,20,00; with no --look the bytes are 0.
-// --wear dresses it in worn items by model id (objects.csv), each optionally with its extension:
-// --wear 81,82,83,84,85 (a studded set), --wear 41:6,57 (a chain hauberk on body mesh 6, a cloak);
-// --hood puts a cloak's hood up.
+// --wear dresses it in worn items by model id (objects.csv), each optionally with its slot and extension:
+// --wear 81,82,83,84,85 (a studded set), --wear 41:6,57 (a chain hauberk on body mesh 6, a cloak),
+// --wear 10@3,11@59,21@824 (a short sword, a round shield, a studded helm); --active 10 (0x15's active
+// weapons byte in hex: sword and shield in use; default FF, none); --hood puts a cloak's hood up.
 
 using System;
 using System.Linq;
@@ -184,13 +185,16 @@ public partial class ModelViewer : Node3D
         string lib = System.IO.Path.GetDirectoryName(dir) ?? "";
         string options = System.IO.Path.Combine(dir, $"fig3_{fig3}.json");
         var worn = (ArgValue("--wear") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
-            .Select(w => w.Split(':'))
-            .Select(w => new DaocProtocol.Packets.WornItem(0, ushort.Parse(w[0]), w.Length > 1 ? byte.Parse(w[1]) : (byte)0))
+            .Select(w => (Slot: w.Contains('@') ? byte.Parse(w.Split('@')[0]) : (byte)0, Parts: w.Split('@')[^1].Split(':')))
+            .Select(w => new DaocProtocol.Packets.WornItem(w.Slot, ushort.Parse(w.Parts[0]), w.Parts.Length > 1 ? byte.Parse(w.Parts[1]) : (byte)0))
             .ToList();
+        byte active = Convert.ToByte(ArgValue("--active") ?? "FF", 16);
         bool hood = OS.GetCmdlineUserArgs().Contains("--hood");
         return FigureLook.Apply(figure, options, look, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) +
             FigureLook.Dress(figure, options, System.IO.Path.Combine(dir, "cata_items.json"), System.IO.Path.Combine(dir, "cata_models.json"),
-                id, worn, hood, false, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) + $" (row {id})";
+                id, worn, hood, false, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) +
+            FigureLook.Gear(figure, options, System.IO.Path.Combine(dir, "cata_gear.json"), dir, worn, active, false, hood,
+                System.IO.Path.Combine(lib, "overrides"), textureDir, lib) + $" (row {id})";
     }
 
     // Plays one of the model's animation clips (a figure converted with mpk figure has idle, walk, run,

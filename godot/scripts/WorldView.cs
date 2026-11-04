@@ -136,6 +136,7 @@ public partial class WorldView : Node3D
         public float Speed;           // smoothed metres per second, to pick the clip
         public Node3D? Figure;        // a player's Catacombs figure, dressed by 0x15 (null otherwise)
         public ushort Model;
+        public CharacterLook Look;
     }
 
     /// <summary>Raised when the player presses Quit (connected).</summary>
@@ -172,6 +173,8 @@ public partial class WorldView : Node3D
     /// <summary>The converted zones folder (private/zones), for the travel window.</summary>
     public string? ZonesDir { get; set; }
     public bool PlayerHoodUp { get; set; }
+    /// <summary>The player's weapon slots in use (the character list's, as 0x15's byte).</summary>
+    public byte PlayerActiveWeapons { get; set; } = 0xFF;
 
     private AnimationPlayer? _bodyAnim;
     private string _bodyClip = "";
@@ -835,7 +838,7 @@ public partial class WorldView : Node3D
             return false;
         var inst = (Node3D)figure.Template.Duplicate();
         inst.Scale = new Vector3(figure.Scale, figure.Scale, figure.Scale);
-        string look = ApplyLook(inst, PlayerModel, PlayerLook) + Dress(inst, PlayerModel, PlayerWorn, PlayerHoodUp, false);
+        string look = Outfit(inst, PlayerModel, PlayerLook, PlayerWorn, PlayerHoodUp, false, false, PlayerActiveWeapons);
         // A figure faces +Z (seen live: the chase camera, behind the body, met the face); the body
         // walks along -Z, so turn it half round.
         inst.Rotation = new Vector3(0, Mathf.Pi, 0);
@@ -1801,9 +1804,9 @@ public partial class WorldView : Node3D
             {
                 dressed = inst;
                 if (_equipment.TryGetValue(objectId, out EquipmentUpdate? gear))
-                    Dress(inst, model, gear.Items, gear.HoodUp, gear.CloakHidden);
+                    Outfit(inst, model, l, gear.Items, gear.HoodUp, gear.CloakHidden, gear.HelmHidden, gear.ActiveWeapons);
                 else
-                    Dress(inst, model, [], false, false);
+                    Outfit(inst, model, l, [], false, false, false, 0xFF);
             }
             node.AddChild(inst);
             anim = inst.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() as AnimationPlayer;
@@ -1819,7 +1822,7 @@ public partial class WorldView : Node3D
         }
         _entityRoot.AddChild(node);
         var entity = new Entity { Node = node, TargetPosition = pos, TargetYaw = yaw, Player = anim, LastPosition = pos,
-            Figure = dressed, Model = model };
+            Figure = dressed, Model = model, Look = look ?? default };
         _entities[objectId] = entity;
         PlayClip(entity, "idle");
     }
@@ -1914,7 +1917,20 @@ public partial class WorldView : Node3D
     {
         _equipment[gear.ObjectId] = gear;
         if (_entities.TryGetValue(gear.ObjectId, out Entity? e) && e.Figure is { } figure)
-            Dress(figure, e.Model, gear.Items, gear.HoodUp, gear.CloakHidden);
+            Outfit(figure, e.Model, e.Look, gear.Items, gear.HoodUp, gear.CloakHidden, gear.HelmHidden, gear.ActiveWeapons);
+    }
+
+    // A player's Catacombs figure in full: its look (face, hair), its armour and cloak, then what it holds
+    // and wears on its head. The look first, so a helm taken off gives the hair back.
+    private string Outfit(Node3D figure, ushort model, CharacterLook look, IReadOnlyList<WornItem> worn,
+        bool hoodUp, bool cloakHidden, bool helmHidden, byte activeWeapons)
+    {
+        string lib = _libraryPath ?? "";
+        string text = ApplyLook(figure, model, look) + Dress(figure, model, worn, hoodUp, cloakHidden);
+        if (_cataFig3 is not null && _cataFig3.TryGetValue(model, out int fig3))
+            text += FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_gear.json"),
+                lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
+        return text;
     }
 
     // Dresses a player's Catacombs figure in worn items (FigureLook.Dress); a description for the log.
