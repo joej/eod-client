@@ -564,18 +564,8 @@ public partial class CharacterScreen : Control
             GD.PrintErr($"--goto: no zone {zoneId} in zones.tsv");
             return from;
         }
-        (float x, float y) = zone.Centre;
-        float z = from.Position.Z;
-        string where = "the middle";
         // The converter writes a landing spot where the middle is a bad place (a city: its first gate).
-        if (ZonesDir() is string zonesDir
-            && System.IO.File.Exists(System.IO.Path.Combine(zonesDir, $"zone{zoneId:D3}", "landing.txt"))
-            && System.IO.File.ReadAllText(System.IO.Path.Combine(zonesDir, $"zone{zoneId:D3}", "landing.txt"))
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries) is [var sx, var sy, var sz, ..]
-            && float.TryParse(sx, System.Globalization.CultureInfo.InvariantCulture, out float lx)
-            && float.TryParse(sy, System.Globalization.CultureInfo.InvariantCulture, out float ly)
-            && float.TryParse(sz, System.Globalization.CultureInfo.InvariantCulture, out float lz))
-            (x, y, z, where) = (lx, ly, lz, "its landing spot");
+        (float x, float y, float z, string where) = TravelDialog.Target(zone, ZonesDir(), from.Position.Z);
         GD.Print($"--goto {zoneId}: jumping to {where} in {zone.Name} (region {zone.RegionId})");
         try
         {
@@ -651,7 +641,7 @@ public partial class CharacterScreen : Control
         var view = new WorldView
         {
             AssetsNote = note, PlayerModel = _playerModel, PlayerLook = _playerLook,
-            PlayerWorn = _playerWorn, PlayerHoodUp = _playerHoodUp,
+            PlayerWorn = _playerWorn, PlayerHoodUp = _playerHoodUp, ZonesDir = ZonesDir(),
             PacketLogging = (() => _packetLog.Enabled, on => _logPackets.ButtonPressed = on),
         };
         view.Init(offline ? null : _connection, offline ? null : _session, world, ResolvedPath(a, "--model"),

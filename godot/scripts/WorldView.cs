@@ -168,6 +168,9 @@ public partial class WorldView : Node3D
     /// <summary>The player's armour (the character list's; the server never sends our own 0x15) and
     /// whether the cloak's hood is up.</summary>
     public IReadOnlyList<WornItem> PlayerWorn { get; set; } = [];
+
+    /// <summary>The converted zones folder (private/zones), for the travel window.</summary>
+    public string? ZonesDir { get; set; }
     public bool PlayerHoodUp { get; set; }
 
     private AnimationPlayer? _bodyAnim;
@@ -395,6 +398,9 @@ public partial class WorldView : Node3D
         var settings = new Button { Text = "Settings (F10)", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
         settings.Pressed += () => SettingsDialog.Open(this);
         _dev.AddToStatus(settings);
+        var travel = new Button { Text = "Travel (F6)", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+        travel.Pressed += () => OpenTravel();
+        _dev.AddToStatus(travel);
         BuildChatUi(overlay);
         AddChild(overlay);
         _viewSetting = ViewOverride() ?? ClientSettings.ViewDistance;
@@ -983,6 +989,10 @@ public partial class WorldView : Node3D
         {
             SettingsDialog.Open(this);
         }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F6 } && !ChatInputActive)
+        {
+            OpenTravel();
+        }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F4 })
         {
             _togglePacketLog?.Invoke();
@@ -1214,6 +1224,19 @@ public partial class WorldView : Node3D
         int dir = System.Array.IndexOf(args, "--shots-out");
         if (set >= 0 && set + 1 < args.Length && dir >= 0 && dir + 1 < args.Length)
             _ = RunShotSet(ResolveArgPath(args[set + 1]), ResolveArgPath(args[dir + 1]));
+        // --travel ZONE opens the travel window, types the zone number and goes (after 2 s and 5 s), to check
+        // the window and the jump without a mouse.
+        int travelArg = System.Array.IndexOf(args, "--travel");
+        if (travelArg >= 0 && travelArg + 1 < args.Length)
+        {
+            string zoneText = args[travelArg + 1];
+            GetTree().CreateTimer(2.0).Timeout += () =>
+            {
+                TravelDialog dialog = OpenTravel();
+                dialog.Filter(zoneText);
+                GetTree().CreateTimer(3.0).Timeout += () => { if (IsInstanceValid(dialog)) dialog.GoFirst(); };
+            };
+        }
         // --drop METRES lifts the character that far once the world is up, to check falling and landing.
         int drop = System.Array.IndexOf(args, "--drop");
         if (drop >= 0 && drop + 1 < args.Length && float.TryParse(args[drop + 1], System.Globalization.NumberStyles.Float,
@@ -1860,6 +1883,29 @@ public partial class WorldView : Node3D
 
     // fig3 figure number per Catacombs model id (catacombs.csv column 4), read once.
     private Dictionary<int, int>? _cataFig3;
+
+    // The travel window (F6): pick a zone, and the GM jump takes us there. The landing spot where the
+    // converter wrote one, else the zone's middle at height 0: outdoors the character is then under the
+    // terrain and is put on top of it (Ground), so no height needs knowing in advance.
+    private TravelDialog OpenTravel() => TravelDialog.Open(this, ZonesDir, zone =>
+    {
+        if (_session is null || _closedReason is not null)
+        {
+            AppendChat("(offline: can't travel)", new Color(0.8f, 0.5f, 0.5f));
+            return;
+        }
+        (float x, float y, float z, string where) = TravelDialog.Target(zone, ZonesDir, 0f);
+        string command = System.FormattableString.Invariant($"/jump to {x:0} {y:0} {z:0} {zone.RegionId}");
+        AppendChat($"Travelling to {zone.Name} (zone {zone.Id}, {where}): {command}", new Color(0.6f, 0.8f, 1f));
+        GD.Print($"[world] travel to zone {zone.Id} {zone.Name}: {command}");
+        _ = SendTravel(command);
+    });
+
+    private async System.Threading.Tasks.Task SendTravel(string command)
+    {
+        try { await _session!.SendCommandAsync(command); }
+        catch (System.Exception e) { AppendChat($"(could not send: {e.Message})", new Color(0.8f, 0.5f, 0.5f)); }
+    }
 
     // Each living's last visible gear (0x15): it can come before or after the player's create packet.
     private readonly Dictionary<ushort, EquipmentUpdate> _equipment = new();
