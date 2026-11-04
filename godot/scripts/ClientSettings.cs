@@ -27,11 +27,27 @@ public static class ClientSettings
         }
     }
 
-    /// <summary>Fullscreen (F11) or a maximized window.</summary>
+    /// <summary>Fullscreen (F11), else a window of <see cref="WindowSize"/>, else a maximized window.</summary>
     public static bool Fullscreen
     {
         get => Load().GetValue("graphics", "fullscreen", false).AsBool();
         set => Save("fullscreen", value);
+    }
+
+    /// <summary>Window size in pixels (what is rendered), e.g. 1600×900; null = maximized.
+    /// Set with --window WxH (tools/play.sh play --window 1600x900); --window max clears it.</summary>
+    public static Vector2I? WindowSize
+    {
+        get => ParseSize(Load().GetValue("graphics", "window_size", "").AsString());
+        set => Save("window_size", value is Vector2I v ? $"{v.X}x{v.Y}" : "");
+    }
+
+    /// <summary>"1600x900" → (1600, 900); anything else (including "max") → null.</summary>
+    public static Vector2I? ParseSize(string text)
+    {
+        string[] wh = text.ToLowerInvariant().Split('x');
+        return wh.Length == 2 && int.TryParse(wh[0], out int w) && int.TryParse(wh[1], out int h) && w >= 320 && h >= 240
+            ? new Vector2I(w, h) : null;
     }
 
     /// <summary>The sun casts real shadows (buildings, trees). Ours: the original drew fixed ones.</summary>
@@ -46,7 +62,23 @@ public static class ClientSettings
     {
         if (DisplayServer.GetName() == "headless")
             return;
-        DisplayServer.WindowSetMode(Fullscreen ? DisplayServer.WindowMode.Fullscreen : DisplayServer.WindowMode.Maximized);
+        if (Fullscreen)
+        {
+            DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
+        }
+        else if (WindowSize is Vector2I size)
+        {
+            DisplayServer.WindowSetMode(DisplayServer.WindowMode.Windowed);
+            int screen = DisplayServer.WindowGetCurrentScreen();
+            Rect2I usable = DisplayServer.ScreenGetUsableRect(screen);
+            size = new Vector2I(System.Math.Min(size.X, usable.Size.X), System.Math.Min(size.Y, usable.Size.Y));
+            DisplayServer.WindowSetSize(size);
+            DisplayServer.WindowSetPosition(usable.Position + (usable.Size - size) / 2);
+        }
+        else
+        {
+            DisplayServer.WindowSetMode(DisplayServer.WindowMode.Maximized);
+        }
     }
 
     private static void Save(string key, Variant value)

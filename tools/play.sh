@@ -30,6 +30,8 @@
 #                   tools/play.sh zones): convert only that zone, and with --enter move the character
 #                   to its middle (GM command /jump: the account must be a GM). Without --zone the character starts where it was
 #                   saved, and the client shows whichever zone the server puts it in.
+#   --window WxH    window size in pixels, e.g. 1600x900 (the client remembers it; --window max
+#                   goes back to a maximized window; F11 is fullscreen)
 #   --packets       print every packet's code and size in the terminal (F4 in the world switches it)
 #   --fresh         re-index the install and reconvert everything, even if nothing changed
 #
@@ -57,7 +59,7 @@ if [ "$CMD" = zones ] && [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then FILTER=$1; sh
 
 CLIENT="" HOST="" PORT="" ACCOUNT="" ZONE="" PASSWORD_CMD=""
 [ -f "$CONF" ] && . "$CONF"
-ENTER="" GOTO="" FRESH=0 CHANGED=0 PACKETS=0
+ENTER="" GOTO="" FRESH=0 CHANGED=0 PACKETS=0 WINDOW=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --client)  CLIENT=${2:?}; CHANGED=1; shift 2 ;;
@@ -69,7 +71,8 @@ while [ $# -gt 0 ]; do
         --enter)   ENTER=${2:?}; shift 2 ;;
         --fresh)   FRESH=1; shift ;;
         --packets) PACKETS=1; shift ;;
-        -h|--help) sed -n '4,41p' "$0"; exit 0 ;;
+        --window)  WINDOW=${2:?}; shift 2 ;;
+        -h|--help) sed -n '4,43p' "$0"; exit 0 ;;
         *) die "unknown option: $1 (see tools/play.sh --help)" ;;
     esac
 done
@@ -236,6 +239,7 @@ do_play() {
     [ -n "$ENTER" ] && args+=(--enter "$ENTER")
     [ -n "$GOTO" ] && args+=(--goto "$GOTO")
     [ "$PACKETS" = 1 ] && args+=(--packets)
+    [ -n "$WINDOW" ] && args+=(--window "$WINDOW")
     step "play: $ACCOUNT@$HOST:$PORT"
     # The window opens on this machine's display (over ssh/tmux on a Mac: the logged-in desktop).
     cd "$REPO" && exec "$godot" --path "$REPO/godot" -- "${args[@]}"

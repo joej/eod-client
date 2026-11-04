@@ -50,6 +50,14 @@ public partial class CharacterScreen : Control
     {
         // Closing the window while in the world quits cleanly first (see _Notification).
         GetTree().AutoAcceptQuit = false;
+        // --window WxH: a window of that size from now on (saved); --window max: maximized again.
+        string[] userArgs = OS.GetCmdlineUserArgs();
+        int w = Array.IndexOf(userArgs, "--window");
+        if (w >= 0 && w + 1 < userArgs.Length)
+        {
+            ClientSettings.WindowSize = ClientSettings.ParseSize(userArgs[w + 1]);
+            ClientSettings.Fullscreen = false;
+        }
         ClientSettings.ApplyWindowMode();
         BuildUi();
         LoadSettings();
