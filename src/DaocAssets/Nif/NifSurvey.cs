@@ -85,6 +85,7 @@ public sealed partial class NifSurvey
                     or "NiSkinData" or "NiBillboardNode" or "NiLODNode" or "NiRangeLODData" => NifCoverage.Partial,
                 "NiTriShapeData" or "NiTriStripsData" or "NiSourceTexture" or "NiTexturingProperty"
                     or "NiMaterialProperty" or "NiStencilProperty" => NifCoverage.Partial,
+                "NiGeomMorpherController" or "NiMorphData" => NifCoverage.Partial,
                 _ => NifCoverage.Unhandled,
             };
         return type switch
@@ -116,6 +117,8 @@ public sealed partial class NifSurvey
                 "NiTexturingProperty" => "base texture only",
                 "NiMaterialProperty" => "diffuse and alpha only",
                 "NiStencilProperty" => "draw mode (sidedness) only",
+                "NiGeomMorpherController" or "NiMorphData" =>
+                    "morph targets and their FM/HM codes exported on skinned shapes (Catacombs face sliders); keys (animated morphs) ignored",
                 _ => "",
             };
         return type switch

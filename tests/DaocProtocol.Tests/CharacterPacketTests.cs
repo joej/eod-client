@@ -80,7 +80,7 @@ public class CharacterPacketTests
         var look = new CharacterLook(EyeSize: 0x37, LipSize: 0x52, EyeColor: 0x63, HairColor: 0x0B,
             FaceType: 0x40, HairStyle: 0x50, MoodType: 0);
         Assert.Equal((4, 5, 11, 6, 3), (look.Face, look.Hair, look.HairColour, look.EyeColour, look.SkinTone));
-        Assert.Equal((Nose: 7, Eyes: 3, Lips: 5, Jaw: 2), look.Sliders);
+        Assert.Equal([7, 3, 5, 2, 4], Enumerable.Range(0, 5).Select(look.Slider));
     }
 
     [Fact]

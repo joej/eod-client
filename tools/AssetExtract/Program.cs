@@ -562,8 +562,10 @@ internal static class Cli
         var list = new List<(NifModel, string?, string)>();
         foreach (DaocAssets.Figures.CataPart part in spec.Parts.Where(p => p.Slot != 8))
         {
-            if (load(part) is { } model) list.Add((model, part.Skin, DaocAssets.Figures.CataSlots.Names[part.Slot]));
-            else missing(part.Nif);
+            if (load(part) is not { } model) { missing(part.Nif); continue; }
+            if (part.Slot == 0)
+                model = LabelledHead(model, part, load);
+            list.Add((model, part.Skin, DaocAssets.Figures.CataSlots.Names[part.Slot]));
         }
         string? rowHair = spec.Parts.FirstOrDefault(p => p.Slot == 8)?.Skin;
         for (int s = 0; s < spec.HairStyles.Count; s++)
@@ -577,12 +579,39 @@ internal static class Cli
         return list;
     }
 
+    // A head's face-slider labels ("FM1=3 ..."): fig3parts often names a copy in fig014.mpk whose morphs
+    // carry none, while the same head in another archive (fig015.mpk for all 36 races) has them. The
+    // codes are taken from the labelled copy when its morphs match (same vertex and target counts); the
+    // geometry stays the named copy's.
+    private static NifModel LabelledHead(NifModel head, DaocAssets.Figures.CataPart part, Func<DaocAssets.Figures.CataPart, NifModel?> load)
+    {
+        if (!head.Meshes.Any(m => m.MorphTargets is not null && m.MorphCodes!.All(c => c == 0)))
+            return head;
+        for (int archive = 1; archive <= 30; archive++)
+        {
+            if (archive == part.Archive || load(part with { Archive = archive }) is not { } other)
+                continue;
+            // Matched by the morphing shape, not mesh by mesh: sar_f_Head01's fig014 copy also carries ten
+            // hidden boxes the labelled copy lacks.
+            var meshes = head.Meshes.Select(m =>
+                m.MorphTargets is not null && other.Meshes.FirstOrDefault(o => o.MorphCodes is { } c && c.Any(x => x != 0)
+                    && o.Vertices.Length == m.Vertices.Length && c.Length == m.MorphTargets.Length) is { } labelled
+                    ? m with { MorphCodes = labelled.MorphCodes } : m).ToList();
+            if (meshes.Any(m => m.MorphCodes?.Any(c => c != 0) == true))
+                return new NifModel { Version = head.Version, Joints = head.Joints, Meshes = meshes };
+        }
+        return head;
+    }
+
     // models/fig3_<figure>.json: a Catacombs race's appearance options for the client (faces, eye colours,
     // skin tints, and per hair style its node and colours), indexed as the appearance bytes count; every
     // texture it names is gathered into the library.
     private static void WriteLooks(DaocAssets.Figures.CataSpec spec, DaocAssets.Figures.CataLooks looks, string modelsDir,
-        AssetLibrary library, HashSet<string> gathered)
+        AssetLibrary library, HashSet<string> gathered, IEnumerable<(NifModel Part, string? Skin, string Label)> parts)
     {
+        int[] headCodes = parts.Where(p => p.Label == "head").SelectMany(p => p.Part.Meshes)
+            .FirstOrDefault(m => m.MorphCodes is not null)?.MorphCodes ?? [];
+        var sliders = DaocAssets.Figures.CatacombsFigure.Sliders(looks.SliderLabels, headCodes);
         static double[] Rgb(System.Numerics.Vector3 v) => [Math.Round(v.X, 3), Math.Round(v.Y, 3), Math.Round(v.Z, 3)];
         int styles = Math.Max(spec.HairStyles.Count, looks.HairColours.Count);
         var json = new
@@ -597,6 +626,7 @@ internal static class Cli
                     ? looks.HairColours[s].Select(c => new { tex = c.Texture, tint = Rgb(c.Tint) }).ToArray() : [],
             }),
             default_hair = spec.DefaultHair,
+            sliders = sliders.Select(sl => new { label = sl.Label, low = sl.Low, high = sl.High }),
         };
         Directory.CreateDirectory(modelsDir);
         File.WriteAllText(Path.Combine(modelsDir, $"fig3_{spec.Figure}.json"), System.Text.Json.JsonSerializer.Serialize(json));
@@ -649,7 +679,7 @@ internal static class Cli
             if (library.GatherTexture(skin) is null)
                 Console.Error.WriteLine($"  skin {skin}: not found");
         if (looks is not null)
-            WriteLooks(spec, looks, Path.Combine(libDir, "models"), library, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            WriteLooks(spec, looks, Path.Combine(libDir, "models"), library, new HashSet<string>(StringComparer.OrdinalIgnoreCase), parts);
         var clips = new Dictionary<string, KfaClip>();
         string animNode = Path.Combine(install, "figures", "animnode.dat");
         if (File.Exists(animNode))
@@ -812,7 +842,7 @@ internal static class Cli
                     foreach (string skin in parts.Select(p => p.Skin).OfType<string>())
                         if (skins.Add(skin)) library.GatherTexture(skin);
                     if (looks is not null && looksWritten.Add(spec.Figure))
-                        WriteLooks(spec, looks, models, library, skins);
+                        WriteLooks(spec, looks, models, library, skins, parts);
                     cataTable.Append(System.FormattableString.Invariant($"{id},{spec.Scale},{Path.GetFileNameWithoutExtension(spec.Skeleton)},{spec.Figure}\n"));
                     cataMade++;
                 }

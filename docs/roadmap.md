@@ -241,9 +241,10 @@ become real figures:
   Your character and other players are drawn with them, NPCs with the classic ones (as retail, W13).
   Seen live: Eodarms as the Catacombs Briton in the City of Camelot. **Appearance (2026-11-04):** the
   character list's and 0x4B's appearance bytes (`CharacterLook`) pick the face, eye colour, hair style and
-  hair colour from the race's options (`models/fig3_<n>.json`, every hair style in the figure). Not yet:
-  skin tone (read, not drawn: W30), the face sliders and mood (morph targets), tattoos, worn equipment,
-  cloaks.
+  hair colour from the race's options (`models/fig3_<n>.json`, every hair style in the figure), and the
+  four face sliders drive the head's morph targets (all 36 races; each slider's feature found by its code
+  pair in the head's "FM" labels). Not yet: skin tone (read, not drawn: W30), mood, tattoos, worn
+  equipment, cloaks.
 
 **M7c — strafe (small, but MVP).** ~~Done 2026-10-31~~ (commit 87c7d90). Add strafe-left/right (Q/E) to the existing WASD + turn rig: with
 the mouse-chase camera, forward + strafe is how you actually navigate. A couple of input reads and a

@@ -85,6 +85,9 @@ internal sealed class Gb10Block
     public uint StencilDrawMode;
     // NiStringsExtraData / NiStringExtraData
     public string[] Strings = [];
+    // NiMorphData: each morph's vectors (morph 0 is the base shape), and whether the others are relative
+    public Vector3[][] MorphVectors = [];
+    public bool RelativeMorphs;
 }
 
 /// <summary>A parsed 10.1 file: block types, the blocks decoded, and how the decode ended.</summary>
@@ -629,14 +632,18 @@ internal static class Gamebryo1010
             {
                 uint morphs = c.U32(), nv = c.U32();
                 if (morphs > 1000 || nv > 65535) throw new NifFormatException($"Implausible morph data ({morphs} x {nv}).");
-                c.U8();                                 // Relative Targets
+                b.RelativeMorphs = c.U8() != 0;         // Relative Targets
                 Bump(f, $"NiMorphData: {Bucket((int)morphs)} morph(s)");
+                b.MorphVectors = new Vector3[morphs][];
                 for (int m = 0; m < morphs; m++)
                 {
                     uint keys = c.U32();
                     uint interp = c.U32();              // present even with no keys
                     NifSurvey.Keys(ref c, keys, interp, 4);
-                    Skip(ref c, nv * 12L);              // Vectors
+                    var vectors = new Vector3[nv];
+                    for (int v = 0; v < nv; v++)
+                        vectors[v] = c.Vec3();
+                    b.MorphVectors[m] = vectors;
                 }
                 break;
             }

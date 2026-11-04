@@ -95,6 +95,48 @@ public sealed class CatacombsFigureTests
     }
 
     [Fact]
+    public void EachSliderTakesTheHeadsMorphPairForItsFeature()
+    {
+        // bri_m_head01's codes in file order: eyes, nose, lips, jaw, then four moods.
+        int[] briton = [3, 4, 1, 2, 5, 6, 7, 8, 21, 22, 23, 24];
+        Assert.Equal(
+            [new CataSlider("Nose", 2, 3), new CataSlider("Eyes", 0, 1), new CataSlider("Lips", 4, 5), new CataSlider("Jaw", 6, 7)],
+            CatacombsFigure.Sliders(["Nose", "Eyes", "Lips", "Jaw"], briton));
+        // dwa_m_head01: nose width (11/12) before ears (9/10), as its slider list has them.
+        int[] dwarf = [3, 4, 1, 2, 11, 12, 9, 10, 21, 22, 23, 24];
+        Assert.Equal([4, 6], CatacombsFigure.Sliders(["Nose Length", "Eyes", "Nose Width", "Ears"], dwarf).Skip(2).Select(x => x.Low));
+        // elf_m_head01 says "Jaw" but carries lips (5/6): the head's unused pair stands in.
+        int[] elf = [3, 4, 1, 2, 5, 6, 9, 10, 21, 22, 23, 24];
+        Assert.Equal(new CataSlider("Jaw", 4, 5), CatacombsFigure.Sliders(["Nose", "Eyes", "Jaw", "Ears"], elf)[2]);
+        // Unlabelled head: no slider reaches a target.
+        Assert.All(CatacombsFigure.Sliders(["Nose", "Eyes"], new int[12]), sl => Assert.Equal((-1, -1), (sl.Low, sl.High)));
+    }
+
+    public static IEnumerable<object[]> BritonHead()
+    {
+        if (File.Exists(Live("bri_m_head01-1010.nif")))
+            yield return [Live("bri_m_head01-1010.nif")];
+    }
+
+    [Theory]
+    [MemberData(nameof(BritonHead))]
+    public void AHeadsMorphTargetsAndCodesReachTheGltf(string path)
+    {
+        NifModel head = NifFile.Read(File.ReadAllBytes(path));
+        NifMesh mesh = Assert.Single(head.Meshes);
+        Assert.Equal([3, 4, 1, 2, 5, 6, 7, 8, 21, 22, 23, 24], mesh.MorphCodes!);
+        Assert.Equal(12, mesh.MorphTargets!.Length);
+        Assert.All(mesh.MorphTargets, t => Assert.Equal(mesh.Vertices.Length, t.Length));
+        Assert.All(mesh.MorphTargets, t => Assert.Contains(t, d => d.Length() > 0.01f));   // every target moves something
+        Assert.All(mesh.MorphTargets, t => Assert.All(t, d => Assert.True(d.Length() < 5f))); // offsets, not positions
+
+        var skeleton = new NifJoint[] { new() { Name = "Bip01", Parent = -1, Local = Matrix4x4.Identity } };
+        NifModel figure = CatacombsFigure.Assemble(skeleton, [(head, "face.dds", "head")]);
+        var gltf = GltfExporter.BuildScene(figure).ToGltf2();
+        Assert.Equal(12, gltf.LogicalMeshes.Single().Primitives.Single().MorphTargetsCount);
+    }
+
+    [Fact]
     public void AModelWithoutACatacombsVersionResolvesToNull()
     {
         Assert.Null(Tables().ResolveCatacombs(33));

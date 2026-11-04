@@ -3,8 +3,8 @@
 // A player's Catacombs appearance on its figure (roadmap M7b): the character's appearance bytes
 // (DaocProtocol CharacterLook: face, hair style and colour, eye colour, skin tone) picked from the
 // race's options file, models/fig3_<n>.json, which mpk figures writes from the install's fig3 tables.
-// Not yet: the skin tone (read, not drawn: how retail blends its tint is open question W30), the face
-// sliders and mood (morph targets), tattoos.
+// The face sliders drive the head's morph targets (models/fig3_<n>.json "sliders": each slider's low and
+// high target). Not yet: the skin tone (read, not drawn: open question W30), mood, tattoos.
 
 using DaocProtocol.Packets;
 using Godot;
@@ -64,6 +64,7 @@ public static class FigureLook
                     m.DetailBlendMode = BaseMaterial3D.BlendModeEnum.Mul;
                 }
                 mi.MaterialOverride = m;
+                SetSliders(mi, o, look);
             }
             else if (name.StartsWith("hair", StringComparison.Ordinal))
             {
@@ -77,7 +78,23 @@ public static class FigureLook
                 }
             }
         }
-        return $" (face {look.Face}, hair {style}{(node is null ? " bald" : "")} colour {look.HairColour}, eyes {look.EyeColour}, skin {look.SkinTone} not drawn)";
+        return $" (face {look.Face}, hair {style}{(node is null ? " bald" : "")} colour {look.HairColour}, eyes {look.EyeColour}, skin {look.SkinTone} not drawn, " +
+            $"sliders {look.Slider(0)}{look.Slider(1)}{look.Slider(2)}{look.Slider(3)})";
+
+        static void SetSliders(MeshInstance3D head, System.Text.Json.JsonElement options, CharacterLook look)
+        {
+            if (!options.TryGetProperty("sliders", out System.Text.Json.JsonElement sliders))
+                return;
+            int shapes = head.GetBlendShapeCount();
+            for (int k = 0; k < sliders.GetArrayLength() && k < 4; k++)
+            {
+                // 0..8, 4 neutral: below 4 blends toward the low target, above toward the high one.
+                float v = Mathf.Clamp(look.Slider(k), 0, 8);
+                int low = sliders[k].GetProperty("low").GetInt32(), high = sliders[k].GetProperty("high").GetInt32();
+                if (low >= 0 && low < shapes) head.SetBlendShapeValue(low, Mathf.Clamp((4 - v) / 4, 0, 1));
+                if (high >= 0 && high < shapes) head.SetBlendShapeValue(high, Mathf.Clamp((v - 4) / 4, 0, 1));
+            }
+        }
 
         static bool Part(string name, string label) => name == label || name.StartsWith(label + "_", StringComparison.Ordinal);
     }

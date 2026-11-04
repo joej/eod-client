@@ -52,6 +52,15 @@ public sealed record NifMesh
     /// the skeleton's rest pose; <c>CatacombsFigure.Assemble</c> binds it to a skeleton's joints.</summary>
     public string[]? SkinBoneNames { get; init; }
 
+    /// <summary>Morph targets (NiGeomMorpherController + NiMorphData) as per-vertex offsets from the base
+    /// shape, in the same space as <see cref="Vertices"/>; target 0 (the base) is left out, so entry i is the
+    /// file's morph i + 1. Null when the shape has none. A Catacombs head's face sliders and moods.</summary>
+    public Vector3[][]? MorphTargets { get; init; }
+
+    /// <summary>Each morph target's feature code from the file's label string ("FM1=3", one line per morph:
+    /// FM = face, HM = hair under a helm), 0 when unlabelled; same order as <see cref="MorphTargets"/>.</summary>
+    public int[]? MorphCodes { get; init; }
+
     /// <summary>Every UV set the shape's data carries (set 0 is <see cref="TexCoords"/>); the extra
     /// texture slots name which set they use.</summary>
     public Vector2[][]? UvSets { get; init; }
@@ -83,7 +92,8 @@ public sealed record NifMesh
         (VertexColors is null ? "" : ", vertex colours") +
         (BaseColor is { } c ? $", rgba({c.X:0.##},{c.Y:0.##},{c.Z:0.##},{c.W:0.##})" : "") +
         (Alpha == SurfaceAlpha.Opaque ? "" : $", {Alpha.ToString().ToLowerInvariant()} {AlphaCutoff:0.###}") +
-        (DoubleSided ? ", two-sided" : "") + (Helper ? ", helper" : "") + (Skin is null ? "" : ", skinned");
+        (DoubleSided ? ", two-sided" : "") + (Helper ? ", helper" : "") + (Skin is null ? "" : ", skinned") +
+        (MorphTargets is null ? "" : $", {MorphTargets.Length} morphs (codes {string.Join(" ", MorphCodes ?? [])})");
 }
 
 /// <summary>One skeleton node of a skinned model, in NIF space (Z-up, NIF units).</summary>

@@ -153,6 +153,7 @@ public static class GltfExporter
                 new VertexJoints4(m.Skin![i].Length > 0 ? m.Skin[i] : [(0, 1f)]));
             foreach (var (a, b, c) in m.Triangles)
                 lp.AddTriangle(LV(a), LV(b), LV(c));
+            AddMorphs(layered, m);
             return layered;
         }
         var builder = new MeshBuilder<VertexPositionNormal, VertexTexture1, VertexJoints4>(m.Name);
@@ -167,7 +168,24 @@ public static class GltfExporter
         }
         foreach (var (a, b, c) in m.Triangles)
             prim.AddTriangle(V(a), V(b), V(c));
+        AddMorphs(builder, m);
         return builder;
+    }
+
+    // The shape's morph targets (a Catacombs head's face sliders and moods), in file order: target i is
+    // the file's morph i + 1. SharpGLTF keys a delta by the base vertex's position, so vertices sharing a
+    // position share a delta (the file gives them the same one: seam copies of one point).
+    private static void AddMorphs(IMeshBuilder<MaterialBuilder> builder, NifMesh m)
+    {
+        if (m.MorphTargets is null)
+            return;
+        for (int t = 0; t < m.MorphTargets.Length; t++)
+        {
+            Vector3[] deltas = m.MorphTargets[t];
+            var target = builder.UseMorphTarget(t);
+            for (int i = 0; i < m.Vertices.Length && i < deltas.Length; i++)
+                target.SetVertexDelta(m.Vertices[i], new VertexGeometryDelta(deltas[i], Vector3.Zero, Vector3.Zero));
+        }
     }
 
     private static IMeshBuilder<MaterialBuilder> BuildMesh(NifMesh m, bool nifSpace)

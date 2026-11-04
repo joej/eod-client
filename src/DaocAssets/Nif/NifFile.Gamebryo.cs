@@ -285,6 +285,7 @@ public static partial class NifFile
             }
             (string[] Names, (int, float)[][] Weights)? byName = shape.SkinRef >= 0 && !skinned
                 ? NamedSkin(blocks[shape.SkinRef], verts.Length) : null;
+            (Vector3[][] Targets, int[] Codes)? morphs = Morphs(shape, data.Vertices.Length, skinned ? Matrix4x4.Identity : world);
             return new NifMesh
             {
                 Name = $"mesh{index}",
@@ -306,7 +307,40 @@ public static partial class NifFile
                 DoubleSided = bothSides,
                 SkinBoneNames = byName?.Names,
                 Skin = byName?.Weights,
+                MorphTargets = morphs?.Targets,
+                MorphCodes = morphs?.Codes,
             };
+        }
+
+        // The shape's morph targets (its NiGeomMorpherController's NiMorphData), as offsets from the base
+        // shape in the same space as the exported vertices (only the linear part of `space` applies to an
+        // offset), and their feature codes from the file's label string: "FM1=3\r\nFM2=4..." numbers the
+        // morphs from 1 after the base. Null when the shape has no morphs for its vertices.
+        private (Vector3[][], int[])? Morphs(Gb10Block shape, int vertexCount, Matrix4x4 space)
+        {
+            if (shape.Controller < 0 || shape.Controller >= blocks.Length || blocks[shape.Controller].Type != "NiGeomMorpherController")
+                return null;
+            int dataRef = blocks[shape.Controller].DataRef;
+            if (dataRef < 0 || dataRef >= blocks.Length || blocks[dataRef].Type != "NiMorphData")
+                return null;
+            Gb10Block data = blocks[dataRef];
+            if (data.MorphVectors.Length < 2 || data.MorphVectors.Any(m => m.Length != vertexCount))
+                return null;
+            Vector3[] baseShape = data.MorphVectors[0];
+            var targets = new Vector3[data.MorphVectors.Length - 1][];
+            for (int m = 1; m < data.MorphVectors.Length; m++)
+                targets[m - 1] = data.MorphVectors[m].Select((v, i) =>
+                    Vector3.TransformNormal(data.RelativeMorphs ? v : v - baseShape[i], space)).ToArray();
+            var codes = new int[targets.Length];
+            string label = blocks.Where(x => x.Type == "NiStringExtraData").SelectMany(x => x.Strings)
+                .FirstOrDefault(t => System.Text.RegularExpressions.Regex.IsMatch(t, @"^[A-Z]+1\s*=")) ?? "";
+            foreach (string line in label.Split('\n', '\r'))
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(line.Trim(), @"^[A-Z]+(\d+)\s*=\s*(-?\d+)$");
+                if (m.Success && int.TryParse(m.Groups[1].Value, out int n) && n >= 1 && n <= codes.Length)
+                    codes[n - 1] = int.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            return (targets, codes);
         }
 
         // A Catacombs part's skin: its bones are named by the file's bone list (a NiStringsExtraData

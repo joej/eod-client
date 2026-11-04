@@ -51,7 +51,17 @@ public sealed record CataSpec(int ModelId, string Name, int SkeletonArchive, str
 /// </summary>
 public sealed record CataLooks(
     IReadOnlyList<string?> Faces, IReadOnlyList<string?> Eyes, IReadOnlyList<Vector3> SkinTints,
-    IReadOnlyList<IReadOnlyList<(string? Texture, Vector3 Tint)>> HairColours);
+    IReadOnlyList<IReadOnlyList<(string? Texture, Vector3 Tint)>> HairColours)
+{
+    /// <summary>The race's face sliders, in its creation screen's order (fig3descriptions "Morphs":
+    /// Nose, Eyes, Lips, Jaw for a Briton).</summary>
+    public IReadOnlyList<string> SliderLabels { get; init; } = [];
+}
+
+/// <summary>A face slider: its label and the head's morph targets at its two ends (indices into the
+/// head mesh's targets, -1 when the head lacks that end). 0 on the slider is fully <see cref="Low"/>,
+/// 8 fully <see cref="High"/>, 4 neither.</summary>
+public sealed record CataSlider(string Label, int Low, int High);
 
 /// <summary>Body slot names, as the mesh names a figure's parts carry (fig3map slot numbers 0..9).</summary>
 public static class CataSlots
@@ -120,6 +130,39 @@ public static partial class CatacombsFigure
         { Clips = clips(n), Figure = figure, HairStyles = hairStyles, DefaultHair = defaultHair };
     }
 
+    // A head's morph feature codes come in pairs, one feature each (surveyed over all 36 race heads,
+    // whose labels "FM1=3 ..." match their race's slider names in 35): 1/2 nose, 3/4 eyes, 5/6 lips,
+    // 7/8 jaw, 9/10 ears, 11/12 nose width, 13/14 tusks, 15/16 sharpness, 17/18 tines, 19/20 spines;
+    // 21-24 are moods. Which end of a pair is the slider's low end is unconfirmed (odd taken as low).
+    private static readonly (string Label, int Code)[] FeatureCodes =
+    [
+        ("Nose Length", 1), ("Nose Width", 11), ("Jaw Length", 7), ("Nose", 1), ("Eyes", 3), ("Lips", 5),
+        ("Jaw", 7), ("Ears", 9), ("Tusks", 13), ("Sharpness", 15), ("Tines", 17), ("Spines", 19),
+    ];
+
+    /// <summary>
+    /// The head's face sliders: each label's feature pair by name; a label whose feature the head lacks
+    /// (the elf man's "Jaw", where his head carries lips) takes the head's next unused pair below the
+    /// moods, in file order. <paramref name="codes"/> is the head mesh's <see cref="NifMesh.MorphCodes"/>.
+    /// </summary>
+    public static IReadOnlyList<CataSlider> Sliders(IReadOnlyList<string> labels, IReadOnlyList<int> codes)
+    {
+        var used = new HashSet<int>();
+        var pairs = codes.Where(c => c is > 0 and < 21).Select(c => (c + 1) / 2).Distinct().ToList();
+        var sliders = new List<CataSlider>();
+        foreach (string label in labels)
+        {
+            int code = FeatureCodes.FirstOrDefault(f => f.Label.Equals(label.Trim(), StringComparison.OrdinalIgnoreCase)).Code;
+            int pair = code > 0 && pairs.Contains((code + 1) / 2) && !used.Contains((code + 1) / 2) ? (code + 1) / 2
+                : pairs.FirstOrDefault(p => !used.Contains(p));
+            if (pair > 0) used.Add(pair);
+            sliders.Add(new CataSlider(label.Trim(), Index(2 * pair - 1), Index(2 * pair)));
+        }
+        return sliders;
+
+        int Index(int c) => c > 0 ? codes.ToList().IndexOf(c) : -1;
+    }
+
     // "CthBody01_ss_bri_M.dds" -> 1, "chnBody05_..." -> 5; 1 when the name carries none.
     internal static int VariantOf(string skin)
     {
@@ -165,6 +208,7 @@ public static partial class CatacombsFigure
                     continue;
                 Vector3[] verts = mesh.Vertices;
                 Vector3[]? normals = mesh.Normals;
+                Vector3[][]? morphs = mesh.MorphTargets;
                 string[] names;
                 if (mesh.SkinBoneNames is not null)
                     names = mesh.SkinBoneNames;
@@ -173,6 +217,11 @@ public static partial class CatacombsFigure
                     // A self-contained skin: pose it in its own file's rest pose.
                     names = own.Select(b => part.Joints[b.Joint].Name).ToArray();
                     var m = own.Select(b => b.InverseBind * partWorld[b.Joint]).ToArray();
+                    // Morph offsets move with the skin's linear part, weighted like the vertices.
+                    if (mesh.MorphTargets is not null)
+                        morphs = mesh.MorphTargets.Select(target => target.Select((d, v) =>
+                            mesh.Skin[v].Length == 0 ? d
+                                : mesh.Skin[v].Aggregate(Vector3.Zero, (acc, bw) => acc + Vector3.TransformNormal(d, m[bw.Bone]) * bw.Weight)).ToArray()).ToArray();
                     verts = new Vector3[mesh.Vertices.Length];
                     normals = mesh.Normals is null ? null : new Vector3[mesh.Vertices.Length];
                     for (int v = 0; v < verts.Length; v++)
@@ -224,6 +273,7 @@ public static partial class CatacombsFigure
                     ShapeName = shape,
                     Vertices = verts,
                     Normals = normals,
+                    MorphTargets = morphs,
                     TextureFile = skin ?? mesh.TextureFile,
                     SkinBoneNames = null,
                     SkinJoints = used.Select(j => (j, Invert(world[j]))).ToArray(),

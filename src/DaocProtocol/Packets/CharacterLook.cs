@@ -26,7 +26,16 @@ public readonly record struct CharacterLook(
     public int EyeColour => EyeColor >> 4;
     /// <summary>The skin tone (fig3skincolormap column, from 0).</summary>
     public int SkinTone => EyeColor & 0x0F;
-    /// <summary>Face sliders, 0..8 with 4 neutral: nose, eyes, lips, jaw.</summary>
-    public (int Nose, int Eyes, int Lips, int Jaw) Sliders =>
-        (EyeSize & 0x0F, EyeSize >> 4, LipSize >> 4, LipSize & 0x0F);
+    /// <summary>The race's face slider <paramref name="k"/> (0-3, in its creation screen's order, the
+    /// fig3descriptions "Morphs" row), 0..8 with 4 neutral. OpenDAoC's comments name the four for a Briton
+    /// (nose, eyes, lips, jaw): eye size low and high half, then lip size high and low half. Other races
+    /// put their own sliders in the same places (a kobold: nose, eyes, jaw, ears).</summary>
+    public int Slider(int k) => k switch
+    {
+        0 => EyeSize & 0x0F,
+        1 => EyeSize >> 4,
+        2 => LipSize >> 4,
+        3 => LipSize & 0x0F,
+        _ => 4,
+    };
 }
