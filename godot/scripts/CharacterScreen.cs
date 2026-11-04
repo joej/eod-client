@@ -267,6 +267,8 @@ public partial class CharacterScreen : Control
         GetTree().Quit();
     }
 
+    // Two panels, used left to right: the server and account to log in with, then (once logged in)
+    // the realm and character to enter the world with. Settings and the packet log along the bottom.
     private void BuildUi()
     {
         var margin = new MarginContainer();
@@ -275,23 +277,28 @@ public partial class CharacterScreen : Control
             margin.AddThemeConstantOverride($"margin_{side}", 24);
         AddChild(margin);
 
-        var column = new VBoxContainer();
-        column.AddThemeConstantOverride("separation", 12);
-        margin.AddChild(column);
+        var page = new VBoxContainer();
+        page.AddThemeConstantOverride("separation", 12);
+        margin.AddChild(page);
+        var panels = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        panels.AddThemeConstantOverride("separation", 24);
+        page.AddChild(panels);
 
+        // --- 1. Log in ---
+        VBoxContainer login = Panel(panels, "1  Log in");
         var form = new GridContainer { Columns = 2 };
         form.AddThemeConstantOverride("h_separation", 12);
-        column.AddChild(form);
+        form.AddThemeConstantOverride("v_separation", 8);
+        login.AddChild(form);
 
         var profileRow = new HBoxContainer();
-        _profile = new OptionButton { CustomMinimumSize = new Vector2(320, 0) };
+        _profile = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         _profile.ItemSelected += index => ShowProfile(index < _profiles.Count ? _profiles[(int)index] : null);
         profileRow.AddChild(_profile);
-        var delete = new Button { Text = "Remove" };
+        var delete = new Button { Text = "Remove", TooltipText = "Forget this server and account" };
         delete.Pressed += DeleteProfile;
         profileRow.AddChild(delete);
-        form.AddChild(new Label { Text = "Login" });
-        form.AddChild(profileRow);
+        Field(form, "Saved", profileRow);
         _host = Field(form, "Server", new LineEdit { PlaceholderText = "host or IP" });
         _port = Field(form, "Port", new SpinBox { MinValue = 1, MaxValue = 65535, Value = 10300 });
         _account = Field(form, "Account", new LineEdit());
@@ -312,50 +319,70 @@ public partial class CharacterScreen : Control
                 LoginProfiles.Save(p with { AutoStart = (AutoStart)_autoStart.Selected });
             _profiles = LoginProfiles.All();
         };
-
-        var buttons = new HBoxContainer();
-        column.AddChild(buttons);
-        _connect = new Button { Text = "Connect" };
+        _connect = new Button { Text = "Log in", SizeFlagsHorizontal = SizeFlags.ShrinkEnd, CustomMinimumSize = new Vector2(140, 0) };
         _connect.Pressed += () => _ = OnConnectPressed();
-        buttons.AddChild(_connect);
-        _enter = new Button { Text = "Enter world", Disabled = true };
-        _enter.Pressed += () => _ = OnEnterPressed();
-        buttons.AddChild(_enter);
-        _logPackets = new CheckBox { Text = "Log packets" };
-        _logPackets.Toggled += on => _packetLog.Enabled = on;
-        buttons.AddChild(_logPackets);
-        _hexLog = new CheckBox { Text = "as hex" };
-        _hexLog.Toggled += on => _packetLog.Hex = on;
-        buttons.AddChild(_hexLog);
-        var settings = new Button { Text = "Settings" };
-        settings.Pressed += () => SettingsDialog.Open(this);
-        buttons.AddChild(settings);
+        login.AddChild(_connect);
+        _status = new Label { Text = "Not connected.", AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        login.AddChild(_status);
 
-        _status = new Label { Text = "Not connected." };
-        column.AddChild(_status);
-
+        // --- 2. Character ---
+        VBoxContainer character = Panel(panels, "2  Choose a character");
         var realmRow = new HBoxContainer();
         realmRow.AddChild(new Label { Text = "Realm" });
-        _realm = new OptionButton();
+        _realm = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         foreach (Realm realm in new[] { Realm.Albion, Realm.Midgard, Realm.Hibernia })
             _realm.AddItem(realm.ToString(), (int)realm);
         // At the character screen, picking a realm lists that realm's characters.
         _realm.ItemSelected += index => _ = ListRealm((Realm)_realm.GetItemId((int)index));
         realmRow.AddChild(_realm);
-        column.AddChild(realmRow);
-
+        character.AddChild(realmRow);
         _characters = new ItemList { SizeFlagsVertical = SizeFlags.ExpandFill };
         _characters.ItemSelected += index => _enter.Disabled = _session is null;
         _characters.ItemActivated += index => _ = OnEnterPressed();
-        column.AddChild(_characters);
+        character.AddChild(_characters);
+        _enter = new Button { Text = "Enter world", Disabled = true, SizeFlagsHorizontal = SizeFlags.ShrinkEnd, CustomMinimumSize = new Vector2(140, 0) };
+        _enter.Pressed += () => _ = OnEnterPressed();
+        character.AddChild(_enter);
+
+        // --- bottom bar ---
+        var bar = new HBoxContainer();
+        bar.AddThemeConstantOverride("separation", 16);
+        page.AddChild(bar);
+        var settings = new Button { Text = "Settings" };
+        settings.Pressed += () => SettingsDialog.Open(this);
+        bar.AddChild(settings);
+        _logPackets = new CheckBox { Text = "Log packets (terminal)" };
+        _logPackets.Toggled += on => _packetLog.Enabled = on;
+        bar.AddChild(_logPackets);
+        _hexLog = new CheckBox { Text = "as hex" };
+        _hexLog.Toggled += on => _packetLog.Hex = on;
+        bar.AddChild(_hexLog);
 
         _password.TextSubmitted += submitted => _ = OnConnectPressed();
+    }
+
+    // A titled panel taking half the width; returns its content column.
+    private static VBoxContainer Panel(HBoxContainer parent, string title)
+    {
+        var panel = new PanelContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsStretchRatio = 1 };
+        parent.AddChild(panel);
+        var pad = new MarginContainer();
+        foreach (string side in new[] { "left", "right", "top", "bottom" })
+            pad.AddThemeConstantOverride($"margin_{side}", 14);
+        panel.AddChild(pad);
+        var column = new VBoxContainer();
+        column.AddThemeConstantOverride("separation", 10);
+        pad.AddChild(column);
+        var heading = new Label { Text = title };
+        heading.AddThemeFontSizeOverride("font_size", 18);
+        column.AddChild(heading);
+        return column;
     }
 
     private static T Field<T>(GridContainer form, string label, T control) where T : Control
     {
         form.AddChild(new Label { Text = label });
-        control.CustomMinimumSize = new Vector2(320, 0);
+        control.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         form.AddChild(control);
         return control;
     }

@@ -101,6 +101,9 @@ public static class ClientSettings
     {
         if (DisplayServer.GetName() == "headless")
             return;
+        int screen = DisplayServer.WindowGetCurrentScreen();
+        GD.Print($"[display] screen {screen}: {DisplayServer.ScreenGetSize(screen)}, usable {DisplayServer.ScreenGetUsableRect(screen).Size}, " +
+                 $"scale {DisplayServer.ScreenGetScale(screen)}");
         DisplayServer.WindowSetMode(DisplayServer.WindowMode.Windowed);
         Rect2I usable = DisplayServer.ScreenGetUsableRect(DisplayServer.WindowGetCurrentScreen());
         var size = new Vector2I(System.Math.Min(900, usable.Size.X), System.Math.Min(700, usable.Size.Y));

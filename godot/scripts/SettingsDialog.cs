@@ -52,7 +52,7 @@ public partial class SettingsDialog : AcceptDialog
         grid.AddThemeConstantOverride("v_separation", 10);
         column.AddChild(grid);
 
-        grid.AddChild(new Label { Text = "Display" });
+        grid.AddChild(new Label { Text = "Window size" });
         var display = new OptionButton { CustomMinimumSize = new Vector2(260, 0) };
         display.AddItem("Fullscreen (F11)", FullscreenItem);
         display.AddItem("Maximized (fit the screen)", MaximizedItem);
@@ -64,6 +64,7 @@ public partial class SettingsDialog : AcceptDialog
             _sizes.Add(s);
         if (saved is Vector2I custom && !_sizes.Contains(custom))
             _sizes.Add(custom);   // set with --window: keep it choosable
+        GD.Print($"[display] usable {usable.Size}; window sizes offered: {string.Join(", ", _sizes.Select(s => $"{s.X}x{s.Y}"))}");
         foreach (Vector2I s in _sizes)
             display.AddItem($"{s.X} × {s.Y}" + (CommonSizes.Contains(s) ? "" : " (custom)"), 2 + _sizes.IndexOf(s));
         display.Select(ClientSettings.Fullscreen ? FullscreenItem
@@ -99,7 +100,7 @@ public partial class SettingsDialog : AcceptDialog
 
         column.AddChild(new Label
         {
-            Text = "The display setting is for the game world; the login screen stays a small window.",
+            Text = "Window size is for the game world; this login screen stays a small window.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(420, 0),
         });
     }
