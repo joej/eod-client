@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The player's settings window (login screen button; F10 or the Settings button in the world):
-// display (fullscreen, a maximized window, or a common window size that fits this screen) and field
-// of view. Changes are saved at once (ClientSettings) and raise ClientSettings.Changed, so the world
+// window mode (window, borderless, fullscreen), window size (fit the screen, or a common size that
+// fits it), frame rate cap and field of view. Changes are saved at once (ClientSettings) and raise ClientSettings.Changed, so the world
 // applies them live.
 
 using Godot;
@@ -18,7 +18,9 @@ public partial class SettingsDialog : AcceptDialog
         new(1920, 1080), new(1920, 1200), new(2560, 1440), new(2560, 1600), new(3840, 2160),
     ];
 
-    private const int FullscreenItem = 0, MaximizedItem = 1;
+    private const int FitItem = 0;
+    // 0 = the monitor's refresh rate (vsync), -1 = unlimited.
+    private static readonly int[] FrameCaps = [0, 30, 60, 75, 90, 120, 144, 165, 240, -1];
     private readonly List<Vector2I> _sizes = [];
 
     /// <summary>Opens the window over <paramref name="parent"/>'s scene (one at a time).</summary>
@@ -52,10 +54,18 @@ public partial class SettingsDialog : AcceptDialog
         grid.AddThemeConstantOverride("v_separation", 10);
         column.AddChild(grid);
 
+        // Window mode, then size (not used in fullscreen, which is always the screen's own resolution).
+        grid.AddChild(new Label { Text = "Window mode" });
+        var mode = new OptionButton { CustomMinimumSize = new Vector2(260, 0) };
+        mode.AddItem("Window", (int)ClientSettings.WindowKind.Windowed);
+        mode.AddItem("Borderless window", (int)ClientSettings.WindowKind.Borderless);
+        mode.AddItem("Fullscreen (F11)", (int)ClientSettings.WindowKind.Fullscreen);
+        mode.Select((int)ClientSettings.WindowMode);
+        grid.AddChild(mode);
+
         grid.AddChild(new Label { Text = "Window size" });
-        var display = new OptionButton { CustomMinimumSize = new Vector2(260, 0) };
-        display.AddItem("Fullscreen (F11)", FullscreenItem);
-        display.AddItem("Maximized (fit the screen)", MaximizedItem);
+        var size = new OptionButton { CustomMinimumSize = new Vector2(260, 0) };
+        size.AddItem("Fit the screen", FitItem);
         Rect2I usable = DisplayServer.GetName() == "headless"
             ? new Rect2I(0, 0, 3840, 2160)
             : DisplayServer.ScreenGetUsableRect(DisplayServer.WindowGetCurrentScreen());
@@ -66,18 +76,34 @@ public partial class SettingsDialog : AcceptDialog
             _sizes.Add(custom);   // set with --window: keep it choosable
         GD.Print($"[display] usable {usable.Size}; window sizes offered: {string.Join(", ", _sizes.Select(s => $"{s.X}x{s.Y}"))}");
         foreach (Vector2I s in _sizes)
-            display.AddItem($"{s.X} × {s.Y}" + (CommonSizes.Contains(s) ? "" : " (custom)"), 2 + _sizes.IndexOf(s));
-        display.Select(ClientSettings.Fullscreen ? FullscreenItem
-            : saved is Vector2I v ? 2 + _sizes.IndexOf(v) : MaximizedItem);
-        display.ItemSelected += index =>
+            size.AddItem($"{s.X} × {s.Y}" + (CommonSizes.Contains(s) ? "" : " (custom)"), 1 + _sizes.IndexOf(s));
+        size.Select(saved is Vector2I v ? 1 + _sizes.IndexOf(v) : FitItem);
+        size.Disabled = ClientSettings.Fullscreen;
+        size.ItemSelected += index =>
         {
-            int id = display.GetItemId((int)index);
-            ClientSettings.Fullscreen = id == FullscreenItem;
-            if (id != FullscreenItem)
-                ClientSettings.WindowSize = id == MaximizedItem ? null : _sizes[id - 2];
+            int id = size.GetItemId((int)index);
+            ClientSettings.WindowSize = id == FitItem ? null : _sizes[id - 1];
             ClientSettings.NotifyChanged(display: true);
         };
-        grid.AddChild(display);
+        mode.ItemSelected += index =>
+        {
+            ClientSettings.WindowMode = (ClientSettings.WindowKind)mode.GetItemId((int)index);
+            size.Disabled = ClientSettings.Fullscreen;
+            ClientSettings.NotifyChanged(display: true);
+        };
+        grid.AddChild(size);
+
+        grid.AddChild(new Label { Text = "Frame rate" });
+        var frames = new OptionButton { CustomMinimumSize = new Vector2(260, 0) };
+        for (int k = 0; k < FrameCaps.Length; k++)
+            frames.AddItem(FrameCaps[k] switch { 0 => "Monitor refresh (vsync)", -1 => "Unlimited", int f => $"{f} fps" }, k);
+        frames.Select(Math.Max(0, Array.IndexOf(FrameCaps, ClientSettings.FrameCap)));
+        frames.ItemSelected += index =>
+        {
+            ClientSettings.FrameCap = FrameCaps[(int)index];
+            ClientSettings.ApplyFrameCap();
+        };
+        grid.AddChild(frames);
 
         grid.AddChild(new Label { Text = "Field of view" });
         var fovRow = new HBoxContainer();
@@ -100,7 +126,7 @@ public partial class SettingsDialog : AcceptDialog
 
         column.AddChild(new Label
         {
-            Text = "Window size is for the game world; this login screen stays a small window.",
+            Text = "Window mode and size are for the game world; this login screen stays a small window.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(420, 0),
         });
     }

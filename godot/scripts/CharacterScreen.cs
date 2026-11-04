@@ -67,6 +67,7 @@ public partial class CharacterScreen : Control
         }
         // A login-sized window; the world gets the player's window mode (ClientSettings) when entered.
         ClientSettings.ApplyLoginWindow();
+        ClientSettings.ApplyFrameCap();
         BuildUi();
         LoginProfiles.MigrateOldLogin();
         RefreshProfiles(LoginProfiles.Last()?.Name);

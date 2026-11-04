@@ -27,14 +27,46 @@ public static class ClientSettings
         }
     }
 
-    /// <summary>Fullscreen (F11), else a window of <see cref="WindowSize"/>, else a maximized window.</summary>
-    public static bool Fullscreen
+    /// <summary>How the world's window is shown: a normal window, a window without a frame, or fullscreen.</summary>
+    public enum WindowKind { Windowed, Borderless, Fullscreen }
+
+    public static WindowKind WindowMode
     {
-        get => Load().GetValue("graphics", "fullscreen", false).AsBool();
-        set => Save("fullscreen", value);
+        get
+        {
+            ConfigFile cfg = Load();
+            if (System.Enum.TryParse(cfg.GetValue("graphics", "window_mode", "").AsString(), out WindowKind k))
+                return k;
+            // Before window_mode there was only a fullscreen switch.
+            return cfg.GetValue("graphics", "fullscreen", false).AsBool() ? WindowKind.Fullscreen : WindowKind.Windowed;
+        }
+        set => Save("window_mode", value.ToString());
     }
 
-    /// <summary>Window size in pixels (what is rendered), e.g. 1600×900; null = maximized.
+    /// <summary>Fullscreen (F11) or not; turning it off goes back to a normal window.</summary>
+    public static bool Fullscreen
+    {
+        get => WindowMode == WindowKind.Fullscreen;
+        set => WindowMode = value ? WindowKind.Fullscreen : WindowKind.Windowed;
+    }
+
+    /// <summary>Frames per second: 0 = the monitor's refresh rate (vsync), -1 = unlimited.</summary>
+    public static int FrameCap
+    {
+        get => Load().GetValue("graphics", "frame_cap", 0).AsInt32();
+        set => Save("frame_cap", value);
+    }
+
+    /// <summary>Applies <see cref="FrameCap"/> (vsync for 0; otherwise vsync off and the engine's cap).</summary>
+    public static void ApplyFrameCap()
+    {
+        int cap = FrameCap;
+        Engine.MaxFps = cap > 0 ? cap : 0;
+        if (DisplayServer.GetName() != "headless")
+            DisplayServer.WindowSetVsyncMode(cap == 0 ? DisplayServer.VSyncMode.Enabled : DisplayServer.VSyncMode.Disabled);
+    }
+
+    /// <summary>Window size in pixels (what is rendered), e.g. 1600×900; null = fit the screen.
     /// Set with --window WxH (tools/play.sh play --window 1600x900); --window max clears it.</summary>
     public static Vector2I? WindowSize
     {
@@ -77,14 +109,29 @@ public static class ClientSettings
     {
         if (DisplayServer.GetName() == "headless")
             return;
-        if (Fullscreen)
+        WindowKind kind = WindowMode;
+        if (kind == WindowKind.Fullscreen)
         {
+            DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, false);
             DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
+            return;
         }
-        else if (WindowSize is Vector2I size)
+        int screen = DisplayServer.WindowGetCurrentScreen();
+        if (kind == WindowKind.Borderless)
+        {
+            // A frameless window: the whole screen when no size is chosen, else that size, centred.
+            DisplayServer.WindowSetMode(DisplayServer.WindowMode.Windowed);
+            DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, true);
+            var area = new Rect2I(DisplayServer.ScreenGetPosition(screen), DisplayServer.ScreenGetSize(screen));
+            Vector2I s = WindowSize is Vector2I w ? new Vector2I(System.Math.Min(w.X, area.Size.X), System.Math.Min(w.Y, area.Size.Y)) : area.Size;
+            DisplayServer.WindowSetSize(s);
+            DisplayServer.WindowSetPosition(area.Position + (area.Size - s) / 2);
+            return;
+        }
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, false);
+        if (WindowSize is Vector2I size)
         {
             DisplayServer.WindowSetMode(DisplayServer.WindowMode.Windowed);
-            int screen = DisplayServer.WindowGetCurrentScreen();
             Rect2I usable = DisplayServer.ScreenGetUsableRect(screen);
             size = new Vector2I(System.Math.Min(size.X, usable.Size.X), System.Math.Min(size.Y, usable.Size.Y));
             DisplayServer.WindowSetSize(size);
@@ -104,6 +151,7 @@ public static class ClientSettings
         int screen = DisplayServer.WindowGetCurrentScreen();
         GD.Print($"[display] screen {screen}: {DisplayServer.ScreenGetSize(screen)}, usable {DisplayServer.ScreenGetUsableRect(screen).Size}, " +
                  $"scale {DisplayServer.ScreenGetScale(screen)}");
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.Borderless, false);
         DisplayServer.WindowSetMode(DisplayServer.WindowMode.Windowed);
         Rect2I usable = DisplayServer.ScreenGetUsableRect(DisplayServer.WindowGetCurrentScreen());
         var size = new Vector2I(System.Math.Min(900, usable.Size.X), System.Math.Min(700, usable.Size.Y));
