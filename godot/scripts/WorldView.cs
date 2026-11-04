@@ -1442,24 +1442,47 @@ public partial class WorldView : Node3D
 
     // With no terrain (a capital city, all models) the character stands on the models: a ray from a
     // little above the body down to whatever floor, street or stair is below it. Starting just above
-    // the body (not high up, as for terrain) keeps it from landing on a roof or an arch overhead, and
-    // only a step's drop (2 m) is followed: walking into a wall (nothing stops the player yet) no
-    // longer drops it to whatever lies far below; it keeps its height instead.
+    // the body (not high up, as for terrain) keeps it from landing on a roof or an arch overhead. A floor
+    // within a step (2 m) is stood on at once; one further down is fallen to under gravity, so a character
+    // left in the air (saved above the street, or walked off a ledge) comes down instead of hanging there
+    // for good. With nothing at all below (off the city's models) it keeps its height.
     private void SnapToFloor()
     {
         if (_zoneRoot is null)
             return;
         Vector3 at = _body.Position;
-        var ray = PhysicsRayQueryParameters3D.Create(at + new Vector3(0, 1.5f, 0), at - new Vector3(0, 2f, 0));
+        var ray = PhysicsRayQueryParameters3D.Create(at + new Vector3(0, 1.5f, 0), at - new Vector3(0, MaxFallSearch, 0));
         var exclude = new Godot.Collections.Array<Rid>();
         foreach (Node n in _body.FindChildren("*", "CollisionObject3D", true, false))
             exclude.Add(((CollisionObject3D)n).GetRid());
         ray.Exclude = exclude;
         Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
-        _groundHit = hit.Count > 0;
-        if (_groundHit)
-            _body.Position = new Vector3(at.X, hit["position"].AsVector3().Y, at.Z);
+        if (hit.Count == 0)
+        {
+            _groundHit = false;
+            _fallSpeed = 0;
+            return;
+        }
+        float floor = hit["position"].AsVector3().Y;
+        if (at.Y - floor <= StepDown)
+        {
+            _body.Position = new Vector3(at.X, floor, at.Z);
+            _groundHit = true;
+            _fallSpeed = 0;
+            return;
+        }
+        // In the air: fall toward the floor below, landing on it.
+        float dt = (float)GetPhysicsProcessDeltaTime();
+        _fallSpeed = Mathf.Min(_fallSpeed + Gravity * dt, MaxFallSpeed);
+        _body.Position = new Vector3(at.X, Mathf.Max(floor, at.Y - _fallSpeed * dt), at.Z);
+        _groundHit = false;
     }
+
+    private float _fallSpeed;                  // metres per second, while falling to a floor below
+    private const float StepDown = 2f;         // a drop followed at once (a step or a stair)
+    private const float Gravity = 9.8f;
+    private const float MaxFallSpeed = 30f;
+    private const float MaxFallSearch = 300f;  // how far below a floor is looked for
 
     private void SendMove(float speed)
     {
