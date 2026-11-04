@@ -75,6 +75,9 @@ public partial class CharacterScreen : Control
         // --packets: log every packet's code and size (off by default: the client prints its own
         // status and asset messages, which a packet stream would bury).
         _logPackets.ButtonPressed = Array.IndexOf(args, "--packets") >= 0;
+        // --settings: open the settings window at start (for checking it in a screenshot).
+        if (Array.IndexOf(args, "--settings") >= 0)
+            CallDeferred(MethodName.OpenSettings);
         // --offline X Y Z [REGION]: the world view at that position with no server (no login, no
         // entities, nothing sent). For checking converted assets (with --shots) any time.
         int o = Array.IndexOf(args, "--offline");
@@ -96,6 +99,8 @@ public partial class CharacterScreen : Control
         if (Current() is { AutoStart: not AutoStart.Off } start && _password.Text.Length > 0)
             _ = StartProfile(start);
     }
+
+    private void OpenSettings() => SettingsDialog.Open(this);
 
     /// <summary>The profile the form shows, as last saved (null for a new one).</summary>
     private LoginProfile? Current() =>
@@ -238,8 +243,10 @@ public partial class CharacterScreen : Control
     {
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
         {
+            // The login screen stays a small window; F11 switches the world's mode.
             ClientSettings.Fullscreen = !ClientSettings.Fullscreen;
-            ClientSettings.ApplyWindowMode();
+            if (_world is not null)
+                ClientSettings.ApplyWindowMode();
             GetViewport().SetInputAsHandled();
         }
     }
@@ -320,6 +327,9 @@ public partial class CharacterScreen : Control
         _hexLog = new CheckBox { Text = "as hex" };
         _hexLog.Toggled += on => _packetLog.Hex = on;
         buttons.AddChild(_hexLog);
+        var settings = new Button { Text = "Settings" };
+        settings.Pressed += () => SettingsDialog.Open(this);
+        buttons.AddChild(settings);
 
         _status = new Label { Text = "Not connected." };
         column.AddChild(_status);

@@ -50,6 +50,21 @@ public static class ClientSettings
             ? new Vector2I(w, h) : null;
     }
 
+    public const float MinFieldOfView = 50, MaxFieldOfView = 110;
+
+    /// <summary>The camera's vertical field of view in degrees (retail has a Field of View option;
+    /// its range and default are open question W29).</summary>
+    public static float FieldOfView
+    {
+        get => System.Math.Clamp((float)Load().GetValue("graphics", "field_of_view", 70f).AsDouble(), MinFieldOfView, MaxFieldOfView);
+        set => Save("field_of_view", value);
+    }
+
+    /// <summary>Raised when a setting changes; <c>display</c> is true when the window mode did.</summary>
+    public static event System.Action<bool>? Changed;
+
+    public static void NotifyChanged(bool display) => Changed?.Invoke(display);
+
     /// <summary>The sun casts real shadows (buildings, trees). Ours: the original drew fixed ones.</summary>
     public static bool SunShadows
     {

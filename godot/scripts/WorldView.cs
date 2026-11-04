@@ -341,7 +341,8 @@ public partial class WorldView : Node3D
         foreach (Node n in _body.GetChildren())
             if (n is CollisionObject3D co)
                 _camArm.AddExcludedObject(co.GetRid());
-        _camera = new Camera3D { Far = 8000f, Fov = 70 };
+        _camera = new Camera3D { Far = 8000f, Fov = ClientSettings.FieldOfView };
+        ClientSettings.Changed += OnSettingsChanged;
         _camArm.AddChild(_camera);
         // The SpringArm extends the camera along the pivot's +Z, so to sit BEHIND a body that faces
         // -Z the pivot yaw is the body yaw turned 180°. Matching them put the camera in front, looking
@@ -379,6 +380,9 @@ public partial class WorldView : Node3D
                 BackToLoginPressed?.Invoke();
         };
         _dev.AddToStatus(_button);
+        var settings = new Button { Text = "Settings (F10)", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+        settings.Pressed += () => SettingsDialog.Open(this);
+        _dev.AddToStatus(settings);
         BuildChatUi(overlay);
         AddChild(overlay);
         _viewSetting = ViewOverride() ?? ClientSettings.ViewDistance;
@@ -961,6 +965,10 @@ public partial class WorldView : Node3D
         {
             _nextViewDistance?.Invoke();
         }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F10 })
+        {
+            SettingsDialog.Open(this);
+        }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F4 })
         {
             _togglePacketLog?.Invoke();
@@ -974,6 +982,16 @@ public partial class WorldView : Node3D
             ClearInspect();
         }
     }
+
+    // Settings window changes, live: the field of view, and the window mode while in the world.
+    private void OnSettingsChanged(bool display)
+    {
+        _camera.Fov = ClientSettings.FieldOfView;
+        if (display)
+            ClientSettings.ApplyWindowMode();
+    }
+
+    public override void _ExitTree() => ClientSettings.Changed -= OnSettingsChanged;
 
     // Left-click on the world (not on a panel: panels stop their clicks) queues an inspect pick.
     public override void _UnhandledInput(InputEvent @event)
