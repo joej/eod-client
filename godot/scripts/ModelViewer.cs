@@ -15,9 +15,13 @@
 // "<Slot><n>[b]:<id>" (Body1:0, Legs2:36, HeadA1:19). By default the viewer shows the first variant
 // of each slot and hides the low-detail bodies (Lod*) and cloaks; --parts Body2,Legs1,... shows
 // exactly the named variants instead (the part before ':').
-// A Catacombs figure (cata<id>.glb) shows every hair style until a look is applied: --look takes the
+// A Catacombs race figure (cata_fig<N>.glb) shows every hair style and mesh variant until dressed; --row
+// <model id> (default: the first using it) gives the model's own skins, and --look takes the
 // seven appearance bytes in hex, in the character list's order (eye size, lip size, eye colour, hair
 // colour, face, hair style, mood), e.g. --look 44,44,20,01,00,20,00; with no --look the bytes are 0.
+// --wear dresses it in worn items by model id (objects.csv), each optionally with its extension:
+// --wear 81,82,83,84,85 (a studded set), --wear 41:6,57 (a chain hauberk on body mesh 6, a cloak);
+// --hood puts a cloak's hood up.
 
 using System;
 using System.Linq;
@@ -168,16 +172,25 @@ public partial class ModelViewer : Node3D
     {
         string name = System.IO.Path.GetFileNameWithoutExtension(path);
         string dir = System.IO.Path.GetDirectoryName(path) ?? "";
-        if (!name.StartsWith("cata", StringComparison.Ordinal) || !int.TryParse(name[4..], out int id)
-            || !WorldView.ReadCataFigures(System.IO.Path.Combine(dir, "catacombs.csv")).TryGetValue(id, out int fig3)
-            || scene is not Node3D figure)
+        // A race figure, cata_fig<N>.glb; --row <model id> picks whose default skins it wears (else the
+        // first model id drawn with it).
+        if (!name.StartsWith("cata_fig", StringComparison.Ordinal) || !int.TryParse(name[8..], out int fig3) || scene is not Node3D figure)
             return "";
+        var rows = WorldView.ReadCataFigures(System.IO.Path.Combine(dir, "catacombs.csv"));
+        int id = int.TryParse(ArgValue("--row"), out int r) ? r : rows.Where(kv => kv.Value == fig3).Select(kv => kv.Key).DefaultIfEmpty(0).Min();
         byte[] b = (ArgValue("--look") ?? "0,0,0,0,0,0,0").Split(',')
             .Select(x => Convert.ToByte(x.Trim(), 16)).Concat(new byte[7]).Take(7).ToArray();
         var look = new DaocProtocol.Packets.CharacterLook(b[0], b[1], b[2], b[3], b[4], b[5], b[6]);
         string lib = System.IO.Path.GetDirectoryName(dir) ?? "";
-        return FigureLook.Apply(figure, System.IO.Path.Combine(dir, $"fig3_{fig3}.json"), look,
-            System.IO.Path.Combine(lib, "overrides"), textureDir, lib);
+        string options = System.IO.Path.Combine(dir, $"fig3_{fig3}.json");
+        var worn = (ArgValue("--wear") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => w.Split(':'))
+            .Select(w => new DaocProtocol.Packets.WornItem(0, ushort.Parse(w[0]), w.Length > 1 ? byte.Parse(w[1]) : (byte)0))
+            .ToList();
+        bool hood = OS.GetCmdlineUserArgs().Contains("--hood");
+        return FigureLook.Apply(figure, options, look, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) +
+            FigureLook.Dress(figure, options, System.IO.Path.Combine(dir, "cata_items.json"), System.IO.Path.Combine(dir, "cata_models.json"),
+                id, worn, hood, false, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) + $" (row {id})";
     }
 
     // Plays one of the model's animation clips (a figure converted with mpk figure has idle, walk, run,

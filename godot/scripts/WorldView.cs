@@ -134,6 +134,8 @@ public partial class WorldView : Node3D
         public string Clip = "";
         public Vector3 LastPosition;
         public float Speed;           // smoothed metres per second, to pick the clip
+        public Node3D? Figure;        // a player's Catacombs figure, dressed by 0x15 (null otherwise)
+        public ushort Model;
     }
 
     /// <summary>Raised when the player presses Quit (connected).</summary>
@@ -162,6 +164,11 @@ public partial class WorldView : Node3D
     /// <summary>The player's face and hair (the character list's appearance bytes), applied to a
     /// Catacombs figure.</summary>
     public CharacterLook PlayerLook { get; set; }
+
+    /// <summary>The player's armour (the character list's; the server never sends our own 0x15) and
+    /// whether the cloak's hood is up.</summary>
+    public IReadOnlyList<WornItem> PlayerWorn { get; set; } = [];
+    public bool PlayerHoodUp { get; set; }
 
     private AnimationPlayer? _bodyAnim;
     private string _bodyClip = "";
@@ -360,6 +367,7 @@ public partial class WorldView : Node3D
         _bridge.ObjectMoved += OnObjectMoved;
         _bridge.NpcSpawned += OnNpcSpawned;
         _bridge.PlayerSpawned += OnPlayerSpawned;
+        _bridge.EquipmentChanged += OnEquipmentChanged;
         _bridge.ObjectRemoved += OnObjectRemoved;
         _bridge.ChatReceived += OnChatReceived;
         _bridge.PingReplied += () => _pings++;
@@ -821,7 +829,7 @@ public partial class WorldView : Node3D
             return false;
         var inst = (Node3D)figure.Template.Duplicate();
         inst.Scale = new Vector3(figure.Scale, figure.Scale, figure.Scale);
-        string look = ApplyLook(inst, PlayerModel, PlayerLook);
+        string look = ApplyLook(inst, PlayerModel, PlayerLook) + Dress(inst, PlayerModel, PlayerWorn, PlayerHoodUp, false);
         // A figure faces +Z (seen live: the chase camera, behind the body, met the face); the body
         // walks along -Z, so turn it half round.
         inst.Rotation = new Vector3(0, Mathf.Pi, 0);
@@ -1570,6 +1578,7 @@ public partial class WorldView : Node3D
 
     private void OnObjectRemoved(ushort objectId)
     {
+        _equipment.Remove(objectId);
         if (_entities.Remove(objectId, out Entity? e))
             e.Node.QueueFree();
     }
@@ -1680,6 +1689,7 @@ public partial class WorldView : Node3D
 
         var node = new Node3D { Position = pos, Rotation = new Vector3(0, yaw, 0) };
         AnimationPlayer? anim = null;
+        Node3D? dressed = null;
         if (model != 0 && ((look is not null ? Figure(model, catacombs: true) : null) ?? Figure(model)) is { } figure)
         {
             // The server's model id is the client's monsters.csv row; mpk figures converted it to
@@ -1688,8 +1698,14 @@ public partial class WorldView : Node3D
             float scale = figure.Scale * Mathf.Max(size, 1) / 50f;
             inst.Scale = new Vector3(scale, scale, scale);
             inst.Rotation = new Vector3(0, Mathf.Pi, 0);   // figures face +Z; entities face -Z
-            if (look is { } l)
-                ApplyLook(inst, model, l);
+            if (look is { } l && ApplyLook(inst, model, l).Length > 0)
+            {
+                dressed = inst;
+                if (_equipment.TryGetValue(objectId, out EquipmentUpdate? gear))
+                    Dress(inst, model, gear.Items, gear.HoodUp, gear.CloakHidden);
+                else
+                    Dress(inst, model, [], false, false);
+            }
             node.AddChild(inst);
             anim = inst.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() as AnimationPlayer;
         }
@@ -1703,7 +1719,8 @@ public partial class WorldView : Node3D
             });
         }
         _entityRoot.AddChild(node);
-        var entity = new Entity { Node = node, TargetPosition = pos, TargetYaw = yaw, Player = anim, LastPosition = pos };
+        var entity = new Entity { Node = node, TargetPosition = pos, TargetYaw = yaw, Player = anim, LastPosition = pos,
+            Figure = dressed, Model = model };
         _entities[objectId] = entity;
         PlayClip(entity, "idle");
     }
@@ -1733,27 +1750,62 @@ public partial class WorldView : Node3D
         Dictionary<int, float> scales = catacombs
             ? _cataScales ??= ReadFigureScales(lib.PathJoin("models").PathJoin("catacombs.csv"))
             : _figureScales ??= ReadFigureScales(lib.PathJoin("models").PathJoin("figures.csv"));
-        string file = catacombs ? $"cata{model}.glb" : $"model{model}.glb";
+        // A Catacombs model id is drawn with its race's figure (cata_fig<N>.glb, shared by every model of
+        // that race); Dress then puts on the model's own skins.
+        _cataFig3 ??= ReadCataFigures(lib.PathJoin("models").PathJoin("catacombs.csv"));
+        string file = !catacombs ? $"model{model}.glb"
+            : _cataFig3.TryGetValue(model, out int fig3) ? $"cata_fig{fig3}.glb" : "";
         string path = lib.PathJoin("models").PathJoin(file);
-        if (lib.Length > 0 && scales.TryGetValue(model, out float scale) && Godot.FileAccess.FileExists(path))
+        if (lib.Length > 0 && file.Length > 0 && scales.TryGetValue(model, out float scale) && Godot.FileAccess.FileExists(path))
         {
-            var doc = new GltfDocument();
-            var state = new GltfState();
-            if (doc.AppendFromFile(path, state) == Error.Ok && doc.GenerateScene(state) is Node3D m)
+            if (!_figureFiles.TryGetValue(file, out Node3D? template))
             {
-                ModelTexturing.TagLayers(state);
-                ModelTexturing.Apply(m, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
-                result = (m, scale, file);
+                var doc = new GltfDocument();
+                var state = new GltfState();
+                if (doc.AppendFromFile(path, state) == Error.Ok && doc.GenerateScene(state) is Node3D m)
+                {
+                    ModelTexturing.TagLayers(state);
+                    ModelTexturing.Apply(m, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
+                    template = m;
+                }
+                _figureFiles[file] = template;
             }
+            if (template is not null)
+                result = (template, scale, file);
         }
         _figures[(model, catacombs)] = result;
         return result;
     }
 
+    // Loaded figure files (null: failed), shared by the model ids drawn with them.
+    private readonly Dictionary<string, Node3D?> _figureFiles = new();
+
     // ----- Catacombs appearance -----
 
     // fig3 figure number per Catacombs model id (catacombs.csv column 4), read once.
     private Dictionary<int, int>? _cataFig3;
+
+    // Each living's last visible gear (0x15): it can come before or after the player's create packet.
+    private readonly Dictionary<ushort, EquipmentUpdate> _equipment = new();
+
+    private void OnEquipmentChanged(EquipmentUpdate gear)
+    {
+        _equipment[gear.ObjectId] = gear;
+        if (_entities.TryGetValue(gear.ObjectId, out Entity? e) && e.Figure is { } figure)
+            Dress(figure, e.Model, gear.Items, gear.HoodUp, gear.CloakHidden);
+    }
+
+    // Dresses a player's Catacombs figure in worn items (FigureLook.Dress); a description for the log.
+    private string Dress(Node3D figure, ushort model, IReadOnlyList<WornItem> worn, bool hoodUp, bool cloakHidden)
+    {
+        string lib = _libraryPath ?? "";
+        _cataFig3 ??= ReadCataFigures(lib.PathJoin("models").PathJoin("catacombs.csv"));
+        return _cataFig3.TryGetValue(model, out int fig3)
+            ? FigureLook.Dress(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_items.json"),
+                lib.PathJoin("models").PathJoin("cata_models.json"), model, worn, hoodUp, cloakHidden,
+                lib.PathJoin("overrides"), lib.PathJoin("textures"), lib)
+            : "";
+    }
 
     // Dresses a player's Catacombs figure in its appearance (FigureLook); a description for the log.
     private string ApplyLook(Node3D figure, ushort model, CharacterLook look)

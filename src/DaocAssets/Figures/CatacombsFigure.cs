@@ -39,6 +39,12 @@ public sealed record CataSpec(int ModelId, string Name, int SkeletonArchive, str
     public IReadOnlyList<CataPart?> HairStyles { get; init; } = [];
     public int DefaultHair { get; init; }
 
+    /// <summary>Every mesh variant of the worn slots (fig3map slots 1 body, 3 legs, 4 boots, 5 arms,
+    /// 6 gloves, 7 cloak), variant n at index n - 1 (null: the race has none), for dressing the figure in
+    /// worn items; and the variant the row itself wears per slot (0 for none: no cloak).</summary>
+    public IReadOnlyDictionary<int, IReadOnlyList<CataPart?>> Variants { get; init; } = new Dictionary<int, IReadOnlyList<CataPart?>>();
+    public IReadOnlyDictionary<int, int> DefaultVariants { get; init; } = new Dictionary<int, int>();
+
     /// <summary>Clip name (idle, walk, run, back) -> .kfa file in anims/.</summary>
     public IReadOnlyDictionary<string, string> Clips { get; init; } = new Dictionary<string, string>();
 }
@@ -71,6 +77,9 @@ public static class CataSlots
 
 public static partial class CatacombsFigure
 {
+    /// <summary>fig3map slots worn items dress: body, legs, boots, arms, gloves, cloak.</summary>
+    public static readonly int[] WornSlots = [1, 3, 4, 5, 6, 7];
+
     // monsters.csv columns (0-based) of a model's Catacombs version.
     internal const int CataNifColumn = 67;
     private static readonly (int Slot, int Column)[] SkinColumns =
@@ -120,6 +129,23 @@ public static partial class CatacombsFigure
                     && int.TryParse(sp[5], out int sarch) ? new CataPart(8, sarch, sp[2].Trim() + ".nif", null) : null);
         while (hairStyles.Count > 0 && hairStyles[^1] is null)
             hairStyles.RemoveAt(hairStyles.Count - 1);
+        var slotVariants = new Dictionary<int, IReadOnlyList<CataPart?>>();
+        var defaults = new Dictionary<int, int>();
+        foreach (int slot in WornSlots)
+        {
+            if (!fig3map.TryGetValue((figure, slot), out string[]? ids))
+                continue;
+            var list = ids.Select(id => int.TryParse(id, out int vid) && fig3parts.TryGetValue(vid, out string[]? vp) && vp.Length >= 6
+                && int.TryParse(vp[5], out int varch) ? new CataPart(slot, varch, vp[2].Trim() + ".nif", null) : null).ToList();
+            while (list.Count > 0 && list[^1] is null)
+                list.RemoveAt(list.Count - 1);
+            if (list.Count == 0)
+                continue;
+            slotVariants[slot] = list;
+            CataPart? worn = parts.FirstOrDefault(p => p.Slot == slot);
+            defaults[slot] = worn is null ? 0
+                : Math.Max(1, list.FindIndex(v => v is not null && v.Nif.Equals(worn.Nif, StringComparison.OrdinalIgnoreCase)) + 1);
+        }
         CataPart? rowHair = parts.FirstOrDefault(p => p.Slot == 8);
         int defaultHair = rowHair is null ? 0
             : Math.Max(0, hairStyles.FindIndex(h => h is not null && h.Nif.Equals(rowHair.Nif, StringComparison.OrdinalIgnoreCase)));
@@ -127,7 +153,7 @@ public static partial class CatacombsFigure
             ? s / 100f : 1f;
         return new CataSpec(int.Parse(monster[0], CultureInfo.InvariantCulture), n[1].Trim(), skeletonArchive,
             n[2].Trim() + "_skeleton.nif", parts, scale)
-        { Clips = clips(n), Figure = figure, HairStyles = hairStyles, DefaultHair = defaultHair };
+        { Clips = clips(n), Figure = figure, HairStyles = hairStyles, DefaultHair = defaultHair, Variants = slotVariants, DefaultVariants = defaults };
     }
 
     // A head's morph feature codes come in pairs, one feature each (surveyed over all 36 race heads,

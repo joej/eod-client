@@ -13,6 +13,121 @@ namespace EodClient;
 
 public static class FigureLook
 {
+    // The worn slots' mesh names: "<slot><n>" (n from 1), "<slot><n>_<k>" for a part's extra shapes.
+    private static readonly System.Text.RegularExpressions.Regex WornMesh =
+        new(@"^(body|lbody|legs|boots|arms|gloves|cloak)(\d+)(_\d+)?$");
+
+    // The items table (models/cata_items.json), parsed once per path.
+    private static readonly System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement?> Items = new();
+
+    /// <summary>
+    /// Dresses a Catacombs figure in worn items (models/cata_items.json, from mpk figures): each item's
+    /// slots show the mesh variant it picks, wearing its texture; slots without an item keep the figure's
+    /// own (models/fig3_&lt;n&gt;.json "defaults"). The body mesh is 7 for a robe, else the torso item's
+    /// extension, else the number in its texture's name. Under body mesh 7 the arms and legs hide and the
+    /// gloves and boots take mesh 3; under 8 the arms hide and the gloves take mesh 3 (the client's rule, as
+    /// published by OfflineDAoC, GPL-3.0). A cloak shows only when worn and not hidden; with the hood up,
+    /// its mesh 2. A variant the race lacks falls back to the default. Returns a description for the log.
+    /// </summary>
+    public static string Dress(Node3D figure, string optionsPath, string itemsPath, string modelsPath, int model,
+        System.Collections.Generic.IReadOnlyList<WornItem> worn, bool hoodUp, bool cloakHidden, params string[] dirs)
+    {
+        if (Options(optionsPath) is not { } o)
+            return "";
+        System.Text.Json.JsonElement? items = Json(Items, itemsPath);
+        // The model's own look (models/cata_models.json): its skin and mesh per slot, before any item.
+        System.Text.Json.JsonElement? row = Json(Items, modelsPath) is { } models
+            && models.TryGetProperty(model.ToString(System.Globalization.CultureInfo.InvariantCulture), out var r) ? r : null;
+        string side = o.TryGetProperty("female", out var fem) && fem.GetBoolean() ? "f" : "m";
+        var chosen = new System.Collections.Generic.Dictionary<string, int>();
+        var textures = new System.Collections.Generic.Dictionary<string, string>();
+        var have = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<int>>();
+        foreach (var p in o.GetProperty("variants").EnumerateObject())
+            have[p.Name] = p.Value.EnumerateArray().Select(x => x.GetInt32()).ToHashSet();
+        foreach (var p in (row is { } rd && rd.TryGetProperty("defaults", out var md) ? md : o.GetProperty("defaults")).EnumerateObject())
+            chosen[p.Name] = p.Value.GetInt32();
+        chosen["cloak"] = 0;
+        if (row is { } rs && rs.TryGetProperty("skins", out var skins))
+            foreach (var p in skins.EnumerateObject())
+                if (p.Name is "body" or "legs" or "boots" or "arms" or "gloves" or "lbody")
+                    textures[p.Name] = p.Value.GetString() ?? "";
+
+        bool cloakWorn = false;
+        foreach (WornItem item in worn)
+        {
+            if (items is not { } table || !table.TryGetProperty(item.Model.ToString(System.Globalization.CultureInfo.InvariantCulture), out var entry)
+                || !entry.TryGetProperty(side, out var pieces))
+                continue;
+            foreach (var piece in pieces.EnumerateObject())
+            {
+                string slot = piece.Name;
+                int v = piece.Value[0].GetInt32();
+                if (slot == "body")
+                    v = entry.GetProperty("robe").GetBoolean() ? 7
+                        : item.Extension is > 0 and <= 8 ? item.Extension
+                        : Math.Max(1, entry.GetProperty("name_variant").GetInt32());
+                chosen[slot] = v;
+                textures[slot] = piece.Value[1].GetString() ?? "";
+                cloakWorn |= slot == "cloak";
+            }
+        }
+        int body = chosen.GetValueOrDefault("body");
+        bool hooded = false;
+        if (body == 7) { chosen["arms"] = 0; chosen["legs"] = 0; chosen["gloves"] = 3; chosen["boots"] = 3; }
+        else if (body == 8) { chosen["arms"] = 0; chosen["gloves"] = 3; }
+        if (!cloakWorn || cloakHidden) chosen["cloak"] = 0;
+        else if (hoodUp && have.TryGetValue("cloak", out var cloaks) && cloaks.Contains(2)) { chosen["cloak"] = 2; hooded = true; }
+        // A mesh the race lacks: its default (an item on a race without that shape).
+        foreach (string slot in chosen.Keys.ToList())
+            if (chosen[slot] > 0 && have.TryGetValue(slot, out var h) && !h.Contains(chosen[slot]))
+                chosen[slot] = slot == "cloak" ? h.Min() : o.GetProperty("defaults").TryGetProperty(slot, out var d) ? d.GetInt32() : 1;
+
+        var loaded = new System.Collections.Generic.Dictionary<string, ImageTexture?>();
+        foreach (Node n in figure.FindChildren("*", "MeshInstance3D", true, false))
+        {
+            var mi = (MeshInstance3D)n;
+            if (hooded && mi.Name.ToString().StartsWith("hair", StringComparison.Ordinal))
+                mi.Visible = false;    // the hood covers the hair
+            var m = WornMesh.Match(mi.Name.ToString());
+            if (!m.Success)
+                continue;
+            string slot = m.Groups[1].Value;
+            mi.Visible = int.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture) == chosen.GetValueOrDefault(slot);
+            if (!mi.Visible || !textures.TryGetValue(slot, out string? texName))
+                continue;
+            if (!loaded.TryGetValue(texName, out ImageTexture? tex))
+                loaded[texName] = tex = ModelTexturing.Load(System.IO.Path.GetFileNameWithoutExtension(texName), dirs);
+            if (tex is not null && mi.GetActiveMaterial(0)?.Duplicate() is BaseMaterial3D mat)
+            {
+                mat.AlbedoTexture = tex;
+                mi.MaterialOverride = mat;
+            }
+        }
+        return " wearing " + string.Join(" ", chosen.Where(kv => kv.Value > 0)
+            .Select(kv => $"{kv.Key} {kv.Value}{(textures.TryGetValue(kv.Key, out string? t) ? $"={t}" : "")}"));
+    }
+
+    private static System.Text.Json.JsonElement? Json(System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement?> cache, string path)
+    {
+        if (!cache.TryGetValue(path, out System.Text.Json.JsonElement? e))
+        {
+            e = Godot.FileAccess.FileExists(path)
+                ? System.Text.Json.JsonDocument.Parse(Godot.FileAccess.GetFileAsString(path)).RootElement : null;
+            cache[path] = e;
+        }
+        return e;
+    }
+
+    private static System.Text.Json.JsonElement? Options(string optionsPath)
+    {
+        if (!Looks.TryGetValue(optionsPath, out System.Text.Json.JsonElement? opts))
+        {
+            opts = Godot.FileAccess.FileExists(optionsPath)
+                ? System.Text.Json.JsonDocument.Parse(Godot.FileAccess.GetFileAsString(optionsPath)).RootElement : null;
+            Looks[optionsPath] = opts;
+        }
+        return opts;
+    }
     // Each options file, parsed once (null: missing).
     private static readonly System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement?> Looks = new();
 
@@ -25,13 +140,7 @@ public static class FigureLook
     /// </summary>
     public static string Apply(Node3D figure, string optionsPath, CharacterLook look, params string[] dirs)
     {
-        if (!Looks.TryGetValue(optionsPath, out System.Text.Json.JsonElement? opts))
-        {
-            opts = Godot.FileAccess.FileExists(optionsPath)
-                ? System.Text.Json.JsonDocument.Parse(Godot.FileAccess.GetFileAsString(optionsPath)).RootElement : null;
-            Looks[optionsPath] = opts;
-        }
-        if (opts is not { } o)
+        if (Options(optionsPath) is not { } o)
             return "";
         static System.Text.Json.JsonElement? Pick(System.Text.Json.JsonElement list, int i) =>
             i >= 0 && i < list.GetArrayLength() && list[i].ValueKind != System.Text.Json.JsonValueKind.Null ? list[i] : null;
@@ -83,7 +192,9 @@ public static class FigureLook
 
         static void SetSliders(MeshInstance3D head, System.Text.Json.JsonElement options, CharacterLook look)
         {
-            if (!options.TryGetProperty("sliders", out System.Text.Json.JsonElement sliders))
+            // Eye size and lip size both 0: a character never customised (ours, made with custom mode 0:
+            // step 1, "generated"); retail-made ones store 0x44 (all neutral). Drawn neutral, not all-low.
+            if (!options.TryGetProperty("sliders", out System.Text.Json.JsonElement sliders) || (look.EyeSize == 0 && look.LipSize == 0))
                 return;
             int shapes = head.GetBlendShapeCount();
             for (int k = 0; k < sliders.GetArrayLength() && k < 4; k++)

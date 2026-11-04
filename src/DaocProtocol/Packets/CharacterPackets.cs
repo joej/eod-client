@@ -66,6 +66,11 @@ public sealed record CharacterSummary(
     public CharacterLook Look { get; init; }
     /// <summary>1 = generated, 2 = finished by the player, 3 = the player may customise it.</summary>
     public byte CustomisationStep { get; init; }
+    /// <summary>The armour worn (helm, gloves, boots, torso, cloak, legs, arms; the server sends the
+    /// character's own gear only here, never in 0x15), with the gloves', boots' and torso's extensions.</summary>
+    public IReadOnlyList<WornItem> Worn { get; init; } = [];
+    /// <summary>The cloak's hood is up.</summary>
+    public bool HoodUp { get; init; }
 }
 
 /// <summary>0xFC (server → client): the characters on one realm's page, 1.126+ layout.</summary>
@@ -110,7 +115,7 @@ public sealed record CharacterOverview(uint Flags, IReadOnlyList<CharacterSummar
         // boots/gloves extensions, torso extension and hood, customisation step, mood.
         byte eyeSize = reader.U8(), lipSize = reader.U8(), eyeColor = reader.U8(), hairColor = reader.U8();
         byte faceType = reader.U8(), hairStyle = reader.U8();
-        reader.Skip(2);
+        byte bootsGloves = reader.U8(), torsoHood = reader.U8();
         byte step = reader.U8(), mood = reader.U8();
         reader.Skip(13);     // zero fill
         string location = reader.StringIntLE();
@@ -119,8 +124,24 @@ public sealed record CharacterOverview(uint Flags, IReadOnlyList<CharacterSummar
         ushort model = reader.U16LE();
         byte region = reader.U8();
         reader.Skip(1);      // expansion zone flag
-        reader.Skip(8 * 2);  // armour models (and right-hand colour)
-        reader.Skip(8 * 2);  // armour colours
+        // Armour models then colours, u16 LE each: helm, gloves, boots, (right-hand colour / left-hand
+        // colour), torso, cloak, legs, arms.
+        var models = new ushort[8];
+        for (int i = 0; i < 8; i++) models[i] = reader.U16LE();
+        var colours = new ushort[8];
+        for (int i = 0; i < 8; i++) colours[i] = reader.U16LE();
+        var worn = new List<WornItem>();
+        void Wear(byte slot, int i, int extension)
+        {
+            if (models[i] != 0) worn.Add(new WornItem(slot, models[i], (byte)extension, colours[i]));
+        }
+        Wear(WornSlot.Helm, 0, 0);
+        Wear(WornSlot.Hands, 1, bootsGloves & 0x0F);
+        Wear(WornSlot.Feet, 2, bootsGloves >> 4);
+        Wear(WornSlot.Torso, 4, torsoHood >> 4);
+        Wear(WornSlot.Cloak, 5, 0);
+        Wear(WornSlot.Legs, 6, 0);
+        Wear(WornSlot.Arms, 7, 0);
         reader.Skip(4 * 2);  // weapon models
         reader.Skip(8);      // stats: str dex con qui int pie emp cha
         byte classId = reader.U8();
@@ -135,6 +156,8 @@ public sealed record CharacterOverview(uint Flags, IReadOnlyList<CharacterSummar
         {
             Look = new CharacterLook(eyeSize, lipSize, eyeColor, hairColor, faceType, hairStyle, mood),
             CustomisationStep = step,
+            Worn = worn,
+            HoodUp = (torsoHood & 0x01) != 0,
         };
     }
 }

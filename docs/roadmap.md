@@ -243,8 +243,11 @@ become real figures:
   character list's and 0x4B's appearance bytes (`CharacterLook`) pick the face, eye colour, hair style and
   hair colour from the race's options (`models/fig3_<n>.json`, every hair style in the figure), and the
   four face sliders drive the head's morph targets (all 36 races; each slider's feature found by its code
-  pair in the head's "FM" labels). Not yet: skin tone (read, not drawn: W30), mood, tattoos, worn
-  equipment, cloaks.
+  pair in the head's "FM" labels). **Worn items (2026-11-04):** players wear their body, arms, legs,
+  gloves, boots and cloak (0x15 for others, the character list for you; `objects.csv`'s Catacombs columns;
+  robes on the long body; hood up). One figure per race and sex (`cata_fig<N>.glb`, 36 in all, 58 MB)
+  carries every mesh variant; each model id's own skins are in `cata_models.json`. Not yet: skin tone
+  (W30), mood, tattoos, dyes, cloak emblems, helms and weapons, NPC gear on classic figures (W31).
 
 **M7c — strafe (small, but MVP).** ~~Done 2026-10-31~~ (commit 87c7d90). Add strafe-left/right (Q/E) to the existing WASD + turn rig: with
 the mouse-chase camera, forward + strafe is how you actually navigate. A couple of input reads and a

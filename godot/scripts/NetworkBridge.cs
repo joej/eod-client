@@ -29,6 +29,9 @@ public sealed class NetworkBridge
     /// <summary>Another player entered view (0x4B PlayerCreate).</summary>
     public event Action<PlayerCreate>? PlayerSpawned;
 
+    /// <summary>A living's visible gear (0x15 EquipmentUpdate): other players and NPCs, never us.</summary>
+    public event Action<EquipmentUpdate>? EquipmentChanged;
+
     /// <summary>A static world object entered view (0xD9 ObjectCreate).</summary>
     public event Action<ObjectCreate>? ObjectSpawned;
 
@@ -80,6 +83,9 @@ public sealed class NetworkBridge
                     break;
                 case ObjectCreate.Code:
                     ObjectSpawned?.Invoke(ObjectCreate.Parse(packet.Payload));
+                    break;
+                case EquipmentUpdate.Code:
+                    EquipmentChanged?.Invoke(EquipmentUpdate.Parse(packet.Payload));
                     break;
                 case RemoveObject.Code:
                     ObjectRemoved?.Invoke(RemoveObject.Parse(packet.Payload).ObjectId);

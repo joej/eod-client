@@ -63,6 +63,13 @@ public class CharacterPacketTests
         Assert.Equal(1u, overview.Flags);
         // Expected values decoded independently from the recording.
         CharacterSummary character = Assert.Single(overview.Characters);
+        // Worn (read off the recording by hand): models helm 0, gloves 85, boots 84, (colour), torso 81,
+        // cloak 1722, legs 82, arms 83; colours all 0; extensions byte pair 00 00; hood down.
+        Assert.Equal(
+            [new WornItem(WornSlot.Hands, 85), new WornItem(WornSlot.Feet, 84), new WornItem(WornSlot.Torso, 81),
+             new WornItem(WornSlot.Cloak, 1722), new WornItem(WornSlot.Legs, 82), new WornItem(WornSlot.Arms, 83)],
+            character.Worn);
+        Assert.False(character.HoodUp);
         Assert.Equal(new CharacterSummary(
             Slot: 0, Level: 50, Name: "Lilillyn", Location: "Camelot Hills", ClassName: "Paladin",
             RaceName: "Highlander", Model: 55562, Region: 1, ClassId: 1, Realm: Realm.Albion, Race: 3, Female: false)
@@ -70,6 +77,7 @@ public class CharacterPacketTests
             // Bytes 44 44 20 01 00 20, then 00 00, step 02, mood 00 (read off the recording by hand).
             Look = new CharacterLook(0x44, 0x44, 0x20, 0x01, 0x00, 0x20, 0x00),
             CustomisationStep = 2,
+            Worn = character.Worn,   // checked above (a list compares by reference)
         },
             character);
     }
@@ -81,6 +89,25 @@ public class CharacterPacketTests
             FaceType: 0x40, HairStyle: 0x50, MoodType: 0);
         Assert.Equal((4, 5, 11, 6, 3), (look.Face, look.Hair, look.HairColour, look.EyeColour, look.SkinTone));
         Assert.Equal([7, 3, 5, 2, 4], Enumerable.Range(0, 5).Select(look.Slider));
+    }
+
+    [Fact]
+    public void EquipmentUpdateParsesRecordedPackets()
+    {
+        // S→C packet 44 of the recording: object 0x2A93, seven items, among them a weapon slot (12,
+        // no extension byte) and a cloak (26).
+        ServerPacket p = Server()[44];
+        Assert.Equal(EquipmentUpdate.Code, p.Code);
+        EquipmentUpdate e = EquipmentUpdate.Parse(p.Payload);
+        Assert.Equal((ushort)0x2A93, e.ObjectId);
+        Assert.Equal(
+            [new WornItem(12, 0x0DDC), new WornItem(22, 0x0E39), new WornItem(23, 0x0E3A), new WornItem(25, 0x0E36),
+             new WornItem(26, 0x02A4), new WornItem(27, 0x0E37), new WornItem(28, 0x0E38)],
+            e.Items);
+        // Packet 46: one torso item whose model carries 0x4000, so a u8 dye colour (0x25) follows its extension.
+        EquipmentUpdate dyed = EquipmentUpdate.Parse(Server()[46].Payload);
+        Assert.Equal(new WornItem(25, 0x3A, 0, 0x25), Assert.Single(dyed.Items));
+        Assert.Equal((false, false, false), (dyed.CloakHidden, dyed.HelmHidden, dyed.HoodUp));
     }
 
     [Fact]
