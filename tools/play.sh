@@ -10,34 +10,26 @@
 #            every outdoor zone, or only the --zone one; this runs the Makefile, which redoes only
 #            what is out of date (a no-op when nothing changed)
 #   build    build the .NET solution and prepare the Godot project
-#   play     start the client, log in and show your characters (or enter the world with --enter)
+#   play     start the client. Logins are kept in the client itself: on its first screen, a
+#            profile (server, account, optionally the password in the macOS Keychain) and what to do
+#            on start (wait, log in to the character list, or enter the last character)
 #   all      assets, build, play
 #   zones [TEXT]  list the zones in your install (number, name, region, kind, converted or not),
 #            only those whose name contains TEXT if given; use one with --zone
 #   config   show the saved settings
 #
-# Options (saved to private/play.conf, so you give each one once):
+# Options (saved to private/play.conf, so you give it once):
 #   --client DIR    root of your DAoC client install (the folder holding game.dll and zones/)
-#   --host HOST     server address, e.g. its Tailscale IP
-#   --port N        server port (default 10300)
-#   --account NAME  account name
-#   --password-cmd CMD  a command that prints the password (a password manager or vault lookup);
-#                   only the command is saved, never the password
 # Per run only:
-#   --enter SLOT    enter the world with the character in this slot (Albion 0-9, Midgard 10-19,
-#                   Hibernia 20-29) instead of stopping at the character list
 #   --zone Z        go to zone Z, a number or part of a name ("salis", "cursed forest"; see
-#                   tools/play.sh zones): convert only that zone, and with --enter move the character
-#                   to its middle (GM command /jump: the account must be a GM). Without --zone the character starts where it was
-#                   saved, and the client shows whichever zone the server puts it in.
+#                   tools/play.sh zones): convert only that zone, and once the client enters the
+#                   world move the character to its middle (GM command /jump: the account must be a
+#                   GM). Without --zone the character starts where it was saved, and the client
+#                   shows whichever zone the server puts it in.
 #   --window WxH    window size in pixels, e.g. 1600x900 (the client remembers it; --window max
 #                   goes back to a maximized window; F11 is fullscreen)
 #   --packets       print every packet's code and size in the terminal (F4 in the world switches it)
 #   --fresh         re-index the install and reconvert everything, even if nothing changed
-#
-# The password is never saved: it comes from DAOC_PASSWORD in the environment, else from the saved
-# --password-cmd, else the script asks for it. It reaches the client through the environment, not
-# the command line.
 #
 # Everything it writes from your client install goes under private/, which git ignores. It is the
 # game's content: never commit it or hand it to anyone (see CLAUDE.md, "Game client and assets").
@@ -59,33 +51,29 @@ if [ "$CMD" = zones ] && [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then FILTER=$1; sh
 
 CLIENT="" HOST="" PORT="" ACCOUNT="" ZONE="" PASSWORD_CMD=""
 [ -f "$CONF" ] && . "$CONF"
-ENTER="" GOTO="" FRESH=0 CHANGED=0 PACKETS=0 WINDOW=""
+GOTO="" FRESH=0 CHANGED=0 PACKETS=0 WINDOW=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --client)  CLIENT=${2:?}; CHANGED=1; shift 2 ;;
-        --host)    HOST=${2:?}; CHANGED=1; shift 2 ;;
-        --port)    PORT=${2:?}; CHANGED=1; shift 2 ;;
-        --account) ACCOUNT=${2:?}; CHANGED=1; shift 2 ;;
         --zone)    GOTO=${2:?}; shift 2 ;;
-        --password-cmd) PASSWORD_CMD=${2:?}; CHANGED=1; shift 2 ;;
-        --enter)   ENTER=${2:?}; shift 2 ;;
+        --host|--port|--account|--password-cmd|--enter)
+            die "$1 is set in the client now: pick or make a profile on its login screen" ;;
         --fresh)   FRESH=1; shift ;;
         --packets) PACKETS=1; shift ;;
         --window)  WINDOW=${2:?}; shift 2 ;;
-        -h|--help) sed -n '4,43p' "$0"; exit 0 ;;
+        -h|--help) sed -n '4,35p' "$0"; exit 0 ;;
         *) die "unknown option: $1 (see tools/play.sh --help)" ;;
     esac
 done
-PORT=${PORT:-10300}
-# Older play.conf files saved a ZONE; it is per run now (--zone), so a saved one is ignored.
+# Older play.conf files also saved a server, account, password command and zone; logins live in
+# the client now and --zone is per run, so those are ignored.
 unset ZONE
 
 save_conf() {
     mkdir -p "$PRIV"
     {
-        echo "# tools/play.sh settings (git-ignored). The password is never stored here."
-        printf 'CLIENT=%q\nHOST=%q\nPORT=%q\nACCOUNT=%q\nPASSWORD_CMD=%q\n' \
-            "$CLIENT" "$HOST" "$PORT" "$ACCOUNT" "$PASSWORD_CMD"
+        echo "# tools/play.sh settings (git-ignored). Logins are kept by the client."
+        printf 'CLIENT=%q\n' "$CLIENT"
     } > "$CONF"
 }
 [ "$CHANGED" = 1 ] && save_conf
@@ -104,9 +92,7 @@ need() {
 if [ "$CMD" = config ]; then
     echo "settings in $CONF"
     echo "  client  ${CLIENT:-(not set)}"
-    echo "  host    ${HOST:-(not set)}:$PORT"
-    echo "  account ${ACCOUNT:-(not set)}"
-    echo "  password ${PASSWORD_CMD:+from --password-cmd}${PASSWORD_CMD:-asked each run (or DAOC_PASSWORD)}"
+    echo "logins: profiles on the client's login screen"
     exit 0
 fi
 
@@ -217,30 +203,13 @@ do_build() {
 }
 
 do_play() {
-    need HOST "server address (e.g. its Tailscale IP)"
-    need ACCOUNT "account"
     [ -d "$ZONES" ] || die "no converted zones in $ZONES: run tools/play.sh assets first"
-    [ -z "$GOTO" ] || [ -n "$ENTER" ] || die "--zone needs --enter: it moves a character that is in the world"
-    if ! nc -z -w 3 "$HOST" "$PORT" 2>/dev/null; then
-        die "can't reach $HOST:$PORT (is the server up, and is this machine on the tailnet? try: tailscale status)"
-    fi
-    if [ -z "${DAOC_PASSWORD:-}" ] && [ -n "$PASSWORD_CMD" ]; then
-        DAOC_PASSWORD=$(bash -c "$PASSWORD_CMD" </dev/null) || die "--password-cmd failed"
-        [ -n "$DAOC_PASSWORD" ] || die "--password-cmd printed nothing"
-    fi
-    if [ -z "${DAOC_PASSWORD:-}" ]; then
-        [ -t 0 ] || die "set DAOC_PASSWORD (no terminal to ask for it)"
-        read -r -s -p "password for $ACCOUNT: " DAOC_PASSWORD; echo
-    fi
-    export DAOC_PASSWORD
-
     local godot; godot=$(find_godot)
-    local args=(--autologin "$HOST" "$ACCOUNT" "$PORT" --zones "$ZONES" --library "$LIB")
-    [ -n "$ENTER" ] && args+=(--enter "$ENTER")
+    local args=(--zones "$ZONES" --library "$LIB")
     [ -n "$GOTO" ] && args+=(--goto "$GOTO")
     [ "$PACKETS" = 1 ] && args+=(--packets)
     [ -n "$WINDOW" ] && args+=(--window "$WINDOW")
-    step "play: $ACCOUNT@$HOST:$PORT"
+    step "play"
     # The window opens on this machine's display (over ssh/tmux on a Mac: the logged-in desktop).
     cd "$REPO" && exec "$godot" --path "$REPO/godot" -- "${args[@]}"
 }

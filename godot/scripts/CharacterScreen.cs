@@ -3,6 +3,11 @@
 // Log in, list the account's characters, and enter the world with one (shown by WorldView).
 // All protocol work is in DaocProtocol's ClientSession; this node only builds the UI.
 //
+// Logins are saved as profiles (LoginProfiles: server, account, realm, last character, and what to
+// do on start); passwords optionally in the macOS Keychain. Started with no options, the client
+// opens the last profile and, if it says so, logs in to the character list or straight into the
+// world. Converted assets default to the repo's private/zones and private/library.
+//
 // Headless check (prints the result and quits; exit code 0 on success):
 //   DAOC_PASSWORD=... Godot --headless --path godot -- --autologin <host> <account> [port]
 //       [--enter <slot> [--goto <zone>] [--stay <seconds>]] [--zones <dir>] [--model <abs.glb>]
@@ -22,8 +27,11 @@ namespace EodClient;
 
 public partial class CharacterScreen : Control
 {
-    private const string SettingsPath = "user://settings.cfg";
-
+    private OptionButton _profile = null!;
+    private LineEdit _profileName = null!;
+    private CheckBox _remember = null!;
+    private OptionButton _autoStart = null!;
+    private List<LoginProfile> _profiles = [];
     private LineEdit _host = null!;
     private SpinBox _port = null!;
     private LineEdit _account = null!;
@@ -60,7 +68,8 @@ public partial class CharacterScreen : Control
         }
         ClientSettings.ApplyWindowMode();
         BuildUi();
-        LoadSettings();
+        LoginProfiles.MigrateOldLogin();
+        RefreshProfiles(LoginProfiles.Last()?.Name);
 
         string[] args = OS.GetCmdlineUserArgs();
         // --packets: log every packet's code and size (off by default: the client prints its own
@@ -82,7 +91,91 @@ public partial class CharacterScreen : Control
             // --stay N: CI/headless — spend N seconds in the world, then /quit and close. Without it,
             // stay in the world indefinitely for interactive play (close the window or press Quit).
             _ = AutoLogin(args[i + 1], args[i + 2], port, enter, Option(args, "--stay"));
+            return;
         }
+        if (Current() is { AutoStart: not AutoStart.Off } start && _password.Text.Length > 0)
+            _ = StartProfile(start);
+    }
+
+    /// <summary>The profile the form shows, as last saved (null for a new one).</summary>
+    private LoginProfile? Current() =>
+        _profile.Selected >= 0 && _profile.Selected < _profiles.Count ? _profiles[_profile.Selected] : null;
+
+    // Fills the profile list and selects <paramref name="select"/> (or "New profile").
+    private void RefreshProfiles(string? select)
+    {
+        _profiles = LoginProfiles.All();
+        _profile.Clear();
+        foreach (LoginProfile p in _profiles)
+            _profile.AddItem(p.Name);
+        _profile.AddItem("New profile…");
+        int index = _profiles.FindIndex(p => p.Name == select);
+        _profile.Select(index >= 0 ? index : _profiles.Count);
+        ShowProfile(index >= 0 ? _profiles[index] : null);
+    }
+
+    private void ShowProfile(LoginProfile? p)
+    {
+        _profileName.Text = p?.Name ?? "";
+        _host.Text = p?.Host ?? "";
+        _port.Value = p?.Port ?? 10300;
+        _account.Text = p?.Account ?? "";
+        _autoStart.Select((int)(p?.AutoStart ?? AutoStart.Off));
+        string? saved = p is null ? null : Keychain.Get(p.KeychainAccount);
+        _password.Text = saved ?? OS.GetEnvironment("DAOC_PASSWORD");
+        _remember.ButtonPressed = saved is not null;
+        if (p is { Realm: not Realm.None })
+            _realm.Select(_realm.GetItemIndex((int)p.Realm));
+    }
+
+    // The form as a profile (keeping the saved realm and last character), saved as the last one used.
+    private LoginProfile SaveFormProfile()
+    {
+        string host = _host.Text.Trim(), account = _account.Text.Trim();
+        string name = _profileName.Text.Trim();
+        if (name.Length == 0)
+            name = $"{account}@{host}";
+        LoginProfile? old = Current();
+        var profile = new LoginProfile(name, host, (int)_port.Value, account, (AutoStart)_autoStart.Selected,
+            old?.Realm ?? Realm.None, old?.Character ?? "");
+        if (old is not null && old.Name != name)
+            LoginProfiles.Delete(old.Name);
+        LoginProfiles.Save(profile);
+        RefreshProfiles(name);
+        return profile;
+    }
+
+    private void DeleteProfile()
+    {
+        if (Current() is not LoginProfile p)
+            return;
+        LoginProfiles.Delete(p.Name);
+        Keychain.Delete(p.KeychainAccount);
+        RefreshProfiles(null);
+        _status.Text = $"Deleted profile {p.Name}.";
+    }
+
+    // Startup: log in with the last profile, then stop at the list or enter its last character.
+    private async Task StartProfile(LoginProfile p)
+    {
+        _status.Text = $"Logging in as {p.Account} on {p.Host} (profile {p.Name})…";
+        GD.Print(_status.Text);
+        bool listed = await ListCharacters(p.Host, p.Port, p.Account, _password.Text);
+        GD.Print(_status.Text);
+        if (!listed || p.AutoStart != AutoStart.LastCharacter)
+            return;
+        CharacterSummary? last = _listed.FirstOrDefault(c => c.Name == p.Character);
+        if (last is null)
+        {
+            _status.Text += p.Character.Length == 0
+                ? " (No character entered yet with this profile: pick one.)"
+                : $" ({p.Character} isn't in {_listedRealm}: pick one.)";
+            GD.Print(_status.Text);
+            return;
+        }
+        GD.Print($"Entering the world as {last.Name}…");
+        if (!await EnterWorld(last.Slot))
+            GD.Print(_status.Text);
     }
 
     private void EnterOffline(string[] args, int o)
@@ -126,6 +219,17 @@ public partial class CharacterScreen : Control
         string cwd = OS.GetEnvironment("PWD");
         string baseDir = string.IsNullOrEmpty(cwd) ? System.IO.Directory.GetCurrentDirectory() : cwd;
         return System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDir, m));
+    }
+
+    // Converted assets: --zones/--library, else the repo's own private/ folders when they exist
+    // (the client run from its source checkout, as tools/play.sh does).
+    private static string? ZonesDir() => ResolvedPath(OS.GetCmdlineUserArgs(), "--zones") ?? RepoPrivate("zones");
+    private static string? LibraryDir() => ResolvedPath(OS.GetCmdlineUserArgs(), "--library") ?? RepoPrivate("library");
+
+    private static string? RepoPrivate(string name)
+    {
+        string dir = System.IO.Path.GetFullPath(System.IO.Path.Combine(ProjectSettings.GlobalizePath("res://"), "..", "private", name));
+        return System.IO.Directory.Exists(dir) ? dir : null;
     }
 
     // F11 toggles fullscreen from anywhere: the login and character screen, and the world, which
@@ -172,13 +276,36 @@ public partial class CharacterScreen : Control
         form.AddThemeConstantOverride("h_separation", 12);
         column.AddChild(form);
 
+        var profileRow = new HBoxContainer();
+        _profile = new OptionButton { CustomMinimumSize = new Vector2(320, 0) };
+        _profile.ItemSelected += index => ShowProfile(index < _profiles.Count ? _profiles[(int)index] : null);
+        profileRow.AddChild(_profile);
+        var delete = new Button { Text = "Delete" };
+        delete.Pressed += DeleteProfile;
+        profileRow.AddChild(delete);
+        form.AddChild(new Label { Text = "Profile" });
+        form.AddChild(profileRow);
+        _profileName = Field(form, "Profile name", new LineEdit { PlaceholderText = "account@server if empty" });
         _host = Field(form, "Server", new LineEdit { PlaceholderText = "host or IP" });
         _port = Field(form, "Port", new SpinBox { MinValue = 1, MaxValue = 65535, Value = 10300 });
         _account = Field(form, "Account", new LineEdit());
         _password = Field(form, "Password", new LineEdit { Secret = true });
-        _realm = Field(form, "Realm (new account)", new OptionButton());
-        foreach (Realm realm in new[] { Realm.Albion, Realm.Midgard, Realm.Hibernia })
-            _realm.AddItem(realm.ToString(), (int)realm);
+        _remember = Field(form, "", new CheckBox
+        {
+            Text = Keychain.Available ? "Remember password (Keychain)" : "Remember password (macOS only)",
+            Disabled = !Keychain.Available,
+        });
+        _autoStart = Field(form, "On start", new OptionButton());
+        _autoStart.AddItem("Wait at this screen", (int)AutoStart.Off);
+        _autoStart.AddItem("Log in to the character list", (int)AutoStart.CharacterList);
+        _autoStart.AddItem("Log in and enter the last character", (int)AutoStart.LastCharacter);
+        _autoStart.ItemSelected += index =>
+        {
+            // Saved at once for an existing profile, so it holds without another login.
+            if (Current() is LoginProfile p)
+                LoginProfiles.Save(p with { AutoStart = (AutoStart)_autoStart.Selected });
+            _profiles = LoginProfiles.All();
+        };
 
         var buttons = new HBoxContainer();
         column.AddChild(buttons);
@@ -198,6 +325,16 @@ public partial class CharacterScreen : Control
         _status = new Label { Text = "Not connected." };
         column.AddChild(_status);
 
+        var realmRow = new HBoxContainer();
+        realmRow.AddChild(new Label { Text = "Realm" });
+        _realm = new OptionButton();
+        foreach (Realm realm in new[] { Realm.Albion, Realm.Midgard, Realm.Hibernia })
+            _realm.AddItem(realm.ToString(), (int)realm);
+        // At the character screen, picking a realm lists that realm's characters.
+        _realm.ItemSelected += index => _ = ListRealm((Realm)_realm.GetItemId((int)index));
+        realmRow.AddChild(_realm);
+        column.AddChild(realmRow);
+
         _characters = new ItemList { SizeFlagsVertical = SizeFlags.ExpandFill };
         _characters.ItemSelected += index => _enter.Disabled = _session is null;
         _characters.ItemActivated += index => _ = OnEnterPressed();
@@ -216,8 +353,53 @@ public partial class CharacterScreen : Control
 
     private async Task OnConnectPressed()
     {
-        SaveSettings();
-        await ListCharacters(_host.Text.Trim(), (int)_port.Value, _account.Text.Trim(), _password.Text);
+        LoginProfile p = SaveFormProfile();
+        if (!await ListCharacters(p.Host, p.Port, p.Account, _password.Text) || !Keychain.Available)
+            return;
+        // Remembered only once it has worked.
+        if (_remember.ButtonPressed)
+        {
+            if (!Keychain.Set(p.KeychainAccount, _password.Text))
+                _status.Text += " (Couldn't store the password in the Keychain.)";
+        }
+        else
+        {
+            Keychain.Delete(p.KeychainAccount);
+        }
+    }
+
+    // Lists another realm's characters on the open character screen.
+    private async Task ListRealm(Realm realm)
+    {
+        if (_session?.State != SessionState.CharacterScreen || realm == _listedRealm)
+            return;
+        try
+        {
+            ShowCharacters(await _session.GetCharactersAsync(realm), realm);
+            if (Current() is LoginProfile p)
+                LoginProfiles.Save(p with { Realm = realm });
+            _profiles = LoginProfiles.All();
+        }
+        catch (Exception e) when (e is IOException or TimeoutException or InvalidDataException)
+        {
+            _status.Text = $"Failed to list {realm}: {e.Message}";
+        }
+    }
+
+    private void ShowCharacters(CharacterOverview overview, Realm realm)
+    {
+        _characters.Clear();
+        _listed.Clear();
+        foreach (CharacterSummary c in overview.Characters)
+        {
+            _listed.Add(c);
+            _characters.AddItem($"{c.Name}    level {c.Level} {c.RaceName} {c.ClassName}, {c.Location}");
+        }
+        _listedRealm = realm;
+        _realm.Select(_realm.GetItemIndex((int)realm));
+        _enter.Disabled = true;
+        _status.Text = $"{_account.Text.Trim()}: {overview.Characters.Count} character(s) in {realm}." +
+                       (overview.Characters.Count > 0 ? " Select one and press Enter world." : "");
     }
 
     private async Task OnEnterPressed()
@@ -257,19 +439,16 @@ public partial class CharacterScreen : Control
                 return false;
             }
 
+            // The profile's realm if it has one, else the account's, else the one picked below.
             Realm realm = await session.OpenCharacterScreenAsync();
+            if (Current() is { Realm: not Realm.None } p && p.Account == account && p.Host == host)
+                realm = p.Realm;
             if (realm == Realm.None)
                 realm = (Realm)_realm.GetSelectedId();
 
             CharacterOverview overview = await session.GetCharactersAsync(realm);
-            foreach (CharacterSummary c in overview.Characters)
-            {
-                _listed.Add(c);
-                _characters.AddItem($"{c.Name}    level {c.Level} {c.RaceName} {c.ClassName}, {c.Location}");
-            }
-
+            ShowCharacters(overview, realm);
             _session = session;
-            _listedRealm = realm;
             // Pings from here on (OpenDAoC drops a client after 150 s without one, even at the
             // character screen); position updates are added while in the world.
             _keepAlive = new CancellationTokenSource();
@@ -302,7 +481,13 @@ public partial class CharacterScreen : Control
         {
             _status.Text = "Entering the world…";
             WorldPosition world = await _session.EnterWorldAsync(_listedRealm, slot);
-            _playerModel = _listed.FirstOrDefault(c => c.Slot == slot)?.Model ?? 0;
+            CharacterSummary? entered = _listed.FirstOrDefault(c => c.Slot == slot);
+            _playerModel = entered?.Model ?? 0;
+            if (entered is not null && Current() is LoginProfile p && p.Account == _account.Text.Trim())
+            {
+                LoginProfiles.Save(p with { Realm = _listedRealm, Character = entered.Name });
+                _profiles = LoginProfiles.All();
+            }
             if (Option(OS.GetCmdlineUserArgs(), "--goto") is int gotoZone)
                 world = await GoTo(world, gotoZone);
 
@@ -335,7 +520,7 @@ public partial class CharacterScreen : Control
         float z = from.Position.Z;
         string where = "the middle";
         // The converter writes a landing spot where the middle is a bad place (a city: its first gate).
-        if (ResolvedPath(OS.GetCmdlineUserArgs(), "--zones") is string zonesDir
+        if (ZonesDir() is string zonesDir
             && System.IO.File.Exists(System.IO.Path.Combine(zonesDir, $"zone{zoneId:D3}", "landing.txt"))
             && System.IO.File.ReadAllText(System.IO.Path.Combine(zonesDir, $"zone{zoneId:D3}", "landing.txt"))
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries) is [var sx, var sy, var sz, ..]
@@ -404,7 +589,7 @@ public partial class CharacterScreen : Control
     {
         string[] a = OS.GetCmdlineUserArgs();
         string? zoneCsv = ResolvedPath(a, "--zone"), terrain = ResolvedPath(a, "--terrain"), note = "";
-        if (ResolvedPath(a, "--zones") is string zonesDir)
+        if ((zoneCsv is null ? ZonesDir() : null) is string zonesDir)
         {
             string dir = System.IO.Path.Combine(zonesDir, $"zone{world.Zone.Id:D3}");
             zoneCsv = System.IO.Path.Combine(dir, "zone.csv");
@@ -421,7 +606,7 @@ public partial class CharacterScreen : Control
             PacketLogging = (() => _packetLog.Enabled, on => _logPackets.ButtonPressed = on),
         };
         view.Init(offline ? null : _connection, offline ? null : _session, world, ResolvedPath(a, "--model"),
-            zoneCsv, ResolvedPath(a, "--library"), terrain);
+            zoneCsv, LibraryDir(), terrain);
         if (note.Length > 0)
             GD.Print($"[world] {note}");
         return view;
@@ -554,25 +739,5 @@ public partial class CharacterScreen : Control
 
         await Disconnect();
         GetTree().Quit(ok ? 0 : 1);
-    }
-
-    // Remembers server, port and account between runs; never the password.
-    private void LoadSettings()
-    {
-        var config = new ConfigFile();
-        if (config.Load(SettingsPath) != Error.Ok)
-            return;
-        _host.Text = (string)config.GetValue("login", "host", "");
-        _port.Value = (int)config.GetValue("login", "port", 10300);
-        _account.Text = (string)config.GetValue("login", "account", "");
-    }
-
-    private void SaveSettings()
-    {
-        var config = new ConfigFile();
-        config.SetValue("login", "host", _host.Text.Trim());
-        config.SetValue("login", "port", (int)_port.Value);
-        config.SetValue("login", "account", _account.Text.Trim());
-        config.Save(SettingsPath);
     }
 }

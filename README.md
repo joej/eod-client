@@ -18,18 +18,19 @@ You need the .NET 10 SDK, the Godot 4 **.NET** build, your own DAoC client insta
 OpenDAoC's), and an OpenDAoC server you can reach (one is in `server/`). Then, from a fresh clone:
 
 ```sh
-DAOC_PASSWORD=… tools/play.sh --client /path/to/DAoC --host <server> --account <name>
+tools/play.sh --client /path/to/DAoC
 ```
 
 `tools/play.sh` converts the outdoor zones from your install into `private/` (git-ignored: it is the game's
-content, never commit it), builds the solution, and starts the client logged in at your character
-list. It remembers the options in `private/play.conf`, so later runs are just `tools/play.sh`. It
-never stores the password: it takes `DAOC_PASSWORD`, or runs a command you give once with
-`--password-cmd '<command that prints it>'` (a password manager or vault lookup), or asks. It redoes
-only what changed in your install or the converter. `tools/play.sh assets`, `build` and `play` run one
-step; `--enter <slot>` goes straight into the world, where the client shows whichever zone the server
-puts your character in; `--zone <n>` with `--enter` takes the character to that zone (the account must
-be a GM); `tools/play.sh --help` lists the rest.
+content, never commit it), builds the solution, and starts the client. It remembers the install folder
+in `private/play.conf`, so later runs are just `tools/play.sh`, and it redoes only what changed in your
+install or the converter. `tools/play.sh assets`, `build` and `play` run one step; `--zone <n>` takes the
+character to that zone once in the world (the account must be a GM); `tools/play.sh --help` lists the rest.
+
+The client keeps your logins as **profiles** on its first screen: server, port, account, and what to do
+when it starts (wait, log in to the character list, or log in and enter the character you played last).
+On macOS it can remember the password in your Keychain; it never writes it to a file. Pick a realm above
+the character list to see that realm's characters.
 
 ## Progress
 
