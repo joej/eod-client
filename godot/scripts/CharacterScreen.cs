@@ -30,6 +30,9 @@ public partial class CharacterScreen : Control
     private LineEdit _password = null!;
     private OptionButton _realm = null!;
     private CheckBox _hexLog = null!;
+    private CheckBox _logPackets = null!;
+    // One log for every connection; off unless --packets or the checkbox (F4 in the world).
+    private readonly PacketLog _packetLog = new(line => GD.Print(line)) { Enabled = false };
     private Button _connect = null!;
     private Button _enter = null!;
     private Label _status = null!;
@@ -52,6 +55,9 @@ public partial class CharacterScreen : Control
         LoadSettings();
 
         string[] args = OS.GetCmdlineUserArgs();
+        // --packets: log every packet's code and size (off by default: the client prints its own
+        // status and asset messages, which a packet stream would bury).
+        _logPackets.ButtonPressed = Array.IndexOf(args, "--packets") >= 0;
         // --offline X Y Z [REGION]: the world view at that position with no server (no login, no
         // entities, nothing sent). For checking converted assets (with --shots) any time.
         int o = Array.IndexOf(args, "--offline");
@@ -174,7 +180,11 @@ public partial class CharacterScreen : Control
         _enter = new Button { Text = "Enter world", Disabled = true };
         _enter.Pressed += () => _ = OnEnterPressed();
         buttons.AddChild(_enter);
-        _hexLog = new CheckBox { Text = "Log packets as hex (Output panel)" };
+        _logPackets = new CheckBox { Text = "Log packets" };
+        _logPackets.Toggled += on => _packetLog.Enabled = on;
+        buttons.AddChild(_logPackets);
+        _hexLog = new CheckBox { Text = "as hex" };
+        _hexLog.Toggled += on => _packetLog.Hex = on;
         buttons.AddChild(_hexLog);
 
         _status = new Label { Text = "Not connected." };
@@ -226,7 +236,7 @@ public partial class CharacterScreen : Control
         try
         {
             // The log sink runs on the receive thread; GD.Print is safe to call from there.
-            _connection = new DaocConnection(new PacketLog(line => GD.Print(line), _hexLog.ButtonPressed));
+            _connection = new DaocConnection(_packetLog);
             var session = new ClientSession(_connection);
 
             _status.Text = $"Connecting to {host}:{port}…";
@@ -397,7 +407,11 @@ public partial class CharacterScreen : Control
                 zoneCsv = terrain = null;
             }
         }
-        var view = new WorldView { AssetsNote = note, PlayerModel = _playerModel };
+        var view = new WorldView
+        {
+            AssetsNote = note, PlayerModel = _playerModel,
+            PacketLogging = (() => _packetLog.Enabled, on => _logPackets.ButtonPressed = on),
+        };
         view.Init(offline ? null : _connection, offline ? null : _session, world, ResolvedPath(a, "--model"),
             zoneCsv, ResolvedPath(a, "--library"), terrain);
         if (note.Length > 0)
@@ -492,7 +506,12 @@ public partial class CharacterScreen : Control
 
     private async Task AutoLogin(string host, string account, int port, int? enterSlot, int? staySeconds)
     {
-        bool ok = await ListCharacters(host, port, account, OS.GetEnvironment("DAOC_PASSWORD"));
+        // Show what we log in with, so Connect (or a re-login after a disconnect) uses the same values.
+        _host.Text = host;
+        _port.Value = port;
+        _account.Text = account;
+        _password.Text = OS.GetEnvironment("DAOC_PASSWORD");
+        bool ok = await ListCharacters(host, port, account, _password.Text);
         GD.Print(_status.Text);
         for (int i = 0; i < _characters.ItemCount; i++)
             GD.Print($"  {_characters.GetItemText(i)}");

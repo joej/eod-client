@@ -91,8 +91,9 @@ public partial class DevOverlay : CanvasLayer
         inspectBox.AddChild(_inspect);
     }
 
-    /// <summary>Adds a checkbox to the layers panel; <paramref name="onChange"/> runs on toggle.</summary>
-    public void AddToggle(string label, bool on, System.Action<bool> onChange)
+    /// <summary>Adds a checkbox to the layers panel; <paramref name="onChange"/> runs on toggle.
+    /// Returns a function that flips it (for a hotkey).</summary>
+    public System.Action AddToggle(string label, bool on, System.Action<bool> onChange)
     {
         var box = new CheckBox { Text = label, ButtonPressed = on, FocusMode = Control.FocusModeEnum.None };
         StyleFont(box, Text);
@@ -100,6 +101,7 @@ public partial class DevOverlay : CanvasLayer
         // Keep the render-mode button last.
         _layers.AddChild(box);
         _layers.MoveChild(box, _renderButton.GetIndex());
+        return () => box.ButtonPressed = !box.ButtonPressed;
     }
 
     /// <summary>Adds a button to the layers panel that cycles through <paramref name="options"/>;

@@ -12,6 +12,9 @@ public sealed class PacketLog(Action<string> sink, bool hex = false)
 {
     public Action<string> Sink { get; } = sink;
 
+    /// <summary>Off: nothing is logged (it can be switched while connected).</summary>
+    public bool Enabled { get; set; } = true;
+
     /// <summary>Whole packets in hex; otherwise code and length only.</summary>
     public bool Hex { get; set; } = hex;
 
@@ -21,8 +24,11 @@ public sealed class PacketLog(Action<string> sink, bool hex = false)
 
     public void Received(ServerPacket packet) => Write("S→C", packet.Code, packet.ToBytes(), Hex);
 
-    private void Write(string direction, byte code, byte[] bytes, bool hex) =>
-        Sink(hex
+    private void Write(string direction, byte code, byte[] bytes, bool hex)
+    {
+        if (Enabled)
+            Sink(hex
             ? $"{direction} [{code:X2}] {Convert.ToHexString(bytes)}"
-            : $"{direction} [{code:X2}] {bytes.Length} bytes");
+                : $"{direction} [{code:X2}] {bytes.Length} bytes");
+    }
 }

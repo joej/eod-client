@@ -168,6 +168,10 @@ public partial class WorldView : Node3D
     /// </summary>
     public string AssetsNote { get; set; } = "";
 
+    /// <summary>Reads and switches the packet log (F4); set by CharacterScreen, which owns it.</summary>
+    public (Func<bool> Get, Action<bool> Set)? PacketLogging { get; set; }
+    private Action? _togglePacketLog;
+
     public int Packets => _packets;
     public int Pings => _pings;
     public int Entities => _entities.Count;
@@ -407,6 +411,8 @@ public partial class WorldView : Node3D
         _dev.AddToggle("Entities", true, on => _entityRoot.Visible = on);
         _dev.AddToggle("Own character", true, on => _body.Visible = on);
         _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);
+        if (PacketLogging is var (getLog, setLog))
+            _togglePacketLog = _dev.AddToggle("F4 packet log", getLog(), setLog);
         _dev.AddInfo($"{zoneObjects} fixtures · {_zoneTexturedModels} textured models · {_waterBodies} water\n" +
             $"{_zoneTexturedSurfaces} textured surfaces" + (_terrain is null ? " · flat ground" : ""));
     }
@@ -954,6 +960,10 @@ public partial class WorldView : Node3D
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F3 })
         {
             _nextViewDistance?.Invoke();
+        }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F4 })
+        {
+            _togglePacketLog?.Invoke();
         }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F2 })
         {

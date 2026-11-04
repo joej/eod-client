@@ -573,4 +573,17 @@ public class ClientSessionTests
         Assert.DoesNotContain(lines, l => l.Contains(Convert.ToHexString("secret"u8)));
         Assert.StartsWith("C→S [F4] 0007", lines[1]);
     }
+
+    [Fact]
+    public void ASwitchedOffPacketLogWritesNothingUntilSwitchedOn()
+    {
+        var lines = new List<string>();
+        var log = new PacketLog(lines.Add) { Enabled = false };
+        var ping = new ClientPacket(0, 0, 0, CryptKeyRequest.Code, CryptKeyRequest.Payload(ClientVersion.V1127e));
+        log.Sent(ping);
+        Assert.Empty(lines);
+        log.Enabled = true;
+        log.Sent(ping);
+        Assert.Equal(["C→S [F4] 19 bytes"], lines);
+    }
 }
