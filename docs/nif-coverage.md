@@ -165,7 +165,10 @@ mostly LINEAR or QUADRATIC; scales QUADRATIC. All of them decode exactly in both
 **What M7b needs, in order:** a 10.1 reader that builds the node tree (from the survey's decodes);
 skin export (`NiSkinData` weights, top 4, inverse bind matrices); one classic figure end to end
 (`bcommonm.nif`); `.kfa` clips via `animnode.dat` and `animnifs.csv`; then Catacombs assembly by bone
-name; then the model-id tables for NPCs.
+name; then the model-id tables for NPCs. **All done by 2026-11-04** (`Figures/MonsterFigure.cs`,
+`Figures/CatacombsFigure.cs`; 10.1 clips read by `KfaClip`). A Catacombs part is bound by name whenever its
+file carries a bone list (NiStringsExtraData) covering every skin bone: some parts' bone pointers look
+self-contained but reach the file's own root (`dwa_f_Hair01`).
 
 ## Not yet audited
 

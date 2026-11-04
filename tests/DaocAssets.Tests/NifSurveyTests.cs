@@ -397,6 +397,9 @@ public class NifFiniteGeometryTests
     [MemberData(nameof(NifSurveyTests.PrivateNifs), MemberType = typeof(NifSurveyTests))]
     public void EveryFixtureConvertsToFiniteVertices(string name)
     {
+        // A Catacombs skeleton holds bones and no geometry (CatacombsFigureTests reads it).
+        if (name.Contains("skeleton", StringComparison.OrdinalIgnoreCase))
+            return;
         NifModel model = NifFile.Read(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "live-nif", name)));
         foreach (NifMesh m in model.Meshes.Where(m => !m.Helper))
             Assert.All(m.Vertices, v => Assert.True(float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z), $"{m.Name}: {v}"));

@@ -60,6 +60,22 @@ public static partial class NifFile
     }
 
     /// <summary>
+    /// The node tree of a 10.1 file as joints (parents first), for a Catacombs skeleton
+    /// (<c>figures/fig3/sfigNNN.mpk</c>, e.g. <c>Bri_m_skeleton.nif</c>): it holds bones and no skinned
+    /// shapes, so <see cref="Read"/> gives it no joints. Null if the file doesn't decode completely.
+    /// </summary>
+    public static IReadOnlyList<NifJoint>? ReadSkeleton(ReadOnlySpan<byte> bytes)
+    {
+        Gb10File g = Gamebryo1010.Parse(bytes);
+        if (!g.Complete)
+            return null;
+        var b = new Gb10Builder(g.Blocks!);
+        foreach (int root in g.Roots.Length > 0 ? g.Roots : [0])
+            b.Walk(root, -1, Matrix4x4.Identity, helper: false, alpha: -1, stencil: -1);
+        return b.Joints;
+    }
+
+    /// <summary>
     /// For a 10.1 file with self-contained skins: the largest difference (max matrix element, NIF
     /// units for the translation part) between BoneBind_i * BoneWorld_i and the skinned shape's own
     /// world transform, over every bone of every skin. Near zero when the file's skeleton is in its
@@ -249,7 +265,12 @@ public static partial class NifFile
                 : AlphaMode(blocks[a].AlphaFlags, blocks[a].AlphaThreshold);
             bool bothSides = mode != SurfaceAlpha.Opaque || (st >= 0 && blocks[st].StencilDrawMode == 3);
 
-            bool skinned = shape.SkinRef >= 0 && SelfContained(blocks, blocks[shape.SkinRef]);
+            // A Catacombs part names its bones in a bone list (NiStringsExtraData), one per skin bone; its
+            // bone pointers can still look self-contained (dwa_f_Hair01's one bone points at the file's own
+            // "Scene Root"), so the list decides: such a skin is bound by name.
+            bool named = shape.SkinRef >= 0 && blocks.FirstOrDefault(x => x.Type == "NiStringsExtraData") is { } list
+                && list.Strings.Length >= blocks[shape.SkinRef].Bones.Length;
+            bool skinned = shape.SkinRef >= 0 && !named && SelfContained(blocks, blocks[shape.SkinRef]);
             Vector3[] verts = data.Vertices;
             Vector3[]? normals = data.Normals;
             if (!skinned)
@@ -262,6 +283,8 @@ public static partial class NifFile
             {
                 _pendingSkins.Add((Meshes.Count, index));
             }
+            (string[] Names, (int, float)[][] Weights)? byName = shape.SkinRef >= 0 && !skinned
+                ? NamedSkin(blocks[shape.SkinRef], verts.Length) : null;
             return new NifMesh
             {
                 Name = $"mesh{index}",
@@ -281,7 +304,36 @@ public static partial class NifFile
                 Alpha = mode,
                 AlphaCutoff = cutoff,
                 DoubleSided = bothSides,
+                SkinBoneNames = byName?.Names,
+                Skin = byName?.Weights,
             };
+        }
+
+        // A Catacombs part's skin: its bones are named by the file's bone list (a NiStringsExtraData
+        // with one name per skin bone), or, past the list's end, by the skin's own bone node
+        // (hig_f_Hair02's list is shorter than its bones; OfflineDAoC's GPL pipeline does the same).
+        private (string[], (int, float)[][])? NamedSkin(Gb10Block skin, int vertexCount)
+        {
+            if (skin.SkinDataRef < 0 || skin.SkinDataRef >= blocks.Length)
+                return null;
+            Gb10Block data = blocks[skin.SkinDataRef];
+            string[] list = blocks.FirstOrDefault(x => x.Type == "NiStringsExtraData")?.Strings ?? [];
+            int count = Math.Min(skin.Bones.Length, data.BoneWeights.Length);
+            var names = new string[count];
+            var influences = new List<(int Bone, float Weight)>[vertexCount];
+            for (int i = 0; i < count; i++)
+            {
+                int node = skin.Bones[i];
+                names[i] = i < list.Length && list[i].Length > 0 ? list[i]
+                    : node >= 0 && node < blocks.Length ? blocks[node].Name : "";
+                foreach ((ushort v, float w) in data.BoneWeights[i])
+                    if (v < vertexCount && w > 0)
+                        (influences[v] ??= []).Add((i, w));
+            }
+            var weights = new (int, float)[vertexCount][];
+            for (int v = 0; v < vertexCount; v++)
+                weights[v] = TopFour(influences[v]);
+            return (names, weights);
         }
 
         // Once the whole tree is walked (every bone has a joint), attaches each skinned shape's

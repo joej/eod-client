@@ -234,6 +234,14 @@ become real figures:
   Catacombs (skeleton + parts bound by bone name). Steps: 10.1 node-tree reader → skin export → one
   classic figure end to end → `.kfa` clips → Catacombs assembly → model-id tables for NPCs. Which
   kind players get is open question W13.
+- **Status 2026-11-04:** classic figures for NPCs (2,071 model ids, idle/walk/run/back) and **Catacombs
+  figures for players**: every model id's Catacombs version (`monsters.csv` "Cata Nif" and CatSkin
+  columns; 697 of 736) is assembled from its race skeleton and one part per slot, bound by bone name,
+  with the 10.1 `Cat_*.kfa` clips (`mpk figures` → `models/cata<id>.glb`; `mpk cata <id>` for one).
+  Your character and other players are drawn with them, NPCs with the classic ones (as retail, W13).
+  Seen live: Eodarms as the Catacombs Briton in the City of Camelot. Not yet: the player's own
+  customisation (face, hair style and colour, skin tone, eye colour, face morphs: the 0x4B and character
+  overview bytes), worn equipment, cloaks.
 
 **M7c — strafe (small, but MVP).** ~~Done 2026-10-31~~ (commit 87c7d90). Add strafe-left/right (Q/E) to the existing WASD + turn rig: with
 the mouse-chase camera, forward + strafe is how you actually navigate. A couple of input reads and a

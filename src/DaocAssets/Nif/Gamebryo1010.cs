@@ -40,6 +40,11 @@ internal sealed class Gb10Block
     public int[] Props = [];
     public int[] Extra = [];
     public int Controller = -1;
+    // Where the block's body starts in the file (after the 10.1 zero marker).
+    public int Offset;
+    // NiTimeController: the next controller in the chain and the stop time.
+    public int NextController = -1;
+    public float StopTime;
     // NiNode (and NiBillboardNode, NiLODNode)
     public int[] Children = [];
     // NiLODNode: its NiRangeLODData / NiScreenLODData. NiRangeLODData: each level's near extent.
@@ -145,7 +150,7 @@ internal static class Gamebryo1010
                 // DAoC 10.1 file; OfflineDAoC's reader skips it too).
                 if (c.U32() != 0)
                     throw new NifFormatException("Block does not start with the 10.1 zero marker.");
-                var block = new Gb10Block { Type = type };
+                var block = new Gb10Block { Type = type, Offset = c.Pos };
                 Decode(ref c, block, types, file.Features);
                 file.Blocks[i] = block;
             }
@@ -608,7 +613,7 @@ internal static class Gamebryo1010
                 break;
             }
             case "NiKeyframeController":
-                TimeController(ref c, nb);
+                TimeController(ref c, nb, b);
                 b.DataRef = Ref(ref c, nb);
                 break;
             case "NiGeomMorpherController":
@@ -857,12 +862,16 @@ internal static class Gamebryo1010
     }
 
     // NiTimeController (10.1, as 4.x): Next Controller, Flags, Frequency, Phase, Start, Stop, Target.
-    private static void TimeController(ref NifCursor c, int nb)
+    // NiTimeController: Next Controller, Flags, Frequency, Phase, Start Time, Stop Time, Target.
+    private static void TimeController(ref NifCursor c, int nb, Gb10Block? b = null)
     {
-        Ref(ref c, nb);
+        int next = Ref(ref c, nb);
         c.U16();
-        Skip(ref c, 16);
+        Skip(ref c, 12);
+        float stop = c.F32();
         Ref(ref c, nb);
+        if (b is not null)
+            (b.NextController, b.StopTime) = (next, stop);
     }
 
     // A ref or ptr: -1 or a block index.

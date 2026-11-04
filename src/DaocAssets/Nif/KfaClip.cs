@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Animation clips (.kfa, roadmap M7b), NetImmerse 4.x. A clip names no bones directly: its root NiNode
+// Animation clips (.kfa, roadmap M7b), NetImmerse 4.x and Gamebryo 10.1 (the Catacombs clips). A clip names no bones directly: its root NiNode
 // carries a chain of NiStringExtraData, each a number indexing figures/animnode.dat (a list of bone
 // names: 0 Bip01, 1 Bip01 Pelvis, ...), and a chain of NiKeyframeControllers in the same order, each
 // pointing at the NiKeyframeData with that bone's keys. Layouts from niftools nif.xml (GPL-3.0) at
@@ -29,6 +29,8 @@ public sealed record KfaClip(float Duration, IReadOnlyList<KfaTrack> Tracks)
         if (!header.Contains("File Format", StringComparison.Ordinal))
             throw new NifFormatException($"Not a NIF file (header: '{header}').");
         uint packed = c.U32();
+        if (packed == 0x0A010000)
+            return Read1010(bytes, boneNames);
         if (packed is < 0x04000002 or >= 0x0A000000)
             throw new NifFormatException($"Clip version {packed >> 24}.{(packed >> 16) & 0xFF} is not a 4.x NIF.");
         int blockCount = checked((int)c.U32());
@@ -78,11 +80,55 @@ public sealed record KfaClip(float Duration, IReadOnlyList<KfaTrack> Tracks)
         return new KfaClip(duration, tracks);
     }
 
+    // A 10.1.0.0 clip (the Catacombs ones, Cat_*.kfa): the same blocks as 4.x, but the root lists its
+    // NiStringExtraData in an array (no chain) and each holds only a name and the bone number. The
+    // keyframe data layout is unchanged at 10.1 (nif.xml; checked by the audit on all 1,542 such clips).
+    private static KfaClip Read1010(ReadOnlySpan<byte> bytes, IReadOnlyList<string> boneNames)
+    {
+        Gb10File g = Gamebryo1010.Parse(bytes);
+        if (!g.Complete)
+            throw new NifFormatException($"10.1 clip does not decode ({g.StopType}: {g.StopReason}).");
+        Gb10Block[] blocks = g.Blocks!;
+        Gb10Block root = blocks[g.Roots.Length > 0 ? g.Roots[0] : 0];
+        var bones = new List<string>();
+        foreach (int e in root.Extra)
+            if (e >= 0 && blocks[e].Type == "NiStringExtraData")
+            {
+                string text = blocks[e].Strings.FirstOrDefault()?.Trim() ?? "";
+                bones.Add(int.TryParse(text, out int i) && i >= 0 && i < boneNames.Count ? boneNames[i] : text);
+            }
+        var tracks = new List<KfaTrack>();
+        float duration = 0;
+        int k = 0;
+        for (int ctl = root.Controller; ctl >= 0 && k < blocks.Length; k++)
+        {
+            Gb10Block t = blocks[ctl];
+            if (t.Type != "NiKeyframeController")
+                throw new NifFormatException($"Controller chain reaches block {ctl} ({t.Type}).");
+            duration = Math.Max(duration, t.StopTime);
+            if (k < bones.Count && t.DataRef >= 0 && blocks[t.DataRef].Type == "NiKeyframeData")
+            {
+                var c = new NifCursor(bytes);
+                c.SeekTo(blocks[t.DataRef].Offset);
+                tracks.Add(ReadKeys(ref c, bones[k]));
+            }
+            ctl = t.NextController;
+        }
+        if (k != bones.Count)
+            throw new NifFormatException($"{bones.Count} bone names but {k} controllers.");
+        return new KfaClip(duration, tracks);
+    }
+
     // NiKeyframeData (4.x): rotations (quaternion keys, or type 4: three Euler key groups), then
     // translation and scale key groups.
     private static KfaTrack ReadKeys(ReadOnlySpan<byte> bytes, int offset, string bone)
     {
         var c = At(bytes, offset);
+        return ReadKeys(ref c, bone);
+    }
+
+    private static KfaTrack ReadKeys(ref NifCursor c, string bone)
+    {
         (float, Quaternion)[] rotations = [];
         uint count = c.U32();
         if (count > 0)

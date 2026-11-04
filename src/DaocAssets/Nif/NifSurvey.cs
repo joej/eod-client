@@ -106,7 +106,7 @@ public sealed partial class NifSurvey
                 "NiNode" or "NiTriShape" or "NiTriStrips" or "NiAlphaProperty" =>
                     "read as a tree only when the whole file decodes; otherwise the file is geometry-scanned",
                 "NiSkinInstance" or "NiSkinData" =>
-                    "self-contained skins exported (top 4 weights); a Catacombs part's bones (by name) are not bound yet",
+                    "skins exported (top 4 weights); a Catacombs part's bones are bound to its skeleton by name (CatacombsFigure)",
                 "NiTriShapeData" or "NiTriStripsData" =>
                     "vertex colours dropped; one UV set (the base slot's); geometry-scanned if the file doesn't decode",
                 "NiSourceTexture" => "external file name only",

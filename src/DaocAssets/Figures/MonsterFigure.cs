@@ -36,6 +36,9 @@ public sealed class MonsterTables
     private readonly Dictionary<int, string> _skins;
     private readonly Dictionary<int, string[]> _anims;
     private readonly Dictionary<int, string[]> _animnifs;
+    private readonly Dictionary<(int, int), string[]> _fig3map = [];
+    private readonly Dictionary<int, string[]> _fig3parts = [];
+    private readonly Dictionary<(int, int), string[]> _hairColours = [];
 
     // anims.csv columns of the clips the client view uses (ID, name, Walk, Back, Run, ..., Idle at 10).
     private static readonly (string Clip, int Column)[] ClipColumns = [("walk", 2), ("back", 3), ("run", 4), ("idle", 10)];
@@ -51,7 +54,49 @@ public sealed class MonsterTables
         string Text(string name) => mpk.TryGetEntry(name, out MpkEntry e)
             ? System.Text.Encoding.Latin1.GetString(mpk.Extract(e))
             : throw new MpkFormatException($"gamedata.mpk has no {name}.");
-        return Parse(Text("monsters.csv"), Text("monnifs.csv"), Text("skins.csv"), Text("anims.csv"), Text("animnifs.csv"));
+        return Parse(Text("monsters.csv"), Text("monnifs.csv"), Text("skins.csv"), Text("anims.csv"), Text("animnifs.csv"))
+            .WithFig3(Text("fig3map.csv"), Text("fig3parts.csv"), Text("fig3haircolormap.csv"));
+    }
+
+    /// <summary>Adds the Catacombs tables: <c>fig3map.csv</c> ((figure, slot) -> part id per variant)
+    /// and <c>fig3parts.csv</c> (part id -> file and archive).</summary>
+    public MonsterTables WithFig3(string fig3mapCsv, string fig3partsCsv, string fig3hairCsv = "")
+    {
+        // fig3haircolormap.csv: figure, style, description, then (skin, tint, ?) per hair colour.
+        foreach (string raw in fig3hairCsv.Split('\n'))
+        {
+            string[] c = raw.TrimEnd('\r').Split(',');
+            if (c.Length > 3 && int.TryParse(c[0], out int figure) && int.TryParse(c[1], out int style))
+                _hairColours.TryAdd((figure, style), c[3..].Select(x => x.Trim()).ToArray());
+        }
+        foreach (string raw in fig3mapCsv.Split('\n'))
+        {
+            string[] c = raw.TrimEnd('\r').Split(',');
+            if (c.Length > 3 && int.TryParse(c[0], out int figure) && int.TryParse(c[1], out int slot))
+                _fig3map.TryAdd((figure, slot), c[3..].Select(x => x.Trim()).ToArray());
+        }
+        foreach ((int id, string[] row) in ById(fig3partsCsv))
+            _fig3parts.TryAdd(id, row);
+        return this;
+    }
+
+    /// <summary>The Catacombs version of server model id <paramref name="modelId"/> (monsters.csv "Cata
+    /// Nif"), or null if it has none. Needs <see cref="WithFig3"/>.</summary>
+    public CataSpec? ResolveCatacombs(int modelId) =>
+        _monsters.TryGetValue(modelId, out string[]? m)
+            ? CatacombsFigure.Resolve(modelId, m, _monnifs, _skins, _fig3map, _fig3parts, ClipsOf, _hairColours)
+            : null;
+
+    // The figure's animation set (monnifs column 3) -> a clip id per action -> its .kfa file.
+    private Dictionary<string, string> ClipsOf(string[] monnif)
+    {
+        var clips = new Dictionary<string, string>();
+        if (monnif.Length > 3 && int.TryParse(monnif[3], out int set) && _anims.TryGetValue(set, out string[]? a))
+            foreach ((string clip, int col) in ClipColumns)
+                if (col < a.Length && int.TryParse(a[col], out int id) && id > 0
+                    && _animnifs.TryGetValue(id, out string[]? kfa) && kfa.Length > 2 && kfa[2].Trim().Length > 0)
+                    clips[clip] = kfa[2].Trim();
+        return clips;
     }
 
     /// <summary>Parses the CSV texts (rows keyed by their numeric ID column; headers skipped).
@@ -59,22 +104,23 @@ public sealed class MonsterTables
     public static MonsterTables Parse(string monstersCsv, string monnifsCsv, string skinsCsv,
         string animsCsv = "", string animnifsCsv = "")
     {
-        static Dictionary<int, string[]> ById(string csv)
-        {
-            var d = new Dictionary<int, string[]>();
-            foreach (string raw in csv.Split('\n'))
-            {
-                string[] c = raw.TrimEnd('\r').Split(',');
-                if (c.Length > 1 && int.TryParse(c[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int id))
-                    d.TryAdd(id, c);
-            }
-            return d;
-        }
         Dictionary<int, string[]> skins = ById(skinsCsv);
         return new MonsterTables(ById(monstersCsv), ById(monnifsCsv),
             skins.Where(kv => kv.Value.Length > 2 && kv.Value[2].Trim().Length > 0)
                  .ToDictionary(kv => kv.Key, kv => kv.Value[2].Trim()),
             ById(animsCsv), ById(animnifsCsv));
+    }
+
+    private static Dictionary<int, string[]> ById(string csv)
+    {
+        var d = new Dictionary<int, string[]>();
+        foreach (string raw in csv.Split('\n'))
+        {
+            string[] c = raw.TrimEnd('\r').Split(',');
+            if (c.Length > 1 && int.TryParse(c[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int id))
+                d.TryAdd(id, c);
+        }
+        return d;
     }
 
     /// <summary>Every model id in monsters.csv, in order.</summary>
@@ -99,14 +145,7 @@ public sealed class MonsterTables
         string nifName = n[2].Trim();
         float scale = m.Length > 12 && float.TryParse(m[12], NumberStyles.Float, CultureInfo.InvariantCulture, out float sc) && sc > 0
             ? sc / 100f : 1f;
-        // The figure's animation set (monnifs column 3) -> a clip id per action -> its .kfa file.
-        var clips = new Dictionary<string, string>();
-        if (int.TryParse(n[3], out int set) && _anims.TryGetValue(set, out string[]? a))
-            foreach ((string clip, int col) in ClipColumns)
-                if (col < a.Length && int.TryParse(a[col], out int id) && id > 0
-                    && _animnifs.TryGetValue(id, out string[]? kfa) && kfa.Length > 2 && kfa[2].Trim().Length > 0)
-                    clips[clip] = kfa[2].Trim();
-        return new FigureSpec(modelId, m[1].Trim(), nifName + ".nif", version, skins, scale, face) { Clips = clips };
+        return new FigureSpec(modelId, m[1].Trim(), nifName + ".nif", version, skins, scale, face) { Clips = ClipsOf(n) };
     }
 }
 

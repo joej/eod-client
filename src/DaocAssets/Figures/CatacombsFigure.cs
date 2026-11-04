@@ -1,0 +1,207 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Catacombs figures (roadmap M7b; open question W13): retail builds every player race from these. A
+// Catacombs figure is a skeleton (figures/fig3/sfigNNN.mpk, "<nif>_skeleton.nif") plus one body part
+// per slot from figures/fig3/figNNN.mpk, each part skinned to the skeleton's bones by name. The tables
+// are in the install's gamedata.mpk:
+//   monsters.csv  a classic model id's Catacombs version: "Cata Nif" (a monnifs row) and a skin id per
+//                 slot (CatSkin Body, Lbody, Head, Arms, Gloves, Legs, Boots, Cloak, Hair); e.g. 32
+//                 Briton Male -> 582 Cata Briton Male, CthBody01_ss_bri_M.dds, Bri_m_Head01.dds, ...
+//   monnifs.csv   the figure's NIF name (bri_m), animation set, "Cata Index" (its fig3map figure) and
+//                 "Skeleton Archive" (sfig001)
+//   fig3map.csv   (figure, slot) -> the part ids of each variant: slot 0 head, 1 body, 2 lbody,
+//                 3 legs, 4 boots, 5 arms, 6 gloves, 7 cloak, 8 hair, 9 full helm
+//   fig3parts.csv part id -> file name and archive number
+// A clothing skin's name carries the mesh variant it is drawn on (CthBody01 = body mesh 1, chnBody05 =
+// 5), as OfflineDAoC's GPL pipeline (nif_character.py, cata_outfit) found; the approach is adapted
+// from there. Not yet: cloaks (drawn on their second UV set), face morphs, eye colour, hair styles
+// and colours from the player's customisation, worn equipment. Owner-run: reads the owner's install.
+
+using System.Globalization;
+using System.Numerics;
+using System.Text.RegularExpressions;
+using DaocAssets.Nif;
+
+namespace DaocAssets.Figures;
+
+/// <summary>One body part of a Catacombs figure: its file in <c>figures/fig3/fig&lt;Archive&gt;.mpk</c>
+/// and the skin it wears.</summary>
+public sealed record CataPart(int Slot, int Archive, string Nif, string? Skin);
+
+/// <summary>A server model id's Catacombs figure: skeleton, parts, clips and scale.</summary>
+public sealed record CataSpec(int ModelId, string Name, int SkeletonArchive, string Skeleton,
+    IReadOnlyList<CataPart> Parts, float Scale)
+{
+    /// <summary>Clip name (idle, walk, run, back) -> .kfa file in anims/.</summary>
+    public IReadOnlyDictionary<string, string> Clips { get; init; } = new Dictionary<string, string>();
+}
+
+public static partial class CatacombsFigure
+{
+    // monsters.csv columns (0-based) of a model's Catacombs version.
+    internal const int CataNifColumn = 67;
+    private static readonly (int Slot, int Column)[] SkinColumns =
+        [(1, 68), (2, 69), (0, 70), (5, 71), (6, 72), (3, 73), (4, 74), (8, 76)];
+
+    /// <summary>
+    /// The Catacombs figure of <paramref name="modelId"/>, or null when the model has none or a table
+    /// lacks a row. Each slot with a skin gets one part: the variant its skin names (else variant 1).
+    /// </summary>
+    internal static CataSpec? Resolve(int modelId, string[] monster, Dictionary<int, string[]> monnifs,
+        Dictionary<int, string> skins, Dictionary<(int Figure, int Slot), string[]> fig3map,
+        Dictionary<int, string[]> fig3parts, Func<string[], IReadOnlyDictionary<string, string>> clips,
+        Dictionary<(int Figure, int Style), string[]>? hairColours = null)
+    {
+        if (monster.Length <= CataNifColumn || !int.TryParse(monster[CataNifColumn], out int nifRow)
+            || !monnifs.TryGetValue(nifRow, out string[]? n) || n.Length < 16
+            || !int.TryParse(n[13], out int figure) || !int.TryParse(n[15], out int skeletonArchive))
+            return null;
+        var parts = new List<CataPart>();
+        foreach ((int slot, int column) in SkinColumns)
+        {
+            if (column >= monster.Length || !int.TryParse(monster[column], out int skinId) || skinId <= 0
+                || !skins.TryGetValue(skinId, out string? skin) || !fig3map.TryGetValue((figure, slot), out string[]? variants))
+                continue;
+            int variant = VariantOf(skin);
+            string? partId = variant <= variants.Length && variants[variant - 1].Length > 0 ? variants[variant - 1]
+                : variants.FirstOrDefault(v => v.Length > 0);
+            if (partId is null || !int.TryParse(partId, out int pid) || !fig3parts.TryGetValue(pid, out string[]? p)
+                || p.Length < 6 || !int.TryParse(p[5], out int archive))
+                continue;
+            parts.Add(new CataPart(slot, archive, p[2].Trim() + ".nif", skin));
+        }
+        // No hair skin in the row (Celt Female 1, Lurikeen Male 1): hair style 1 in colour 1 from
+        // fig3haircolormap ((figure, style) -> per colour: skin, tint, ?), as for a new character.
+        if (!parts.Any(p => p.Slot == 8) && hairColours is not null && hairColours.TryGetValue((figure, 1), out string[]? hc)
+            && hc.Length > 0 && int.TryParse(hc[0], out int hairSkin) && skins.TryGetValue(hairSkin, out string? hairFile)
+            && fig3map.TryGetValue((figure, 8), out string[]? hairs) && hairs.Length > 0 && int.TryParse(hairs[0], out int hid)
+            && fig3parts.TryGetValue(hid, out string[]? hp) && hp.Length >= 6 && int.TryParse(hp[5], out int harch))
+            parts.Add(new CataPart(8, harch, hp[2].Trim() + ".nif", hairFile));
+        if (parts.Count == 0)
+            return null;
+        float scale = monster.Length > 81 && float.TryParse(monster[81], NumberStyles.Float, CultureInfo.InvariantCulture, out float s) && s > 0
+            ? s / 100f : 1f;
+        return new CataSpec(int.Parse(monster[0], CultureInfo.InvariantCulture), n[1].Trim(), skeletonArchive,
+            n[2].Trim() + "_skeleton.nif", parts, scale) { Clips = clips(n) };
+    }
+
+    // "CthBody01_ss_bri_M.dds" -> 1, "chnBody05_..." -> 5; 1 when the name carries none.
+    internal static int VariantOf(string skin)
+    {
+        Match m = PartNumber().Match(skin);
+        return m.Success && int.TryParse(m.Groups[1].Value, out int v) && v > 0 ? v : 1;
+    }
+
+    [GeneratedRegex(@"(?:body|arms|legs|boots?|gloves?)(\d\d)", RegexOptions.IgnoreCase)]
+    private static partial Regex PartNumber();
+
+    /// <summary>
+    /// Binds body parts to a skeleton by bone name. A part's skin is either named bones over vertices
+    /// already in the rest pose (most parts) or a self-contained skin over a copy of the skeleton (hair);
+    /// both end up as rest-pose vertices weighted to the skeleton's joints, whose inverse bind is the
+    /// inverse of the joint's rest world transform (the parts' bind pose is the skeleton's rest pose).
+    /// A rigid shape follows the root bone. <paramref name="parts"/> pairs each part file with the skin
+    /// it wears (null: its own texture).
+    /// </summary>
+    public static NifModel Assemble(IReadOnlyList<NifJoint> skeleton, IEnumerable<(NifModel Part, string? Skin)> parts)
+    {
+        var skel = new NifModel { Version = default, Meshes = [], Joints = skeleton };
+        Matrix4x4[] world = skel.JointWorlds();
+        var jointOf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int j = 0; j < skeleton.Count; j++)
+            jointOf.TryAdd(skeleton[j].Name.Trim(), j);
+        int root = jointOf.TryGetValue("Bip01", out int r) ? r : 0;
+
+        var meshes = new List<NifMesh>();
+        NifVersion version = default;
+        foreach ((NifModel part, string? skin) in parts)
+        {
+            version = part.Version;
+            Matrix4x4[] partWorld = part.JointWorlds();
+            foreach (NifMesh mesh in part.Meshes)
+            {
+                if (mesh.Helper)
+                    continue;
+                Vector3[] verts = mesh.Vertices;
+                Vector3[]? normals = mesh.Normals;
+                string[] names;
+                if (mesh.SkinBoneNames is not null)
+                    names = mesh.SkinBoneNames;
+                else if (mesh.SkinJoints is { } own && mesh.Skin is not null)
+                {
+                    // A self-contained skin: pose it in its own file's rest pose.
+                    names = own.Select(b => part.Joints[b.Joint].Name).ToArray();
+                    var m = own.Select(b => b.InverseBind * partWorld[b.Joint]).ToArray();
+                    verts = new Vector3[mesh.Vertices.Length];
+                    normals = mesh.Normals is null ? null : new Vector3[mesh.Vertices.Length];
+                    for (int v = 0; v < verts.Length; v++)
+                    {
+                        foreach ((int bone, float w) in mesh.Skin[v])
+                        {
+                            verts[v] += Vector3.Transform(mesh.Vertices[v], m[bone]) * w;
+                            if (normals is not null)
+                                normals[v] += Vector3.TransformNormal(mesh.Normals![v], m[bone]) * w;
+                        }
+                        if (mesh.Skin[v].Length == 0)
+                            verts[v] = mesh.Vertices[v];
+                        if (normals is not null)
+                            normals[v] = normals[v] == Vector3.Zero ? mesh.Normals![v] : Vector3.Normalize(normals[v]);
+                    }
+                }
+                else
+                    names = [];
+
+                // The skeleton joints this mesh uses, and each vertex's influences re-indexed to them.
+                var used = new List<int>();
+                var slotOf = new Dictionary<int, int>();
+                int Slot(int joint)
+                {
+                    if (!slotOf.TryGetValue(joint, out int s))
+                    {
+                        s = used.Count;
+                        used.Add(joint);
+                        slotOf[joint] = s;
+                    }
+                    return s;
+                }
+                var weights = new (int, float)[verts.Length][];
+                for (int v = 0; v < verts.Length; v++)
+                {
+                    var list = new List<(int, float)>();
+                    if (mesh.Skin is not null && names.Length > 0)
+                        foreach ((int bone, float w) in mesh.Skin[v])
+                            if (bone < names.Length && jointOf.TryGetValue(names[bone].Trim(), out int j))
+                                list.Add((Slot(j), w));
+                    float sum = list.Sum(x => x.Item2);
+                    weights[v] = sum > 0 ? list.Select(x => (x.Item1, x.Item2 / sum)).ToArray() : [(Slot(root), 1f)];
+                }
+                meshes.Add(mesh with
+                {
+                    Name = $"{mesh.Name}_{meshes.Count}",
+                    Vertices = verts,
+                    Normals = normals,
+                    TextureFile = skin ?? mesh.TextureFile,
+                    SkinBoneNames = null,
+                    SkinJoints = used.Select(j => (j, Invert(world[j]))).ToArray(),
+                    Skin = weights,
+                });
+            }
+        }
+        return new NifModel { Version = version, Joints = skeleton, Meshes = meshes };
+    }
+
+    private static Matrix4x4 Invert(Matrix4x4 m) =>
+        Matrix4x4.Invert(m, out Matrix4x4 inv) ? inv : Matrix4x4.Identity;
+
+    /// <summary>
+    /// A clip for a Catacombs skeleton: rotations on every bone, translations on the root (Bip01) only.
+    /// The Catacombs clips are shared across races and some were keyed on other proportions; their
+    /// translations would stretch each skeleton's bones (OfflineDAoC's finding: Cat_troll_idle moves the
+    /// troll's eyelids 2.8 units).
+    /// </summary>
+    public static KfaClip RotationsOnly(KfaClip clip) => clip with
+    {
+        Tracks = clip.Tracks.Select(t => t.Bone.Trim().Equals("Bip01", StringComparison.OrdinalIgnoreCase) ? t
+            : t with { Translations = [] }).ToList(),
+    };
+}

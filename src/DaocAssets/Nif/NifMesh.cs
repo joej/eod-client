@@ -47,6 +47,11 @@ public sealed record NifMesh
     /// influences, strongest first, weights summing to 1 (empty if no bone weights the vertex).</summary>
     public (int Bone, float Weight)[][]? Skin { get; init; }
 
+    /// <summary>A Catacombs body part (skinned to a skeleton in another file): its bones by name, in the
+    /// order <see cref="Skin"/> indexes them. Its vertices are baked to the part's world space, which is
+    /// the skeleton's rest pose; <c>CatacombsFigure.Assemble</c> binds it to a skeleton's joints.</summary>
+    public string[]? SkinBoneNames { get; init; }
+
     /// <summary>Every UV set the shape's data carries (set 0 is <see cref="TexCoords"/>); the extra
     /// texture slots name which set they use.</summary>
     public Vector2[][]? UvSets { get; init; }

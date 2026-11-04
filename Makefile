@@ -10,7 +10,7 @@
 #   make check-zone208      ... and fail if its zone check has errors
 #   make clean-zone208      delete zone 208's converted files (its models stay in the shared library)
 #   make zones              every outdoor zone and capital city, plus private/zones/summary.md
-#                           and the NPC figures (make figures: every classic model id)
+#                           and the figures (make figures: every model id, classic and Catacombs)
 #   make check-zones        ... and fail if any zone check has errors
 #   make clean-library      delete every converted model and texture (they are redone on demand)
 #   make clean              delete everything this Makefile made
@@ -156,7 +156,8 @@ check-zone$(1): zone$(1)
 endef
 $(foreach z,$(WANT),$(eval $(call ZONE_RULES,$(z),$(shell expr $(z) + 0))))
 
-# --- figures: every classic-figure NPC model id (models/model<id>.glb + models/figures.csv) ----------
+# --- figures: every model id as its classic figure (models/model<id>.glb, figures.csv: NPCs) and its ----
+# --- Catacombs version (models/cata<id>.glb, catacombs.csv: players) --------------------------------------
 FIGURES := $(LIB)/models/.figures.done
 .PHONY: figures
 figures: $(FIGURES)

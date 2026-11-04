@@ -808,11 +808,12 @@ public partial class WorldView : Node3D
 
     // Loads the .glb at _modelPath as the character body: scaled to a human-ish height and seated on
     // the ground (feet at the body origin). Returns false (keep the capsule) if no usable model.
-    // The character's own figure (models/model<PlayerModel>.glb, from mpk figures). It stands on its
-    // origin and faces +Z, so it is turned to the body's -Z.
+    // The character's own figure: the Catacombs version of its model id (models/cata<PlayerModel>.glb,
+    // how retail draws players; W13), else the classic one (models/model<PlayerModel>.glb). It stands
+    // on its origin and faces +Z, so it is turned to the body's -Z.
     private bool TryAddOwnFigure(Node3D body)
     {
-        if (PlayerModel == 0 || Figure(PlayerModel) is not { } figure)
+        if (PlayerModel == 0 || (Figure(PlayerModel, catacombs: true) ?? Figure(PlayerModel)) is not { } figure)
             return false;
         var inst = (Node3D)figure.Template.Duplicate();
         inst.Scale = new Vector3(figure.Scale, figure.Scale, figure.Scale);
@@ -822,7 +823,7 @@ public partial class WorldView : Node3D
         body.AddChild(inst);
         _bodyAnim = inst.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() as AnimationPlayer;
         PlayBodyClip("idle");
-        GD.Print($"[world] character drawn as figure model{PlayerModel}");
+        GD.Print($"[world] character drawn as figure {figure.File}");
         return true;
     }
 
@@ -1557,8 +1558,9 @@ public partial class WorldView : Node3D
     private void OnPlayerSpawned(PlayerCreate p)
     {
         Vector3 pos = ToGodot(p.X, p.Y, p.Z);
-        // A different, brighter tint so other players read as players, not mobs.
-        SpawnEntity(p.ObjectId, pos, YawFromHeading(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f));
+        // Drawn like your own character (its model id's Catacombs figure); without one, a capsule in a
+        // brighter tint so other players read as players, not mobs.
+        SpawnEntity(p.ObjectId, pos, YawFromHeading(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f), p.Model, player: true);
     }
 
     private void OnObjectRemoved(ushort objectId)
@@ -1659,7 +1661,8 @@ public partial class WorldView : Node3D
         _ => new Color(0.55f, 0.55f, 0.6f), // neutral
     };
 
-    private void SpawnEntity(ushort objectId, Vector3 pos, float yaw, Color color, ushort model = 0, byte size = 50)
+    private void SpawnEntity(ushort objectId, Vector3 pos, float yaw, Color color, ushort model = 0, byte size = 50,
+        bool player = false)
     {
         // Free any node we already have for this id before replacing it. This happens normally: an
         // entity first seen via a bare 0xA1 update spawns grey (OnObjectMoved), then its 0xDA/0x4B
@@ -1670,8 +1673,8 @@ public partial class WorldView : Node3D
             existing.Node.QueueFree();
 
         var node = new Node3D { Position = pos, Rotation = new Vector3(0, yaw, 0) };
-        AnimationPlayer? player = null;
-        if (model != 0 && Figure(model) is { } figure)
+        AnimationPlayer? anim = null;
+        if (model != 0 && ((player ? Figure(model, catacombs: true) : null) ?? Figure(model)) is { } figure)
         {
             // The server's model id is the client's monsters.csv row; mpk figures converted it to
             // models/model<id>.glb. Size 50 is normal; the table's own scale applies on top.
@@ -1680,7 +1683,7 @@ public partial class WorldView : Node3D
             inst.Scale = new Vector3(scale, scale, scale);
             inst.Rotation = new Vector3(0, Mathf.Pi, 0);   // figures face +Z; entities face -Z
             node.AddChild(inst);
-            player = inst.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() as AnimationPlayer;
+            anim = inst.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() as AnimationPlayer;
         }
         else
         {
@@ -1692,7 +1695,7 @@ public partial class WorldView : Node3D
             });
         }
         _entityRoot.AddChild(node);
-        var entity = new Entity { Node = node, TargetPosition = pos, TargetYaw = yaw, Player = player, LastPosition = pos };
+        var entity = new Entity { Node = node, TargetPosition = pos, TargetYaw = yaw, Player = anim, LastPosition = pos };
         _entities[objectId] = entity;
         PlayClip(entity, "idle");
     }
@@ -1707,19 +1710,24 @@ public partial class WorldView : Node3D
         e.Clip = clip;
     }
 
-    // Converted figures by model id (null: none for that id), loaded once each and duplicated per NPC.
-    private readonly Dictionary<ushort, (Node3D Template, float Scale)?> _figures = new();
-    private Dictionary<int, float>? _figureScales;
+    // Converted figures by model id (null: none for that id), loaded once each and duplicated per
+    // entity: classic ones (models/model<id>.glb, listed in figures.csv) and Catacombs ones
+    // (models/cata<id>.glb, catacombs.csv), both written by mpk figures.
+    private readonly Dictionary<(ushort, bool), (Node3D Template, float Scale, string File)?> _figures = new();
+    private Dictionary<int, float>? _figureScales, _cataScales;
 
-    private (Node3D Template, float Scale)? Figure(ushort model)
+    private (Node3D Template, float Scale, string File)? Figure(ushort model, bool catacombs = false)
     {
-        if (_figures.TryGetValue(model, out var cached))
+        if (_figures.TryGetValue((model, catacombs), out var cached))
             return cached;
-        (Node3D, float)? result = null;
+        (Node3D, float, string)? result = null;
         string lib = string.IsNullOrEmpty(_libraryPath) ? "" : _libraryPath;
-        _figureScales ??= ReadFigureScales(lib.PathJoin("models").PathJoin("figures.csv"));
-        string path = lib.PathJoin("models").PathJoin($"model{model}.glb");
-        if (lib.Length > 0 && _figureScales.TryGetValue(model, out float scale) && Godot.FileAccess.FileExists(path))
+        Dictionary<int, float> scales = catacombs
+            ? _cataScales ??= ReadFigureScales(lib.PathJoin("models").PathJoin("catacombs.csv"))
+            : _figureScales ??= ReadFigureScales(lib.PathJoin("models").PathJoin("figures.csv"));
+        string file = catacombs ? $"cata{model}.glb" : $"model{model}.glb";
+        string path = lib.PathJoin("models").PathJoin(file);
+        if (lib.Length > 0 && scales.TryGetValue(model, out float scale) && Godot.FileAccess.FileExists(path))
         {
             var doc = new GltfDocument();
             var state = new GltfState();
@@ -1727,14 +1735,14 @@ public partial class WorldView : Node3D
             {
                 ModelTexturing.TagLayers(state);
                 ModelTexturing.Apply(m, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
-                result = (m, scale);
+                result = (m, scale, file);
             }
         }
-        _figures[model] = result;
+        _figures[(model, catacombs)] = result;
         return result;
     }
 
-    // models/figures.csv (written by mpk figures): "id,scale,figure" per converted model id.
+    // models/figures.csv and catacombs.csv (written by mpk figures): "id,scale,figure" per converted model id.
     private static Dictionary<int, float> ReadFigureScales(string path)
     {
         var scales = new Dictionary<int, float>();

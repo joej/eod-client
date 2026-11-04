@@ -64,6 +64,9 @@ internal static class Cli
         if (command == "figures")
             return FiguresCmd(args);
 
+        if (command == "cata")
+            return CataCmd(args);
+
         string inputPath = args[1];
         if (!File.Exists(inputPath))
         {
@@ -514,7 +517,7 @@ internal static class Cli
 
         DaocAssets.Figures.FigureSpec? spec = DaocAssets.Figures.MonsterTables.Read(gamedata).Resolve(modelId);
         if (spec is null) { Console.Error.WriteLine($"figure: no model {modelId} in gamedata.mpk"); return 3; }
-        if (spec.Version >= 3) { Console.Error.WriteLine($"figure: model {modelId} ({spec.Name}) is a Catacombs figure, not supported yet"); return 2; }
+        if (spec.Version >= 3) { Console.Error.WriteLine($"figure: model {modelId} ({spec.Name}) is a Catacombs figure: use mpk cata"); return 2; }
 
         var index = AssetIndex.Load(indexPath);
         byte[]? bytes = index.Read(spec.Nif);
@@ -547,6 +550,74 @@ internal static class Cli
         Console.WriteLine($"figure {modelId} ({spec.Name}): {spec.Nif}, {parts} parts, scale {spec.Scale:0.##}, " +
             $"skins {string.Join(" ", spec.Skins.Select(kv => kv.Key + "=" + kv.Value))}, " +
             $"clips {string.Join(" ", clips.Select(kv => $"{kv.Key}={spec.Clips[kv.Key]}({kv.Value.Duration:0.#}s)"))} -> {outPath}");
+        return 0;
+    }
+
+    // A server model id's Catacombs figure (monsters.csv "Cata Nif"): its skeleton from
+    // figures/fig3/sfigNNN.mpk and one part per slot from figures/fig3/figNNN.mpk, bound by bone name,
+    // each wearing its skin; written to the library as models/cata<id>.glb with the figure's clips.
+    private static int CataCmd(string[] args)
+    {
+        if (args.Length < 2 || !int.TryParse(args[1], out int modelId)) return Usage();
+        string? gamedata = null, indexPath = null, libDir = null;
+        for (int i = 2; i < args.Length; i++)
+        {
+            if (args[i] == "--gamedata" && i + 1 < args.Length) gamedata = args[++i];
+            else if (args[i] == "--index" && i + 1 < args.Length) indexPath = args[++i];
+            else if (args[i] == "--library" && i + 1 < args.Length) libDir = args[++i];
+            else return Usage();
+        }
+        if (gamedata is null || indexPath is null || libDir is null) return Usage();
+
+        DaocAssets.Figures.CataSpec? spec = DaocAssets.Figures.MonsterTables.Read(gamedata).ResolveCatacombs(modelId);
+        if (spec is null) { Console.Error.WriteLine($"cata: model {modelId} has no Catacombs figure in gamedata.mpk"); return 3; }
+        string install = Path.GetDirectoryName(Path.GetFullPath(gamedata))!;
+        string fig3 = Path.Combine(install, "figures", "fig3");
+        byte[]? Member(string archive, string name)
+        {
+            string path = Path.Combine(fig3, archive);
+            if (!File.Exists(path)) return null;
+            using MpkArchive mpk = MpkArchive.Open(path);
+            MpkEntry? e = mpk.Entries.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
+            return e is null ? null : mpk.Extract(e);
+        }
+        byte[]? skelBytes = Member($"sfig{spec.SkeletonArchive:000}.mpk", spec.Skeleton);
+        IReadOnlyList<NifJoint>? skeleton = skelBytes is null ? null : NifFile.ReadSkeleton(skelBytes);
+        if (skeleton is null) { Console.Error.WriteLine($"cata: skeleton {spec.Skeleton} not readable in sfig{spec.SkeletonArchive:000}.mpk"); return 3; }
+
+        var parts = new List<(NifModel, string?)>();
+        foreach (DaocAssets.Figures.CataPart part in spec.Parts)
+        {
+            byte[]? bytes = Member($"fig{part.Archive:000}.mpk", part.Nif);
+            if (bytes is null) { Console.Error.WriteLine($"  part {part.Nif}: not in fig{part.Archive:000}.mpk"); continue; }
+            parts.Add((NifFile.Read(bytes), part.Skin));
+        }
+        NifModel figure = DaocAssets.Figures.CatacombsFigure.Assemble(skeleton, parts);
+
+        var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir);
+        foreach (string skin in spec.Parts.Select(p => p.Skin).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
+            if (library.GatherTexture(skin) is null)
+                Console.Error.WriteLine($"  skin {skin}: not found");
+        var clips = new Dictionary<string, KfaClip>();
+        string animNode = Path.Combine(install, "figures", "animnode.dat");
+        if (File.Exists(animNode))
+        {
+            string[] boneNames = File.ReadAllLines(animNode, System.Text.Encoding.Latin1).Select(l => l.Trim()).ToArray();
+            foreach ((string clip, string kfa) in spec.Clips)
+            {
+                string? path = Directory.EnumerateFiles(Path.Combine(install, "anims"))
+                    .FirstOrDefault(f => string.Equals(Path.GetFileName(f), kfa, StringComparison.OrdinalIgnoreCase));
+                try { if (path is not null) clips[clip] = DaocAssets.Figures.CatacombsFigure.RotationsOnly(KfaClip.Read(File.ReadAllBytes(path), boneNames)); }
+                catch (NifFormatException e) { Console.Error.WriteLine($"  clip {clip} ({kfa}): {e.Message}"); }
+            }
+        }
+        string outPath = Path.Combine(libDir, "models", $"cata{modelId}.glb");
+        Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
+        GltfExporter.SaveGlb(figure, outPath, clips);
+        int unbound = figure.Meshes.Sum(m => m.Skin!.Count(w => w.Length == 1 && w[0].Weight == 1f && m.SkinJoints![w[0].Bone].Joint == 0));
+        Console.WriteLine($"cata {modelId} ({spec.Name}): {spec.Skeleton} ({skeleton.Count} bones), " +
+            $"parts {string.Join(" ", spec.Parts.Select(p => $"{p.Slot}:{Path.GetFileNameWithoutExtension(p.Nif)}={p.Skin}"))}, " +
+            $"{figure.Meshes.Count} meshes, clips {string.Join(" ", clips.Keys)} -> {outPath}");
         return 0;
     }
 
@@ -624,9 +695,87 @@ internal static class Cli
         }
         File.WriteAllText(Path.Combine(models, "figures.csv"), table.ToString());
         Console.WriteLine($"figures: {made} model ids converted ({figures.Count(f => f.Value is not null)} figure files, " +
-            $"{clipCache.Count(c => c.Value is not null)} clips, {skins.Count} skins); {catacombs} Catacombs (not yet), " +
+            $"{clipCache.Count(c => c.Value is not null)} clips, {skins.Count} skins); {catacombs} whose own figure is a Catacombs one (skipped), " +
             $"{missing} without a figure, {failed} failed");
-        return failed == 0 ? 0 : 1;
+
+        // Each model id's Catacombs version (how retail draws players) as models/cata<id>.glb, listed in
+        // models/catacombs.csv. Skeletons, parts and clips are read once each.
+        string fig3 = Path.Combine(install, "figures", "fig3");
+        var archives = new Dictionary<string, MpkArchive?>(StringComparer.OrdinalIgnoreCase);
+        byte[]? Member(string archive, string name)
+        {
+            if (!archives.TryGetValue(archive, out MpkArchive? mpk))
+                archives[archive] = mpk = File.Exists(Path.Combine(fig3, archive)) ? MpkArchive.Open(Path.Combine(fig3, archive)) : null;
+            return mpk is not null && mpk.TryGetEntry(name, out MpkEntry e) ? mpk.Extract(e) : null;
+        }
+        var skeletons = new Dictionary<string, IReadOnlyList<NifJoint>?>(StringComparer.OrdinalIgnoreCase);
+        var partCache = new Dictionary<string, NifModel?>(StringComparer.OrdinalIgnoreCase);
+        var cataTable = new System.Text.StringBuilder("id,scale,figure\n");
+        int cataMade = 0, cataFailed = 0, cataMissingParts = 0;
+        try
+        {
+            foreach (int id in tables.ModelIds)
+            {
+                DaocAssets.Figures.CataSpec? spec = tables.ResolveCatacombs(id);
+                if (spec is null) continue;
+                string skelKey = $"sfig{spec.SkeletonArchive:000}.mpk/{spec.Skeleton}";
+                if (!skeletons.TryGetValue(skelKey, out IReadOnlyList<NifJoint>? skeleton))
+                {
+                    try { skeleton = Member($"sfig{spec.SkeletonArchive:000}.mpk", spec.Skeleton) is byte[] b ? NifFile.ReadSkeleton(b) : null; }
+                    catch (NifFormatException) { skeleton = null; }
+                    skeletons[skelKey] = skeleton;
+                }
+                if (skeleton is null) { cataFailed++; Console.Error.WriteLine($"  cata {id} ({spec.Name}): no skeleton {skelKey}"); continue; }
+                var parts = new List<(NifModel, string?)>();
+                foreach (DaocAssets.Figures.CataPart part in spec.Parts)
+                {
+                    string key = $"fig{part.Archive:000}.mpk/{part.Nif}";
+                    if (!partCache.TryGetValue(key, out NifModel? model))
+                    {
+                        try { model = Member($"fig{part.Archive:000}.mpk", part.Nif) is byte[] b ? NifFile.Read(b) : null; }
+                        catch (NifFormatException) { model = null; }
+                        partCache[key] = model;
+                    }
+                    if (model is null) { cataMissingParts++; continue; }
+                    parts.Add((model, part.Skin));
+                }
+                var clips = new Dictionary<string, KfaClip>();
+                foreach ((string clip, string kfa) in spec.Clips)
+                {
+                    if (!clipCache.TryGetValue(kfa, out KfaClip? k))
+                    {
+                        try { k = animFiles.TryGetValue(kfa, out string? path) ? KfaClip.Read(File.ReadAllBytes(path), boneNames) : null; }
+                        catch (NifFormatException) { k = null; }
+                        clipCache[kfa] = k;
+                    }
+                    if (k is not null) clips[clip] = DaocAssets.Figures.CatacombsFigure.RotationsOnly(k);
+                }
+                try
+                {
+                    NifModel figure = DaocAssets.Figures.CatacombsFigure.Assemble(skeleton, parts);
+                    string outPath = Path.Combine(models, $"cata{id}.glb");
+                    GltfExporter.SaveGlb(figure, outPath + ".tmp", clips);
+                    File.Move(outPath + ".tmp", outPath, overwrite: true);
+                    foreach (string skin in spec.Parts.Select(p => p.Skin).OfType<string>())
+                        if (skins.Add(skin)) library.GatherTexture(skin);
+                    cataTable.Append(System.FormattableString.Invariant($"{id},{spec.Scale},{Path.GetFileNameWithoutExtension(spec.Skeleton)}\n"));
+                    cataMade++;
+                }
+                catch (Exception e) when (e is NifFormatException or InvalidOperationException or ArgumentException)
+                {
+                    cataFailed++;
+                    Console.Error.WriteLine($"  cata {id} ({spec.Name}): {e.Message}");
+                }
+            }
+        }
+        finally
+        {
+            foreach (MpkArchive? a in archives.Values) a?.Dispose();
+        }
+        File.WriteAllText(Path.Combine(models, "catacombs.csv"), cataTable.ToString());
+        Console.WriteLine($"figures: {cataMade} Catacombs versions converted ({skeletons.Count(s => s.Value is not null)} skeletons, " +
+            $"{partCache.Count(p => p.Value is not null)} parts), {cataMissingParts} parts missing, {cataFailed} failed");
+        return failed == 0 && cataFailed == 0 ? 0 : 1;
     }
 
     private static int ModelCmd(string[] args)
@@ -1041,7 +1190,8 @@ internal static class Cli
               mpk index    <client-dir> --out index.json
               mpk model    <name.nif> --index index.json --library LIBDIR
               mpk figure   <model-id> --gamedata gamedata.mpk --index index.json --library LIBDIR
-              mpk figures  --gamedata gamedata.mpk --index index.json --library LIBDIR   (every classic model id)
+              mpk figures  --gamedata gamedata.mpk --index index.json --library LIBDIR   (every model id: classic figures, and Catacombs versions)
+              mpk cata     <model-id> --gamedata gamedata.mpk --index index.json --library LIBDIR   (its Catacombs figure)
               mpk zonedeps <dat<NNN>.mpk> --index index.json --var NAME
               mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR [--size W H]
               mpk terrain  <dat<NNN>.mpk> --offset X Y --out FILE.glb [--size W H] [--tiles N] [--index index.json --library LIBDIR]
