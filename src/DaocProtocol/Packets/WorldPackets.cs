@@ -127,8 +127,12 @@ public static class PositionUpdate
     /// <param name="actionFlags">Bit 0x80 = torch; the recorded client sends 0x80.</param>
     /// <param name="verticalSpeed">Non-zero while falling or jumping (the server's FallSpeed).</param>
     /// <param name="health">Percent; the server skips it.</param>
+    /// <param name="landed">Set on the one update that lands from a fall: the falling-damage field's bit 15.
+    /// The server then charges fall damage from <paramref name="verticalSpeed"/> (OpenDAoC: none until
+    /// 500 units/s, minus 100 per Safe Fall level). The recorded client never sets it while standing.</param>
     public static byte[] Payload(float x, float y, float z, ushort sessionId, ushort objectId, ushort zoneId,
-        ushort heading, float speed = 0, float verticalSpeed = 0, byte stateFlags = 0, byte actionFlags = 0, byte health = 100) =>
+        ushort heading, float speed = 0, float verticalSpeed = 0, byte stateFlags = 0, byte actionFlags = 0, byte health = 100,
+        bool landed = false) =>
         new PayloadWriter()
             .F32LE(x).F32LE(y).F32LE(z)
             .F32LE(speed)
@@ -138,7 +142,7 @@ public static class PositionUpdate
             .U16BE(zoneId)
             .U8(stateFlags)
             .U8(0)           // unknown
-            .U16BE(0)        // falling damage
+            .U16BE(landed ? (ushort)0x8000 : (ushort)0)   // falling damage: bit 15 = landed
             .U16BE(heading)
             .U8(actionFlags)
             .Zeros(2)        // unknown

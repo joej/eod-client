@@ -309,6 +309,10 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   region-change and teleport packets; entering a dungeon or city (until M11, as a placeholder).
 - **Death, release and respawn**, which move the player to a bind point, often in another zone.
 - **Swimming** in the water M7 draws.
+- **Gravity (started 2026-11-04):** the character stands on terrain and on model floors (streets,
+  stairs, bridges, walls, roofs), walks up and down steps, falls under gravity off a ledge, jumps (Space),
+  and reports landings so the server charges fall damage. Retail's gravity, jump and step values and its
+  collision hulls are W32; walls don't stop the character yet (M9 "solid world").
 - **Done when:** you can walk from Camelot Hills into Salisbury Plains and back, use a zone jump, and
   die, release and come back at your bind point.
 

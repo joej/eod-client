@@ -260,7 +260,7 @@ u16 BE object id         1.127+, skipped; the recorded client sends 0
 u16 BE zone id           must exist or the player is kicked to the character screen
 u8     state flags       sitting 0x10, jumping 0x08, swimming 0x04, strafing 0x20/0x40/0x80
 u8     unknown
-u16 BE falling damage
+u16 BE falling damage     bit 15 = landed (see below); the recorded client sends 0
 u16 BE heading           the recorded client sometimes sets 0x1000 (L7)
 u8     action flags      0x80 "torch" in the server's enum; the recorded client sends 0x80
 2      unknown
@@ -274,6 +274,13 @@ GPL): zone offsets and sizes × 8192, half-open rectangle, first match.
 
 *Verified:* all 92 recorded 0xA9 packets rebuild byte for byte; the recorded position falls in the
 zone the recorded client reported.
+
+**Falling.** While in the air the client reports its vertical speed (region units per second, falling
+negative); the recorded client sends small negative values walking downhill (−17 to −50) and 0 standing.
+On the one update that lands from a fall it sets bit 15 of the falling-damage field, and OpenDAoC then
+charges fall damage from that update's vertical speed: none up to 500 units/s, otherwise
+`min(99, (speed − 501) / 15)` percent, with Safe Fall raising the threshold by 100 per level
+(`PlayerPositionUpdateHandler`). The recorded client never sets the bit while standing. GMs take none.
 
 ## Being moved by the server
 

@@ -1214,6 +1214,11 @@ public partial class WorldView : Node3D
         int dir = System.Array.IndexOf(args, "--shots-out");
         if (set >= 0 && set + 1 < args.Length && dir >= 0 && dir + 1 < args.Length)
             _ = RunShotSet(ResolveArgPath(args[set + 1]), ResolveArgPath(args[dir + 1]));
+        // --drop METRES lifts the character that far once the world is up, to check falling and landing.
+        int drop = System.Array.IndexOf(args, "--drop");
+        if (drop >= 0 && drop + 1 < args.Length && float.TryParse(args[drop + 1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float metres))
+            _dropPending = metres;
         int s = System.Array.IndexOf(args, "--shot");
         if (s >= 0 && s + 1 < args.Length && double.TryParse(args[s + 1], System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out double at))
@@ -1382,7 +1387,14 @@ public partial class WorldView : Node3D
             }
         }
 
-        SnapToGround();
+        // Space jumps from the ground.
+        if (driving && !_airborne && _groundHit && Input.IsKeyPressed(Key.Space))
+        {
+            _verticalSpeed = JumpSpeed;
+            _airborne = true;
+            _jumping = true;
+        }
+        Ground(delta);
 
         // DAoC's normal pace is a run; backing up has its own clip.
         PlayBodyClip(!moving ? "idle" : forward < 0 ? "back" : "run");
@@ -1395,94 +1407,130 @@ public partial class WorldView : Node3D
         _posLeft -= (float)delta;
         ushort heading = HeadingFromYaw(_bodyYaw);
         (float rx, float ry, float rz) = ToRegion(_body.Position);
-        bool changed = moving
+        bool changed = moving || _airborne || _landingSpeed > 0
             || heading != _world.Position.Heading
             || Mathf.Abs(rx - _world.Position.X) > PositionEpsilon
-            || Mathf.Abs(ry - _world.Position.Y) > PositionEpsilon;
+            || Mathf.Abs(ry - _world.Position.Y) > PositionEpsilon
+            || Mathf.Abs(rz - _world.Position.Z) > PositionEpsilon;
 
         // Send when the timer runs out, or at once on a change (unless we just sent this tick).
-        if (_posLeft <= 0f || (changed && _posLeft < MovingSendInterval - 0.02))
+        if (_posLeft <= 0f || _landingSpeed > 0 || (changed && _posLeft < MovingSendInterval - 0.02))
         {
             SendMove(moving ? WalkUnitsPerSecond : 0f);
             _posLeft = changed ? MovingSendInterval : IdleSendInterval;
         }
     }
 
-    // Keeps the body on the terrain: cast a ray straight down the body's column against the terrain
-    // trimesh collider and set Y to the hit. No gravity/stepping yet — the character is pinned to the
-    // ground surface, which is all M4 needs ("walk on the ground"). No terrain (flat placeholder) or
-    // no hit (over a gap) leaves Y where it is.
-    private void SnapToGround()
+    // Gravity (roadmap M8 movement). The character stands on the highest floor below a point a step above
+    // its feet: terrain or a model's surface (street, stair, bridge, keep wall, roof) that faces up enough to
+    // stand on, never leaves (alpha cut-out) or a wall. A floor within a step (up 1.5 m, down 2 m) is stood on
+    // at once, walking up stairs and down slopes; one further below is fallen to under gravity and landed on,
+    // and Space jumps. The landing is reported to the server with the impact speed, which charges fall
+    // damage (0xA9). With no floor below (under the terrain after a bad position, or off the models) the
+    // character is put back on the terrain above it, or keeps its height.
+    // Not yet: walls and obstacles (nothing stops the character sideways), swimming, the client's own
+    // collision hulls ("collidee" nodes, which our converter drops), retail's gravity and jump values.
+    private void Ground(double delta)
     {
-        if (_terrain is null)
+        if (_dropPending > 0 && _groundHit)
         {
-            SnapToFloor();
+            _body.Position += new Vector3(0, _dropPending, 0);
+            GD.Print($"[world] --drop: lifted {_dropPending:0.#} m");
+            _dropPending = 0;
+        }
+        Vector3 at = _body.Position;
+        float dt = (float)delta;
+        float? floor = FloorBelow(at);
+        if (floor is null)
+        {
+            // Nothing below: under the ground? Back onto the terrain above.
+            if (_terrain is not null && TerrainAbove(at) is float above)
+                _body.Position = new Vector3(at.X, above, at.Z);
+            _airborne = false;
+            _verticalSpeed = 0;
+            _groundHit = false;
             return;
         }
-
-        // Cast from above the terrain's whole height range straight down past its bottom, so a steep
-        // descent is always found (a ray only ±100 m of the body's current Y missed the ground once
-        // the body walked out past a downslope and kept its old height). Terrain Y here spans ~1–150 m.
-        Vector3 col = _body.Position;
-        var ray = PhysicsRayQueryParameters3D.Create(
-            new Vector3(col.X, 400f, col.Z),
-            new Vector3(col.X, -400f, col.Z));
-        ray.CollisionMask = TerrainLayer;   // terrain only — never a tree/keep roof
-        Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
-        if (hit.Count > 0 && hit["position"].AsVector3() is { } p)
+        if (_airborne || _verticalSpeed > 0 || at.Y - floor.Value > StepDown)
         {
-            _body.Position = new Vector3(col.X, p.Y, col.Z);
-            _groundHit = true;
+            _airborne = true;
+            _verticalSpeed = Mathf.Max(_verticalSpeed - Gravity * dt, -MaxFallSpeed);
+            float y = at.Y + _verticalSpeed * dt;
+            if (y <= floor.Value)
+            {
+                y = floor.Value;
+                _landingSpeed = -_verticalSpeed;     // reported on the next position send
+                if (_landingSpeed > 5f)
+                    GD.Print($"[world] landed at {_landingSpeed:0.0} m/s ({_landingSpeed / RegionMetresPerUnit:0} units/s)");
+                _verticalSpeed = 0;
+                _airborne = false;
+                _jumping = false;
+            }
+            _body.Position = new Vector3(at.X, y, at.Z);
         }
         else
         {
-            _groundHit = false;   // over a gap / no terrain under this column
+            _body.Position = new Vector3(at.X, floor.Value, at.Z);
+            _verticalSpeed = 0;
         }
+        _groundHit = !_airborne;
     }
 
-    // With no terrain (a capital city, all models) the character stands on the models: a ray from a
-    // little above the body down to whatever floor, street or stair is below it. Starting just above
-    // the body (not high up, as for terrain) keeps it from landing on a roof or an arch overhead. A floor
-    // within a step (2 m) is stood on at once; one further down is fallen to under gravity, so a character
-    // left in the air (saved above the street, or walked off a ledge) comes down instead of hanging there
-    // for good. With nothing at all below (off the city's models) it keeps its height.
-    private void SnapToFloor()
+    // The highest standable surface below a point a step above the feet: a ray down that passes walls,
+    // steep faces and alpha cut-out surfaces (leaves) to the first floor.
+    private float? FloorBelow(Vector3 at)
     {
-        if (_zoneRoot is null)
-            return;
-        Vector3 at = _body.Position;
-        var ray = PhysicsRayQueryParameters3D.Create(at + new Vector3(0, 1.5f, 0), at - new Vector3(0, MaxFallSearch, 0));
         var exclude = new Godot.Collections.Array<Rid>();
         foreach (Node n in _body.FindChildren("*", "CollisionObject3D", true, false))
             exclude.Add(((CollisionObject3D)n).GetRid());
-        ray.Exclude = exclude;
-        Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
-        if (hit.Count == 0)
+        Vector3 from = at + new Vector3(0, StepUp, 0), to = at - new Vector3(0, MaxFallSearch, 0);
+        for (int tries = 0; tries < 12; tries++)
         {
-            _groundHit = false;
-            _fallSpeed = 0;
-            return;
+            var ray = PhysicsRayQueryParameters3D.Create(from, to);
+            ray.Exclude = exclude;
+            ray.HitBackFaces = true;
+            Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
+            if (hit.Count == 0)
+                return null;
+            Vector3 point = hit["position"].AsVector3();
+            Vector3 normal = hit["normal"].AsVector3();
+            GodotObject collider = hit["collider"].AsGodotObject();
+            bool terrain = collider is CollisionObject3D co && (co.CollisionLayer & TerrainLayer) != 0;
+            if (terrain || (Mathf.Abs(normal.Y) >= MinFloorNormal && !CutOut(collider)))
+                return point.Y;
+            exclude.Add(hit["rid"].AsRid());
         }
-        float floor = hit["position"].AsVector3().Y;
-        if (at.Y - floor <= StepDown)
-        {
-            _body.Position = new Vector3(at.X, floor, at.Z);
-            _groundHit = true;
-            _fallSpeed = 0;
-            return;
-        }
-        // In the air: fall toward the floor below, landing on it.
-        float dt = (float)GetPhysicsProcessDeltaTime();
-        _fallSpeed = Mathf.Min(_fallSpeed + Gravity * dt, MaxFallSpeed);
-        _body.Position = new Vector3(at.X, Mathf.Max(floor, at.Y - _fallSpeed * dt), at.Z);
-        _groundHit = false;
+        return null;
     }
 
-    private float _fallSpeed;                  // metres per second, while falling to a floor below
-    private const float StepDown = 2f;         // a drop followed at once (a step or a stair)
-    private const float Gravity = 9.8f;
-    private const float MaxFallSpeed = 30f;
-    private const float MaxFallSearch = 300f;  // how far below a floor is looked for
+    // A model surface drawn with an alpha cut-out (foliage): its collider's mesh uses alpha scissor.
+    private static bool CutOut(GodotObject collider) =>
+        collider is Node n && n.GetParent() is MeshInstance3D mi
+        && Enumerable.Range(0, mi.GetSurfaceOverrideMaterialCount()).Any(i =>
+            (mi.GetActiveMaterial(i) as BaseMaterial3D)?.Transparency is BaseMaterial3D.TransparencyEnum.AlphaScissor
+                or BaseMaterial3D.TransparencyEnum.Alpha);
+
+    // The terrain surface above a point (the character got under the ground), or null.
+    private float? TerrainAbove(Vector3 at)
+    {
+        var ray = PhysicsRayQueryParameters3D.Create(new Vector3(at.X, 400f, at.Z), at);
+        ray.CollisionMask = TerrainLayer;
+        Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
+        return hit.Count > 0 ? hit["position"].AsVector3().Y : null;
+    }
+
+    private float _dropPending;               // --drop: metres to lift the character after spawning
+    private bool _airborne;
+    private bool _jumping;                    // airborne from a jump: 0xA9 state flag 0x08 (others see it)
+    private float _verticalSpeed;             // metres per second, up positive
+    private float _landingSpeed;              // a landing's impact speed (m/s), until it is reported
+    private const float StepUp = 1.5f;        // a rise walked up at once (a stair)
+    private const float StepDown = 2f;        // a drop walked down at once
+    private const float Gravity = 9.8f;       // ours; retail's value is unknown
+    private const float JumpSpeed = 4.5f;     // about 1 m high; retail's value is unknown
+    private const float MaxFallSpeed = 50f;
+    private const float MaxFallSearch = 600f; // how far below a floor is looked for
+    private const float MinFloorNormal = 0.6f;   // a surface up to ~53 degrees from flat is stood on
 
     private void SendMove(float speed)
     {
@@ -1491,8 +1539,13 @@ public partial class WorldView : Node3D
         // Reflect it locally at once so the overlay and keep-alive see the new position without
         // waiting for the async send; MoveToAsync sets the same values on the session.
         _world = _world with { Position = _world.Position with { X = rx, Y = ry, Z = rz, Heading = heading } };
+        // While airborne the vertical speed goes along; the landing update carries the impact speed and
+        // the landed bit, from which the server charges fall damage. Region units per second, falling negative.
+        bool landed = _landingSpeed > 0;
+        float vertical = (landed ? -_landingSpeed : _airborne ? _verticalSpeed : 0f) / RegionMetresPerUnit;
+        _landingSpeed = 0;
         if (_session is not null)
-            _ = _session.MoveToAsync(rx, ry, rz, heading, speed);
+            _ = _session.MoveToAsync(rx, ry, rz, heading, speed, vertical, landed, stateFlags: _jumping ? (byte)0x08 : (byte)0);
     }
 
     // The server moved us within the region (0x04). Take the position over at once — the next 0xA9

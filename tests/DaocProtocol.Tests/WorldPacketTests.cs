@@ -101,6 +101,18 @@ public class WorldPacketTests
     }
 
     [Fact]
+    public void ALandingUpdateCarriesTheImpactSpeedAndTheLandedBit()
+    {
+        // Falling 20 m at 9.8 m/s² lands at 19.8 m/s = 791 units/s; OpenDAoC charges fall damage when bit
+        // 15 of the falling-damage field (offset 28, big-endian) is set, from the vertical speed (offset 16).
+        byte[] landing = PositionUpdate.Payload(1, 2, 3, 7, 0, 26, 1024, verticalSpeed: -791f, landed: true);
+        Assert.Equal(-791f, BitConverter.ToSingle(landing, 16));
+        Assert.Equal(new byte[] { 0x80, 0x00 }, landing[28..30]);
+        // Otherwise the field stays 0, as the recorded client always sends it.
+        Assert.Equal(new byte[] { 0x00, 0x00 }, PositionUpdate.Payload(1, 2, 3, 7, 0, 26, 1024, verticalSpeed: -40f)[28..30]);
+    }
+
+    [Fact]
     public void CommandMatchesRecordedClient()
     {
         ClientPacket recorded = Client[15];

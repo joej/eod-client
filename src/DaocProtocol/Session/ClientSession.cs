@@ -339,7 +339,16 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// a zone lookup the caller does not do yet (see roadmap M4), so this keeps the current zone.
     /// </summary>
     public async Task MoveToAsync(float x, float y, float z, ushort heading, float speed = 0,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await MoveToAsync(x, y, z, heading, speed, verticalSpeed: 0, landed: false, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// As <see cref="MoveToAsync(float, float, float, ushort, float, CancellationToken)"/>, with the vertical
+    /// speed in region units per second (negative falling: OpenDAoC's FallSpeed) and, on the one update that
+    /// lands from a fall, <paramref name="landed"/>: the server then charges fall damage from that speed.
+    /// </summary>
+    public async Task MoveToAsync(float x, float y, float z, ushort heading, float speed, float verticalSpeed, bool landed,
+        CancellationToken cancellationToken = default, byte stateFlags = 0)
     {
         await _positionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -353,7 +362,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
             MoveSpeed = speed;
             PositionAndObjectId moved = world.Position with { X = x, Y = y, Z = z, Heading = heading };
             World = world with { Position = moved };
-            await SendPositionAsync(World, speed, cancellationToken).ConfigureAwait(false);
+            await SendPositionAsync(World, speed, cancellationToken, verticalSpeed, landed, stateFlags).ConfigureAwait(false);
         }
         finally
         {
@@ -362,11 +371,13 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     }
 
     /// <summary>Sends one 0xA9 for the given position at the given speed. Shared by the keep-alive and <see cref="MoveToAsync"/>.</summary>
-    private Task SendPositionAsync(WorldPosition world, float speed, CancellationToken cancellationToken)
+    private Task SendPositionAsync(WorldPosition world, float speed, CancellationToken cancellationToken,
+        float verticalSpeed = 0, bool landed = false, byte stateFlags = 0)
     {
         PositionAndObjectId p = world.Position;
         return connection.SendAsync(PositionUpdate.Code,
-            PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, world.Zone.Id, p.Heading, speed),
+            PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, world.Zone.Id, p.Heading, speed,
+                verticalSpeed, stateFlags, landed: landed),
             cancellationToken);
     }
 
