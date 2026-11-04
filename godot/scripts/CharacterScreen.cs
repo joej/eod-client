@@ -28,7 +28,6 @@ namespace EodClient;
 public partial class CharacterScreen : Control
 {
     private OptionButton _profile = null!;
-    private LineEdit _profileName = null!;
     private CheckBox _remember = null!;
     private OptionButton _autoStart = null!;
     private List<LoginProfile> _profiles = [];
@@ -66,7 +65,8 @@ public partial class CharacterScreen : Control
             ClientSettings.WindowSize = ClientSettings.ParseSize(userArgs[w + 1]);
             ClientSettings.Fullscreen = false;
         }
-        ClientSettings.ApplyWindowMode();
+        // A login-sized window; the world gets the player's window mode (ClientSettings) when entered.
+        ClientSettings.ApplyLoginWindow();
         BuildUi();
         LoginProfiles.MigrateOldLogin();
         RefreshProfiles(LoginProfiles.Last()?.Name);
@@ -101,22 +101,23 @@ public partial class CharacterScreen : Control
     private LoginProfile? Current() =>
         _profile.Selected >= 0 && _profile.Selected < _profiles.Count ? _profiles[_profile.Selected] : null;
 
-    // Fills the profile list and selects <paramref name="select"/> (or "New profile").
-    private void RefreshProfiles(string? select)
+    // Fills the login list and selects <paramref name="select"/> (or "New"); with <paramref name="show"/>
+    // the form shows it too (not after a save: the form already holds it, password included).
+    private void RefreshProfiles(string? select, bool show = true)
     {
         _profiles = LoginProfiles.All();
         _profile.Clear();
         foreach (LoginProfile p in _profiles)
             _profile.AddItem(p.Name);
-        _profile.AddItem("New profile…");
+        _profile.AddItem("New server or account…");
         int index = _profiles.FindIndex(p => p.Name == select);
         _profile.Select(index >= 0 ? index : _profiles.Count);
-        ShowProfile(index >= 0 ? _profiles[index] : null);
+        if (show)
+            ShowProfile(index >= 0 ? _profiles[index] : null);
     }
 
     private void ShowProfile(LoginProfile? p)
     {
-        _profileName.Text = p?.Name ?? "";
         _host.Text = p?.Host ?? "";
         _port.Value = p?.Port ?? 10300;
         _account.Text = p?.Account ?? "";
@@ -128,20 +129,18 @@ public partial class CharacterScreen : Control
             _realm.Select(_realm.GetItemIndex((int)p.Realm));
     }
 
-    // The form as a profile (keeping the saved realm and last character), saved as the last one used.
+    // The form as a saved login, named by its account and server: changing either makes another
+    // entry (the old one stays until deleted). Keeps that login's realm and last character.
     private LoginProfile SaveFormProfile()
     {
         string host = _host.Text.Trim(), account = _account.Text.Trim();
-        string name = _profileName.Text.Trim();
-        if (name.Length == 0)
-            name = $"{account}@{host}";
-        LoginProfile? old = Current();
-        var profile = new LoginProfile(name, host, (int)_port.Value, account, (AutoStart)_autoStart.Selected,
+        int port = (int)_port.Value;
+        string name = LoginProfile.NameFor(account, host, port);
+        LoginProfile? old = _profiles.FirstOrDefault(p => p.Name == name);
+        var profile = new LoginProfile(name, host, port, account, (AutoStart)_autoStart.Selected,
             old?.Realm ?? Realm.None, old?.Character ?? "");
-        if (old is not null && old.Name != name)
-            LoginProfiles.Delete(old.Name);
         LoginProfiles.Save(profile);
-        RefreshProfiles(name);
+        RefreshProfiles(name, show: false);
         return profile;
     }
 
@@ -152,13 +151,13 @@ public partial class CharacterScreen : Control
         LoginProfiles.Delete(p.Name);
         Keychain.Delete(p.KeychainAccount);
         RefreshProfiles(null);
-        _status.Text = $"Deleted profile {p.Name}.";
+        _status.Text = $"Removed {p.Name}.";
     }
 
     // Startup: log in with the last profile, then stop at the list or enter its last character.
     private async Task StartProfile(LoginProfile p)
     {
-        _status.Text = $"Logging in as {p.Account} on {p.Host} (profile {p.Name})…";
+        _status.Text = $"Logging in as {p.Account} on {p.Host}…";
         GD.Print(_status.Text);
         bool listed = await ListCharacters(p.Host, p.Port, p.Account, _password.Text);
         GD.Print(_status.Text);
@@ -194,6 +193,7 @@ public partial class CharacterScreen : Control
         _world.QuitPressed += () => GetTree().Quit();
         GetTree().Root.CallDeferred(Node.MethodName.AddChild, _world);
         Visible = false;
+        ClientSettings.ApplyWindowMode();
     }
 
     private static int? Option(string[] args, string name)
@@ -280,12 +280,11 @@ public partial class CharacterScreen : Control
         _profile = new OptionButton { CustomMinimumSize = new Vector2(320, 0) };
         _profile.ItemSelected += index => ShowProfile(index < _profiles.Count ? _profiles[(int)index] : null);
         profileRow.AddChild(_profile);
-        var delete = new Button { Text = "Delete" };
+        var delete = new Button { Text = "Remove" };
         delete.Pressed += DeleteProfile;
         profileRow.AddChild(delete);
-        form.AddChild(new Label { Text = "Profile" });
+        form.AddChild(new Label { Text = "Login" });
         form.AddChild(profileRow);
-        _profileName = Field(form, "Profile name", new LineEdit { PlaceholderText = "account@server if empty" });
         _host = Field(form, "Server", new LineEdit { PlaceholderText = "host or IP" });
         _port = Field(form, "Port", new SpinBox { MinValue = 1, MaxValue = 65535, Value = 10300 });
         _account = Field(form, "Account", new LineEdit());
@@ -435,6 +434,9 @@ public partial class CharacterScreen : Control
             LoginResult login = await session.LoginAsync(account, password);
             if (!login.Success)
             {
+                // The server hangs up after a refusal; drop the connection first, or _Process sees
+                // it close and replaces this message with "Disconnected".
+                await Disconnect();
                 _status.Text = $"Login refused: {login.Error}";
                 return false;
             }
@@ -460,6 +462,7 @@ public partial class CharacterScreen : Control
         catch (Exception e) when (e is IOException or TimeoutException or System.Net.Sockets.SocketException
                                       or InvalidDataException or NotSupportedException)
         {
+            await Disconnect();
             _status.Text = $"Failed: {e.Message}";
             return false;
         }
@@ -493,6 +496,7 @@ public partial class CharacterScreen : Control
 
             ShowWorld(world);
             Visible = false;
+            ClientSettings.ApplyWindowMode();
             return true;
         }
         catch (Exception e) when (e is IOException or TimeoutException or InvalidDataException or ArgumentException)
@@ -641,6 +645,7 @@ public partial class CharacterScreen : Control
             _world = null;
             world.QueueFree();
             Visible = true;
+            ClientSettings.ApplyLoginWindow();
             _enter.Disabled = _session?.State != SessionState.CharacterScreen;
         }
     }
@@ -652,6 +657,7 @@ public partial class CharacterScreen : Control
         _characters.Clear();
         _listed.Clear();
         Visible = true;
+        ClientSettings.ApplyLoginWindow();
         _enter.Disabled = true;
         _connect.Disabled = false;
         _status.Text = message;

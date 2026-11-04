@@ -25,6 +25,10 @@ public sealed record LoginProfile(
     string Name, string Host, int Port, string Account, AutoStart AutoStart = AutoStart.Off,
     Realm Realm = Realm.None, string Character = "")
 {
+    /// <summary>A login's name, shown in the list: "account@host", plus ":port" when not 10300.</summary>
+    public static string NameFor(string account, string host, int port) =>
+        port == 10300 ? $"{account}@{host}" : $"{account}@{host}:{port}";
+
     /// <summary>The Keychain entry this profile's password is stored under.</summary>
     public string KeychainAccount => $"{Account}@{Host}:{Port}";
 }
@@ -95,7 +99,7 @@ public static class LoginProfiles
         if (host.Length == 0 || account.Length == 0 || All().Count > 0)
             return;
         int port = cfg.GetValue("login", "port", 10300).AsInt32();
-        Save(new LoginProfile($"{account}@{host}", host, port, account));
+        Save(new LoginProfile(LoginProfile.NameFor(account, host, port), host, port, account));
     }
 
     private static ConfigFile Load()

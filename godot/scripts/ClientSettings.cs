@@ -81,6 +81,18 @@ public static class ClientSettings
         }
     }
 
+    /// <summary>The login and character screen: a form-sized window, centred, whatever the world uses.</summary>
+    public static void ApplyLoginWindow()
+    {
+        if (DisplayServer.GetName() == "headless")
+            return;
+        DisplayServer.WindowSetMode(DisplayServer.WindowMode.Windowed);
+        Rect2I usable = DisplayServer.ScreenGetUsableRect(DisplayServer.WindowGetCurrentScreen());
+        var size = new Vector2I(System.Math.Min(900, usable.Size.X), System.Math.Min(700, usable.Size.Y));
+        DisplayServer.WindowSetSize(size);
+        DisplayServer.WindowSetPosition(usable.Position + (usable.Size - size) / 2);
+    }
+
     private static void Save(string key, Variant value)
     {
         ConfigFile cfg = Load();
