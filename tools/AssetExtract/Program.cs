@@ -553,6 +553,58 @@ internal static class Cli
         return 0;
     }
 
+    // A Catacombs figure's parts, labelled for the client: each slot's part (head, body, ...) except the
+    // hair, then every hair style of the race as hair<n> (from 0), the row's own style wearing its hair skin
+    // and the others their first colour; the client shows one and re-dresses it from fig3_<figure>.json.
+    private static List<(NifModel Part, string? Skin, string Label)> CataParts(DaocAssets.Figures.CataSpec spec,
+        DaocAssets.Figures.CataLooks? looks, Func<DaocAssets.Figures.CataPart, NifModel?> load, Action<string> missing)
+    {
+        var list = new List<(NifModel, string?, string)>();
+        foreach (DaocAssets.Figures.CataPart part in spec.Parts.Where(p => p.Slot != 8))
+        {
+            if (load(part) is { } model) list.Add((model, part.Skin, DaocAssets.Figures.CataSlots.Names[part.Slot]));
+            else missing(part.Nif);
+        }
+        string? rowHair = spec.Parts.FirstOrDefault(p => p.Slot == 8)?.Skin;
+        for (int s = 0; s < spec.HairStyles.Count; s++)
+        {
+            if (spec.HairStyles[s] is not { } style) continue;
+            if (load(style) is not { } model) { missing(style.Nif); continue; }
+            string? skin = s == spec.DefaultHair && rowHair is not null ? rowHair
+                : looks is not null && s < looks.HairColours.Count && looks.HairColours[s].Count > 0 ? looks.HairColours[s][0].Texture : null;
+            list.Add((model, skin, $"hair{s}"));
+        }
+        return list;
+    }
+
+    // models/fig3_<figure>.json: a Catacombs race's appearance options for the client (faces, eye colours,
+    // skin tints, and per hair style its node and colours), indexed as the appearance bytes count; every
+    // texture it names is gathered into the library.
+    private static void WriteLooks(DaocAssets.Figures.CataSpec spec, DaocAssets.Figures.CataLooks looks, string modelsDir,
+        AssetLibrary library, HashSet<string> gathered)
+    {
+        static double[] Rgb(System.Numerics.Vector3 v) => [Math.Round(v.X, 3), Math.Round(v.Y, 3), Math.Round(v.Z, 3)];
+        int styles = Math.Max(spec.HairStyles.Count, looks.HairColours.Count);
+        var json = new
+        {
+            faces = looks.Faces,
+            eyes = looks.Eyes,
+            skins = looks.SkinTints.Select(Rgb),
+            hair = Enumerable.Range(0, styles).Select(s => new
+            {
+                node = s < spec.HairStyles.Count && spec.HairStyles[s] is not null ? $"hair{s}" : null,
+                colours = s < looks.HairColours.Count
+                    ? looks.HairColours[s].Select(c => new { tex = c.Texture, tint = Rgb(c.Tint) }).ToArray() : [],
+            }),
+            default_hair = spec.DefaultHair,
+        };
+        Directory.CreateDirectory(modelsDir);
+        File.WriteAllText(Path.Combine(modelsDir, $"fig3_{spec.Figure}.json"), System.Text.Json.JsonSerializer.Serialize(json));
+        foreach (string t in looks.Faces.Concat(looks.Eyes).Concat(looks.HairColours.SelectMany(h => h.Select(c => c.Texture))).OfType<string>())
+            if (gathered.Add(t) && library.GatherTexture(t) is null)
+                Console.Error.WriteLine($"  look texture {t}: not found");
+    }
+
     // A server model id's Catacombs figure (monsters.csv "Cata Nif"): its skeleton from
     // figures/fig3/sfigNNN.mpk and one part per slot from figures/fig3/figNNN.mpk, bound by bone name,
     // each wearing its skin; written to the library as models/cata<id>.glb with the figure's clips.
@@ -585,19 +637,19 @@ internal static class Cli
         IReadOnlyList<NifJoint>? skeleton = skelBytes is null ? null : NifFile.ReadSkeleton(skelBytes);
         if (skeleton is null) { Console.Error.WriteLine($"cata: skeleton {spec.Skeleton} not readable in sfig{spec.SkeletonArchive:000}.mpk"); return 3; }
 
-        var parts = new List<(NifModel, string?)>();
-        foreach (DaocAssets.Figures.CataPart part in spec.Parts)
-        {
-            byte[]? bytes = Member($"fig{part.Archive:000}.mpk", part.Nif);
-            if (bytes is null) { Console.Error.WriteLine($"  part {part.Nif}: not in fig{part.Archive:000}.mpk"); continue; }
-            parts.Add((NifFile.Read(bytes), part.Skin));
-        }
+        var tables = DaocAssets.Figures.MonsterTables.Read(gamedata);
+        DaocAssets.Figures.CataLooks? looks = tables.Looks(spec.Figure);
+        var parts = CataParts(spec, looks,
+            p => Member($"fig{p.Archive:000}.mpk", p.Nif) is byte[] b ? NifFile.Read(b) : null,
+            nif => Console.Error.WriteLine($"  part {nif}: not in its archive"));
         NifModel figure = DaocAssets.Figures.CatacombsFigure.Assemble(skeleton, parts);
 
         var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir);
-        foreach (string skin in spec.Parts.Select(p => p.Skin).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (string skin in parts.Select(p => p.Skin).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
             if (library.GatherTexture(skin) is null)
                 Console.Error.WriteLine($"  skin {skin}: not found");
+        if (looks is not null)
+            WriteLooks(spec, looks, Path.Combine(libDir, "models"), library, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         var clips = new Dictionary<string, KfaClip>();
         string animNode = Path.Combine(install, "figures", "animnode.dat");
         if (File.Exists(animNode))
@@ -617,6 +669,7 @@ internal static class Cli
         int unbound = figure.Meshes.Sum(m => m.Skin!.Count(w => w.Length == 1 && w[0].Weight == 1f && m.SkinJoints![w[0].Bone].Joint == 0));
         Console.WriteLine($"cata {modelId} ({spec.Name}): {spec.Skeleton} ({skeleton.Count} bones), " +
             $"parts {string.Join(" ", spec.Parts.Select(p => $"{p.Slot}:{Path.GetFileNameWithoutExtension(p.Nif)}={p.Skin}"))}, " +
+            $"fig3 {spec.Figure}, {spec.HairStyles.Count(h => h is not null)} hair styles (row's {spec.DefaultHair}), " +
             $"{figure.Meshes.Count} meshes, clips {string.Join(" ", clips.Keys)} -> {outPath}");
         return 0;
     }
@@ -710,7 +763,8 @@ internal static class Cli
         }
         var skeletons = new Dictionary<string, IReadOnlyList<NifJoint>?>(StringComparer.OrdinalIgnoreCase);
         var partCache = new Dictionary<string, NifModel?>(StringComparer.OrdinalIgnoreCase);
-        var cataTable = new System.Text.StringBuilder("id,scale,figure\n");
+        var cataTable = new System.Text.StringBuilder("id,scale,figure,fig3\n");
+        var looksWritten = new HashSet<int>();
         int cataMade = 0, cataFailed = 0, cataMissingParts = 0;
         try
         {
@@ -726,8 +780,8 @@ internal static class Cli
                     skeletons[skelKey] = skeleton;
                 }
                 if (skeleton is null) { cataFailed++; Console.Error.WriteLine($"  cata {id} ({spec.Name}): no skeleton {skelKey}"); continue; }
-                var parts = new List<(NifModel, string?)>();
-                foreach (DaocAssets.Figures.CataPart part in spec.Parts)
+                DaocAssets.Figures.CataLooks? looks = tables.Looks(spec.Figure);
+                var parts = CataParts(spec, looks, part =>
                 {
                     string key = $"fig{part.Archive:000}.mpk/{part.Nif}";
                     if (!partCache.TryGetValue(key, out NifModel? model))
@@ -736,9 +790,8 @@ internal static class Cli
                         catch (NifFormatException) { model = null; }
                         partCache[key] = model;
                     }
-                    if (model is null) { cataMissingParts++; continue; }
-                    parts.Add((model, part.Skin));
-                }
+                    return model;
+                }, _ => cataMissingParts++);
                 var clips = new Dictionary<string, KfaClip>();
                 foreach ((string clip, string kfa) in spec.Clips)
                 {
@@ -756,9 +809,11 @@ internal static class Cli
                     string outPath = Path.Combine(models, $"cata{id}.glb");
                     GltfExporter.SaveGlb(figure, outPath + ".tmp", clips);
                     File.Move(outPath + ".tmp", outPath, overwrite: true);
-                    foreach (string skin in spec.Parts.Select(p => p.Skin).OfType<string>())
+                    foreach (string skin in parts.Select(p => p.Skin).OfType<string>())
                         if (skins.Add(skin)) library.GatherTexture(skin);
-                    cataTable.Append(System.FormattableString.Invariant($"{id},{spec.Scale},{Path.GetFileNameWithoutExtension(spec.Skeleton)}\n"));
+                    if (looks is not null && looksWritten.Add(spec.Figure))
+                        WriteLooks(spec, looks, models, library, skins);
+                    cataTable.Append(System.FormattableString.Invariant($"{id},{spec.Scale},{Path.GetFileNameWithoutExtension(spec.Skeleton)},{spec.Figure}\n"));
                     cataMade++;
                 }
                 catch (Exception e) when (e is NifFormatException or InvalidOperationException or ArgumentException)

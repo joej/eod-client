@@ -159,6 +159,10 @@ public partial class WorldView : Node3D
     /// Briton male): the body is drawn as that figure when one was converted. 0 = none.</summary>
     public ushort PlayerModel { get; set; }
 
+    /// <summary>The player's face and hair (the character list's appearance bytes), applied to a
+    /// Catacombs figure.</summary>
+    public CharacterLook PlayerLook { get; set; }
+
     private AnimationPlayer? _bodyAnim;
     private string _bodyClip = "";
 
@@ -817,13 +821,14 @@ public partial class WorldView : Node3D
             return false;
         var inst = (Node3D)figure.Template.Duplicate();
         inst.Scale = new Vector3(figure.Scale, figure.Scale, figure.Scale);
+        string look = ApplyLook(inst, PlayerModel, PlayerLook);
         // A figure faces +Z (seen live: the chase camera, behind the body, met the face); the body
         // walks along -Z, so turn it half round.
         inst.Rotation = new Vector3(0, Mathf.Pi, 0);
         body.AddChild(inst);
         _bodyAnim = inst.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() as AnimationPlayer;
         PlayBodyClip("idle");
-        GD.Print($"[world] character drawn as figure {figure.File}");
+        GD.Print($"[world] character drawn as figure {figure.File}{look}");
         return true;
     }
 
@@ -1560,7 +1565,7 @@ public partial class WorldView : Node3D
         Vector3 pos = ToGodot(p.X, p.Y, p.Z);
         // Drawn like your own character (its model id's Catacombs figure); without one, a capsule in a
         // brighter tint so other players read as players, not mobs.
-        SpawnEntity(p.ObjectId, pos, YawFromHeading(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f), p.Model, player: true);
+        SpawnEntity(p.ObjectId, pos, YawFromHeading(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f), p.Model, look: p.Look);
     }
 
     private void OnObjectRemoved(ushort objectId)
@@ -1661,8 +1666,9 @@ public partial class WorldView : Node3D
         _ => new Color(0.55f, 0.55f, 0.6f), // neutral
     };
 
+    // look: a player (drawn with its Catacombs figure, dressed in its face and hair); null for an NPC.
     private void SpawnEntity(ushort objectId, Vector3 pos, float yaw, Color color, ushort model = 0, byte size = 50,
-        bool player = false)
+        CharacterLook? look = null)
     {
         // Free any node we already have for this id before replacing it. This happens normally: an
         // entity first seen via a bare 0xA1 update spawns grey (OnObjectMoved), then its 0xDA/0x4B
@@ -1674,7 +1680,7 @@ public partial class WorldView : Node3D
 
         var node = new Node3D { Position = pos, Rotation = new Vector3(0, yaw, 0) };
         AnimationPlayer? anim = null;
-        if (model != 0 && ((player ? Figure(model, catacombs: true) : null) ?? Figure(model)) is { } figure)
+        if (model != 0 && ((look is not null ? Figure(model, catacombs: true) : null) ?? Figure(model)) is { } figure)
         {
             // The server's model id is the client's monsters.csv row; mpk figures converted it to
             // models/model<id>.glb. Size 50 is normal; the table's own scale applies on top.
@@ -1682,6 +1688,8 @@ public partial class WorldView : Node3D
             float scale = figure.Scale * Mathf.Max(size, 1) / 50f;
             inst.Scale = new Vector3(scale, scale, scale);
             inst.Rotation = new Vector3(0, Mathf.Pi, 0);   // figures face +Z; entities face -Z
+            if (look is { } l)
+                ApplyLook(inst, model, l);
             node.AddChild(inst);
             anim = inst.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() as AnimationPlayer;
         }
@@ -1740,6 +1748,37 @@ public partial class WorldView : Node3D
         }
         _figures[(model, catacombs)] = result;
         return result;
+    }
+
+    // ----- Catacombs appearance -----
+
+    // fig3 figure number per Catacombs model id (catacombs.csv column 4), read once.
+    private Dictionary<int, int>? _cataFig3;
+
+    // Dresses a player's Catacombs figure in its appearance (FigureLook); a description for the log.
+    private string ApplyLook(Node3D figure, ushort model, CharacterLook look)
+    {
+        string lib = _libraryPath ?? "";
+        _cataFig3 ??= ReadCataFigures(lib.PathJoin("models").PathJoin("catacombs.csv"));
+        return _cataFig3.TryGetValue(model, out int fig3)
+            ? FigureLook.Apply(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), look,
+                lib.PathJoin("overrides"), lib.PathJoin("textures"), lib)
+            : "";
+    }
+
+    // models/catacombs.csv: "id,scale,figure,fig3"; fig3 is the race's options file number.
+    internal static Dictionary<int, int> ReadCataFigures(string path)
+    {
+        var figures = new Dictionary<int, int>();
+        if (!Godot.FileAccess.FileExists(path))
+            return figures;
+        foreach (string line in Godot.FileAccess.GetFileAsString(path).Split('\n'))
+        {
+            string[] c = line.Split(',');
+            if (c.Length >= 4 && int.TryParse(c[0], out int id) && int.TryParse(c[3], out int fig3))
+                figures[id] = fig3;
+        }
+        return figures;
     }
 
     // models/figures.csv and catacombs.csv (written by mpk figures): "id,scale,figure" per converted model id.

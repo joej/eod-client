@@ -110,13 +110,16 @@ public sealed record NpcCreate(
 
 /// <summary>
 /// 0x4B PlayerCreate (PacketLib1124, PlayerCreate172): another player enters view. X/Y/Z are
-/// region-global LITTLE-endian float32 (like 0x20/0xA9). We read the fixed head and the name; the
-/// face attributes, equipment strings and horse block are skipped — a capsule stands in for now.
+/// region-global LITTLE-endian float32 (like 0x20/0xA9). We read the fixed head, the appearance and
+/// the name; the guild, title strings and horse block are skipped.
 /// </summary>
 public sealed record PlayerCreate(
     float X, float Y, float Z, ushort SessionId, ushort ObjectId, ushort Heading,
     ushort Model, byte Level, byte Flags, string Name)
 {
+    /// <summary>The player's face and hair (Catacombs appearance).</summary>
+    public CharacterLook Look { get; init; }
+
     public const byte Code = 0x4B;
 
     public ushort HeadingOnly => (ushort)(Heading & 0x0FFF);
@@ -131,10 +134,15 @@ public sealed record PlayerCreate(
         ushort model = r.U16BE();
         byte level = r.U8();
         byte flags = r.U8();
-        r.Skip(7);              // face attributes (eye/lip/mood/hair/face)
+        // Appearance, in this packet's order: eye size, lip size, mood, eye colour, hair colour, face, hair style.
+        byte eyeSize = r.U8(), lipSize = r.U8(), mood = r.U8(), eyeColor = r.U8(), hairColor = r.U8();
+        byte faceType = r.U8(), hairStyle = r.U8();
         r.Skip(3);              // "new in 1.74" + 2 unknown
         string name = r.StringU8();
-        return new PlayerCreate(x, y, z, sessionId, objectId, heading, model, level, flags, name);
+        return new PlayerCreate(x, y, z, sessionId, objectId, heading, model, level, flags, name)
+        {
+            Look = new CharacterLook(eyeSize, lipSize, eyeColor, hairColor, faceType, hairStyle, mood),
+        };
     }
 }
 

@@ -151,7 +151,9 @@ header only. An empty slot is a single `00`; an occupied slot:
 u8   level (non-zero)
 str  name                            int-length string
 u32  0x18, u8 1
-10   face and hair, armour extensions, hood, customisation step, mood
+6    appearance: eye size, lip size, eye colour, hair colour, face, hair style (see below)
+2    armour extensions (boots << 4 | gloves; torso << 4 | hood up)
+u8   customisation step (1 generated, 2 finished by the player, 3 may customise)   u8 mood
 13   zero
 str  location, class name, race name int-length strings
 u16 LE model   u8 region   u8 expansion zone flag
@@ -164,6 +166,15 @@ u8   race/gender: race = (b & 0x0F) | ((b & 0x40) >> 2); female = b & 0x80
 
 *Verified:* the recorded overview decodes to one level 50 Highlander Paladin; live accounts with
 0, 1 and 2 characters.
+
+**Appearance bytes.** Stored by the server as the client sent them at creation and sent back here and
+in 0x4B PlayerCreate (whose order is eye size, lip size, **mood**, eye colour, hair colour, face, hair
+style). Each byte holds two settings, one per half-byte: eye size = eyes (high) and nose (low); lip size
+= lips (high) and jaw (low); eye colour = eye colour (high) and skin tone (low); hair colour = colour
+(low); face and hair style in the high half. Styles and colours count from 0; the face sliders run 0–8
+with 4 neutral. *Seen:* characters made with the retail client store `44 44 00 00 00 10` and
+`44 44 20 01 00 20` (all sliders neutral). The meaning of each index is our reading, not yet confirmed
+against the retail creation screen.
 
 **0xFF CharacterCreateRequest** (C→S, `CharacterCreateRequestHandler.CreationCharacterData`,
 1.125+ branch): one character per packet.

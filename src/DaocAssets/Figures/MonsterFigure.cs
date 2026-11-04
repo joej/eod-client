@@ -13,6 +13,7 @@
 // "Multi" columns are the likely source): variant 1 is used. Owner-run: reads the owner's install.
 
 using System.Globalization;
+using System.Numerics;
 using DaocAssets.Mpk;
 using DaocAssets.Nif;
 
@@ -39,6 +40,7 @@ public sealed class MonsterTables
     private readonly Dictionary<(int, int), string[]> _fig3map = [];
     private readonly Dictionary<int, string[]> _fig3parts = [];
     private readonly Dictionary<(int, int), string[]> _hairColours = [];
+    private readonly Dictionary<int, string[]> _faceMap = [], _eyeMap = [], _skinMap = [], _tints = [];
 
     // anims.csv columns of the clips the client view uses (ID, name, Walk, Back, Run, ..., Idle at 10).
     private static readonly (string Clip, int Column)[] ClipColumns = [("walk", 2), ("back", 3), ("run", 4), ("idle", 10)];
@@ -55,7 +57,8 @@ public sealed class MonsterTables
             ? System.Text.Encoding.Latin1.GetString(mpk.Extract(e))
             : throw new MpkFormatException($"gamedata.mpk has no {name}.");
         return Parse(Text("monsters.csv"), Text("monnifs.csv"), Text("skins.csv"), Text("anims.csv"), Text("animnifs.csv"))
-            .WithFig3(Text("fig3map.csv"), Text("fig3parts.csv"), Text("fig3haircolormap.csv"));
+            .WithFig3(Text("fig3map.csv"), Text("fig3parts.csv"), Text("fig3haircolormap.csv"))
+            .WithFig3Looks(Text("fig3facemap.csv"), Text("fig3eyecolormap.csv"), Text("fig3skincolormap.csv"), Text("fig3tints.csv"));
     }
 
     /// <summary>Adds the Catacombs tables: <c>fig3map.csv</c> ((figure, slot) -> part id per variant)
@@ -78,6 +81,42 @@ public sealed class MonsterTables
         foreach ((int id, string[] row) in ById(fig3partsCsv))
             _fig3parts.TryAdd(id, row);
         return this;
+    }
+
+    /// <summary>Adds the appearance tables: <c>fig3facemap</c>, <c>fig3eyecolormap</c> (figure -> a skin
+    /// id per option), <c>fig3skincolormap</c> (figure -> a tint id per option) and <c>fig3tints</c>
+    /// (tint id -> red, green, blue).</summary>
+    public MonsterTables WithFig3Looks(string faceCsv, string eyeCsv, string skinCsv, string tintsCsv)
+    {
+        foreach ((Dictionary<int, string[]> d, string csv) in new[] { (_faceMap, faceCsv), (_eyeMap, eyeCsv), (_skinMap, skinCsv), (_tints, tintsCsv) })
+            foreach ((int id, string[] row) in ById(csv))
+                d.TryAdd(id, row.Select(x => x.Trim()).ToArray());
+        return this;
+    }
+
+    /// <summary>The appearance options of fig3 figure <paramref name="figure"/> (a race and sex), or null
+    /// if the tables have no face row for it. Needs <see cref="WithFig3Looks"/>.</summary>
+    public CataLooks? Looks(int figure)
+    {
+        if (!_faceMap.TryGetValue(figure, out string[]? faces))
+            return null;
+        string? Skin(string id) => int.TryParse(id, out int i) && _skins.TryGetValue(i, out string? f) ? f : null;
+        Vector3 Tint(string id) => int.TryParse(id, out int i) && _tints.TryGetValue(i, out string[]? t) && t.Length > 4
+            && float.TryParse(t[2], CultureInfo.InvariantCulture, out float r) && float.TryParse(t[3], CultureInfo.InvariantCulture, out float g)
+            && float.TryParse(t[4], CultureInfo.InvariantCulture, out float b)
+            ? new Vector3(r, g, b) / 255f : Vector3.One;
+        static IEnumerable<string> Options(string[]? row) =>
+            (row ?? []).Skip(2).Reverse().SkipWhile(x => x.Length == 0).Reverse();
+        var hair = new List<IReadOnlyList<(string?, Vector3)>>();
+        for (int style = 1; _hairColours.TryGetValue((figure, style), out string[]? h); style++)
+        {
+            var colours = new List<(string?, Vector3)>();
+            for (int c = 0; c + 1 < h.Length && h[c].Length > 0; c += 3)
+                colours.Add((Skin(h[c]), Tint(h[c + 1])));
+            hair.Add(colours);
+        }
+        return new CataLooks(Options(faces).Select(Skin).ToList(), Options(_eyeMap.GetValueOrDefault(figure)).Select(Skin).ToList(),
+            Options(_skinMap.GetValueOrDefault(figure)).Select(Tint).ToList(), hair);
     }
 
     /// <summary>The Catacombs version of server model id <paramref name="modelId"/> (monsters.csv "Cata

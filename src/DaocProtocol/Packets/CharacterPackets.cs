@@ -60,7 +60,13 @@ public static class RealmReply
 /// <param name="Slot">0–9 within the realm's page.</param>
 public sealed record CharacterSummary(
     int Slot, byte Level, string Name, string Location, string ClassName, string RaceName,
-    ushort Model, byte Region, byte ClassId, Realm Realm, byte Race, bool Female);
+    ushort Model, byte Region, byte ClassId, Realm Realm, byte Race, bool Female)
+{
+    /// <summary>The character's face and hair (Catacombs appearance).</summary>
+    public CharacterLook Look { get; init; }
+    /// <summary>1 = generated, 2 = finished by the player, 3 = the player may customise it.</summary>
+    public byte CustomisationStep { get; init; }
+}
 
 /// <summary>0xFC (server → client): the characters on one realm's page, 1.126+ layout.</summary>
 /// <param name="Flags">Bit 0: characters may be created in all realms (realm switcher shown).</param>
@@ -100,7 +106,12 @@ public sealed record CharacterOverview(uint Flags, IReadOnlyList<CharacterSummar
     {
         string name = reader.StringIntLE();
         reader.Skip(4 + 1);  // u32 0x18, u8 1
-        reader.Skip(10);     // face and hair customisation, armour extensions, hood, customisation step, mood
+        // Appearance (PacketLib1126): eye size, lip size, eye colour, hair colour, face, hair style, then
+        // boots/gloves extensions, torso extension and hood, customisation step, mood.
+        byte eyeSize = reader.U8(), lipSize = reader.U8(), eyeColor = reader.U8(), hairColor = reader.U8();
+        byte faceType = reader.U8(), hairStyle = reader.U8();
+        reader.Skip(2);
+        byte step = reader.U8(), mood = reader.U8();
         reader.Skip(13);     // zero fill
         string location = reader.StringIntLE();
         string className = reader.StringIntLE();
@@ -120,7 +131,11 @@ public sealed record CharacterOverview(uint Flags, IReadOnlyList<CharacterSummar
         bool female = (raceGender & 0x80) != 0;
         reader.Skip(2);      // active weapon slots
         reader.Skip(3);      // SI flag, constitution, unknown
-        return new CharacterSummary(slot, level, name, location, className, raceName, model, region, classId, realm, race, female);
+        return new CharacterSummary(slot, level, name, location, className, raceName, model, region, classId, realm, race, female)
+        {
+            Look = new CharacterLook(eyeSize, lipSize, eyeColor, hairColor, faceType, hairStyle, mood),
+            CustomisationStep = step,
+        };
     }
 }
 

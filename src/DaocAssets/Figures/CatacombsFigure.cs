@@ -28,12 +28,35 @@ namespace DaocAssets.Figures;
 /// and the skin it wears.</summary>
 public sealed record CataPart(int Slot, int Archive, string Nif, string? Skin);
 
-/// <summary>A server model id's Catacombs figure: skeleton, parts, clips and scale.</summary>
+/// <summary>A server model id's Catacombs figure: skeleton, parts, clips and scale. <see cref="Figure"/> is
+/// its fig3 figure number (monnifs "Cata Index"), which keys the race's appearance options
+/// (<see cref="CataLooks"/>); <see cref="HairStyles"/> holds every hair style's part (null: bald), and
+/// <see cref="DefaultHair"/> the one the row wears.</summary>
 public sealed record CataSpec(int ModelId, string Name, int SkeletonArchive, string Skeleton,
     IReadOnlyList<CataPart> Parts, float Scale)
 {
+    public int Figure { get; init; }
+    public IReadOnlyList<CataPart?> HairStyles { get; init; } = [];
+    public int DefaultHair { get; init; }
+
     /// <summary>Clip name (idle, walk, run, back) -> .kfa file in anims/.</summary>
     public IReadOnlyDictionary<string, string> Clips { get; init; } = new Dictionary<string, string>();
+}
+
+/// <summary>
+/// A Catacombs race's appearance options, each list indexed as the character's appearance bytes count
+/// (from 0): face textures (fig3facemap), eye colour textures multiplied over the face
+/// (fig3eyecolormap), skin tints (fig3skincolormap -> fig3tints RGB, 0..1), and per hair style its
+/// colours, each a texture and a tint (fig3haircolormap).
+/// </summary>
+public sealed record CataLooks(
+    IReadOnlyList<string?> Faces, IReadOnlyList<string?> Eyes, IReadOnlyList<Vector3> SkinTints,
+    IReadOnlyList<IReadOnlyList<(string? Texture, Vector3 Tint)>> HairColours);
+
+/// <summary>Body slot names, as the mesh names a figure's parts carry (fig3map slot numbers 0..9).</summary>
+public static class CataSlots
+{
+    public static readonly string[] Names = ["head", "body", "lbody", "legs", "boots", "arms", "gloves", "cloak", "hair", "helm"];
 }
 
 public static partial class CatacombsFigure
@@ -79,10 +102,22 @@ public static partial class CatacombsFigure
             parts.Add(new CataPart(8, harch, hp[2].Trim() + ".nif", hairFile));
         if (parts.Count == 0)
             return null;
+        // Every hair style of the race (fig3map slot 8, variant n = style n - 1); an empty one is bald.
+        var hairStyles = new List<CataPart?>();
+        if (fig3map.TryGetValue((figure, 8), out string[]? styles))
+            foreach (string id in styles)
+                hairStyles.Add(int.TryParse(id, out int sid) && fig3parts.TryGetValue(sid, out string[]? sp) && sp.Length >= 6
+                    && int.TryParse(sp[5], out int sarch) ? new CataPart(8, sarch, sp[2].Trim() + ".nif", null) : null);
+        while (hairStyles.Count > 0 && hairStyles[^1] is null)
+            hairStyles.RemoveAt(hairStyles.Count - 1);
+        CataPart? rowHair = parts.FirstOrDefault(p => p.Slot == 8);
+        int defaultHair = rowHair is null ? 0
+            : Math.Max(0, hairStyles.FindIndex(h => h is not null && h.Nif.Equals(rowHair.Nif, StringComparison.OrdinalIgnoreCase)));
         float scale = monster.Length > 81 && float.TryParse(monster[81], NumberStyles.Float, CultureInfo.InvariantCulture, out float s) && s > 0
             ? s / 100f : 1f;
         return new CataSpec(int.Parse(monster[0], CultureInfo.InvariantCulture), n[1].Trim(), skeletonArchive,
-            n[2].Trim() + "_skeleton.nif", parts, scale) { Clips = clips(n) };
+            n[2].Trim() + "_skeleton.nif", parts, scale)
+        { Clips = clips(n), Figure = figure, HairStyles = hairStyles, DefaultHair = defaultHair };
     }
 
     // "CthBody01_ss_bri_M.dds" -> 1, "chnBody05_..." -> 5; 1 when the name carries none.
@@ -103,7 +138,12 @@ public static partial class CatacombsFigure
     /// A rigid shape follows the root bone. <paramref name="parts"/> pairs each part file with the skin
     /// it wears (null: its own texture).
     /// </summary>
-    public static NifModel Assemble(IReadOnlyList<NifJoint> skeleton, IEnumerable<(NifModel Part, string? Skin)> parts)
+    public static NifModel Assemble(IReadOnlyList<NifJoint> skeleton, IEnumerable<(NifModel Part, string? Skin)> parts) =>
+        Assemble(skeleton, parts.Select(p => (p.Part, p.Skin, "")));
+
+    /// <summary>As above; each part's meshes are named <c>Label</c>, <c>Label_1</c>, ... (empty: the
+    /// shape's own name), so the client can find a slot (<c>head</c>) or a hair style (<c>hair2</c>).</summary>
+    public static NifModel Assemble(IReadOnlyList<NifJoint> skeleton, IEnumerable<(NifModel Part, string? Skin, string Label)> parts)
     {
         var skel = new NifModel { Version = default, Meshes = [], Joints = skeleton };
         Matrix4x4[] world = skel.JointWorlds();
@@ -114,9 +154,10 @@ public static partial class CatacombsFigure
 
         var meshes = new List<NifMesh>();
         NifVersion version = default;
-        foreach ((NifModel part, string? skin) in parts)
+        foreach ((NifModel part, string? skin, string label) in parts)
         {
             version = part.Version;
+            int shapeNo = 0;
             Matrix4x4[] partWorld = part.JointWorlds();
             foreach (NifMesh mesh in part.Meshes)
             {
@@ -175,9 +216,12 @@ public static partial class CatacombsFigure
                     float sum = list.Sum(x => x.Item2);
                     weights[v] = sum > 0 ? list.Select(x => (x.Item1, x.Item2 / sum)).ToArray() : [(Slot(root), 1f)];
                 }
+                string shape = label.Length == 0 ? mesh.ShapeName : shapeNo == 0 ? label : $"{label}_{shapeNo}";
+                shapeNo++;
                 meshes.Add(mesh with
                 {
                     Name = $"{mesh.Name}_{meshes.Count}",
+                    ShapeName = shape,
                     Vertices = verts,
                     Normals = normals,
                     TextureFile = skin ?? mesh.TextureFile,

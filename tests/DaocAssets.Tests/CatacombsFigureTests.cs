@@ -31,12 +31,21 @@ public sealed class CatacombsFigureTests
             // monnifs: ..., Figure Version (12), Cata Index (13), Cata Anim Set (14), Skeleton Archive (15).
             "Information,,NIF\nID,Textual Name,Name\n582,Cata Briton Male,bri_m,233,178,70,70,70,0,4,1,,3,1,,1",
             "Information,,Skin\nID,Textual Name,Name\n3233,Briton ss Body,CthBody02_ss_bri_M.dds\n"
-                + "3238,briton head1,Bri_m_Head01.dds\n3804,hair,Bri_m_Hair01_blonde.dds")
+                + "3238,briton head1,Bri_m_Head01.dds\n3778,head2,Bri_m_Head02.dds\n3804,hair,Bri_m_Hair01_blonde.dds\n"
+                + "3808,hair,bri_m_hair02_blonde.dds\n6275,eyes,eyecolor_1.dds\n6276,eyes,eyecolor_2.dds")
         .WithFig3(
-            "id,,\n#,part,desc\n1,0,Briton Male Head,1306,,\n1,1,Briton Male Body,291,292,\n1,8,Briton Male Hair,5,6,",
+            "id,,\n#,part,desc\n1,0,Briton Male Head,1306,,\n1,1,Briton Male Body,291,292,\n1,8,Briton Male Hair,5,,7,",
             "ID,Text,Part,Expansion,Test,Archive,Double\n1306,bri_m_head01,bri_m_head01,4,1,15,\n"
-                + "291,Body,Body01_BC_m,4,1,2,\n292,Body,Body02_BC_m,4,1,3,\n5,Briton Male Hair,bri_m_Hair01,4,1,15,1",
-            ",hair,\n#,style #,Description,1S,1T,1M\n1,1,Cata Briton Male,3804,188,,3804,125,");
+                + "291,Body,Body01_BC_m,4,1,2,\n292,Body,Body02_BC_m,4,1,3,\n5,Briton Male Hair,bri_m_Hair01,4,1,15,1\n"
+                + "7,Briton Male Hair,bri_m_Hair03,4,1,15,1",
+            ",hair,\n#,style #,Description,1S,1T,1M\n1,1,Cata Briton Male,3804,188,,3804,125,\n1,2,Cata Briton Male,3808,188,,,,\n"
+                + "1,3,Cata Briton Male,3804,188,,,,")
+        .WithFig3Looks(
+            "id,,\n#,Description,1,2\n1, Briton Male,3238,3778,,",
+            "id,,\n#,Description,1,2\n1,Cata Briton Male,6275,6276",
+            "id,,\n#,,1,2\n1,Cata Briton Male,1,8",
+            "Information,,\nID,Textual Name,Red,Green,Blue\n1,Norse Skin 1,255,255,255\n8,Norse Skin 8,119,60,14\n"
+                + "125,Hair Tint 29,255,243,176\n188,No tint,255,255,255");
 
     [Fact]
     public void AModelIdResolvesToItsSkeletonAndOnePartPerSkinnedSlot()
@@ -50,6 +59,39 @@ public sealed class CatacombsFigureTests
                 new CataPart(8, 15, "bri_m_Hair01.nif", "Bri_m_Hair01_blonde.dds"), // no hair skin: style 1, colour 1
             ],
             spec.Parts);
+    }
+
+    [Fact]
+    public void EveryHairStyleOfTheRaceIsListedAndAnEmptyOneIsBald()
+    {
+        CataSpec spec = Tables().ResolveCatacombs(32)!;
+        Assert.Equal(1, spec.Figure);
+        Assert.Equal([new CataPart(8, 15, "bri_m_Hair01.nif", null), null, new CataPart(8, 15, "bri_m_Hair03.nif", null)], spec.HairStyles);
+        Assert.Equal(0, spec.DefaultHair);
+    }
+
+    [Fact]
+    public void ARacesAppearanceOptionsComeFromTheFig3Tables()
+    {
+        CataLooks looks = Tables().Looks(1)!;
+        Assert.Equal(["Bri_m_Head01.dds", "Bri_m_Head02.dds"], looks.Faces);
+        Assert.Equal(["eyecolor_1.dds", "eyecolor_2.dds"], looks.Eyes);
+        Assert.Equal([Vector3.One, new Vector3(119, 60, 14) / 255f], looks.SkinTints);
+        Assert.Equal(3, looks.HairColours.Count);                   // styles 1-3
+        Assert.Equal([("Bri_m_Hair01_blonde.dds", Vector3.One), ("Bri_m_Hair01_blonde.dds", new Vector3(255, 243, 176) / 255f)],
+            looks.HairColours[0]);
+        Assert.Equal([("bri_m_hair02_blonde.dds", Vector3.One)], looks.HairColours[1]);
+        Assert.Null(Tables().Looks(99));
+    }
+
+    [Fact]
+    public void LabelledPartsNameTheirMeshesForTheClient()
+    {
+        NifMesh Shape(string n) => new() { Name = n, ShapeName = n, Vertices = [Vector3.Zero], Triangles = [(0, 0, 0)] };
+        var head = new NifModel { Version = default, Meshes = [Shape("Bri_m_head01")] };
+        var hair = new NifModel { Version = default, Meshes = [Shape("Editable Mesh"), Shape("Editable Mesh")] };
+        NifModel figure = CatacombsFigure.Assemble(Skeleton, [(head, "face.dds", "head"), (hair, "hair.dds", "hair2")]);
+        Assert.Equal(["head", "hair2", "hair2_1"], figure.Meshes.Select(m => m.ShapeName));
     }
 
     [Fact]

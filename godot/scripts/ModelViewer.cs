@@ -15,6 +15,9 @@
 // "<Slot><n>[b]:<id>" (Body1:0, Legs2:36, HeadA1:19). By default the viewer shows the first variant
 // of each slot and hides the low-detail bodies (Lod*) and cloaks; --parts Body2,Legs1,... shows
 // exactly the named variants instead (the part before ':').
+// A Catacombs figure (cata<id>.glb) shows every hair style until a look is applied: --look takes the
+// seven appearance bytes in hex, in the character list's order (eye size, lip size, eye colour, hair
+// colour, face, hair style, mood), e.g. --look 44,44,20,01,00,20,00; with no --look the bytes are 0.
 
 using System;
 using System.Linq;
@@ -145,6 +148,7 @@ public partial class ModelViewer : Node3D
         string textureDir = TextureDirFromArgs() ?? System.IO.Path.GetDirectoryName(path) ?? "";
         int textured = ModelTexturing.Apply(scene, textureDir);
         string parts = ChooseFigureParts(scene, ArgValue("--parts"));
+        string look = ApplyLook(scene, path, textureDir);
         string anim = PlayClip(scene, ArgValue("--anim"), ArgValue("--anim-time"));
 
         Aabb bounds = ComputeBounds(scene);
@@ -155,7 +159,25 @@ public partial class ModelViewer : Node3D
             (textured > 0 ? $" · {textured} textured" : " · untextured") + "\n" +
             (parts.Length > 0 ? $"parts: {parts}\n" : "") +
             (anim.Length > 0 ? $"clip: {anim}\n" : "") +
+            (look.Length > 0 ? $"look:{look}\n" : "") +
             "left-drag orbit · wheel zoom";
+    }
+
+    // A Catacombs figure (models/cata<id>.glb beside catacombs.csv): dressed in --look's appearance bytes.
+    private static string ApplyLook(Node scene, string path, string textureDir)
+    {
+        string name = System.IO.Path.GetFileNameWithoutExtension(path);
+        string dir = System.IO.Path.GetDirectoryName(path) ?? "";
+        if (!name.StartsWith("cata", StringComparison.Ordinal) || !int.TryParse(name[4..], out int id)
+            || !WorldView.ReadCataFigures(System.IO.Path.Combine(dir, "catacombs.csv")).TryGetValue(id, out int fig3)
+            || scene is not Node3D figure)
+            return "";
+        byte[] b = (ArgValue("--look") ?? "0,0,0,0,0,0,0").Split(',')
+            .Select(x => Convert.ToByte(x.Trim(), 16)).Concat(new byte[7]).Take(7).ToArray();
+        var look = new DaocProtocol.Packets.CharacterLook(b[0], b[1], b[2], b[3], b[4], b[5], b[6]);
+        string lib = System.IO.Path.GetDirectoryName(dir) ?? "";
+        return FigureLook.Apply(figure, System.IO.Path.Combine(dir, $"fig3_{fig3}.json"), look,
+            System.IO.Path.Combine(lib, "overrides"), textureDir, lib);
     }
 
     // Plays one of the model's animation clips (a figure converted with mpk figure has idle, walk, run,
