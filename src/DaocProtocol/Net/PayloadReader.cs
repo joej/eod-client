@@ -31,6 +31,9 @@ public ref struct PayloadReader(ReadOnlySpan<byte> payload)
 
     public void Skip(int count) => Take(count);
 
+    /// <summary>The next <paramref name="count"/> bytes as they are (e.g. a fixed-width field).</summary>
+    public ReadOnlySpan<byte> Bytes(int count) => Take(count);
+
     /// <summary>
     /// A string written by the server's PacketOut.WritePascalStringIntLE: a u32 little-endian
     /// length counting a terminating zero, the bytes, then the zero. An empty string is length 0.

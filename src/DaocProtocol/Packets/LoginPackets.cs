@@ -5,7 +5,6 @@
 // PacketLib1127.SendLoginGranted, PacketLib168.SendLoginDenied, eLoginError. Client payloads are
 // checked byte for byte against a recorded 1.127e session in the tests.
 
-using System.Buffers.Binary;
 using System.Text;
 using DaocProtocol.Net;
 
@@ -47,13 +46,13 @@ public sealed record CryptKeyReply(uint KeyLength, string Version, byte Revision
 
     public static CryptKeyReply Parse(ReadOnlySpan<byte> payload)
     {
-        uint keyLength = BinaryPrimitives.ReadUInt32LittleEndian(payload);
+        var r = new PayloadReader(payload);
+        uint keyLength = r.U32LE();
         if (keyLength != 0)
             throw new NotSupportedException($"Server sent a {keyLength}-byte encryption key; encrypted sessions are not supported.");
 
-        ReadOnlySpan<byte> rest = payload[4..];
-        string version = FixedString(rest[..5]);
-        return new CryptKeyReply(keyLength, version, rest[5], rest[6], rest[7]);
+        string version = FixedString(r.Bytes(5));
+        return new CryptKeyReply(keyLength, version, r.U8(), r.U8(), r.U8());
     }
 
     private static string FixedString(ReadOnlySpan<byte> field)
@@ -71,19 +70,11 @@ public sealed record LoginGranted(string AccountName, string ServerNameShort, by
 
     public static LoginGranted Parse(ReadOnlySpan<byte> payload)
     {
-        int pos = 0;
-        string account = PascalString(payload, ref pos);
-        string server = PascalString(payload, ref pos);
-        return new LoginGranted(account, server, payload[pos], payload[pos + 1], payload[pos + 2] != 0);
-    }
-
-    // u8 length + bytes (PacketOut.WritePascalString)
-    private static string PascalString(ReadOnlySpan<byte> payload, ref int pos)
-    {
-        int length = payload[pos];
-        string value = Encoding.Latin1.GetString(payload.Slice(pos + 1, length));
-        pos += 1 + length;
-        return value;
+        // Strings are u8 length + bytes (PacketOut.WritePascalString).
+        var r = new PayloadReader(payload);
+        string account = r.StringU8();
+        string server = r.StringU8();
+        return new LoginGranted(account, server, r.U8(), r.U8(), r.U8() != 0);
     }
 }
 
@@ -92,7 +83,7 @@ public sealed record LoginDenied(LoginError Error)
 {
     public const byte Code = 0x2C;
 
-    public static LoginDenied Parse(ReadOnlySpan<byte> payload) => new((LoginError)payload[0]);
+    public static LoginDenied Parse(ReadOnlySpan<byte> payload) => new((LoginError)new PayloadReader(payload).U8());
 }
 
 /// <summary>Reasons in 0x2C, from OpenDAoC's eLoginError (client 1.127 messages).</summary>

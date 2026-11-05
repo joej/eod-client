@@ -25,6 +25,7 @@ public sealed class DaocConnection : IAsyncDisposable
     private readonly PacketLog? _log;
     private NetworkStream? _stream;
     private Task _receiveLoop = Task.CompletedTask;
+    private int _disposed;
 
     public DaocConnection(PacketLog? log = null) => _log = log;
 
@@ -53,7 +54,9 @@ public sealed class DaocConnection : IAsyncDisposable
         {
             ClientPacket packet = _sequencer.Next(code, payload);
             _log?.Sent(packet);
-            await stream.WriteAsync(packet.ToBytes(), cancellationToken).ConfigureAwait(false);
+            // Not cancellable once started: half a packet on the wire misframes every later one, and
+            // the server disconnects on the bad checksum. The token only cancels the wait for the lock.
+            await stream.WriteAsync(packet.ToBytes(), CancellationToken.None).ConfigureAwait(false);
         }
         finally
         {
@@ -112,10 +115,18 @@ public sealed class DaocConnection : IAsyncDisposable
         {
             _inbound.Writer.TryComplete(e is IOException ? e : new IOException(e.Message, e));
         }
+        catch (Exception e)
+        {
+            // Anything else (a throwing log sink, a parser bug) still ends the queue, so readers
+            // see the error instead of waiting for a reply that can no longer arrive.
+            _inbound.Writer.TryComplete(e);
+        }
     }
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
         _stop.Cancel();
         _tcp.Dispose();
         await _receiveLoop.ConfigureAwait(false);

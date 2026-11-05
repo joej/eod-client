@@ -330,6 +330,22 @@ public class ClientSessionTests
         }
     }
 
+    [Fact]
+    public async Task ACancelledJumpLeavesUsWhereWeWere()
+    {
+        // Not just a timeout: any end to the wait must leave Relocating, or 0xA9 stays held back.
+        await using var server = new FakeServer(Recording(p => IsJump(p)
+            ? []
+            : WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await InWorld(server);
+        await using (connection)
+        {
+            using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => session.JumpAsync(1, 560000, 570000, 1000, cancel.Token));
+            Assert.Equal(SessionState.InWorld, session.State);
+        }
+    }
+
     /// <summary>Recorded world entry: 9D → B1 + 29, D4 → the burst from C5 to 4E (packets 10–36), BF → 2D (packet 237).</summary>
     private static ServerPacket[]? WorldEntry(ClientPacket p) => p.Code switch
     {

@@ -82,6 +82,15 @@ public class LoginPacketTests
         Assert.Equal(LoginError.IncorrectPassword, LoginDenied.Parse([0x01, 0x01, 0x01, 0x1b, 0x00]).Error);
 
     [Fact]
+    public void ShortLoginRepliesAreInvalidData()
+    {
+        // Every parser reports a truncated packet the same way, so callers need to catch one type.
+        Assert.Throws<InvalidDataException>(() => CryptKeyReply.Parse(Server[0].Payload.AsSpan(0, 8)));
+        Assert.Throws<InvalidDataException>(() => LoginGranted.Parse(Server[1].Payload.AsSpan(0, 5)));
+        Assert.Throws<InvalidDataException>(() => LoginDenied.Parse([]));
+    }
+
+    [Fact]
     public void SequencerNumbersPacketsLikeTheRecordedClient()
     {
         var sequencer = new ClientPacketSequencer();

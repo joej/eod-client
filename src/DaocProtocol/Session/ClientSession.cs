@@ -316,10 +316,14 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
             // Shorter than the server's 5 s link-death limit: 0xA9 is held back while we wait.
             reply = await ExpectAsync(cancellationToken, JumpTimeout, CharacterJump.Code, RegionChanged.Code).ConfigureAwait(false);
         }
-        catch (TimeoutException)
+        catch (Exception e)
         {
-            State = SessionState.InWorld;   // nothing moved: carry on where we were
-            throw new TimeoutException($"The server didn't move us within {JumpTimeout.TotalSeconds:0} s (is the account a GM?).");
+            // Nothing moved: carry on where we were, whatever ended the wait (a timeout, cancellation,
+            // a lost connection). Left Relocating, the keep-alive would hold back 0xA9 for good.
+            State = SessionState.InWorld;
+            if (e is TimeoutException)
+                throw new TimeoutException($"The server didn't move us within {JumpTimeout.TotalSeconds:0} s (is the account a GM?).");
+            throw;
         }
 
         return reply.Code == CharacterJump.Code
@@ -507,10 +511,19 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     private Task<ServerPacket> ExpectAsync(CancellationToken cancellationToken, params byte[] codes) =>
         ExpectAsync(cancellationToken, ReplyTimeout, codes);
 
+    /// <summary>
+    /// Set while a session method waits for its reply. Anything else that reads packets (a game loop
+    /// polling <see cref="DaocConnection.TryReceive"/>) must hold off meanwhile, or it takes the reply.
+    /// </summary>
+    public bool AwaitingReply => Volatile.Read(ref _awaiting) > 0;
+
+    private int _awaiting;
+
     private async Task<ServerPacket> ExpectAsync(CancellationToken cancellationToken, TimeSpan replyTimeout, params byte[] codes)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(replyTimeout);
+        Interlocked.Increment(ref _awaiting);
         try
         {
             while (true)
@@ -527,6 +540,10 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             throw new TimeoutException($"No {string.Join(" or ", codes.Select(c => $"0x{c:X2}"))} within {replyTimeout.TotalSeconds:0.#} s.");
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _awaiting);
         }
     }
 }
