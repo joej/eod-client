@@ -306,9 +306,8 @@ public static partial class NifFile
     }
 
     // DAoC NIFs carry helper geometry the retail client never draws as a visible surface: collision
-    // hulls, pick/climb/ladder volumes and shadow-caster proxies. game.dll 1.130's visibility pass
-    // (FUN_004828a3, traced by the daoc-re session, RE/34-nif-node-names.md) hides a node and its whole
-    // subtree when its name is an EXACT, case-insensitive match (_stricmp) for one of these — NOT a
+    // hulls, pick/climb/ladder volumes and shadow-caster proxies. The client's visibility rule hides a
+    // node and its whole subtree when its name is an EXACT, case-insensitive match for one of these — NOT a
     // prefix. So `collidee` is hidden but `collidee016`/`collideeH`/"coll tower low" are not (they hide
     // only under a `collidee` parent or via their own file Hidden flag); `climb`/`sclimb` are exact too,
     // and `climb001` is not hidden by its own name. Matching by prefix over-drops vs. retail — it was
@@ -351,7 +350,7 @@ public static partial class NifFile
 
     // NiAVObject flags bit 0 = Hidden: Gamebryo app-culls the node and its subtree, so the client
     // never draws it. The likely source of the placeholder-coloured (purple/aqua) shapes that the
-    // artists left in the file but flagged hidden. (daoc-re RE/34; FUN_004828a3 sets this same bit.)
+    // artists left in the file but flagged hidden. The name rule above sets this same bit.
     private static bool IsHidden(ushort flags) => (flags & 0x1) != 0;
 
     // Chooses which NiLODNode children to walk: the near / full-detail level only. The engine draws a

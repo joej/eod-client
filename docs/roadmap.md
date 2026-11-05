@@ -165,7 +165,7 @@ in.
 > `WorldView` starts draining — so entities first seen via a bare 0xA1 render neutral grey instead of
 > realm-tinted and named. Buffer the init-burst packets through the bridge to fix it. Also found: the
 > 0xA1 health byte exceeds 100 for some NPCs (open question W4). Server-side, the test account was made
-> GM so the movement monitor stops kicking the fast debug camera (daoc-re #2).
+> GM so the movement monitor stops kicking the fast debug camera.
 
 ### M6 — Talk (chat in and out) ✅
 **Done** 2026-10-31 · shot 2026-10-31_19_say-hello-in-cotswold

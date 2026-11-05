@@ -489,7 +489,7 @@ public sealed class NifFileTests
     {
         // game.dll's visibility pass hides (and the client never draws) nodes named exactly
         // collidee/climb/sclimb/pickee/ladder/shadowcaster and any node with the NiAVObject Hidden
-        // flag (daoc-re RE/34). keep.NIF carries collidee subtrees; those shapes are flagged Helper by
+        // flag. keep.NIF carries collidee subtrees; those shapes are flagged Helper by
         // the reader and must NOT reach the exported scene — rendering them was the z-fighting
         // placeholder geometry (and, for the keep, the collision hull overlapping the real stone).
         NifModel model = NifFile.Read(File.ReadAllBytes(path));
