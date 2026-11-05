@@ -29,7 +29,11 @@ counts as unchecked, never as passed. One rule isn't in `nif.xml`: each 10.1 blo
 zero. On 2026-11-03, **no 10.1 file in the install failed and all but one decode completely to the
 footer**: 7,097 files (all 2,892 figures, 1,542 animations, 1,259 items and 303 effects; 959 of 960
 zone objects). The one left stops at `NiMeshParticleSystem` (the `NiPSys*` particle family, used by
-one zone object). On 2026-11-02 only 6,168 did: 466 zone objects stopped at billboard, LOD, particle,
+one zone object: the Darkness Falls room `zones/Nifs/dr_demonroom2b.npk`, block 80 of 464, with 57 of
+its 66 shapes after it). Since 2026-11-05 the converter reports that file as unsupported: the old
+byte-offset scan that stood in when the tree walk failed is gone. It found 62 of the 66 shapes and
+placed them without their nodes' transforms. Decoding the particle blocks (or skipping their subtree)
+is dungeon work (roadmap M11). On 2026-11-02 only 6,168 did: 466 zone objects stopped at billboard, LOD, particle,
 controller, light and texture-effect blocks. Tests: `NifSurvey1010Tests` (complete, stray byte, missing marker, bad
 reference, undecoded type).
 

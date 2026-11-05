@@ -20,6 +20,7 @@ started 2026-11-05: what was found, what is done, and what is left. Pick the wor
 | 3c5d984 | Small fixes: DaocCli and command-line argument errors, an unlisted realm, a FakeServer race, `reconvert-zone.sh` no longer hides errors, Keychain exposure documented. |
 | 2bc30e5 | `NetworkBridge` moved into `DaocProtocol.Session` (no Godot), with tests over the recorded session. |
 | d8f7d0a | `CharacterScreen` split into partial-class files (`.Ui`, `.Profiles`, `.World`, `.CommandLine`). Moved code only. |
+| f229cfa | The old NIF 10.1 byte-offset fallback scan is gone: a 10.1 file that doesn't decode to the footer is reported as unsupported (only `dr_demonroom2b`, a Darkness Falls room with a particle system; see `docs/nif-coverage.md`). One geometry decoder (`NifGeometry`, 4.x and 10.1) for the converter and the audit. Checked over the whole install: every other NIF reads to identical geometry (hash of vertices, normals, colours, UVs, triangles), the audit report is unchanged, and a full `make check-zones` reconversion left all 5,507 outputs byte-identical. The 28 live fixture tests ran and pass (`DAOC_REQUIRE_FIXTURES=1`). |
 
 Godot changes were checked with `tools/shots.sh` before and after (pixel comparison: the scene is
 unchanged; only the live counters in the status and layer panels differ between runs).
@@ -44,22 +45,15 @@ live") and open question L13.
 
 ### 2. Work that needs the owner's client install
 
-- **Remove the old NIF 10.1 fallback scan** (`NifFile.cs`, `ReadGamebryo1010` and its
-  `TryRead*1010` helpers): it runs only when the tree reader fails (one file in the install, per
-  `docs/nif-coverage.md`), repeats `Gamebryo1010`'s geometry reading, and tries every byte offset
-  on a bad file. Report that file as unsupported instead.
-- **One geometry/strip decoder** instead of three (`NifFile` 4.x, `Gamebryo1010`, `NifSurvey`).
-- Both are NIF reader changes: rerun `mpk audit <client-dir> --out private/audit/nif-audit.md`
-  afterwards and keep its integrity section clean (CLAUDE.md rule), then `make check-zones` and
-  `tools/shots.sh`.
 - **Sit animation** for the quit: the converter exports only idle, walk, back, run and the combat
   idles (`MonsterFigure.ClipColumns`). Find the sit clip's column in `anims.csv`, export it, and
   play it while `WorldView` is quitting.
 - **Measure before caching archives in `AssetIndex`**: `Read` reopens the archive for every asset.
   Time a zone conversion; keep archives open (making `AssetIndex` disposable, about nine call sites
   in `AssetExtract`) only if it is slow.
-- Run the fixture tests with the private fixtures present (`DAOC_REQUIRE_FIXTURES=1 dotnet test`):
-  the 28 live tests have not run since they were changed to report skips.
+- **Unexplained zone-check errors** (there before this review, not in `tools/zonecheck-known.txt`):
+  zone 107 Vanern Swamp, `Outcrop1.glb` x4 under the ground (and x2 floating); zone 334 Midgard Event,
+  `rockrandom3.glb` x1 under the ground. `make check-zones` fails on them. Fix or explain each one.
 
 ### 3. Lower priority
 
