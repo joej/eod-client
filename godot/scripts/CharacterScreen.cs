@@ -625,6 +625,7 @@ public partial class CharacterScreen : Control
         _world.BackToLoginPressed += () => Fire(() => BackToLogin("Disconnected."));
         _world.Relocated += moved => CallDeferred(MethodName.ShowWorldDeferred, moved.Zone.Id);
         _world.RegionChanging += () => Fire(FollowRegionChange);
+        _world.QuitArrived += reply => Fire(() => FinishQuit(reply));
         old?.QueueFree();
         GetTree().Root.AddChild(_world);
     }
@@ -694,28 +695,68 @@ public partial class CharacterScreen : Control
             return false;
 
         WorldView world = _world;
+        ClientSession session = _session;
+        // The character sits for the server's quit timer; moving stands it up and calls the quit off.
+        using var interrupt = new CancellationTokenSource();
+        void OnInterrupted() => interrupt.Cancel();
+        world.QuitInterrupted += OnInterrupted;
         world.BeginQuit();
         try
         {
-            CharacterOverview? back = await _session.QuitAsync();
+            CharacterOverview? back = await session.QuitAsync(interrupt.Token);
             _status.Text = back is null
                 ? "The server ended the game."
                 : $"Back at the character screen: {back.Characters.Count} character(s) in {_listedRealm}.";
+            ShowCharacterScreen(world);
             return true;
+        }
+        catch (OperationCanceledException) when (interrupt.IsCancellationRequested)
+        {
+            // Standing up is what stops the server's timer (it doesn't stop on movement alone).
+            await session.SitAsync(false);
+            world.EndQuit();
+            return false;
         }
         catch (Exception e) when (e is IOException or TimeoutException or InvalidOperationException)
         {
             _status.Text = $"Quit failed: {e.Message}";
+            ShowCharacterScreen(world);
             return false;
         }
         finally
         {
-            _world = null;
-            world.QueueFree();
-            Visible = true;
-            ClientSettings.ApplyLoginWindow();
-            _enter.Disabled = _session?.State != SessionState.CharacterScreen;
+            world.QuitInterrupted -= OnInterrupted;
         }
+    }
+
+    // The server ended a quit we weren't waiting on (sent some other way): list the realm, which also
+    // moves the server's connection state to the character screen, and show it.
+    private async Task FinishQuit(ServerPacket reply)
+    {
+        if (_world is not WorldView world || _session is not ClientSession session)
+            return;
+        try
+        {
+            CharacterOverview? back = await session.FinishQuitAsync(reply);
+            _status.Text = back is null
+                ? "The server ended the game."
+                : $"Back at the character screen: {back.Characters.Count} character(s) in {_listedRealm}.";
+        }
+        catch (Exception e) when (e is IOException or TimeoutException or InvalidDataException)
+        {
+            _status.Text = $"Quit failed: {e.Message}";
+        }
+        ShowCharacterScreen(world);
+    }
+
+    // Leaves the world view for the character screen once the quit has ended.
+    private void ShowCharacterScreen(WorldView world)
+    {
+        _world = null;
+        world.QueueFree();
+        Visible = true;
+        ClientSettings.ApplyLoginWindow();
+        _enter.Disabled = _session?.State != SessionState.CharacterScreen;
     }
 
     /// <summary>Drops the connection and shows the login form with a message.</summary>

@@ -439,13 +439,28 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// server run link death: 60 s during which logins are refused.
     /// Keep <see cref="KeepAliveAsync"/> running until this returns, and stop draining packets
     /// elsewhere: this method must see the 0xA4. Returns the fresh listing, or null if the server
-    /// ended the game instead.
+    /// ended the game instead. The server sits the character down for the timer; to call the quit
+    /// off, stand up with <see cref="SitAsync"/> and cancel this wait: the session stays in the world,
+    /// and the packets read meanwhile wait in <see cref="TakeSkipped"/>.
     /// </summary>
     public async Task<CharacterOverview?> QuitAsync(CancellationToken cancellationToken = default)
     {
         Require(SessionState.InWorld);
         await connection.SendAsync(CommandRequest.Code, CommandRequest.Payload("&quit"), cancellationToken).ConfigureAwait(false);
         ServerPacket reply = await ExpectAsync(cancellationToken, QuitTimeout, QuitReply.Code).ConfigureAwait(false);
+        return await FinishQuitAsync(reply, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Completes a quit from its 0xA4: as <see cref="QuitAsync"/> does once the reply is in. Call it for
+    /// a 0xA4 drained elsewhere (a quit this session didn't start, e.g. a command sent as text): the
+    /// server has already removed the character, and until the realm is listed it still counts the
+    /// connection as playing. Returns the fresh listing, or null if the server ended the game.
+    /// </summary>
+    public async Task<CharacterOverview?> FinishQuitAsync(ServerPacket reply, CancellationToken cancellationToken = default)
+    {
+        if (reply.Code != QuitReply.Code)
+            throw new ArgumentException($"0x{reply.Code:X2} is not a quit reply.", nameof(reply));
         World = null;
         if (QuitReply.LeavesGame(reply.Payload))
         {
@@ -455,6 +470,17 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
 
         State = SessionState.CharacterScreen;
         return await GetCharactersAsync(_lastListedRealm, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sit down or stand up (0xC7). The server answers with a status update and a chat line (or a
+    /// refusal, e.g. while moving), which arrive with the other unprompted packets. Standing up while
+    /// <see cref="QuitAsync"/> waits cancels the server's quit timer: cancel that wait too.
+    /// </summary>
+    public Task SitAsync(bool sit, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(SitRequest.Code, SitRequest.Payload(sit), cancellationToken);
     }
 
     /// <summary>Longest quit timer (60 s after combat) plus slack.</summary>

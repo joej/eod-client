@@ -202,13 +202,33 @@ public partial class WorldView : Node3D
 
     /// <summary>
     /// Stops draining incoming packets (ClientSession.QuitAsync must see the 0xA4) and shows a
-    /// note; the keep-alive keeps running until this node leaves the tree.
+    /// note; the keep-alive keeps running until this node leaves the tree. The server sits the
+    /// character down; moving raises <see cref="QuitInterrupted"/>.
     /// </summary>
     public void BeginQuit()
     {
         _draining = false;
-        _note = "   quitting: the server's quit timer takes about 20 s…";
+        _quitting = true;
+        _note = "   quitting: sit still for the server's quit timer (about 20 s); moving cancels it";
     }
+
+    /// <summary>The server ended the game (0xA4) for a quit the owner wasn't waiting on: finish it.</summary>
+    public event Action<ServerPacket>? QuitArrived;
+
+    /// <summary>The player moved during the quit timer: the owner stands up and calls the quit off.</summary>
+    public event Action? QuitInterrupted;
+
+    /// <summary>The quit was called off: back to playing (draining again, the Quit button usable).</summary>
+    public void EndQuit()
+    {
+        _quitting = false;
+        _draining = true;
+        _note = "";
+        _button.Disabled = false;
+        AppendChat("Quit cancelled: you moved.", new Color(0.6f, 0.8f, 1f));
+    }
+
+    private bool _quitting;
 
     /// <summary>Call before adding to the tree. <paramref name="modelPath"/> is an optional .glb to
     /// stand in for the character; null or missing falls back to the capsule (MVC needs no assets).
@@ -387,6 +407,13 @@ public partial class WorldView : Node3D
         _bridge.ChatReceived += OnChatReceived;
         _bridge.PingReplied += () => _pings++;
         _bridge.Jumped += OnJumped;
+        _bridge.QuitArrived += reply =>
+        {
+            _draining = false;   // the character has left the world; what follows is the listing's
+            _quitting = false;
+            _note = "   quit: back to the character screen…";
+            QuitArrived?.Invoke(reply);
+        };
         _bridge.RegionChanged += _ =>
         {
             _draining = false;   // what follows is the re-entry's, not ours
@@ -1441,6 +1468,13 @@ public partial class WorldView : Node3D
         _body.Rotation = new Vector3(0, _bodyYaw, 0);
 
         bool moving = forward != 0f || strafe != 0f;
+        // Sitting out the quit timer: walking, strafing or jumping stands up and calls the quit off.
+        if (_quitting && (moving || (driving && Input.IsKeyPressed(Key.Space))))
+        {
+            _quitting = false;
+            _note = "   standing up: quit cancelled";
+            QuitInterrupted?.Invoke();
+        }
         if (moving)
         {
             // Body faces -Z in Godot; forward is its -Z basis, strafe its +X basis (right). Both are
@@ -1761,6 +1795,19 @@ public partial class WorldView : Node3D
         if (_session is null)
         {
             AppendChat("(offline: nothing is sent)", new Color(0.8f, 0.5f, 0.5f));
+            return;
+        }
+        // A typed /quit (or /q) runs the client's own quit, as the button does: sent as plain text,
+        // the client wouldn't know a quit was under way (nor stand up when the player moves).
+        string command = line.Split(' ', 2)[0];
+        if (command.Equals("/quit", System.StringComparison.OrdinalIgnoreCase)
+            || command.Equals("/q", System.StringComparison.OrdinalIgnoreCase))
+        {
+            if (!_quitting && !_button.Disabled)
+            {
+                _button.Disabled = true;
+                QuitPressed?.Invoke();
+            }
             return;
         }
         try

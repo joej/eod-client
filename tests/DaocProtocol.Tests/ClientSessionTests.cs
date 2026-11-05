@@ -507,6 +507,52 @@ public class ClientSessionTests
     }
 
     [Fact]
+    public async Task AQuitReplyDrainedElsewhereFinishesTheQuit()
+    {
+        // A /quit typed as text: the world drained the 0xA4, and hands it over. The session lists the
+        // realm (the server's state moves to the character screen) and is back at the character screen.
+        await using var server = new FakeServer(Recording(p =>
+            WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await InWorld(server);
+        await using (connection)
+        {
+            CharacterOverview? back = await session.FinishQuitAsync(new ServerPacket(QuitReply.Code, [0x00, 0x01]));
+            Assert.Equal(SessionState.CharacterScreen, session.State);
+            Assert.Null(session.World);
+            Assert.NotNull(back);
+        }
+    }
+
+    [Fact]
+    public async Task StandingUpCallsAQuitOff()
+    {
+        // The player moves during the quit timer: the client stands up (0xC7 00), which stops the
+        // server's timer, and stops waiting for 0xA4. The character stays in the world, and what
+        // arrived meanwhile (here the server's chat line) is kept for the world to show.
+        await using var server = new FakeServer(Recording(p =>
+            p.Code == CommandRequest.Code ? [new ServerPacket(ChatMessage.Code, [0, 0, 0, 0, 0, 0, 0, 0])]
+            : p.Code == SitRequest.Code ? []
+            : WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await InWorld(server);
+        await using (connection)
+        {
+            using var cancel = new CancellationTokenSource();
+            Task<CharacterOverview?> quit = session.QuitAsync(cancel.Token);
+            await Task.Delay(200);
+            await session.SitAsync(false);
+            cancel.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => quit);
+
+            Assert.Equal(SessionState.InWorld, session.State);
+            Assert.NotNull(session.World);
+            Assert.Contains(session.TakeSkipped(), p => p.Code == ChatMessage.Code);
+        }
+
+        ClientPacket stand = Assert.Single(server.Received, p => p.Code == SitRequest.Code);
+        Assert.Equal([0x00], stand.Payload);
+    }
+
+    [Fact]
     public async Task KeepAlivePingsFromTheCharacterScreenAndFollowsIntoTheWorld()
     {
         await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));

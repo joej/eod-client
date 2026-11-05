@@ -58,6 +58,13 @@ public sealed class NetworkBridge
     /// </summary>
     public event Action<RegionChanged>? RegionChanged;
 
+    /// <summary>
+    /// The server ended our time in the world (0xA4) without ClientSession.QuitAsync waiting for it
+    /// (a /quit sent another way). The character is gone; the subscriber stops draining and finishes
+    /// the quit (ClientSession.FinishQuitAsync).
+    /// </summary>
+    public event Action<ServerPacket>? QuitArrived;
+
     /// <summary>The server answered a keep-alive (0x29). Kept so the overlay can count pings.</summary>
     public event Action? PingReplied;
 
@@ -121,6 +128,9 @@ public sealed class NetworkBridge
                     break;
                 case PingRequest.ReplyCode:
                     PingReplied?.Invoke();
+                    break;
+                case QuitReply.Code:
+                    QuitArrived?.Invoke(packet);
                     break;
                 default:
                     _unhandled[packet.Code] = _unhandled.GetValueOrDefault(packet.Code) + 1;

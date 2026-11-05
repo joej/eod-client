@@ -369,8 +369,13 @@ and logins in the meantime are refused (0x2C, 0x11 AccountIsInLogoutProcedure). 
 1. **0xAF CommandRequest** (C→S): `00`, the command text with `&` for `/`, `00`. Here `&quit`.
    (The 1.127 server skips one byte, then reads the text.)
 2. Keep sending 0xA9 and 0xA3: the server's quit timer runs **20 s** (up to 60 s after combat;
-   immediate for GM accounts or with `disable_quit_timer`). It sits the character down and stops
-   only on link death or death.
+   immediate for GM accounts or with `disable_quit_timer`, so a GM test account never sees the
+   timer or the sitting below; 0xA4 follows the `&quit` at once). It sits the character down. It refuses
+   to start while the last 0xA9 had a speed ("can't quit while standing"), and stops on death,
+   link death, crafting, or when the character stands up: **0xC7 PlayerSitRequest** (C→S) with
+   `00` (`01` sits). Moving alone does not stand the character up on the server, so a client that
+   lets the player move away must send 0xC7 `00` to call the quit off (`GamePlayer.Quit`/`Sit`,
+   OpenDAoC 2026.09.36; the cancel path is from source, not yet seen live).
 3. **0xA4 Quit** (S→C, `PacketLib168.SendPlayerQuit`): `00` = back to the character screen (`01` =
    leave the game), then the character's level. The character is saved and removed.
 4. **Request 0xFC for the realm.** Until then the server still treats the connection as "playing",

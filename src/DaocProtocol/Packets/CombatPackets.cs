@@ -23,6 +23,18 @@ public static class AttackRequest
         new PayloadWriter().U8(start ? (byte)1 : (byte)0).U8(byPlayer ? (byte)0 : (byte)1).ToArray();
 }
 
+/// <summary>
+/// C→S 0xC7 PlayerSitRequest (OpenDAoC PlayerSitRequestHandler): one byte, non-zero to sit, 0 to stand.
+/// Standing up is also how a quit is cancelled: /quit sits the character down, and the server stops
+/// the quit timer when it stands (GamePlayer.Sit). Moving alone does not stand it up on the server.
+/// </summary>
+public static class SitRequest
+{
+    public const byte Code = 0xC7;
+
+    public static byte[] Payload(bool sit) => [sit ? (byte)1 : (byte)0];
+}
+
 /// <summary>S→C 0x74: the character's attack mode, as the server now has it (weapons drawn or not).</summary>
 public static class AttackMode
 {
