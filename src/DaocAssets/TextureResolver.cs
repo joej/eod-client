@@ -32,10 +32,11 @@ public readonly record struct TextureResult(string Name, TextureSource Source, s
 public sealed class TextureResolver
 {
     private readonly string _clientDir;
-    // Lazily built index of loose texture files (lower-case file name -> full path), and the list of
-    // .mpk archives, so repeated resolves don't re-walk the tree.
+    // Lazily built indexes of loose texture files (lower-case file name -> full path) and of archive
+    // members (lower-case bare name -> archive, member), so repeated resolves neither re-walk the tree
+    // nor reopen every archive.
     private Dictionary<string, string>? _looseByName;
-    private List<string>? _archives;
+    private Dictionary<string, (string Archive, string Member)>? _archivedByName;
 
     public TextureResolver(string clientDir)
     {
@@ -74,28 +75,11 @@ public sealed class TextureResolver
             return new TextureResult(bare, TextureSource.Loose, loose);
         }
 
-        foreach (string archive in Archives)
+        if (ArchivedByName.TryGetValue(bare.ToLowerInvariant(), out var found))
         {
-            try
-            {
-                using MpkArchive mpk = MpkArchive.Open(archive);
-                MpkEntry? match = null;
-                foreach (MpkEntry e in mpk.Entries)
-                    if (string.Equals(BareName(e.Name), bare, StringComparison.OrdinalIgnoreCase))
-                    {
-                        match = e;
-                        break;
-                    }
-                if (match is { } entry)
-                {
-                    File.WriteAllBytes(dest, mpk.Extract(entry));
-                    return new TextureResult(bare, TextureSource.Archive, archive);
-                }
-            }
-            catch (MpkFormatException)
-            {
-                // A malformed or non-standard archive: skip it, keep scanning the rest.
-            }
+            using MpkArchive mpk = MpkArchive.Open(found.Archive);
+            File.WriteAllBytes(dest, mpk.Extract(found.Member));
+            return new TextureResult(bare, TextureSource.Archive, found.Archive);
         }
 
         return new TextureResult(bare, TextureSource.Missing, null);
@@ -110,8 +94,7 @@ public sealed class TextureResolver
     }
 
     private Dictionary<string, string> LooseByName => _looseByName ??= BuildLooseIndex();
-    private List<string> Archives => _archives ??=
-        Directory.EnumerateFiles(_clientDir, "*.mpk", SearchOption.AllDirectories).ToList();
+    private Dictionary<string, (string Archive, string Member)> ArchivedByName => _archivedByName ??= BuildArchiveIndex();
 
     private Dictionary<string, string> BuildLooseIndex()
     {
@@ -119,6 +102,26 @@ public sealed class TextureResolver
         foreach (string ext in new[] { "*.dds", "*.tga", "*.bmp" })
             foreach (string path in Directory.EnumerateFiles(_clientDir, ext, SearchOption.AllDirectories))
                 map.TryAdd(Path.GetFileName(path).ToLowerInvariant(), path); // first wins
+        return map;
+    }
+
+    // Every archive is opened once; the first archive (in enumeration order) holding a name wins.
+    private Dictionary<string, (string Archive, string Member)> BuildArchiveIndex()
+    {
+        var map = new Dictionary<string, (string, string)>(StringComparer.Ordinal);
+        foreach (string archive in Directory.EnumerateFiles(_clientDir, "*.mpk", SearchOption.AllDirectories))
+        {
+            try
+            {
+                using MpkArchive mpk = MpkArchive.Open(archive);
+                foreach (MpkEntry e in mpk.Entries)
+                    map.TryAdd(BareName(e.Name).ToLowerInvariant(), (archive, e.Name));
+            }
+            catch (MpkFormatException)
+            {
+                // A malformed or non-standard archive: skip it, keep indexing the rest.
+            }
+        }
         return map;
     }
 }

@@ -166,6 +166,10 @@ public sealed class MpkArchive : IDisposable
 
     // --- parsing helpers ---
 
+    // Deflate expands at most about 1032:1, so a size beyond that is a corrupt (or crafted) directory,
+    // not a reason to allocate gigabytes.
+    private const long MaxDeflateRatio = 1032;
+
     private static (uint DirCrc, int DirCSize, int NameCSize, int Count) DecodeHeader(ReadOnlySpan<byte> obf)
     {
         Span<byte> h = stackalloc byte[ObfHeaderSize];
@@ -184,7 +188,7 @@ public sealed class MpkArchive : IDisposable
             throw new MpkFormatException("Directory failed its CRC check (corrupt archive).");
 
         long declared = (long)count * RecordSize;
-        if (declared > Array.MaxLength)
+        if (declared > Array.MaxLength || declared > dirComp.Length * MaxDeflateRatio)
             throw new MpkFormatException($"Member count {count} is implausibly large.");
         byte[] dir = Inflate(dirComp, (int)declared, "directory");
 
@@ -203,6 +207,9 @@ public sealed class MpkArchive : IDisposable
 
             if (cOff + (long)cSize > dataRegionLen)
                 throw new MpkFormatException($"Member '{name}' points past the end of the archive.");
+            // Checked before Extract allocates it: no real member inflates beyond deflate's limit.
+            if (uSize > cSize * MaxDeflateRatio)
+                throw new MpkFormatException($"Member '{name}' claims {uSize} bytes from {cSize} compressed.");
 
             entries[k] = new MpkEntry
             {

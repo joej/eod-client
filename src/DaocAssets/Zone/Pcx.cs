@@ -45,9 +45,14 @@ public sealed class Pcx
         int height = ymax - ymin + 1;
         if (width <= 0 || height <= 0 || bytesPerLine < width)
             throw new FormatException($"Bad PCX dimensions ({width}x{height}, bpl={bytesPerLine}).");
+        // One RLE pair yields at most 63 bytes: a header asking for more than the data can hold is
+        // rejected before it is allocated (16-bit fields allow up to 4 GB).
+        long declared = (long)bytesPerLine * height;
+        if (declared > (d.Length - 128L) * 63)
+            throw new FormatException($"PCX header claims {width}x{height} but the file is only {d.Length} bytes.");
 
         // RLE-decode exactly bytesPerLine * height bytes, starting after the 128-byte header.
-        int scanlineTotal = bytesPerLine * height;
+        int scanlineTotal = (int)declared;
         var raw = new byte[scanlineTotal];
         int p = 128, o = 0;
         while (o < scanlineTotal)

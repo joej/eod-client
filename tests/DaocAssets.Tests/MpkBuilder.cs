@@ -14,7 +14,11 @@ internal static class MpkBuilder
 {
     private const int RecordSize = 284;
 
-    public static byte[] Build(params (string Name, byte[] Data)[] members)
+    public static byte[] Build(params (string Name, byte[] Data)[] members) => Build(null, members);
+
+    /// <summary>As <see cref="Build(ValueTuple{string, byte[]}[])"/>, with each member's directory
+    /// size replaced by <paramref name="claimSize"/>(real size), to test a lying directory.</summary>
+    public static byte[] Build(Func<int, uint>? claimSize, params (string Name, byte[] Data)[] members)
     {
         // Compress each member; lay out the directory with running offsets.
         var compressed = new byte[members.Length][];
@@ -31,7 +35,7 @@ internal static class MpkBuilder
             BinaryPrimitives.WriteUInt32LittleEndian(f, 0);                    // timestamp
             BinaryPrimitives.WriteUInt32LittleEndian(f.Slice(4), 4);           // constant 4
             BinaryPrimitives.WriteUInt32LittleEndian(f.Slice(8), 0);           // decompressed offset (unused)
-            BinaryPrimitives.WriteUInt32LittleEndian(f.Slice(12), (uint)members[i].Data.Length);
+            BinaryPrimitives.WriteUInt32LittleEndian(f.Slice(12), claimSize?.Invoke(members[i].Data.Length) ?? (uint)members[i].Data.Length);
             BinaryPrimitives.WriteUInt32LittleEndian(f.Slice(16), (uint)runningOffset);
             BinaryPrimitives.WriteUInt32LittleEndian(f.Slice(20), (uint)comp.Length);
             BinaryPrimitives.WriteUInt32LittleEndian(f.Slice(24), Crc32.HashToUInt32(comp));

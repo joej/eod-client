@@ -39,6 +39,17 @@ public sealed class TerrainTests
     }
 
     [Fact]
+    public void RejectsDimensionsTheDataCannotHold()
+    {
+        // 65536 x 65536 from a 128-byte header and two bytes of data: refused before allocating 4 GB.
+        var h = new byte[130];
+        h[0] = 0x0A; h[2] = 1; h[3] = 8;
+        W16(h, 8, 0xFFFF); W16(h, 10, 0xFFFF);
+        h[65] = 1; W16(h, 66, 0xFFFF);
+        Assert.Throws<FormatException>(() => Pcx.Read(h));
+    }
+
+    [Fact]
     public void RejectsNonPcx()
     {
         Assert.Throws<FormatException>(() => Pcx.Read(new byte[200])); // manufacturer byte != 0x0A

@@ -93,6 +93,14 @@ public sealed class MpkArchiveTests
     }
 
     [Fact]
+    public void RejectsAMemberSizeNoDeflateStreamCouldHold()
+    {
+        // 2 GB claimed for a few compressed bytes: refused when the directory is read, not allocated.
+        byte[] bytes = MpkBuilder.Build(_ => int.MaxValue, ("big.bin", new byte[16]));
+        Assert.Throws<MpkFormatException>(() => MpkArchive.Read(bytes));
+    }
+
+    [Fact]
     public void RejectsDuplicateNames()
     {
         byte[] bytes = MpkBuilder.Build([("dup.txt", "a"u8.ToArray()), ("dup.txt", "b"u8.ToArray())]);
