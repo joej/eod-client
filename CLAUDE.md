@@ -375,13 +375,15 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
         │                          #   [--enter <slot> [--stay <seconds>]] [--zone zone.csv]
         │                          #   [--library <dir>] [--terrain terrain.glb] [--model <glb>]
         │                          #   [--campose X Y Z YAW PITCH] [--shot SECONDS] [--view classic|x2|x4]
-        ├── WorldView.cs           # ✓ terrain + placed zone objects (0.025 m/unit), chase camera,
-        │                          #   WASD/strafe movement sent via MoveToAsync, live entities
-        │                          #   (capsules, interpolated), chat log + input
+        ├── WorldView.cs           # ✓ the world view (partial class): state, setup, input, frame loop;
+        │                          #   .Zone (terrain, objects 0.025 m/unit, water, sky), .Player (chase
+        │                          #   camera, movement via MoveToAsync, ground), .Entities (players/NPCs,
+        │                          #   figures, gear), .Chat, .Inspect, .Shots (dev args, screenshots)
         ├── NetworkBridge.cs       # ✓ drained packets → typed events (entities, chat, pings)
         ├── DevOverlay.cs          # ✓ dev panels: status, layer toggles, F2 render modes,
         │                          #   click-to-inspect readout (model/mesh/material/UVs)
-        └── ModelTexturing.cs      # ✓ binds library .dds textures to glTF materials by name
+        └── ModelTexturing.cs      # ✓ LoadGlb (run-time .glb load), binds library .dds textures to
+                                   #   glTF materials by name
 ```
 
 Rule: after any change to the NIF reader, rerun `mpk audit <client-dir> --out

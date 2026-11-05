@@ -1,0 +1,181 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// WorldView: Development arguments and screenshots: --shots pose sets, --attack, --drop, P to save.
+
+using DaocProtocol.Net;
+using DaocProtocol.Packets;
+using DaocProtocol.Session;
+using DaocProtocol.World;
+using Godot;
+
+namespace EodClient;
+
+public partial class WorldView
+{
+    // Saves the current frame to <progress>/shot_<timestamp>.png. The progress dir is the repo's
+    // git-ignored private/progress (where the roadmap/eveofdarkness workflow expects shots), resolved
+    // from the library path if given, else from the project directory; only if neither is under the
+    // repo does it fall back to Godot's writable user:// dir. The viewport image is only valid after a
+    // frame is drawn, so await the post-draw signal first.
+    // Developer options for repeatable views of the real client (rendered comparisons):
+    //   --campose X Y Z YAW PITCH  start in free-fly with the camera at region coordinates X Y Z,
+    //                              looking along YAW (degrees, 0 = north, 90 = east) and PITCH (degrees)
+    //   --shot SECONDS             save a screenshot (as P does) after that many seconds in the world
+    //   --view LABEL               view distance for this run (classic, x1.5, x2, x4), not saved
+    private double _shotAt = -1;
+    private int _viewSetting;
+
+    // --view LABEL: a view distance for this run only (the saved setting is untouched).
+    private static int? ViewOverride()
+    {
+        string[] args = OS.GetCmdlineUserArgs();
+        int v = System.Array.IndexOf(args, "--view");
+        if (v < 0 || v + 1 >= args.Length)
+            return null;
+        int idx = System.Array.FindIndex(ClientSettings.ViewDistances, x => x.Label == args[v + 1]);
+        return idx >= 0 ? idx : null;
+    }
+    private void ApplyDevArgs()
+    {
+        string[] args = OS.GetCmdlineUserArgs();
+        int i = System.Array.IndexOf(args, "--campose");
+        if (i >= 0 && i + 5 < args.Length && Floats(string.Join(' ', args[(i + 1)..(i + 6)])) is { Length: 5 } c)
+        {
+            SetChase(false);
+            _camera.GlobalPosition = ToGodot(c[0], c[1], c[2]);
+            // Godot yaw 0 looks along -Z (north, since DAoC y runs south); DAoC-style yaw turns clockwise.
+            _camYaw = -Mathf.DegToRad(c[3]);
+            _camPitch = Mathf.DegToRad(c[4]);
+        }
+        int set = System.Array.IndexOf(args, "--shots");
+        int dir = System.Array.IndexOf(args, "--shots-out");
+        if (set >= 0 && set + 1 < args.Length && dir >= 0 && dir + 1 < args.Length)
+            _ = RunShotSet(ResolveArgPath(args[set + 1]), ResolveArgPath(args[dir + 1]));
+        // --travel ZONE opens the travel window, types the zone number and goes (after 2 s and 5 s), to check
+        // the window and the jump without a mouse.
+        int travelArg = System.Array.IndexOf(args, "--travel");
+        if (travelArg >= 0 && travelArg + 1 < args.Length)
+        {
+            string zoneText = args[travelArg + 1];
+            GetTree().CreateTimer(2.0).Timeout += () =>
+            {
+                TravelDialog dialog = OpenTravel();
+                dialog.Filter(zoneText);
+                GetTree().CreateTimer(3.0).Timeout += () => { if (IsInstanceValid(dialog)) dialog.GoFirst(); };
+            };
+        }
+        // --attack SECONDS presses the attack key (H) after 2 s and again SECONDS later, to check attack mode (the
+        // server's 0x74 answers, drawn weapons, the combat idle) without a keyboard; --shot can catch it drawn.
+        int attackArg = System.Array.IndexOf(args, "--attack");
+        if (attackArg >= 0 && attackArg + 1 < args.Length && double.TryParse(args[attackArg + 1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double attackFor))
+            GetTree().CreateTimer(2.0).Timeout += () =>
+            {
+                _ = SendAttack(true);
+                GetTree().CreateTimer(attackFor).Timeout += () => _ = SendAttack(false);
+            };
+        // --drop METRES lifts the character that far once the world is up, to check falling and landing.
+        int drop = System.Array.IndexOf(args, "--drop");
+        if (drop >= 0 && drop + 1 < args.Length && float.TryParse(args[drop + 1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float metres))
+            _dropPending = metres;
+        int s = System.Array.IndexOf(args, "--shot");
+        if (s >= 0 && s + 1 < args.Length && double.TryParse(args[s + 1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double at))
+            _shotAt = at;
+    }
+
+    // A fixed shot set (--shots FILE --shots-out DIR): each line of FILE is "name X Y Z YAW PITCH"
+    // (region units, degrees; '#' starts a comment). The camera visits each pose in turn, the frame
+    // is saved as DIR/name.png, and the client quits when the set is done. Run the same set before and
+    // after an asset change and compare: the world checked the same way every time, not by walking.
+    private async System.Threading.Tasks.Task RunShotSet(string file, string dir)
+    {
+        DirAccess.MakeDirRecursiveAbsolute(dir);
+        var poses = new System.Collections.Generic.List<(string Name, float[] P)>();
+        foreach (string raw in System.IO.File.ReadAllLines(file))
+        {
+            string line = raw.Split('#')[0].Trim();
+            if (line.Length == 0) continue;
+            string[] f = line.Split((char[])[' ', '\t'], System.StringSplitOptions.RemoveEmptyEntries);
+            if (f.Length == 6 && Floats(string.Join(' ', f[1..])) is { Length: 5 } c)
+                poses.Add((f[0], c));
+            else
+                GD.PrintErr($"[shots] skipped line: {raw}");
+        }
+        // Let the zone finish loading and settle for a moment first.
+        for (int k = 0; k < 10; k++)
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        foreach ((string name, float[] c) in poses)
+        {
+            SetChase(false);
+            _camera.GlobalPosition = ToGodot(c[0], c[1], c[2]);
+            _camYaw = -Mathf.DegToRad(c[3]);
+            _camPitch = Mathf.DegToRad(c[4]);
+            _nextStatus = 0;   // the shot's status text is the pose's, not up to 0.25 s old
+            for (int k = 0; k < 4; k++)
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            Image img = GetViewport().GetTexture().GetImage();
+            string path = dir.PathJoin(name + ".png");
+            Error err = img.SavePng(path);
+            GD.Print(err == Error.Ok ? $"[shots] {name} -> {path}" : $"[shots] {name} failed: {err}");
+        }
+        GD.Print($"[shots] {poses.Count} shot(s) done");
+        if (_session is null)
+            GetTree().Quit();
+        else
+            QuitPressed?.Invoke();
+    }
+
+    // Like CharacterScreen's paths: relative to the shell's working directory, not godot/.
+    private static string ResolveArgPath(string path)
+    {
+        if (System.IO.Path.IsPathRooted(path)) return path;
+        string cwd = OS.GetEnvironment("PWD");
+        return System.IO.Path.GetFullPath(System.IO.Path.Combine(string.IsNullOrEmpty(cwd) ? System.IO.Directory.GetCurrentDirectory() : cwd, path));
+    }
+
+    private async System.Threading.Tasks.Task SaveScreenshot()
+    {
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        Image img = GetViewport().GetTexture().GetImage();
+
+        string dir = ScreenshotDir();
+        DirAccess.MakeDirRecursiveAbsolute(dir);
+        string stamp = Time.GetDatetimeStringFromSystem().Replace(":", "-").Replace("T", "_");
+        string path = dir.PathJoin($"shot_{stamp}.png");
+
+        Error err = img.SavePng(path);
+        // Show only the file NAME in the overlay, never the full local path: these shots are
+        // captured for the eveofdarkness.org panel, and an on-screen "/Users/…" path would have to
+        // be cropped out before any could be published. The full path still goes to the console log.
+        _note = err == Error.Ok ? $"   saved {path.GetFile()}" : $"   screenshot failed: {err}";
+        GD.Print(err == Error.Ok ? $"[world] screenshot -> {path}" : $"[world] screenshot failed: {err}");
+    }
+
+    private string ScreenshotDir()
+    {
+        // 1. Sibling of the library path: <...>/private/library -> <...>/private/progress.
+        if (!string.IsNullOrEmpty(_libraryPath))
+        {
+            string? parent = System.IO.Path.GetDirectoryName(_libraryPath.TrimEnd('/'));
+            if (!string.IsNullOrEmpty(parent))
+                return parent.PathJoin("progress");
+        }
+
+        // 2. Repo's private/progress, found by walking up from the Godot project dir (res://). This is
+        //    the usual case for a no-assets launch (no --model): shots still land where the roadmap
+        //    and eveofdarkness workflow look for them, not in Godot's hidden user:// dir.
+        string projectDir = ProjectSettings.GlobalizePath("res://");
+        for (var d = new System.IO.DirectoryInfo(projectDir); d is not null; d = d.Parent)
+        {
+            string progress = System.IO.Path.Combine(d.FullName, "private", "progress");
+            if (System.IO.Directory.Exists(progress))
+                return progress;
+        }
+
+        // 3. Last resort: Godot's writable user data dir.
+        return ProjectSettings.GlobalizePath("user://progress");
+    }
+}
