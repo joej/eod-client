@@ -176,6 +176,14 @@ with 4 neutral. *Seen:* characters made with the retail client store `44 44 00 0
 `44 44 20 01 00 20` (all sliders neutral). The meaning of each index is our reading, not yet confirmed
 against the retail creation screen.
 
+**Dyes and emblems.** Each worn item carries one number (the overview's colours; 0x15's colour field,
+announced by model bit 0x8000 for a u16 or 0x4000 for a u8): the guild emblem when the item has one,
+else its dye (`SendLivingEquipmentUpdate`, `SendCharacterOverview`). A dye is a `tints.csv` row (0–143);
+an emblem is `logo << 9 | pattern << 7 | primary << 3 | secondary` (`EmblemDialogReponseHandler`; logo
+1–255, pattern 0–3, primary 0–15, secondary 0–7), so any emblem with a logo is 512 or more. A logo above 127
+needs a 17th bit: 0x15 sets the slot byte's 0x80 for it (cloak and left hand only); the overview's u16
+drops it.
+
 **0xFF CharacterCreateRequest** (C→S, `CharacterCreateRequestHandler.CreationCharacterData`,
 1.125+ branch): one character per packet.
 

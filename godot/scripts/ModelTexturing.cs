@@ -117,6 +117,11 @@ public static class ModelTexturing
             copy.VertexColorUseAsAlbedo = true;
     }
 
+    /// <summary>A layer's texture name from an imported material's glTF extras ("dark", "detail", "decal"), or null.</summary>
+    public static string? Layer(Material? material, string layer) =>
+        material is not null && material.HasMeta(LayersMeta)
+        && material.GetMeta(LayersMeta).AsGodotDictionary().TryGetValue(layer, out Variant v) ? v.AsString() : null;
+
     /// <summary>Loads one texture by stem (e.g. "watery") from the first dir that has it, or null.</summary>
     public static ImageTexture? Load(string stem, params string[] dirs)
     {

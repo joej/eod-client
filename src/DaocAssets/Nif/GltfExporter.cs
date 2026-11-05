@@ -140,11 +140,42 @@ public static class GltfExporter
     // "Body1:0", are chosen by it), else the mesh name (water00, mesh12).
     private static string NodeName(NifMesh m) => string.IsNullOrEmpty(m.ShapeName) ? m.Name : m.ShapeName;
 
+    // The UV sets past the layer one (TEXCOORD_2 and 3; Godot's CUSTOM0.xy and .zw): the detail map's when the
+    // dark map holds TEXCOORD_1 (an emblem shield: pattern, logo and surface on three sets), then the mesh's
+    // own extra sets (a cloak's emblem pattern and logo). Empty for nearly every mesh.
+    private static Vector2[][] MoreUvs(NifMesh m)
+    {
+        var more = new List<Vector2[]>();
+        if (m.DarkTexCoords is not null && m.DetailTexCoords is { } detail)
+            more.Add(detail);
+        if (m.ExtraTexCoords is { } extra)
+            more.AddRange(extra);
+        return more.Where(u => u.Length == m.Vertices.Length).Take(2).ToArray();
+    }
+
+    private static Vector2 At(Vector2[][] sets, int s, int i) => s < sets.Length ? sets[s][i] : Vector2.Zero;
+
     private static IMeshBuilder<MaterialBuilder> BuildSkinnedMesh(NifMesh m)
     {
         MaterialBuilder material = Material(m);
         bool hasNormals = m.Normals is not null && m.Normals.Length == m.Vertices.Length;
         bool hasUv = m.TexCoords is not null && m.TexCoords.Length == m.Vertices.Length;
+        Vector2[][] more = MoreUvs(m);
+        if (more.Length > 0)
+        {
+            Vector2[]? layer = m.DarkTexCoords ?? m.DetailTexCoords ?? m.DecalTexCoords;
+            var four = new MeshBuilder<VertexPositionNormal, VertexTexture4, VertexJoints4>(m.Name);
+            var fp = four.UsePrimitive(material);
+            VertexBuilder<VertexPositionNormal, VertexTexture4, VertexJoints4> FV(int i) => new(
+                new VertexPositionNormal(m.Vertices[i], hasNormals ? m.Normals![i] : Vector3.UnitZ),
+                new VertexTexture4(hasUv ? m.TexCoords![i] : Vector2.Zero,
+                    layer is not null && layer.Length == m.Vertices.Length ? layer[i] : Vector2.Zero, At(more, 0, i), At(more, 1, i)),
+                new VertexJoints4(m.Skin![i].Length > 0 ? m.Skin[i] : [(0, 1f)]));
+            foreach (var (a, b, c) in m.Triangles)
+                fp.AddTriangle(FV(a), FV(b), FV(c));
+            AddMorphs(four, m);
+            return four;
+        }
         // A second texture layer (a figure's face decal) rides on TEXCOORD_1, as on unskinned meshes.
         Vector2[]? uv2 = m.DarkTexCoords ?? m.DetailTexCoords ?? m.DecalTexCoords;
         if (uv2 is not null && uv2.Length == m.Vertices.Length)
@@ -203,6 +234,31 @@ public static class GltfExporter
         Vector2[]? uv2 = m.DarkTexCoords ?? m.DetailTexCoords ?? m.DecalTexCoords;
         bool hasUv2 = uv2 is not null && uv2.Length == m.Vertices.Length;
         bool hasColors = m.VertexColors is not null && m.VertexColors.Length == m.Vertices.Length;
+        Vector2[][] more = MoreUvs(m);
+        if (more.Length == 1)
+        {
+            var three = new MeshBuilder<VertexPositionNormal, VertexColor1Texture3>(m.Name);
+            var tp = three.UsePrimitive(material);
+            VertexBuilder<VertexPositionNormal, VertexColor1Texture3, VertexEmpty> TV(int i) => new(
+                Vertex(m, i, hasNormals, hasUv, nifSpace).Geometry,
+                new VertexColor1Texture3(hasColors ? m.VertexColors![i] : Vector4.One,
+                    hasUv ? m.TexCoords![i] : Vector2.Zero, hasUv2 ? uv2![i] : Vector2.Zero, more[0][i]));
+            foreach (var (a, b, c) in m.Triangles)
+                tp.AddTriangle(TV(a), TV(b), TV(c));
+            return three;
+        }
+        if (more.Length > 0)
+        {
+            var four = new MeshBuilder<VertexPositionNormal, VertexColor1Texture4>(m.Name);
+            var fp = four.UsePrimitive(material);
+            VertexBuilder<VertexPositionNormal, VertexColor1Texture4, VertexEmpty> FV(int i) => new(
+                Vertex(m, i, hasNormals, hasUv, nifSpace).Geometry,
+                new VertexColor1Texture4(hasColors ? m.VertexColors![i] : Vector4.One,
+                    hasUv ? m.TexCoords![i] : Vector2.Zero, hasUv2 ? uv2![i] : Vector2.Zero, At(more, 0, i), At(more, 1, i)));
+            foreach (var (a, b, c) in m.Triangles)
+                fp.AddTriangle(FV(a), FV(b), FV(c));
+            return four;
+        }
         if (hasUv2 || hasColors)
         {
             var layered = new MeshBuilder<VertexPositionNormal, VertexColor1Texture2>(m.Name);

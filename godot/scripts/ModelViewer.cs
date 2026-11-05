@@ -22,7 +22,9 @@
 // --wear dresses it in worn items by model id (objects.csv), each optionally with its slot and extension:
 // --wear 81,82,83,84,85 (a studded set), --wear 41:6,57 (a chain hauberk on body mesh 6, a cloak),
 // --wear 10@3,11@59,21@824 (a short sword, a round shield, a studded helm); --active 10 (0x15's active
-// weapons byte in hex: sword and shield in use; default FF, none); --hood puts a cloak's hood up; --drawn
+// weapons byte in hex: sword and shield in use; default FF, none); a third field is the item's dye (a tints.csv
+// row) or guild emblem number (logo << 9 | pattern << 7 | primary << 3 | secondary): --wear 26@57:1:2600 is a
+// cloak with logo 5 on pattern 1; --hood puts a cloak's hood up; --drawn
 // shows them in attack mode (weapons in hand; with no --anim, the weapon's combat idle).
 
 using System;
@@ -187,14 +189,17 @@ public partial class ModelViewer : Node3D
         string options = System.IO.Path.Combine(dir, $"fig3_{fig3}.json");
         var worn = (ArgValue("--wear") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Select(w => (Slot: w.Contains('@') ? byte.Parse(w.Split('@')[0]) : (byte)0, Parts: w.Split('@')[^1].Split(':')))
-            .Select(w => new DaocProtocol.Packets.WornItem(w.Slot, ushort.Parse(w.Parts[0]), w.Parts.Length > 1 ? byte.Parse(w.Parts[1]) : (byte)0))
+            .Select(w => (w.Slot, w.Parts, Paint: w.Parts.Length > 2 ? int.Parse(w.Parts[2]) : 0))
+            .Select(w => new DaocProtocol.Packets.WornItem(w.Slot, ushort.Parse(w.Parts[0]), w.Parts.Length > 1 ? byte.Parse(w.Parts[1]) : (byte)0,
+                (ushort)(w.Paint & 0xFFFF), 0, w.Paint > 0xFFFF))
             .ToList();
         byte active = Convert.ToByte(ArgValue("--active") ?? "FF", 16);
         bool hood = OS.GetCmdlineUserArgs().Contains("--hood");
         return FigureLook.Apply(figure, options, look, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) +
             FigureLook.Dress(figure, options, System.IO.Path.Combine(dir, "cata_items.json"), System.IO.Path.Combine(dir, "cata_models.json"),
+                System.IO.Path.Combine(dir, "colours.json"),
                 id, worn, hood, false, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) +
-            FigureLook.Gear(figure, options, System.IO.Path.Combine(dir, "cata_gear.json"), dir, worn, active, false, hood,
+            FigureLook.Gear(figure, options, System.IO.Path.Combine(dir, "cata_gear.json"), System.IO.Path.Combine(dir, "colours.json"), dir, worn, active, false, hood,
                 Drawn, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) + $" (row {id})" +
             (Drawn ? $" drawn, {(_combatIdle = FigureLook.CombatIdle(System.IO.Path.Combine(dir, "cata_gear.json"), worn, active))}" : "");
     }

@@ -27,9 +27,11 @@ public static class FigureLook
     /// extension, else the number in its texture's name. Under body mesh 7 the arms and legs hide and the
     /// gloves and boots take mesh 3; under 8 the arms hide and the gloves take mesh 3 (the client's rule, as
     /// published by OfflineDAoC, GPL-3.0). A cloak shows only when worn and not hidden; with the hood up,
-    /// its mesh 2. A variant the race lacks falls back to the default. Returns a description for the log.
+    /// its mesh 2. A variant the race lacks falls back to the default. Each piece wears its item's dye
+    /// (<see cref="ItemPaint.Dye"/>, models/colours.json), and a cloak its guild emblem. Returns a description
+    /// for the log.
     /// </summary>
-    public static string Dress(Node3D figure, string optionsPath, string itemsPath, string modelsPath, int model,
+    public static string Dress(Node3D figure, string optionsPath, string itemsPath, string modelsPath, string coloursPath, int model,
         System.Collections.Generic.IReadOnlyList<WornItem> worn, bool hoodUp, bool cloakHidden, params string[] dirs)
     {
         if (Options(optionsPath) is not { } o)
@@ -53,6 +55,7 @@ public static class FigureLook
                     textures[p.Name] = p.Value.GetString() ?? "";
 
         bool cloakWorn = false;
+        var itemOf = new System.Collections.Generic.Dictionary<string, WornItem>();   // the item that dresses each slot
         foreach (WornItem item in worn)
         {
             if (items is not { } table || !table.TryGetProperty(item.Model.ToString(System.Globalization.CultureInfo.InvariantCulture), out var entry)
@@ -68,6 +71,7 @@ public static class FigureLook
                         : Math.Max(1, entry.GetProperty("name_variant").GetInt32());
                 chosen[slot] = v;
                 textures[slot] = piece.Value[1].GetString() ?? "";
+                itemOf[slot] = item;
                 cloakWorn |= slot == "cloak";
             }
         }
@@ -97,14 +101,25 @@ public static class FigureLook
                 continue;
             if (!loaded.TryGetValue(texName, out ImageTexture? tex))
                 loaded[texName] = tex = ModelTexturing.Load(System.IO.Path.GetFileNameWithoutExtension(texName), dirs);
-            if (tex is not null && mi.GetActiveMaterial(0)?.Duplicate() is BaseMaterial3D mat)
+            // From the imported material each time, so a dye or emblem taken off doesn't linger.
+            if (tex is null || mi.Mesh?.SurfaceGetMaterial(0) is not BaseMaterial3D original)
+                continue;
+            WornItem? by = itemOf.TryGetValue(slot, out WornItem it) ? it : null;
+            Color dye = (by is { } d ? ItemPaint.Dye(coloursPath, d.Dye) : null) ?? Colors.White;
+            if (slot == "cloak" && by?.Emblem is { } emblem)
             {
-                mat.AlbedoTexture = tex;
-                mi.MaterialOverride = mat;
+                mi.MaterialOverride = ItemPaint.Material(coloursPath, tex, emblem, itemLayout: false, original.AlbedoColor, dirs);
+                continue;
             }
+            var mat = (BaseMaterial3D)original.Duplicate();
+            mat.AlbedoTexture = tex;
+            mat.AlbedoColor = original.AlbedoColor * dye;
+            mi.MaterialOverride = mat;
         }
         return " wearing " + string.Join(" ", chosen.Where(kv => kv.Value > 0)
-            .Select(kv => $"{kv.Key} {kv.Value}{(textures.TryGetValue(kv.Key, out string? t) ? $"={t}" : "")}"));
+            .Select(kv => $"{kv.Key} {kv.Value}{(textures.TryGetValue(kv.Key, out string? t) ? $"={t}" : "")}" +
+                (itemOf.TryGetValue(kv.Key, out WornItem w) && (w.Emblem is not null || w.Dye > 0)
+                    ? w.Emblem is { } e ? $" emblem {e.Logo}/{e.Pattern}/{e.Primary}/{e.Secondary}" : $" dye {w.Dye}" : "")));
     }
 
     // Item models (models/<nif>.glb), loaded and textured once each, duplicated per figure.
@@ -119,9 +134,10 @@ public static class FigureLook
     /// ("Bip01 L/R Back"), so a spare two-hander stays on the back while sword and shield are drawn. A shield
     /// in use is on "Bip01 L Shield" either way, an unused one not drawn; the helm on "Bip01 Helmet", hiding
     /// the hair, unless hidden or under a raised hood. Rules as OfflineDAoC (GPL-3.0) published them from the
-    /// client. Returns a log description.
+    /// client. Each wears its dye, and an emblem item (a shield whose base slot is the emblem pattern) its
+    /// guild emblem over its own surface (<see cref="ItemPaint"/>). Returns a log description.
     /// </summary>
-    public static string Gear(Node3D figure, string optionsPath, string gearPath, string modelsDir,
+    public static string Gear(Node3D figure, string optionsPath, string gearPath, string coloursPath, string modelsDir,
         System.Collections.Generic.IReadOnlyList<WornItem> worn, byte activeWeapons, bool helmHidden, bool hoodUp, bool drawn,
         params string[] dirs)
     {
@@ -185,20 +201,34 @@ public static class FigureLook
             var f = frames.GetProperty(frame);
             float F(int i) => f[i].GetSingle();
             var model = (Node3D)template.Duplicate();
-            if (retexture is not null && ModelTexturing.Load(System.IO.Path.GetFileNameWithoutExtension(retexture), dirs) is { } swap)
-                foreach (Node mn in model.FindChildren("*", "MeshInstance3D", true, false))
-                    if (mn is MeshInstance3D mmi && mmi.GetActiveMaterial(0)?.Duplicate() is BaseMaterial3D mat)
-                    {
+            Texture2D? swap = retexture is not null ? ModelTexturing.Load(System.IO.Path.GetFileNameWithoutExtension(retexture), dirs) : null;
+            Color dye = ItemPaint.Dye(coloursPath, item.Dye) ?? Colors.White;
+            foreach (Node mn in model.FindChildren("*", "MeshInstance3D", true, false))
+            {
+                if (mn is not MeshInstance3D mmi || mmi.Mesh?.SurfaceGetMaterial(0) is not BaseMaterial3D imported)
+                    continue;
+                // An emblem item: its base texture is the emblem pattern; the surface is the item's own texture
+                // (objects.csv "Apply Texture") or its detail layer, on the third UV set.
+                if (imported.ResourceName.StartsWith("cloakpattern", StringComparison.OrdinalIgnoreCase))
+                {
+                    Texture2D? surface = swap ?? (ModelTexturing.Layer(imported, "detail") is { } detail ? ModelTexturing.Load(detail, dirs) : null);
+                    mmi.MaterialOverride = ItemPaint.Material(coloursPath, surface, item.Emblem, itemLayout: true, dye, dirs);
+                }
+                else if ((swap is not null || dye != Colors.White) && mmi.GetActiveMaterial(0)?.Duplicate() is BaseMaterial3D mat)
+                {
+                    if (swap is not null)
                         mat.AlbedoTexture = swap;
-                        mmi.MaterialOverride = mat;
-                    }
+                    mat.AlbedoColor *= dye;
+                    mmi.MaterialOverride = mat;
+                }
+            }
             model.Transform = new Transform3D(new Basis(new Vector3(F(0), F(1), F(2)), new Vector3(F(3), F(4), F(5)), new Vector3(F(6), F(7), F(8))),
                 new Vector3(F(9), F(10), F(11)));
             var attach = new BoneAttachment3D { Name = $"Gear_{item.Slot}", BoneName = bone };
             skel.AddChild(attach);
             attach.AddChild(model);
             helmed |= item.Slot == WornSlot.Helm;
-            hung.Add($"{nif}@{bone}");
+            hung.Add($"{nif}@{bone}" + (item.Emblem is { } em ? $" emblem {em.Logo}/{em.Pattern}/{em.Primary}/{em.Secondary}" : item.Dye > 0 ? $" dye {item.Dye}" : ""));
         }
         if (helmed)
             foreach (Node n in figure.FindChildren("hair*", "MeshInstance3D", true, false))

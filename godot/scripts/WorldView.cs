@@ -1006,10 +1006,11 @@ public partial class WorldView : Node3D
         {
             OpenTravel();
         }
-        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F } && !ChatInputActive)
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.H } && !ChatInputActive)
         {
-            // F toggles attack mode (our binding; retail's default key unconfirmed, open question W34). The server
-            // answers with 0x74, and that draws or sheathes the weapons.
+            // H toggles attack mode: our binding, a key the install's RPG preset leaves free (F is retail's face
+            // target; retail's attack key is unconfirmed, open question W34). The server answers with 0x74, and
+            // that draws or sheathes the weapons.
             _ = SendAttack(!_attacking);
         }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F4 })
@@ -1256,7 +1257,7 @@ public partial class WorldView : Node3D
                 GetTree().CreateTimer(3.0).Timeout += () => { if (IsInstanceValid(dialog)) dialog.GoFirst(); };
             };
         }
-        // --attack SECONDS presses the attack key after 2 s and again SECONDS later, to check attack mode (the
+        // --attack SECONDS presses the attack key (H) after 2 s and again SECONDS later, to check attack mode (the
         // server's 0x74 answers, drawn weapons, the combat idle) without a keyboard; --shot can catch it drawn.
         int attackArg = System.Array.IndexOf(args, "--attack");
         if (attackArg >= 0 && attackArg + 1 < args.Length && double.TryParse(args[attackArg + 1], System.Globalization.NumberStyles.Float,
@@ -2015,7 +2016,7 @@ public partial class WorldView : Node3D
         string lib = _libraryPath ?? "";
         _cataFig3 ??= ReadCataFigures(lib.PathJoin("models").PathJoin("catacombs.csv"));
         if (_cataFig3.TryGetValue(model, out int fig3))
-            FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_gear.json"),
+            FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_gear.json"), lib.PathJoin("models").PathJoin("colours.json"),
                 lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, drawn, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
     }
 
@@ -2037,7 +2038,7 @@ public partial class WorldView : Node3D
         string lib = _libraryPath ?? "";
         string text = ApplyLook(figure, model, look) + Dress(figure, model, worn, hoodUp, cloakHidden);
         if (_cataFig3 is not null && _cataFig3.TryGetValue(model, out int fig3))
-            text += FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_gear.json"),
+            text += FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_gear.json"), lib.PathJoin("models").PathJoin("colours.json"),
                 lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, drawn, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
         return text;
     }
@@ -2049,7 +2050,7 @@ public partial class WorldView : Node3D
         _cataFig3 ??= ReadCataFigures(lib.PathJoin("models").PathJoin("catacombs.csv"));
         return _cataFig3.TryGetValue(model, out int fig3)
             ? FigureLook.Dress(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_items.json"),
-                lib.PathJoin("models").PathJoin("cata_models.json"), model, worn, hoodUp, cloakHidden,
+                lib.PathJoin("models").PathJoin("cata_models.json"), lib.PathJoin("models").PathJoin("colours.json"), model, worn, hoodUp, cloakHidden,
                 lib.PathJoin("overrides"), lib.PathJoin("textures"), lib)
             : "";
     }
@@ -2177,7 +2178,7 @@ public partial class WorldView : Node3D
             $"body {_body.Position.X:0.0},{_body.Position.Y:0.0},{_body.Position.Z:0.0}   " +
             $"ground {(_groundHit ? "ON" : "--")}   mode {(_chase ? "chase" : "free")}\n" +
             (_chase
-                ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Space jump, Shift sprint, wheel zoom   ·   F attack   ·   Tab free-fly, P shot"
+                ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Space jump, Shift sprint, wheel zoom   ·   H attack   ·   Tab free-fly, P shot"
                 : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot")
             + "\nF1 panels · F2 render mode · F3 view distance · left-click inspect (Esc clears)";
     }

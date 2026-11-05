@@ -80,15 +80,24 @@ public sealed record NifMesh
     public string? DecalTextureFile { get; init; }
     public Vector2[]? DecalTexCoords { get; init; }
 
+    /// <summary>More UV sets for the exporter to keep, written after the layer ones (TEXCOORD_2 on, which Godot
+    /// reads as CUSTOM0): a Catacombs cloak's emblem pattern and logo sets (its cloth is on set 1).</summary>
+    public Vector2[][]? ExtraTexCoords { get; init; }
+
     /// <summary>The NIF shape (NiTriShape) name, e.g. a body-part variant in a classic figure.</summary>
     public string ShapeName { get; init; } = "";
+
+    // " (set k)" when a layer's UVs are one of the shape's sets, for nifinfo.
+    private string SetOf(Vector2[]? uv) => UvSets is { Length: > 1 } sets && uv is not null && Array.IndexOf(sets, uv) is >= 0 and var k
+        ? $" (set {k})" : "";
 
     public override string ToString() =>
         $"{Name}: {Vertices.Length} verts, {Triangles.Length} tris" +
         (TextureFile is null ? "" : $", tex {TextureFile}") +
-        (DarkTextureFile is null ? "" : $", dark {DarkTextureFile}") +
-        (DetailTextureFile is null ? "" : $", detail {DetailTextureFile}") +
-        (DecalTextureFile is null ? "" : $", decal {DecalTextureFile}") +
+        (DarkTextureFile is null ? "" : $", dark {DarkTextureFile}{SetOf(DarkTexCoords)}") +
+        (DetailTextureFile is null ? "" : $", detail {DetailTextureFile}{SetOf(DetailTexCoords)}") +
+        (DecalTextureFile is null ? "" : $", decal {DecalTextureFile}{SetOf(DecalTexCoords)}") +
+        (UvSets is { Length: > 1 } sets ? $", {sets.Length} UV sets" : "") +
         (VertexColors is null ? "" : ", vertex colours") +
         (BaseColor is { } c ? $", rgba({c.X:0.##},{c.Y:0.##},{c.Z:0.##},{c.W:0.##})" : "") +
         (Alpha == SurfaceAlpha.Opaque ? "" : $", {Alpha.ToString().ToLowerInvariant()} {AlphaCutoff:0.###}") +

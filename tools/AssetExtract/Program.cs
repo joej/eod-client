@@ -572,7 +572,8 @@ internal static class Cli
             list.Add((model, part.Skin, DaocAssets.Figures.CataSlots.Names[part.Slot]));
         }
         // Every mesh variant of the worn slots as <slot><n> (from 1), wearing the row's skin for that slot;
-        // the client shows the one the worn item (or the row) picks. A cloak's texture is on its second UV set.
+        // the client shows the one the worn item (or the row) picks. A cloak's texture is on its second UV set;
+        // its first and third carry a guild emblem's pattern and logo (TEXCOORD_2 and 3: Godot's CUSTOM0).
         foreach ((int slot, IReadOnlyList<DaocAssets.Figures.CataPart?> variants) in spec.Variants)
         {
             string? skin = spec.Parts.FirstOrDefault(p => p.Slot == slot)?.Skin;
@@ -584,7 +585,8 @@ internal static class Cli
                     model = new NifModel
                     {
                         Version = model.Version, Joints = model.Joints,
-                        Meshes = model.Meshes.Select(m => m.UvSets is { Length: > 1 } uv ? m with { TexCoords = uv[1] } : m).ToList(),
+                        Meshes = model.Meshes.Select(m => m.UvSets is { Length: > 1 } uv
+                            ? m with { TexCoords = uv[1], ExtraTexCoords = uv.Length > 2 ? [uv[0], uv[2]] : [uv[0]] } : m).ToList(),
                     };
                 list.Add((model, skin, $"{DaocAssets.Figures.CataSlots.Names[slot]}{v + 1}"));
             }
@@ -685,7 +687,9 @@ internal static class Cli
         foreach (string nif in gear.Values.SelectMany(g => g.Helms.Values.Prepend(g.Nif ?? "")).Where(n => n.Length > 0)
                      .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            ModelResult converted = library.GetModel(nif);
+            // Reconverted every run: this step runs only when the converter changed (make figures), and the
+            // item models must follow it (an emblem shield's third UV set).
+            ModelResult converted = library.GetModel(nif, reconvert: true);
             if (converted.GlbPath is null || index.Read(nif) is not byte[] bytes) { failed++; continue; }
             string stem = Path.GetFileNameWithoutExtension(converted.GlbPath);
             stems[Path.GetFileNameWithoutExtension(nif)] = stem;
@@ -726,6 +730,34 @@ internal static class Cli
         };
         File.WriteAllText(Path.Combine(modelsDir, "cata_gear.json"), System.Text.Json.JsonSerializer.Serialize(json));
         Console.WriteLine($"cata gear: {gear.Count} held items and helms, {nifs.Count} item models converted, {failed} failed");
+    }
+
+    // models/colours.json: dyes {id: [r, g, b]} (tints.csv, Catacombs colours), and guild emblems: primary and
+    // secondary colours (patterns.csv), the four pattern masks and the logos {id: texture} (insignia.csv), every
+    // logo's picture gathered into the library.
+    private static void WriteItemColours(string gamedata, string modelsDir, AssetLibrary library)
+    {
+        using MpkArchive mpk = MpkArchive.Open(gamedata);
+        string Text(string name) => System.Text.Encoding.Latin1.GetString(mpk.Extract(name));
+        var c = DaocAssets.Figures.ItemColours.Parse(Text("tints.csv"), Text("patterns.csv"), Text("insignia.csv"));
+        static int[] Rgb((byte R, byte G, byte B) t) => [t.R, t.G, t.B];
+        int missing = 0;
+        var logos = new SortedDictionary<int, string>();
+        foreach ((int id, string file) in c.Logos)
+        {
+            if (library.GatherTexture(file) is null) { missing++; continue; }
+            logos[id] = Path.GetFileNameWithoutExtension(file);
+        }
+        var json = new
+        {
+            dyes = c.Dyes.ToDictionary(kv => kv.Key.ToString(CultureInfo.InvariantCulture), kv => Rgb(kv.Value)),
+            primary = c.Primary.Select(Rgb),
+            secondary = c.Secondary.Select(Rgb),
+            masks = DaocAssets.Figures.ItemColours.PatternMasks,
+            logos = logos.ToDictionary(kv => kv.Key.ToString(CultureInfo.InvariantCulture), kv => kv.Value),
+        };
+        File.WriteAllText(Path.Combine(modelsDir, "colours.json"), System.Text.Json.JsonSerializer.Serialize(json));
+        Console.WriteLine($"colours: {c.Dyes.Count} dyes, {logos.Count} emblem logos ({missing} not in the install)");
     }
 
     private static System.Numerics.Matrix4x4 Rotation(System.Numerics.Matrix4x4 m) => m with { M41 = 0, M42 = 0, M43 = 0 };
@@ -1015,6 +1047,7 @@ internal static class Cli
         cata.WriteModels(cataModels);
         WriteCataItems(gamedata, models, library, cata.Gathered);
         WriteCataGear(gamedata, models, library, index);
+        WriteItemColours(gamedata, models, library);
         int cataFailed = cata.Failed;
         Console.WriteLine($"figures: {cataModels.Count} model ids on {cata.FigureCount} Catacombs figures, " +
             $"{cata.MissingParts} parts missing, {cataFailed} failed");
