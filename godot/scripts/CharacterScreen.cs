@@ -209,7 +209,12 @@ public partial class CharacterScreen : Control
     private static int? Option(string[] args, string name)
     {
         int i = Array.IndexOf(args, name);
-        return i >= 0 && i + 1 < args.Length ? int.Parse(args[i + 1]) : null;
+        if (i < 0)
+            return null;
+        if (i + 1 < args.Length && int.TryParse(args[i + 1], out int value))
+            return value;
+        GD.PrintErr($"{name} needs a number; ignored.");
+        return null;
     }
 
     private static string? StringOption(string[] args, string name)

@@ -194,7 +194,8 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     public async Task<WorldPosition> EnterWorldAsync(Realm realm, int slot, CancellationToken cancellationToken = default)
     {
         Require(SessionState.CharacterScreen);
-        if (realm != _lastListedRealm || !_overviews[realm].Characters.Any(c => c.Slot == slot))
+        if (realm != _lastListedRealm || !_overviews.TryGetValue(realm, out CharacterOverview? listed)
+            || !listed.Characters.Any(c => c.Slot == slot))
             throw new ArgumentException($"Slot {slot} in {realm} is empty, or {realm} wasn't the realm listed last.", nameof(slot));
 
         await connection.SendAsync(RegionListRequest.Code, RegionListRequest.Payload(realm, slot), cancellationToken).ConfigureAwait(false);

@@ -3,6 +3,10 @@
 // Remembered passwords, in the macOS login Keychain through /usr/bin/security. The password goes
 // to `security -i` on its standard input, never on a command line (where other processes could
 // read it). Elsewhere nothing is remembered and the client asks.
+// The trade-off: the item is created by /usr/bin/security, so it trusts that tool, and any program
+// running as this user can read it with `security find-generic-password -s "EoD Client" -w` without
+// a prompt. Restricting it to the client would need a signed app using the Keychain API directly.
+// Fine for a test account's password; don't remember one that matters elsewhere.
 
 using System.Diagnostics;
 

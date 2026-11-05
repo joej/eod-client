@@ -27,23 +27,50 @@ using DaocProtocol.Session;
 
 if (args.Length < 2)
 {
-    Console.Error.WriteLine("usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--create <Name> | --delete <slot> | --enter <slot> [--goto <zone>] [--stay <seconds>]] [--idle <seconds> [--no-keepalive]] [--log | --hex]");
+    Console.Error.WriteLine(Usage);
     return 1;
 }
 
 string host = args[0];
 string account = args[1];
-int port = args.SkipWhile(a => a != "--port").Skip(1).Select(int.Parse).DefaultIfEmpty(10300).First();
+// A bad or missing option value prints the usage line and exits 1, as a missing argument does.
+string? Value(string name)
+{
+    int i = Array.IndexOf(args, name);
+    if (i < 0)
+        return null;
+    if (i + 1 < args.Length)
+        return args[i + 1];
+    Console.Error.WriteLine($"{name} needs a value.\n{Usage}");
+    Environment.Exit(1);
+    return null;
+}
+int? Int(string name)
+{
+    if (Value(name) is not string v)
+        return null;
+    if (int.TryParse(v, out int n))
+        return n;
+    Console.Error.WriteLine($"{name} needs a number, not '{v}'.\n{Usage}");
+    Environment.Exit(1);
+    return null;
+}
+
+int port = Int("--port") ?? 10300;
 bool hex = args.Contains("--hex");
 bool log = hex || args.Contains("--log");
-Realm realmChoice = args.SkipWhile(a => a != "--realm").Skip(1)
-    .Select(r => Enum.Parse<Realm>(r, ignoreCase: true)).DefaultIfEmpty(Realm.Albion).First();
-string? createName = args.SkipWhile(a => a != "--create").Skip(1).FirstOrDefault();
-int? deleteSlot = args.SkipWhile(a => a != "--delete").Skip(1).Select(int.Parse).Cast<int?>().FirstOrDefault();
-int? enterSlot = args.SkipWhile(a => a != "--enter").Skip(1).Select(int.Parse).Cast<int?>().FirstOrDefault();
-int? gotoZone = args.SkipWhile(a => a != "--goto").Skip(1).Select(int.Parse).Cast<int?>().FirstOrDefault();
-int staySeconds = args.SkipWhile(a => a != "--stay").Skip(1).Select(int.Parse).DefaultIfEmpty(10).First();
-int idleSeconds = args.SkipWhile(a => a != "--idle").Skip(1).Select(int.Parse).DefaultIfEmpty(0).First();
+Realm realmChoice = Realm.Albion;
+if (Value("--realm") is string realmName && !Enum.TryParse(realmName, ignoreCase: true, out realmChoice))
+{
+    Console.Error.WriteLine($"--realm must be albion, midgard or hibernia, not '{realmName}'.\n{Usage}");
+    return 1;
+}
+string? createName = Value("--create");
+int? deleteSlot = Int("--delete");
+int? enterSlot = Int("--enter");
+int? gotoZone = Int("--goto");
+int staySeconds = Int("--stay") ?? 10;
+int idleSeconds = Int("--idle") ?? 0;
 bool keepAliveOn = !args.Contains("--no-keepalive");
 string? password = Environment.GetEnvironmentVariable("DAOC_PASSWORD");
 if (string.IsNullOrEmpty(password))
@@ -189,4 +216,9 @@ static void Print(Realm realm, CharacterOverview overview)
     Console.WriteLine($"{realm}: {overview.Characters.Count} character(s), flags 0x{overview.Flags:X}");
     foreach (CharacterSummary c in overview.Characters)
         Console.WriteLine($"  slot {c.Slot}: {c.Name}, level {c.Level} {c.RaceName} {c.ClassName}, {c.Location}");
+}
+
+partial class Program
+{
+    private const string Usage = "usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--create <Name> | --delete <slot> | --enter <slot> [--goto <zone>] [--stay <seconds>]] [--idle <seconds> [--no-keepalive]] [--log | --hex]";
 }

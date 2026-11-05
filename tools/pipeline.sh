@@ -19,7 +19,7 @@
 #   1. convert   each .nif -> .glb (geometry + material name; no texture bytes embedded)
 #   2. textures  gather the .dds those models reference (loose on disk, or from the right .mpk)
 # Then the Godot client loads <name>.glb and its <texture>.dds from <out-dir>.
-# NiTriStripsData models (some creatures) are skipped with a note; that format isn't read yet.
+# A model that fails to convert is skipped with the converter's message.
 set -eu
 
 if [ "$#" -ne 3 ]; then

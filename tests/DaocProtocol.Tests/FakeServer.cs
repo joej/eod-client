@@ -25,7 +25,13 @@ internal sealed class FakeServer : IAsyncDisposable
 
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
 
-    public List<ClientPacket> Received { get; } = [];
+    /// <summary>A snapshot of the packets received so far (the server task adds to them meanwhile).</summary>
+    public List<ClientPacket> Received
+    {
+        get { lock (_received) return [.. _received]; }
+    }
+
+    private readonly List<ClientPacket> _received = [];
 
     /// <summary>Whatever went wrong on the server side (bad frame, bad checksum), or null.</summary>
     public Exception? Error { get; private set; }
@@ -54,7 +60,7 @@ internal sealed class FakeServer : IAsyncDisposable
                     if (result == FrameResult.BadChecksum)
                         throw new InvalidDataException("Client packet with a bad checksum.");
 
-                    Received.Add(packet!);
+                    lock (_received) _received.Add(packet!);
                     offset += consumed;
                     ServerPacket[]? replies = respond(packet!);
                     if (replies is null)
