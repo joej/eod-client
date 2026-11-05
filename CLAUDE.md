@@ -370,7 +370,8 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
     ├── scenes/Main.tscn           # ✓ root Control with CharacterScreen.cs
     ├── scenes/ModelViewer.tscn    # ✓ orbit any converted .glb (ModelViewer.cs)
     └── scripts/
-        ├── CharacterScreen.cs     # ✓ UI built in code: login form, realm, character list, Enter
+        ├── CharacterScreen.cs     # ✓ (partial: .Ui, .Profiles, .World, .CommandLine) UI built in code:
+        │                          #   login form, realm, character list, Enter
         │                          #   world, hex-log toggle. Headless check: DAOC_PASSWORD=… godot-mono
         │                          #   --headless --path godot -- --autologin <host> <account> [port]
         │                          #   [--enter <slot> [--stay <seconds>]] [--zone zone.csv]
