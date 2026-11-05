@@ -365,7 +365,7 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 ├── tools/play.sh                  # clone → assets (via make) → build → play in one command (README Quick start)
 ├── tools/pipeline.sh, reconvert-zone.sh  # owner-run conversion of their own install
 └── godot/                         # ✓ Godot 4.7.2 .NET project (EodClient.csproj, net8.0, in the
-    │                              #   solution); references DaocProtocol
+    │                              #   solution); references DaocProtocol and DaocAssets (file formats)
     ├── project.godot              # main scene: scenes/Main.tscn
     ├── scenes/Main.tscn           # ✓ root Control with CharacterScreen.cs
     ├── scenes/ModelViewer.tscn    # ✓ orbit any converted .glb (ModelViewer.cs)
