@@ -162,7 +162,8 @@ public partial class CharacterScreen
 
         WorldView world = _world;
         ClientSession session = _session;
-        // The character sits for the server's quit timer; moving stands it up and calls the quit off.
+        // The character sits for the server's quit timer. Moving (a new X/Y in 0xA9) stands it up and
+        // calls the quit off on the server, so the client only stops waiting.
         using var interrupt = new CancellationTokenSource();
         void OnInterrupted() => interrupt.Cancel();
         world.QuitInterrupted += OnInterrupted;
@@ -178,8 +179,8 @@ public partial class CharacterScreen
         }
         catch (OperationCanceledException) when (interrupt.IsCancellationRequested)
         {
-            // Standing up is what stops the server's timer (it doesn't stop on movement alone).
-            await session.SitAsync(false);
+            // No 0xC7 stand-up: the server has already stood the character up (it would answer
+            // "You are not sitting!").
             world.EndQuit();
             return false;
         }

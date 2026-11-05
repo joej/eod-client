@@ -65,8 +65,10 @@ public partial class WorldView
         _body.Rotation = new Vector3(0, _bodyYaw, 0);
 
         bool moving = forward != 0f || strafe != 0f;
-        // Sitting out the quit timer: walking, strafing or jumping stands up and calls the quit off.
-        if (_quitting && (moving || (driving && Input.IsKeyPressed(Key.Space))))
+        // Sitting out the quit timer: walking or strafing stands up and calls the quit off. The server
+        // decides on a change of X/Y (OpenDAoC PlayerMovementComponent.UpdatePosition → OnPlayerMove),
+        // so a jump in place or a turn doesn't cancel, here or there.
+        if (_quitting && moving)
         {
             _quitting = false;
             _note = "   standing up: quit cancelled";

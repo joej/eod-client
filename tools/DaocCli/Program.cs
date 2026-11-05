@@ -6,7 +6,7 @@
 //   DAOC_PASSWORD=... dotnet run --project tools/DaocCli -- <host> <account>
 //       [--port 10300] [--realm albion|midgard|hibernia]
 //       [--create <Name> | --delete <slot> | --enter <slot> [--goto <zone>] [--stay <seconds>]]
-//       [--idle <seconds> [--no-keepalive]] [--log | --hex]
+//       [--idle <seconds> [--no-keepalive]] [--log | --hex] [--quit-checks]
 //
 // --realm is used when the account has no realm yet (or may use all realms); default albion.
 // --create makes a level 1 Briton Armsman (Albion only) in the first free slot; --delete removes
@@ -17,6 +17,9 @@
 // command /jump, so the account must be a GM. --log prints every packet's code and length,
 // --hex the whole packet (never the login request). --idle waits at the character screen first;
 // with --no-keepalive it sends no pings there (OpenDAoC disconnects after 150 s without one).
+// --quit-checks (with --enter, on a player account: GMs have no quit timer) runs the Godot client's
+// quit path four ways: quit and wait; quit and move (the quit is called off); quit again;
+// quit while running. It prints the server's chat lines and sitting state as they arrive.
 // The password is read from DAOC_PASSWORD so it stays out of command lines and shell history.
 // Exit codes: 0 login granted, 2 login denied, 1 any other failure.
 
@@ -58,7 +61,9 @@ int? Int(string name)
 
 int port = Int("--port") ?? 10300;
 bool hex = args.Contains("--hex");
+bool quitChecks = args.Contains("--quit-checks");
 bool log = hex || args.Contains("--log");
+var clock = System.Diagnostics.Stopwatch.StartNew();
 Realm realmChoice = Realm.Albion;
 if (Value("--realm") is string realmName && !Enum.TryParse(realmName, ignoreCase: true, out realmChoice))
 {
@@ -81,7 +86,8 @@ if (string.IsNullOrEmpty(password))
 
 // Each session step times out on its own (ClientSession.ReplyTimeout); only connecting needs a deadline here.
 using var connectTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-await using var connection = new DaocConnection(log ? new PacketLog(Console.WriteLine, hex) : null);
+await using var connection = new DaocConnection(
+    quitChecks ? new PacketLog(QuitWatch, hex: true) : log ? new PacketLog(Console.WriteLine, hex) : null);
 var session = new ClientSession(connection);
 using var stopKeepAlive = new CancellationTokenSource();
 Task keepAlive = Task.CompletedTask;
@@ -144,7 +150,10 @@ try
             PositionAndObjectId m = moved.Position;
             Console.WriteLine($"jumped: region {m.RegionId}, zone {moved.Zone.Id} ({moved.Zone.Name}), x {m.X} y {m.Y} z {m.Z}");
         }
-        await StayInWorld(TimeSpan.FromSeconds(staySeconds));
+        if (quitChecks)
+            await QuitChecks(realm, enter);
+        else
+            await StayInWorld(TimeSpan.FromSeconds(staySeconds));
     }
 
     return 0;
@@ -211,6 +220,125 @@ async Task StayInWorld(TimeSpan stay)
                       (back is null ? "the server ended the game" : $"back at the character screen ({back.Characters.Count} character(s))"));
 }
 
+// --quit-checks: the four quit cases from docs/code-review-2026-11.md, driven the way the Godot
+// client's LeaveWorld does it (QuitAsync with a cancel token; on movement, stop waiting: the server
+// stands the character up and calls the quit off when its X/Y changes).
+async Task QuitChecks(Realm realm, int slot)
+{
+    Step("1. /quit and stand still");
+    await TimedQuit();
+
+    WorldPosition w = await Reenter();
+    Step("2. /quit, then move after 5 s");
+    using (var interrupt = new CancellationTokenSource())
+    {
+        Task<CharacterOverview?> quit = session.QuitAsync(interrupt.Token);
+        await Task.Delay(TimeSpan.FromSeconds(5));
+        await Walk(w, seconds: 1);
+        interrupt.Cancel();
+        await Swallow(quit);
+    }
+    await StillInWorld(TimeSpan.FromSeconds(30));
+
+    Step("3. /quit again after the cancelled one");
+    await TimedQuit();
+
+    w = await Reenter();
+    Step("4. /quit while running");
+    using (var interrupt = new CancellationTokenSource())
+    {
+        Task running = Walk(w, seconds: 3);
+        await Task.Delay(TimeSpan.FromSeconds(1));
+        Task<CharacterOverview?> quit = session.QuitAsync(interrupt.Token);
+        await running;
+        interrupt.Cancel();
+        await Swallow(quit);
+    }
+    await StillInWorld(TimeSpan.FromSeconds(30));
+
+    Step("leaving: /quit standing still");
+    await TimedQuit();
+
+    async Task TimedQuit()
+    {
+        long started = clock.ElapsedMilliseconds;
+        CharacterOverview? back = await session.QuitAsync();
+        Note($"0xA4 after {(clock.ElapsedMilliseconds - started) / 1000.0:0.0} s; " +
+             (back is null ? "the server ended the game" : "back at the character screen"));
+    }
+
+    async Task<WorldPosition> Reenter()
+    {
+        WorldPosition entered = await session.EnterWorldAsync(realm, slot);
+        Note($"back in the world at x {entered.Position.X} y {entered.Position.Y}");
+        await Task.Delay(TimeSpan.FromSeconds(3));   // let the entry burst settle
+        return entered;
+    }
+
+    // Runs east at run speed (191 units/s), an update every 0.2 s as retail does, then stops.
+    async Task Walk(WorldPosition from, double seconds)
+    {
+        PositionAndObjectId p = from.Position;
+        Note($"running {seconds:0} s");
+        for (double t = 0.2; t <= seconds + 0.01; t += 0.2)
+        {
+            await session.MoveToAsync(p.X + (float)(191 * t), p.Y, p.Z, 1024, speed: 191);
+            await Task.Delay(200);
+        }
+        await session.MoveToAsync(p.X + (float)(191 * seconds), p.Y, p.Z, 1024, speed: 0);
+        Note("stopped");
+    }
+
+    // Reads what arrives for a while (the log prints chat); a 0xA4 here means the quit went ahead.
+    async Task StillInWorld(TimeSpan wait)
+    {
+        using var stop = new CancellationTokenSource(wait);
+        try
+        {
+            while (true)
+                if ((await connection.ReceiveAsync(stop.Token)).Code == QuitReply.Code)
+                    throw new IOException("0xA4 arrived: the quit was not called off");
+        }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+        }
+        Note($"no 0xA4 in {wait.TotalSeconds:0} s: still in the world");
+    }
+
+    static async Task Swallow(Task t)
+    {
+        try { await t; }
+        catch (OperationCanceledException) { }
+    }
+}
+
+void Step(string what) => Console.WriteLine($"\n[{clock.Elapsed.TotalSeconds,6:0.0}] === {what}");
+void Note(string what) => Console.WriteLine($"[{clock.Elapsed.TotalSeconds,6:0.0}]     {what}");
+
+// Packet-log sink for --quit-checks: chat in and out (0xAF), stand/sit requests (0xC7) and the
+// sitting byte of 0xAD (byte 2 of the payload), nothing else.
+void QuitWatch(string line)
+{
+    // "S→C [AF] <hex>"
+    if (line.Length < 9)
+        return;
+    string dir = line[..3], code = line[5..7];
+    if (code is not ("AF" or "AD" or "A4" or "C7"))
+        return;   // includes 0xA7, which the log never writes as hex
+    byte[] bytes = Convert.FromHexString(line[9..]);
+    if (dir == "S→C" && code == "AF")
+    {
+        ChatMessage m = ChatMessage.Parse(bytes.AsSpan(3));
+        Note($"S→C chat {m.Type} (0x{(byte)m.Type:X2}): {m.Text}");
+    }
+    else if (dir == "S→C" && code == "AD" && bytes.Length > 5)
+        Note($"S→C 0xAD status: sitting {bytes[5]}");
+    else if (dir == "S→C" && code == "A4")
+        Note("S→C 0xA4 quit");
+    else if (dir == "C→S" && code is "AF" or "C7")
+        Note($"C→S 0x{code} {Convert.ToHexString(bytes.AsSpan(10, bytes.Length - 12))}");
+}
+
 static void Print(Realm realm, CharacterOverview overview)
 {
     Console.WriteLine($"{realm}: {overview.Characters.Count} character(s), flags 0x{overview.Flags:X}");
@@ -220,5 +348,5 @@ static void Print(Realm realm, CharacterOverview overview)
 
 partial class Program
 {
-    private const string Usage = "usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--create <Name> | --delete <slot> | --enter <slot> [--goto <zone>] [--stay <seconds>]] [--idle <seconds> [--no-keepalive]] [--log | --hex]";
+    private const string Usage = "usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--create <Name> | --delete <slot> | --enter <slot> [--goto <zone>] [--stay <seconds>]] [--idle <seconds> [--no-keepalive]] [--log | --hex] [--quit-checks]";
 }

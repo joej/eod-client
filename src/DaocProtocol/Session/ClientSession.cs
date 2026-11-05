@@ -476,7 +476,8 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// <summary>
     /// Sit down or stand up (0xC7). The server answers with a status update and a chat line (or a
     /// refusal, e.g. while moving), which arrive with the other unprompted packets. Standing up while
-    /// <see cref="QuitAsync"/> waits cancels the server's quit timer: cancel that wait too.
+    /// <see cref="QuitAsync"/> waits cancels the server's quit timer: cancel that wait too. Moving (an
+    /// 0xA9 with a new X/Y) stands the character up on the server by itself; no 0xC7 is needed then.
     /// </summary>
     public Task SitAsync(bool sit, CancellationToken cancellationToken = default)
     {
