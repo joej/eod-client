@@ -20,13 +20,10 @@ public sealed class AssetLibraryTests : IDisposable
             try { if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
     }
 
-    // A minimal real NIF: reuse the bowsprit fixture if present, else skip (the convert path needs a
-    // genuine NIF; the override/texture paths below don't and always run).
-    private static string? BowspritFixture()
-    {
-        string p = Path.Combine(AppContext.BaseDirectory, "live-nif", "sample-422.nif");
-        return File.Exists(p) ? p : null;
-    }
+    // A minimal real NIF: the bowsprit fixture (the convert path needs a genuine NIF; the
+    // override/texture paths below don't and always run).
+    private const string Bowsprit = "live-nif/sample-422.nif";
+    private static string BowspritFixture() => Path.Combine(AppContext.BaseDirectory, Bowsprit);
 
     private AssetIndex IndexWith(params (string name, byte[] data)[] loose)
     {
@@ -36,12 +33,10 @@ public sealed class AssetLibraryTests : IDisposable
         return AssetIndex.Build(_client);
     }
 
-    [Fact]
+    [LiveFact(Bowsprit)]
     public void ConvertsAModelOnceAndCachesTheGlb()
     {
-        string? fixture = BowspritFixture();
-        if (fixture is null)
-            return; // no fixture available; the other tests cover override/texture logic
+        string fixture = BowspritFixture();
 
         // Put the real NIF in the crafted client under a known name, index it.
         Directory.CreateDirectory(_client);
@@ -60,14 +55,12 @@ public sealed class AssetLibraryTests : IDisposable
         Assert.Equal(written, File.GetLastWriteTimeUtc(second.GlbPath!));
     }
 
-    [Fact]
+    [LiveFact(Bowsprit)]
     public void ReconvertRewritesTheCachedGlbAndLeavesNoTemporaryFiles()
     {
         // The Makefile's `mpk model` reconverts when the converter changed: a cached glb must not be
         // returned as-is, and the atomic write must leave nothing but the glb behind.
-        string? fixture = BowspritFixture();
-        if (fixture is null)
-            return;
+        string fixture = BowspritFixture();
         Directory.CreateDirectory(_client);
         File.Copy(fixture, Path.Combine(_client, "thing.nif"));
         var library = new AssetLibrary(AssetIndex.Build(_client), _lib);

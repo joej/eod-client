@@ -21,7 +21,7 @@ public class NifSurveyTests(ITestOutputHelper output)
             yield return [Path.GetFileName(p)];
     }
 
-    [Theory]
+    [LiveTheory("live-nif")]
     [MemberData(nameof(PrivateNifs))]
     public void EveryDecodedBlockEndsExactlyAtTheNextOne(string name)
     {
@@ -323,17 +323,15 @@ public class NifBlockScanTests
 
 /// <summary>
 /// Skinned 10.1 figures: the tree reader, skin weights and inverse bind matrices, checked on a classic
-/// figure from the owner's client (git-ignored fixture; skipped when absent).
+/// figure from the owner's client (git-ignored fixture; see LiveFixture).
 /// </summary>
 public class NifSkinTests
 {
     private static string Fixture => Path.Combine(AppContext.BaseDirectory, "live-nif", "bcommonm-1010.nif");
 
-    [Fact]
+    [LiveFact("live-nif/bcommonm-1010.nif")]   // the owner's figures/bcommonm.nif
     public void AClassicFigureStandsAssembledInItsBindPose()
     {
-        if (!File.Exists(Fixture))
-            return;   // private fixture (the owner's figures/bcommonm.nif) not present
         byte[] bytes = File.ReadAllBytes(Fixture);
         NifModel model = NifFile.Read(bytes);
         Assert.True(model.Joints.Count > 100);
@@ -361,11 +359,9 @@ public class NifSkinTests
             }
     }
 
-    [Fact]
+    [LiveFact("live-nif/bcommonm-1010.nif")]
     public void TheExportedSkinPosesTheFigureToHumanHeight()
     {
-        if (!File.Exists(Fixture))
-            return;
         NifModel model = NifFile.Read(File.ReadAllBytes(Fixture));
         // Keep one variant per slot, as the viewer does, and measure through glTF's own skinning.
         string[] parts = ["Body1:", "LBody1:", "Legs1:", "Boots1:", "Arms1:", "Gloves1:", "HeadA1:"];
@@ -393,7 +389,7 @@ public class NifSkinTests
 /// glTF writer, so it has to be caught here (ncarcass-421.nif has a node with a NaN transform).</summary>
 public class NifFiniteGeometryTests
 {
-    [Theory]
+    [LiveTheory("live-nif")]
     [MemberData(nameof(NifSurveyTests.PrivateNifs), MemberType = typeof(NifSurveyTests))]
     public void EveryFixtureConvertsToFiniteVertices(string name)
     {

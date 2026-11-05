@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Build everything (warnings are errors) and run the tests. Tests over the owner's client files
+# (private/*-fixtures) are reported as skipped here; RoadmapFormatTests guards the site's parse rules.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet build eod-client.slnx
+      - name: dotnet test (German locale, to catch culture-dependent number parsing)
+        run: dotnet test eod-client.slnx --no-build
+        env:
+          LANG: de_DE.UTF-8
+          LC_ALL: de_DE.UTF-8

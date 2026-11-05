@@ -115,14 +115,12 @@ public class ZoneWaterTests
         Assert.Equal("water00,Test River,RIVER,1916,watery,ripl,-50,16776960", ZoneWater.CsvRow(r));
     }
 
-    [Fact]
+    [LiveFact("live-terrain/SECTOR.DAT")]
     public void CamelotHillsRiverRunsUnderTheBridge()
     {
         // The owner's Camelot Hills SECTOR.DAT (git-ignored fixture). river00: 33 bank pairs at height
         // 1916; the bridge (zone-local 36608, 50944) lies between pair 9's banks.
         string path = Path.Combine(AppContext.BaseDirectory, "live-terrain", "SECTOR.DAT");
-        if (!File.Exists(path))
-            return;
         var bodies = ZoneWater.Parse(File.ReadAllText(path, System.Text.Encoding.Latin1));
         WaterBody river = bodies.Single(b => b.Index == 0);
         Assert.Equal(("RIVER", 1916f), (river.Type, river.Height));

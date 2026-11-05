@@ -10,7 +10,7 @@ namespace DaocAssets.Tests;
 /// Catacombs figures: a model id's Catacombs version resolved through monsters.csv, monnifs.csv,
 /// fig3map.csv, fig3parts.csv and fig3haircolormap.csv (rows shaped like the install's, cut down), and
 /// parts bound to a skeleton by bone name. The live tests read real files from git-ignored
-/// private/nif-fixtures and skip when they are absent.
+/// private/nif-fixtures and are skipped (see LiveFixture) when absent.
 /// </summary>
 public sealed class CatacombsFigureTests
 {
@@ -140,7 +140,7 @@ public sealed class CatacombsFigureTests
             yield return [Live("bri_m_head01-1010.nif")];
     }
 
-    [Theory]
+    [LiveTheory("live-nif/bri_m_head01-1010.nif")]
     [MemberData(nameof(BritonHead))]
     public void AHeadsMorphTargetsAndCodesReachTheGltf(string path)
     {
@@ -253,7 +253,7 @@ public sealed class CatacombsFigureTests
             yield return [Live("bri_m_skeleton-1010.nif")];
     }
 
-    [Theory]
+    [LiveTheory("live-nif/bri_m_skeleton-1010.nif", "live-nif/body01_bc_m-1010.nif", "live-nif/dwa_f_hair01-1010.nif")]
     [MemberData(nameof(BritonSkeleton))]
     public void ASkeletonFileReadsAsJoints(string path)
     {
@@ -263,7 +263,7 @@ public sealed class CatacombsFigureTests
         Assert.All(joints.Skip(1), j => Assert.InRange(j.Parent, 0, joints.Count - 1));
     }
 
-    [Theory]
+    [LiveTheory("live-nif/bri_m_skeleton-1010.nif", "live-nif/body01_bc_m-1010.nif", "live-nif/dwa_f_hair01-1010.nif")]
     [MemberData(nameof(BritonSkeleton))]
     public void AHairWhoseOneBonePointsAtItsOwnRootIsANamedBonePart(string _)
     {
@@ -276,7 +276,7 @@ public sealed class CatacombsFigureTests
         Assert.All(hair.Vertices, v => Assert.InRange(v.Z, 55f, 85f));   // head height, not the feet
     }
 
-    [Theory]
+    [LiveTheory("live-nif/bri_m_skeleton-1010.nif", "live-nif/body01_bc_m-1010.nif", "live-nif/dwa_f_hair01-1010.nif")]
     [MemberData(nameof(BritonSkeleton))]
     public void ABodyPartBindsToEveryBoneItNamesAndRestsAsStored(string path)
     {
@@ -298,7 +298,7 @@ public sealed class CatacombsFigureTests
             yield return [Live("cat_i_hm-1010.kfa")];
     }
 
-    [Theory]
+    [LiveTheory("live-nif/cat_i_hm-1010.kfa")]
     [MemberData(nameof(CatacombsClip))]
     public void ACatacombsClipReadsAs10_1(string path)
     {

@@ -109,7 +109,7 @@ public sealed class MpkArchiveTests
                 yield return [path];
     }
 
-    [Theory]
+    [LiveTheory("live-mpk")]
     [MemberData(nameof(LiveArchives))]
     public void ExtractsEveryMemberOfARealArchive(string path)
     {
@@ -122,7 +122,7 @@ public sealed class MpkArchiveTests
         }
     }
 
-    [Theory]
+    [LiveTheory("live-mpk")]
     [MemberData(nameof(LiveArchives))]
     public void RandomAccessReadsOneMemberWithoutReadingTheRest(string path)
     {

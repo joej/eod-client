@@ -344,7 +344,8 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │                                  #   and LOD rules, GltfExporter via SharpGLTF), Zone/ (zone
 │                                  #   layout, heightmap terrain, PCX), Library/ (convert-once
 │                                  #   asset library + install index), TextureResolver
-├── tests/DaocAssets.Tests/        # asset readers against golden fixtures (some read git-ignored private ones)
+├── tests/DaocAssets.Tests/        # asset readers against golden fixtures; [LiveFact]/[LiveTheory] ones read
+│                                  #   git-ignored private/*-fixtures, skipped when absent (DAOC_REQUIRE_FIXTURES=1: fail)
 ├── tests/DaocProtocol.Tests/      # net10.0 xUnit; Fixtures/ holds the RustDAoC 1.127e capture
 │                                  # (GPL, provenance in Fixtures/README.md). FakeServer: localhost
 │                                  # server replaying recorded replies, for ClientSession tests

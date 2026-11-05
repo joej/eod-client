@@ -56,7 +56,9 @@ libraries.
   model viewer orbits any converted model.
 - **Tests** (`tests/`): framing/checksum against the recorded session, packet builders and parsers,
   a fake server that replays recorded replies, and the asset readers (MPK, NIF, textures, zone,
-  terrain) against golden fixtures.
+  terrain) against golden fixtures. Tests that need files from your own client install
+  (git-ignored `private/*-fixtures`) are reported as skipped without them;
+  `DAOC_REQUIRE_FIXTURES=1 dotnet test` makes a missing one fail. CI runs build and tests on every push.
 - **Command-line tools** (`tools/`): `DaocCli` runs the login→world→quit flow without a window for
   testing; `AssetExtract` (`mpk`) is the asset converter CLI; an EoD `Launcher` (Windows, built but
   not yet validated) for pointing a real client at a server.

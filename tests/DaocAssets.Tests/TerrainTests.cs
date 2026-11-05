@@ -6,7 +6,7 @@ namespace DaocAssets.Tests;
 
 /// <summary>
 /// Terrain: PCX decoding (crafted image, no fixture) and the height formula / mesh against the real
-/// Camelot Hills data when the git-ignored fixtures are present (skips cleanly otherwise). The
+/// Camelot Hills data when the git-ignored fixtures are present (skipped otherwise, see LiveFixture). The
 /// height formula Z = terrain*scalefactor + offset*offsetfactor is the one verified byte-for-byte
 /// against the live spawn (Eodarms Z=2896 at cell (101,182): 162*8 + 50*32).
 /// </summary>
@@ -53,7 +53,7 @@ public sealed class TerrainTests
             yield return [dir];
     }
 
-    [Theory]
+    [LiveTheory("live-terrain/terrain.pcx", "live-terrain/SECTOR.DAT")]
     [MemberData(nameof(TerrainDir))]
     public void HeightFormulaMatchesTheLiveSpawn(string dir)
     {

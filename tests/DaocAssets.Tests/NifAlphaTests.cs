@@ -44,7 +44,7 @@ public class NifAlphaTests(ITestOutputHelper output)
         }
     }
 
-    [Theory]
+    [LiveTheory("live-nif/elm1-421.nif", "live-nif/oak1-4101.nif")]
     [MemberData(nameof(Trees))]
     public void TreeLeavesAreTwoSidedCutouts(string path)
     {

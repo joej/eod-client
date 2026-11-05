@@ -10,11 +10,11 @@ namespace DaocAssets.Tests;
 /// <summary>
 /// NIF reader tests. The live tests run against real client NIFs in git-ignored
 /// private/nif-fixtures (copied to output when present) and assert the golden geometry decoded
-/// by hand and cross-checked against nif.xml. They skip when the fixtures are absent.
+/// by hand and cross-checked against nif.xml. They are skipped (see LiveFixture) when absent.
 /// </summary>
 public sealed class NifFileTests
 {
-    // A single case when the fixture is present, none otherwise, so the test skips cleanly.
+    // A single case when the fixture is present; [LiveTheory] reports the test as skipped otherwise.
     public static IEnumerable<object[]> Bowsprit()
     {
         string p = Path.Combine(AppContext.BaseDirectory, "live-nif", "sample-422.nif");
@@ -57,7 +57,7 @@ public sealed class NifFileTests
             yield return [p];
     }
 
-    [Theory]
+    [LiveTheory("live-nif/sample-422.nif")]
     [MemberData(nameof(Bowsprit))]
     public void ReadsTheBowspritGoldenGeometry(string path)
     {
@@ -83,7 +83,7 @@ public sealed class NifFileTests
         Assert.Equal("a29c9f18d2b00746", TriHash(mesh));
     }
 
-    [Theory]
+    [LiveTheory("live-nif/sample-1010.nif")]
     [MemberData(nameof(Ambrat))]
     public void ReadsTheAmbratGamebryoGoldenGeometry(string path)
     {
@@ -107,7 +107,7 @@ public sealed class NifFileTests
         Assert.Equal("6178f8385ce0c558", TriHash(mesh));
     }
 
-    [Theory]
+    [LiveTheory("live-nif/sample-strips-1010.nif")]
     [MemberData(nameof(StripsCreature))]
     public void ReadsTheTriStripsGoldenGeometry(string path)
     {
@@ -133,7 +133,7 @@ public sealed class NifFileTests
         Assert.Equal("7273be65c279afb2", TriHash(m1));
     }
 
-    [Theory]
+    [LiveTheory("live-nif/sample-strips-4x.nif")]
     [MemberData(nameof(Strips4x))]
     public void ReadsThe4xTriStripsGoldenGeometry(string path)
     {
@@ -151,7 +151,7 @@ public sealed class NifFileTests
         Assert.Equal("da58e35b38cf8ca7", TriHash(mesh));
     }
 
-    [Theory]
+    [LiveTheory("live-nif/sample-multimat-4x.nif")]
     [MemberData(nameof(MultiMat4x))]
     public void ReadsPerShapeTexturesInAMultiMaterialModel(string path)
     {
@@ -184,7 +184,7 @@ public sealed class NifFileTests
         Assert.Equal("baf5e3a26b8f8ff7", TextureMapHash(model));
     }
 
-    [Theory]
+    [LiveTheory("live-nif/keep-422.nif")]
     [MemberData(nameof(Keep422))]
     public void UntexturedKeepShapesCarryMaterialColourNotTheSharedTexture(string path)
     {
@@ -249,7 +249,7 @@ public sealed class NifFileTests
             yield return [p];
     }
 
-    [Theory]
+    [LiveTheory("live-nif/domnangrove-422.nif")]
     [MemberData(nameof(DomnanGrove))]
     public void TheGrovesStandingStonesCarryTheirDarkMapOnTheSecondUvSet(string path)
     {
@@ -483,7 +483,7 @@ public sealed class NifFileTests
         Assert.Contains(factors, f => Near(f, grey));
     }
 
-    [Theory]
+    [LiveTheory("live-nif/keep-422.nif")]
     [MemberData(nameof(Keep422))]
     public void CollisionAndHiddenHelperShapesAreDroppedFromTheScene(string path)
     {
@@ -502,7 +502,7 @@ public sealed class NifFileTests
         Assert.True(exported < model.Meshes.Count, "some shapes should be dropped");
     }
 
-    [Theory]
+    [LiveTheory("live-nif/keep-422.nif")]
     [MemberData(nameof(Keep422))]
     public void OnlyTheNearLodLevelIsExported(string path)
     {
@@ -559,7 +559,7 @@ public sealed class NifFileTests
         Assert.Throws<NifFormatException>(() => NifFile.Read("not a nif at all"u8.ToArray()));
     }
 
-    [Theory]
+    [LiveTheory("live-nif/sample-422.nif")]
     [MemberData(nameof(Bowsprit))]
     public void ConvertsToAValidGlbWithYUpGeometry(string path)
     {
@@ -595,7 +595,7 @@ public sealed class NifFileTests
         AssertWindingFacesOutward(prim);
     }
 
-    [Theory]
+    [LiveTheory("live-nif/sample-strips-1010.nif")]
     [MemberData(nameof(StripsCreature))]
     public void HumanoidConvertsToAPlausibleHeightInMetres(string path)
     {
@@ -695,7 +695,7 @@ public sealed class NifFileTests
         return Convert.ToHexStringLower(SHA256.HashData(buf))[..16];
     }
 
-    [Theory]
+    [LiveTheory("live-nif/keep-422.nif")]
     [MemberData(nameof(Keep422))]
     public void KeepDrawsOnlyItsNearLevelOnce(string path)
     {
