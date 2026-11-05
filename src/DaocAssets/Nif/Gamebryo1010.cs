@@ -772,100 +772,28 @@ internal static class Gamebryo1010
         return (source, uvSet);
     }
 
-    // NiGeometryData at 10.1.0.0, shared by triangle and particle data: Num Vertices to Consistency
-    // Flags. The Data Flags u16 holds the UV-set count (low 6 bits) and "has tangents" (bit 12).
+    // NiGeometryData at 10.1.0.0, shared by triangle and particle data (NifGeometry.ReadBase).
     private static int GeometryDataBase(ref NifCursor c, Gb10Block b, Dictionary<string, int> f)
     {
-        string type = b.Type;
-        int nv = c.U16();
-        c.U8(); c.U8();                                 // Keep Flags, Compress Flags
-        if (StrictBool(ref c)) b.Vertices = Vec3s(ref c, nv);
-        int dataFlags = c.U16();
-        int uvSets = dataFlags & 0x3F;
-        bool tangents = (dataFlags & 0x1000) != 0;
-        bool normals = StrictBool(ref c);
-        if (normals)
-        {
-            b.Normals = Vec3s(ref c, nv);
-            if (tangents) Skip(ref c, nv * 24L);        // tangents, bitangents
-        }
-        else Bump(f, $"{type}: no normals");
-        if (normals && tangents) Bump(f, $"{type}: tangents");
-        Skip(ref c, 16);                                // Center, Radius
-        if (StrictBool(ref c))
-        {
-            Bump(f, $"{type}: vertex colours");
-            b.Colors = new Vector4[nv];
-            for (int v = 0; v < nv; v++) b.Colors[v] = new Vector4(c.F32(), c.F32(), c.F32(), c.F32());
-        }
-        if (uvSets == 0) Bump(f, $"{type}: no UVs");
-        if (uvSets > 1) Bump(f, $"{type}: {uvSets} UV sets");
-        b.UvSets = new Vector2[uvSets][];
-        for (int s = 0; s < uvSets; s++)
-        {
-            var set = new Vector2[nv];
-            for (int v = 0; v < nv; v++) set[v] = new Vector2(c.F32(), c.F32());
-            b.UvSets[s] = set;
-        }
-        c.U16();                                        // Consistency Flags
-        return nv;
+        NifGeometryData g = NifGeometry.ReadBase(ref c, b.Type, gamebryo10: true, f);
+        Store(b, g);
+        return g.VertexCount;
     }
 
-    // NiTriBasedGeomData + NiTriShapeData / NiTriStripsData at 10.1.0.0, after the NiGeometryData base.
+    // NiTriShapeData / NiTriStripsData at 10.1.0.0 (NifGeometry.Read).
     private static void GeometryData(ref NifCursor c, Gb10Block b, Dictionary<string, int> f)
     {
-        string type = b.Type;
-        int nv = GeometryDataBase(ref c, b, f);
-        int triangles = c.U16();
-        if (type == "NiTriShapeData")
-        {
-            if (c.U32() != (uint)triangles * 3) throw new NifFormatException("Num Triangle Points != 3 x triangles.");
-            if (StrictBool(ref c))
-            {
-                b.Triangles = new (ushort, ushort, ushort)[triangles];
-                for (int t = 0; t < triangles; t++)
-                    b.Triangles[t] = (Index(ref c, nv), Index(ref c, nv), Index(ref c, nv));
-            }
-            int groups = c.U16();
-            for (int g = 0; g < groups; g++)
-                Skip(ref c, c.U16() * 2L);
-        }
-        else
-        {
-            int strips = c.U16();
-            var lengths = new int[strips];
-            for (int s = 0; s < strips; s++) lengths[s] = c.U16();
-            if (StrictBool(ref c))
-            {
-                var tris = new List<(ushort, ushort, ushort)>();
-                foreach (int len in lengths)
-                {
-                    var strip = new ushort[len];
-                    for (int k = 0; k < len; k++)
-                    {
-                        strip[k] = c.U16();         // 0xFFFF = strip restart
-                        if (strip[k] >= nv && strip[k] != 0xFFFF)
-                            throw new NifFormatException($"Strip index {strip[k]} of {nv}.");
-                    }
-                    NifFile.AppendStrip(strip, tris);
-                }
-                b.Triangles = [.. tris];
-            }
-        }
+        NifGeometryData g = NifGeometry.Read(ref c, b.Type, gamebryo10: true, f);
+        Store(b, g);
+        b.Triangles = g.Triangles;
     }
 
-    private static ushort Index(ref NifCursor c, int nv)
+    private static void Store(Gb10Block b, NifGeometryData g)
     {
-        ushort i = c.U16();
-        if (i >= nv) throw new NifFormatException($"Vertex index {i} of {nv}.");
-        return i;
-    }
-
-    private static Vector3[] Vec3s(ref NifCursor c, int n)
-    {
-        var a = new Vector3[n];
-        for (int i = 0; i < n; i++) a[i] = c.Vec3();
-        return a;
+        b.Vertices = g.Vertices;
+        b.Normals = g.Normals;
+        b.Colors = g.Colors;
+        b.UvSets = g.UvSets;
     }
 
     // NiTimeController (10.1, as 4.x): Next Controller, Flags, Frequency, Phase, Start, Stop, Target.

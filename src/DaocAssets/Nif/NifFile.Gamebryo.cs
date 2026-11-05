@@ -40,18 +40,20 @@ public static partial class NifFile
             t.Trans.X, t.Trans.Y, t.Trans.Z, 1);
     }
 
-    // The tree walk over a parsed 10.1 file. Returns null if the file didn't decode completely.
-    private static NifModel? ReadGamebryoTree(ReadOnlySpan<byte> bytes, NifVersion version)
+    // The tree walk over a parsed 10.1 file. Throws if the file doesn't decode completely or holds no
+    // geometry: without block sizes there is no safe way to skip what we can't read.
+    private static NifModel ReadGamebryoTree(ReadOnlySpan<byte> bytes, NifVersion version)
     {
         Gb10File g = Gamebryo1010.Parse(bytes);
         if (!g.Complete)
-            return null;
+            throw new NifFormatException(
+                $"10.1 NIF stops at {g.StopType ?? "an undecoded block"} ({g.StopReason ?? g.Result.ToString()}); not supported.");
         Gb10Block[] blocks = g.Blocks!;
         var b = new Gb10Builder(blocks);
         foreach (int root in g.Roots.Length > 0 ? g.Roots : [0])
             b.Walk(root, -1, Matrix4x4.Identity, helper: false, alpha: -1, stencil: -1);
         if (b.Meshes.Count == 0)
-            return null;
+            throw new NifFormatException("10.1 NIF has no geometry.");
         // A skeleton only when something is skinned to it: a static 10.1 object exports as baked
         // meshes like a 4.x one (its nodes would otherwise become joints, and repeated helper names
         // such as "collidee" made the glTF writer refuse the file).

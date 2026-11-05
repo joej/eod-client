@@ -6,9 +6,10 @@ namespace DaocAssets.Nif;
 
 /// <summary>
 /// Parses a NIF file into its static meshes. Entry point: <see cref="Read(ReadOnlySpan{byte})"/>.
-/// Implements the NetImmerse 4.2.x path (items); Gamebryo 10.1.0.0 (creatures) is handled
-/// separately once decoded. Unknown block types are skipped by walking to the next recognised
-/// block, so a file we don't fully model still yields the geometry we do understand.
+/// NetImmerse 4.x: unknown block types are skipped by walking to the next recognised block, so a
+/// file we don't fully model still yields the geometry we do understand. Gamebryo 10.1.0.0 has no
+/// block sizes, so a 10.1 file must decode block by block to the footer (<c>Gamebryo1010</c>); one
+/// that stops at a type we don't decode is reported as unsupported.
 /// </summary>
 public static partial class NifFile
 {
@@ -37,7 +38,7 @@ public static partial class NifFile
         if (version >= V1020)
             throw new NifFormatException($"NIF version {version} is newer than supported (4.2.x and 10.1.0.0 only).");
         if (version >= V1010)
-            return ReadGamebryoTree(bytes, version) ?? ReadGamebryo1010(bytes, c, version);
+            return ReadGamebryoTree(bytes, version);
         if (version <= V4000)
             throw new NifFormatException($"NIF version {version} is older than supported (4.1.0.1+).");
 
@@ -565,12 +566,7 @@ public static partial class NifFile
         try
         {
             c.SizedString(); // skip the type string
-            return d.Type switch
-            {
-                "NiTriShapeData" => ReadTriShapeData(ref c, default, "geom"),
-                "NiTriStripsData" => ReadTriStripsData4x(ref c, "geom"),
-                _ => null,
-            };
+            return d.Type is "NiTriShapeData" or "NiTriStripsData" ? ReadGeometryData4x(ref c, d.Type, "geom") : null;
         }
         catch (NifFormatException)
         {
@@ -807,255 +803,10 @@ public static partial class NifFile
         }
     }
 
-    // Gamebryo 10.1.0.0 (creatures). The header after the Version u32 is: User Version u32,
-    // Num Blocks u32, Num Block Types u16, [SizedString x Num Block Types], Block Type Index
-    // (u16 x Num Blocks). Block bodies carry no inline type string — the type comes from the index
-    // table — and the intermediate blocks (NiNode, NiKeyframeController/Data, NiSkin*) have large
-    // version-gated layouts we don't need. Since the goal is geometry, we read the header to bound
-    // and validate the file, then locate each NiTriShapeData body by a strict, self-validating scan
-    // (every field consistency-checked), mirroring the 4.2.x approach of finding geometry without
-    // modelling every intermediate block. Verified byte-for-byte against a real creature NIF.
-    private static NifModel ReadGamebryo1010(ReadOnlySpan<byte> bytes, NifCursor c, NifVersion version)
-    {
-        c.U32();                                  // User Version
-        int blockCount = checked((int)c.U32());   // Num Blocks
-        int numTypes = c.U16();                    // Num Block Types
-        if (blockCount is < 1 or > 100000 || numTypes is < 1 or > 10000)
-            throw new NifFormatException($"Implausible 10.1.0.0 header (blocks {blockCount}, types {numTypes}).");
-
-        var typeNames = new string[numTypes];
-        for (int t = 0; t < numTypes; t++)
-            typeNames[t] = c.SizedString();
-        bool hasShape = false, hasStrips = false;
-        foreach (string t in typeNames)
-        {
-            hasShape |= t == "NiTriShapeData";
-            hasStrips |= t == "NiTriStripsData";
-        }
-        // Block Type Index (u16 per block) follows; skipping it lands the cursor at the first body.
-        for (int b = 0; b < blockCount; b++)
-            c.U16();
-        int bodiesStart = c.Pos;
-
-        if (!hasShape && !hasStrips)
-            throw new NifFormatException("No NiTriShapeData/NiTriStripsData type in 10.1.0.0 NIF (no geometry we read).");
-
-        // Scan for geometry bodies. A file holds one kind (shape or strips); try whichever the type
-        // table says is present, each a strict self-validating parse so a wrong offset is rejected.
-        var meshes = new List<NifMesh>();
-        int scan = bodiesStart;
-        while (scan < bytes.Length)
-        {
-            if (hasShape && TryReadTriShapeData1010(bytes, scan, $"mesh{meshes.Count}", out NifMesh mesh, out int next))
-            {
-                meshes.Add(mesh);
-                scan = next;
-            }
-            else if (hasStrips && TryReadTriStripsData1010(bytes, scan, $"mesh{meshes.Count}", out NifMesh strip, out int nextS))
-            {
-                meshes.Add(strip);
-                scan = nextS;
-            }
-            else
-            {
-                scan++;
-            }
-        }
-
-        if (meshes.Count == 0)
-            throw new NifFormatException("No NiTriShapeData/NiTriStripsData geometry decoded in 10.1.0.0 NIF.");
-
-        string? textureFile = FindFirstTextureName(bytes);
-        if (textureFile is not null)
-            for (int m = 0; m < meshes.Count; m++)
-                meshes[m] = meshes[m] with { TextureFile = meshes[m].TextureFile ?? textureFile };
-
-        return new NifModel { Version = version, Meshes = meshes };
-    }
-
-    // The geometry data shared by NiTriShapeData and NiTriStripsData at 10.1.0.0 (the NiGeometryData
-    // -> NiTriBasedGeomData part), read up to and including Num Triangles. Field order (gates
-    // resolved for 10.1.0.0, verified against nif.xml):
-    //   Num Vertices u16; Keep Flags u8; Compress Flags u8; Has Vertices bool(1) + Vertices;
-    //   Data Flags u16 (low 6 bits = UV-set count, bit 4096 = tangents present); Has Normals bool(1)
-    //   + Normals [+ Tangents + Bitangents if bit 4096]; Bounding Sphere (centre+radius);
-    //   Has Vertex Colors bool(1) + Color4s; UV sets; Consistency Flags u16; Num Triangles u16.
-    // Returns false on any inconsistency so it can drive a self-validating scan for the block.
-    private static bool TryReadGeometryCommon1010(
-        ref NifCursor c, out int numVertices, out Vector3[] vertices,
-        out Vector3[]? normals, out Vector2[]? texCoords, out int numTriangles)
-    {
-        numVertices = 0; vertices = []; normals = null; texCoords = null; numTriangles = 0;
-
-        int nv = c.U16();
-        if (nv is < 1 or > 65535)
-            return false;
-        c.U8();                      // Keep Flags
-        c.U8();                      // Compress Flags
-
-        if (!TryBool(ref c, out bool hasVerts) || !hasVerts) // geometry we use always has vertices
-            return false;
-        vertices = ReadVec3Array(ref c, nv);
-
-        int dataFlags = c.U16();
-        int uvSets = dataFlags & 0x3F;
-        bool hasTangents = (dataFlags & 0x1000) != 0;
-
-        if (!TryBool(ref c, out bool hasNormals)) return false;
-        normals = hasNormals ? ReadVec3Array(ref c, nv) : null;
-        if (hasNormals && hasTangents)
-            for (int k = 0; k < nv; k++) { c.Vec3(); c.Vec3(); } // tangents + bitangents
-
-        c.Vec3(); c.F32();           // Bounding Sphere
-
-        if (!TryBool(ref c, out bool hasColors)) return false;
-        if (hasColors)
-            for (int k = 0; k < nv * 4; k++) c.F32();
-
-        for (int s = 0; s < uvSets; s++)
-        {
-            var set = new Vector2[nv];
-            for (int v = 0; v < nv; v++)
-                set[v] = new Vector2(c.F32(), c.F32());
-            texCoords ??= set;
-        }
-
-        c.U16();                     // Consistency Flags
-        numTriangles = c.U16();
-        numVertices = nv;
-        return true;
-    }
-
-    // NiTriShapeData body at 10.1.0.0 (self-validating). After the shared geometry:
-    //   Num Triangle Points u32 (=3x); Has Triangles bool(1) + Triangles; Num Match Groups u16.
-    private static bool TryReadTriShapeData1010(
-        ReadOnlySpan<byte> bytes, int offset, string name, out NifMesh mesh, out int next)
-    {
-        mesh = null!;
-        next = offset;
-        try
-        {
-            var c = new NifCursor(bytes);
-            c.SeekTo(offset);
-
-            if (!TryReadGeometryCommon1010(ref c, out int nv, out Vector3[] vertices,
-                    out Vector3[]? normals, out Vector2[]? texCoords, out int numTriangles))
-                return false;
-            if (numTriangles == 0)
-                return false;
-
-            uint numTrianglePoints = c.U32();
-            if (numTrianglePoints != (uint)numTriangles * 3)
-                return false;
-            if (!TryBool(ref c, out bool hasTriangles) || !hasTriangles)
-                return false;
-
-            var triangles = new (ushort, ushort, ushort)[numTriangles];
-            for (int t = 0; t < numTriangles; t++)
-            {
-                ushort a = c.U16(), b = c.U16(), cc = c.U16();
-                if (a >= nv || b >= nv || cc >= nv)
-                    return false;
-                triangles[t] = (a, b, cc);
-            }
-            int matchGroups = c.U16();
-            if (matchGroups is < 0 or > 70000)
-                return false;
-
-            mesh = new NifMesh
-            {
-                Name = name,
-                Vertices = vertices,
-                Normals = normals,
-                TexCoords = texCoords,
-                Triangles = triangles,
-            };
-            next = c.Pos;
-            return true;
-        }
-        catch (NifFormatException)
-        {
-            return false;
-        }
-    }
-
-    // NiTriStripsData body at 10.1.0.0 (self-validating). After the shared geometry:
-    //   Num Strips u16; Strip Lengths u16 x Num Strips; Has Points bool(1); Points u16 (one array
-    //   per strip, each Strip Lengths[i] long). We convert the strips to a triangle list, flipping
-    //   winding on odd triangles and dropping degenerate (stitch) triangles.
-    private static bool TryReadTriStripsData1010(
-        ReadOnlySpan<byte> bytes, int offset, string name, out NifMesh mesh, out int next)
-    {
-        mesh = null!;
-        next = offset;
-        try
-        {
-            var c = new NifCursor(bytes);
-            c.SeekTo(offset);
-
-            if (!TryReadGeometryCommon1010(ref c, out int nv, out Vector3[] vertices,
-                    out Vector3[]? normals, out Vector2[]? texCoords, out int numTriangles))
-                return false;
-            if (numTriangles == 0)
-                return false;
-
-            int numStrips = c.U16();
-            if (numStrips is < 1 or > 10000)
-                return false;
-            var lengths = new int[numStrips];
-            long totalPoints = 0;
-            for (int s = 0; s < numStrips; s++)
-            {
-                lengths[s] = c.U16();
-                totalPoints += lengths[s];
-            }
-            if (totalPoints is 0 or > 2_000_000)
-                return false;
-            if (!TryBool(ref c, out bool hasPoints) || !hasPoints)
-                return false;
-
-            var triangles = new List<(ushort, ushort, ushort)>();
-            for (int s = 0; s < numStrips; s++)
-            {
-                int len = lengths[s];
-                var strip = new ushort[len];
-                for (int i = 0; i < len; i++)
-                {
-                    ushort idx = c.U16();
-                    // 0xFFFF is a strip-restart sentinel in some data; otherwise indices must be valid.
-                    if (idx != 0xFFFF && idx >= nv)
-                        return false;
-                    strip[i] = idx;
-                }
-                AppendStripTriangles(strip, triangles);
-            }
-            if (triangles.Count == 0)
-                return false;
-
-            mesh = new NifMesh
-            {
-                Name = name,
-                Vertices = vertices,
-                Normals = normals,
-                TexCoords = texCoords,
-                Triangles = triangles.ToArray(),
-            };
-            next = c.Pos;
-            return true;
-        }
-        catch (NifFormatException)
-        {
-            return false;
-        }
-    }
-
     // Converts one triangle strip to triangles: triangle i is (p[i], p[i+1], p[i+2]) with winding
     // flipped on odd i to keep consistent facing. Degenerate triangles (a repeated index, used to
     // stitch strips together, plus the 0xFFFF restart sentinel) are dropped.
-    internal static void AppendStrip(ushort[] strip, List<(ushort, ushort, ushort)> into) =>
-        AppendStripTriangles(strip, into);
-
-    private static void AppendStripTriangles(ushort[] strip, List<(ushort, ushort, ushort)> into)
+    internal static void AppendStrip(ushort[] strip, List<(ushort, ushort, ushort)> into)
     {
         for (int i = 0; i + 2 < strip.Length; i++)
         {
@@ -1066,142 +817,19 @@ public static partial class NifFile
         }
     }
 
-    // A 1-byte bool that must be exactly 0 or 1 (used to reject a wrong scan offset).
-    private static bool TryBool(ref NifCursor c, out bool value)
+    // NiTriShapeData / NiTriStripsData at 4.x, as a mesh (NifGeometry.Read).
+    private static NifMesh ReadGeometryData4x(ref NifCursor c, string type, string name)
     {
-        byte b = c.U8();
-        value = b != 0;
-        return b is 0 or 1;
-    }
-
-    // Scans for the first external texture file name (a sized string ending in a known image
-    // extension). Works for both the 4.2.x and 10.1.0.0 NiSourceTexture layouts.
-    private static string? FindFirstTextureName(ReadOnlySpan<byte> bytes)
-    {
-        for (int q = 0; q + 4 <= bytes.Length; q++)
-        {
-            uint len = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(q, 4));
-            if (len is < 5 or > 255 || q + 4 + (int)len > bytes.Length)
-                continue;
-            ReadOnlySpan<byte> s = bytes.Slice(q + 4, (int)len);
-            bool printable = true;
-            foreach (byte ch in s)
-                if (ch is < 0x20 or > 0x7E) { printable = false; break; }
-            if (!printable)
-                continue;
-            string str = System.Text.Encoding.Latin1.GetString(s);
-            if (str.EndsWith(".dds", StringComparison.OrdinalIgnoreCase)
-                || str.EndsWith(".tga", StringComparison.OrdinalIgnoreCase)
-                || str.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase))
-                return str;
-        }
-        return null;
-    }
-
-    // The geometry data shared by NiTriShapeData and NiTriStripsData at 4.x (NiGeometryData ->
-    // NiTriBasedGeomData), read up to and including Num Triangles. Field order for 4.2.x (verified):
-    //   Num Vertices u16; Has Vertices bool(1) + Vertices; Has Normals bool(1) + Normals; Bounding
-    //   Sphere (centre+radius); Has Vertex Colors bool(1) + Color4s; Data Flags u16 (`until=4.2.2.0`,
-    //   low 6 bits = UV-set count); UV sets; Num Triangles u16. No Keep/Compress bytes and no
-    //   Consistency Flags (those are `since 10.x`); no Has-UV byte (that is `until=4.0.0.2`).
-    private static void ReadGeometryCommon4x(
-        ref NifCursor c, out int numVertices, out Vector3[] vertices,
-        out Vector3[]? normals, out Vector2[][] uvSets, out Vector4[]? colors, out int numTriangles)
-    {
-        numVertices = c.U16();
-        vertices = c.Bool() ? ReadVec3Array(ref c, numVertices) : [];
-        normals = c.Bool() ? ReadVec3Array(ref c, numVertices) : null;
-        c.Vec3(); c.F32();           // Bounding sphere: centre + radius
-        colors = null;
-        if (c.Bool())                // vertex colours (Color4); whether they're used is the property's call
-        {
-            colors = new Vector4[numVertices];
-            for (int v = 0; v < numVertices; v++)
-                colors[v] = new Vector4(c.F32(), c.F32(), c.F32(), c.F32());
-        }
-
-        int setCount = c.U16() & 0x3F; // Data Flags (until=4.2.2.0): low 6 bits = UV-set count
-        uvSets = new Vector2[setCount][];
-        for (int s = 0; s < setCount; s++)
-        {
-            Vector2[] set = new Vector2[numVertices];
-            for (int v = 0; v < numVertices; v++)
-                set[v] = new Vector2(c.F32(), c.F32());
-            uvSets[s] = set;
-        }
-
-        numTriangles = c.U16();      // NiTriBasedGeomData
-    }
-
-    // NiTriShapeData at 4.2.x. After the shared geometry: Num Triangle Points u32 (=3x), triangles.
-    // (`Has Triangles` is `since 10.1.0.0`, so at 4.2.x triangles follow directly.)
-    private static NifMesh ReadTriShapeData(ref NifCursor c, NifVersion version, string name)
-    {
-        ReadGeometryCommon4x(ref c, out int numVertices, out Vector3[] vertices,
-            out Vector3[]? normals, out Vector2[][] uvSets, out Vector4[]? colors, out int numTriangles);
-
-        uint numTrianglePoints = c.U32();
-        if (numTrianglePoints != (uint)numTriangles * 3)
-            throw new NifFormatException($"Triangle point count {numTrianglePoints} != 3 x {numTriangles}.");
-
-        var triangles = new (ushort, ushort, ushort)[numTriangles];
-        for (int t = 0; t < numTriangles; t++)
-        {
-            ushort a = c.U16(), b = c.U16(), cc = c.U16();
-            if (a >= numVertices || b >= numVertices || cc >= numVertices)
-                throw new NifFormatException($"Triangle {t} indexes a vertex past {numVertices}.");
-            triangles[t] = (a, b, cc);
-        }
-
+        NifGeometryData g = NifGeometry.Read(ref c, type, gamebryo10: false, features: null);
         return new NifMesh
         {
             Name = name,
-            Vertices = vertices,
-            Normals = normals,
-            TexCoords = uvSets.Length > 0 ? uvSets[0] : null,
-            UvSets = uvSets,
-            VertexColors = colors,
-            Triangles = triangles,
-        };
-    }
-
-    // NiTriStripsData at 4.x. After the shared geometry: Num Strips u16; Strip Lengths u16 x strips;
-    // Points u16 (one array per strip). `Has Points` is `since 10.0.1.3`, so there is NO Has-Points
-    // byte at 4.x — points follow Strip Lengths directly. Strips are converted to a triangle list.
-    private static NifMesh ReadTriStripsData4x(ref NifCursor c, string name)
-    {
-        ReadGeometryCommon4x(ref c, out int numVertices, out Vector3[] vertices,
-            out Vector3[]? normals, out Vector2[][] uvSets, out Vector4[]? colors, out int _);
-
-        int numStrips = c.U16();
-        var lengths = new int[numStrips];
-        for (int s = 0; s < numStrips; s++)
-            lengths[s] = c.U16();
-
-        var triangles = new List<(ushort, ushort, ushort)>();
-        for (int s = 0; s < numStrips; s++)
-        {
-            int len = lengths[s];
-            var strip = new ushort[len];
-            for (int i = 0; i < len; i++)
-            {
-                ushort idx = c.U16();
-                if (idx != 0xFFFF && idx >= numVertices)
-                    throw new NifFormatException($"Strip index {idx} past {numVertices} vertices.");
-                strip[i] = idx;
-            }
-            AppendStripTriangles(strip, triangles);
-        }
-
-        return new NifMesh
-        {
-            Name = name,
-            Vertices = vertices,
-            Normals = normals,
-            TexCoords = uvSets.Length > 0 ? uvSets[0] : null,
-            UvSets = uvSets,
-            VertexColors = colors,
-            Triangles = triangles.ToArray(),
+            Vertices = g.Vertices,
+            Normals = g.Normals,
+            TexCoords = g.UvSets.Length > 0 ? g.UvSets[0] : null,
+            UvSets = g.UvSets,
+            VertexColors = g.Colors,
+            Triangles = g.Triangles,
         };
     }
 
@@ -1226,14 +854,6 @@ public static partial class NifFile
         {
             return null;
         }
-    }
-
-    private static Vector3[] ReadVec3Array(ref NifCursor c, int n)
-    {
-        var a = new Vector3[n];
-        for (int i = 0; i < n; i++)
-            a[i] = c.Vec3();
-        return a;
     }
 
     // Advances the cursor to the next position that begins a plausible sized type string naming a

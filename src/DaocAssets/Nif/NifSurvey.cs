@@ -280,7 +280,7 @@ public sealed partial class NifSurvey
                 break;
             case "NiTriShapeData":
             case "NiTriStripsData":
-                GeometryData(ref c, type, f);
+                NifGeometry.Read(ref c, type, gamebryo10: false, f);
                 break;
             case "NiTexturingProperty":
             {
@@ -449,42 +449,6 @@ public sealed partial class NifSurvey
         if (v <= V41012) c.U16();                       // Unknown1
         if (clamp != 3) Bump(f, $"NiTexturingProperty: {slot} clamp mode {clamp} (not wrap)");
         if (uvSet != 0) Bump(f, $"NiTexturingProperty: {slot} uses UV set {uvSet}");
-    }
-
-    // NiGeometryData (4.x) + NiTriBasedGeomData + NiTriShapeData / NiTriStripsData.
-    private static void GeometryData(ref NifCursor c, string type, Dictionary<string, int> f)
-    {
-        int nv = c.U16();
-        if (c.Bool()) Skip(ref c, (uint)nv * 12);
-        bool normals = c.Bool();
-        if (normals) Skip(ref c, (uint)nv * 12);
-        else Bump(f, $"{type}: no normals");
-        Skip(ref c, 16);                                // Center, Radius
-        if (c.Bool())
-        {
-            Bump(f, $"{type}: vertex colours");
-            Skip(ref c, (uint)nv * 16);
-        }
-        int uvSets = c.U16() & 63;
-        if (uvSets == 0) Bump(f, $"{type}: no UVs");
-        if (uvSets > 1) Bump(f, $"{type}: {uvSets} UV sets");
-        Skip(ref c, (uint)(uvSets * nv * 8));
-        int triangles = c.U16();
-        if (type == "NiTriShapeData")
-        {
-            c.U32();                                    // Num Triangle Points
-            Skip(ref c, (uint)triangles * 6);
-            int groups = c.U16();
-            for (int g = 0; g < groups; g++)
-                Skip(ref c, (uint)c.U16() * 2);
-        }
-        else
-        {
-            int strips = c.U16();
-            var lengths = new int[strips];
-            for (int s = 0; s < strips; s++) lengths[s] = c.U16();
-            foreach (int len in lengths) Skip(ref c, (uint)len * 2);
-        }
     }
 
     private static string ApplyModeName(uint mode) => mode switch
