@@ -443,7 +443,7 @@ internal static class Cli
 
         string[] nifs =
             Directory.Exists(modelArg)
-                ? Directory.GetFiles(modelArg, "*.nif", SearchOption.AllDirectories)
+                ? Directory.GetFiles(modelArg, "*.nif", new EnumerationOptions { RecurseSubdirectories = true, MatchCasing = MatchCasing.CaseInsensitive })
                 : File.Exists(modelArg) ? [modelArg]
                 : [];
         if (nifs.Length == 0)

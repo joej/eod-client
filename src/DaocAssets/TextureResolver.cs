@@ -67,18 +67,19 @@ public sealed class TextureResolver
     {
         string bare = BareName(textureName);
         Directory.CreateDirectory(outDir);
-        string dest = Path.Combine(outDir, bare);
 
+        // The copy takes the real file's name, not the reference's spelling: a model's reference often
+        // differs in case, and on a case-sensitive file system only the real name is found again.
         if (LooseByName.TryGetValue(bare.ToLowerInvariant(), out string? loose))
         {
-            File.Copy(loose, dest, overwrite: true);
+            File.Copy(loose, Path.Combine(outDir, Path.GetFileName(loose)), overwrite: true);
             return new TextureResult(bare, TextureSource.Loose, loose);
         }
 
         if (ArchivedByName.TryGetValue(bare.ToLowerInvariant(), out var found))
         {
             using MpkArchive mpk = MpkArchive.Open(found.Archive);
-            File.WriteAllBytes(dest, mpk.Extract(found.Member));
+            File.WriteAllBytes(Path.Combine(outDir, BareName(found.Member)), mpk.Extract(found.Member));
             return new TextureResult(bare, TextureSource.Archive, found.Archive);
         }
 
@@ -96,11 +97,18 @@ public sealed class TextureResolver
     private Dictionary<string, string> LooseByName => _looseByName ??= BuildLooseIndex();
     private Dictionary<string, (string Archive, string Member)> ArchivedByName => _archivedByName ??= BuildArchiveIndex();
 
+    // Install file names come in any case (.DDS, .MPK); patterns are case-sensitive on Linux by default.
+    private static readonly EnumerationOptions AnyCase = new()
+    {
+        RecurseSubdirectories = true,
+        MatchCasing = MatchCasing.CaseInsensitive,
+    };
+
     private Dictionary<string, string> BuildLooseIndex()
     {
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (string ext in new[] { "*.dds", "*.tga", "*.bmp" })
-            foreach (string path in Directory.EnumerateFiles(_clientDir, ext, SearchOption.AllDirectories))
+            foreach (string path in Directory.EnumerateFiles(_clientDir, ext, AnyCase))
                 map.TryAdd(Path.GetFileName(path).ToLowerInvariant(), path); // first wins
         return map;
     }
@@ -109,7 +117,7 @@ public sealed class TextureResolver
     private Dictionary<string, (string Archive, string Member)> BuildArchiveIndex()
     {
         var map = new Dictionary<string, (string, string)>(StringComparer.Ordinal);
-        foreach (string archive in Directory.EnumerateFiles(_clientDir, "*.mpk", SearchOption.AllDirectories))
+        foreach (string archive in Directory.EnumerateFiles(_clientDir, "*.mpk", AnyCase))
         {
             try
             {
