@@ -318,6 +318,41 @@ Salisbury Plains → Cursed Forest (region 200) by B1 B7, then our D4 → … 4E
 new region's NPCs arriving; Cursed Forest → Camelot Hills through the Godot client, which loaded each
 zone's converted assets by the zone the server reported.
 
+## Attack mode
+
+**C→S 0x74** (`PlayerAttackRequestHandler`): `u8 start` (1 attack, 0 stop), `u8 asked` (0 when the
+player pressed the key, 1 when the client itself stops). The server starts only an attack the player
+asked for; with a ranged weapon readied it refuses melee mode.
+
+**S→C 0x74 AttackMode** (`PacketLib168.SendAttackMode`): `u8 on`, then 3 zero bytes. Sent when the
+server's attack state changes: in answer to the request, and when it ends attack mode itself. No target
+is needed ("You enter combat mode but have no target!"). The 1.127e recording has two, both off.
+
+**Other players** carry it in their position and heading updates: bit 0x80 of the health byte (the low
+seven bits are the health percent). Both are "UDP" packets that OpenDAoC sends over TCP to a client
+that hasn't confirmed UDP (our 0xBF sends 0).
+
+S→C **0xA9 PlayerPosition** (1.127, `PlayerPositionUpdateHandler.CreateOutPak1127`), 40 bytes:
+
+```
+f32 LE x, y, z           region-global
+f32 LE speed, fall speed
+u16 BE session id, object id, zone id
+u8 state flags, u8 0, u16 BE steed seat
+u16 BE heading           low 12 bits
+u8 action flags, u8 roleplay flag, u8 0
+u8 health                0x80 = attack mode
+u8 mana %, u8 endurance %, u16 0
+```
+
+S→C **0xBA PlayerHeading** (1.127, `PlayerHeadingUpdateHandler.CreateOutPak1127`), keyed by session id
+(the player's 0x4B gives both ids): `u16 BE session`, `u16 BE target` (0), `u16 BE heading`,
+`u8 steed seat`, `u8 action flags`, `u8 0`, `u8 state flags`, `u8 health`, `u8 mana %`,
+`u8 endurance %`, `u8 0`.
+
+*Verified live (2026-11-05):* our own 0x74 on and off. Other players' bit is from the server's writer,
+not yet seen with a second player.
+
 ## Logging out
 
 Closing the socket while "playing" makes the character link-dead: it stays in the world for 60 s
@@ -344,4 +379,5 @@ and logins in the meantime are refused (0x2C, 0x11 AccountIsInLogoutProcedure). 
 | Login | `Packets/LoginPackets.cs` | `LoginPacketTests` |
 | Character screen | `Packets/CharacterPackets.cs` | `CharacterPacketTests`, `CharacterCreateTests` |
 | World, keep-alive, server moves, logout | `Packets/WorldPackets.cs`, `World/Zones.cs` | `WorldPacketTests` |
+| Attack mode, other players' moves | `Packets/CombatPackets.cs`, `Packets/WorldEntityPackets.cs` | `CombatPacketTests` |
 | Session flow | `Session/ClientSession.cs`, `Net/DaocConnection.cs` | `ClientSessionTests` (against a fake server replaying recorded replies) |

@@ -248,8 +248,13 @@ become real figures:
   robes on the long body; hood up). One figure per race and sex (`cata_fig<N>.glb`, 36 in all, 58 MB)
   carries every mesh variant; each model id's own skins are in `cata_models.json`. **Helms and weapons
   (2026-11-04):** the helm on the head (hair hidden), weapons sheathed on the hip or back or in the hand,
-  a shield on the arm, by the item NIFs' own frames (`cata_gear.json`, 1,815 item models). Not yet: skin
-  tone (W30), mood, tattoos, dyes, emblems, weapons drawn in combat, NPC gear on classic figures (W31, W33).
+  a shield on the arm, by the item NIFs' own frames (`cata_gear.json`, 1,815 item models). **Attack mode
+  (2026-11-05):** F asks the server for attack mode (0x74); its answer draws the weapons into the hands and
+  the figure stands in the weapon's combat idle (`canims.csv`: one-hand, two-hand, polearm, staff, bow,
+  crossbow, hand to hand, scythe). Other players' drawn state comes from their position and heading
+  updates (S→C 0xA9 / 0xBA), which now also move them. Seen live: Eodarms drawing his sword in the City of
+  Camelot. Not yet: skin tone (W30), mood, tattoos, dyes, emblems, NPC gear on classic figures (W31, W33),
+  swings and other combat animation (M10).
 
 **M7c — strafe (small, but MVP).** ~~Done 2026-10-31~~ (commit 87c7d90). Add strafe-left/right (Q/E) to the existing WASD + turn rig: with
 the mouse-chase camera, forward + strafe is how you actually navigate. A couple of input reads and a

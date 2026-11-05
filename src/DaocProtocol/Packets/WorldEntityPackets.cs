@@ -198,3 +198,63 @@ public sealed record ObjectDelete(ushort ObjectId)
     public static ObjectDelete Parse(ReadOnlySpan<byte> payload) =>
         new(new PayloadReader(payload).U16BE());
 }
+
+/// <summary>
+/// S→C 0xA9 PlayerPosition (1.127 layout, OpenDAoC PlayerPositionUpdateHandler.CreateOutPak1127): another
+/// player's position, relayed from its own 0xA9. Sent "by UDP", which OpenDAoC delivers over TCP while the
+/// client hasn't confirmed UDP (our 0xBF says it hasn't). 40 bytes; X/Y/Z region-global little-endian
+/// float32 like our own 0xA9, shorts big-endian.
+/// </summary>
+/// <param name="Health">Health byte: the low 7 bits are the percent, bit 0x80 attack mode (weapons drawn).</param>
+public sealed record PlayerPosition(float X, float Y, float Z, float Speed, float FallSpeed, ushort SessionId,
+    ushort ObjectId, ushort ZoneId, byte StateFlags, ushort Heading, byte ActionFlags, byte Health)
+{
+    public const byte Code = 0xA9;
+
+    public ushort HeadingOnly => (ushort)(Heading & 0x0FFF);
+    public bool InCombat => (Health & 0x80) != 0;
+    public byte HealthPercent => (byte)(Health & 0x7F);
+
+    public static PlayerPosition Parse(ReadOnlySpan<byte> payload)
+    {
+        var r = new PayloadReader(payload);
+        float x = r.F32LE(), y = r.F32LE(), z = r.F32LE(), speed = r.F32LE(), fall = r.F32LE();
+        ushort session = r.U16BE(), objectId = r.U16BE(), zone = r.U16BE();
+        byte state = r.U8();
+        r.Skip(1);
+        r.Skip(2);                 // steed seat
+        ushort heading = r.U16BE();
+        byte action = r.U8();
+        r.Skip(2);                 // roleplay flag, 0
+        byte health = r.U8();
+        return new PlayerPosition(x, y, z, speed, fall, session, objectId, zone, state, heading, action, health);
+    }
+}
+
+/// <summary>
+/// S→C 0xBA PlayerHeading (1.127 layout, OpenDAoC PlayerHeadingUpdateHandler.CreateOutPak1127): another
+/// player turned, or its state changed while standing. Keyed by session id, not object id (the player's
+/// 0x4B carries both). Also delivered over TCP without UDP.
+/// </summary>
+/// <param name="Health">As in <see cref="PlayerPosition"/>: bit 0x80 attack mode.</param>
+public sealed record PlayerHeading(ushort SessionId, ushort Heading, byte ActionFlags, byte StateFlags, byte Health)
+{
+    public const byte Code = 0xBA;
+
+    public ushort HeadingOnly => (ushort)(Heading & 0x0FFF);
+    public bool InCombat => (Health & 0x80) != 0;
+
+    public static PlayerHeading Parse(ReadOnlySpan<byte> payload)
+    {
+        var r = new PayloadReader(payload);
+        ushort session = r.U16BE();
+        r.Skip(2);                 // current target (0 from OpenDAoC)
+        ushort heading = r.U16BE();
+        r.Skip(1);                 // steed seat
+        byte action = r.U8();
+        r.Skip(1);
+        byte state = r.U8();
+        byte health = r.U8();
+        return new PlayerHeading(session, heading, action, state, health);
+    }
+}

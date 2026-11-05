@@ -112,16 +112,18 @@ public static class FigureLook
 
     /// <summary>
     /// Hangs a Catacombs figure's weapons, shield and helm on its skeleton (models/cata_gear.json, from mpk
-    /// figures), replacing any it had. Out of combat (we don't track attack mode yet): a weapon in an active
-    /// slot that sheathes, and any sheathable one not in use, hangs by its belt frame on the opposite hip
-    /// (right hand: "Bip01 L Belt") or, two-handed and ranged, by its back frame ("Bip01 L/R Back"); an
-    /// active one that doesn't sheathe (staves, most polearms and bows) stays in the hand by its grip
-    /// ("Bip01 R Held", the left hand and ranged "Bip01 L Held"); an active shield on "Bip01 L Shield", an
-    /// unused one not drawn; the helm on "Bip01 Helmet", hiding the hair, unless hidden or under a raised
-    /// hood. Rules as OfflineDAoC (GPL-3.0) published them from the client. Returns a log description.
+    /// figures), replacing any it had. A weapon in use goes in the hand by its grip ("Bip01 R Held"; the left
+    /// hand and ranged "Bip01 L Held") when <paramref name="drawn"/> (attack mode) or when it doesn't sheathe
+    /// (staves, most polearms and bows). Otherwise a sheathable weapon, in use or not, hangs by its belt frame
+    /// on the opposite hip (right hand: "Bip01 L Belt") or, two-handed and ranged, by its back frame
+    /// ("Bip01 L/R Back"), so a spare two-hander stays on the back while sword and shield are drawn. A shield
+    /// in use is on "Bip01 L Shield" either way, an unused one not drawn; the helm on "Bip01 Helmet", hiding
+    /// the hair, unless hidden or under a raised hood. Rules as OfflineDAoC (GPL-3.0) published them from the
+    /// client. Returns a log description.
     /// </summary>
     public static string Gear(Node3D figure, string optionsPath, string gearPath, string modelsDir,
-        System.Collections.Generic.IReadOnlyList<WornItem> worn, byte activeWeapons, bool helmHidden, bool hoodUp, params string[] dirs)
+        System.Collections.Generic.IReadOnlyList<WornItem> worn, byte activeWeapons, bool helmHidden, bool hoodUp, bool drawn,
+        params string[] dirs)
     {
         if (Options(optionsPath) is not { } o || Json(Items, gearPath) is not { } gear
             || figure.FindChildren("*", "Skeleton3D", true, false).FirstOrDefault() is not Skeleton3D skel)
@@ -161,6 +163,8 @@ public static class FigureLook
                 bool lefty = item.Slot is WornSlot.LeftHand or WornSlot.Ranged;
                 if (entry.GetProperty("shield").GetBoolean())
                     bone = inUse ? "Bip01 L Shield" : null;
+                else if (inUse && (drawn || !entry.GetProperty("belt").GetBoolean()))
+                    bone = lefty ? "Bip01 L Held" : "Bip01 R Held";
                 else if (entry.GetProperty("belt").GetBoolean())
                     (bone, frame) = item.Slot switch
                     {
@@ -169,8 +173,6 @@ public static class FigureLook
                         WornSlot.TwoHand => ("Bip01 L Back", "back"),
                         _ => ("Bip01 R Back", "back"),
                     };
-                else if (inUse)
-                    bone = lefty ? "Bip01 L Held" : "Bip01 R Held";
             }
             if (nif is null || bone is null)
                 continue;
@@ -202,6 +204,32 @@ public static class FigureLook
             foreach (Node n in figure.FindChildren("hair*", "MeshInstance3D", true, false))
                 ((MeshInstance3D)n).Visible = false;   // under the helm (its "Helm Hair" squash shapes: W33)
         return hung.Count == 0 ? "" : " holding " + string.Join(" ", hung);
+    }
+
+    /// <summary>
+    /// The combat idle for the weapon in use (the right hand's: a one-hander, two-hander or bow; else the left's),
+    /// by its objects.csv "Combat Stance" (cata_gear.json "stance"): 2 two-hand, 3 polearm, 4 staff, 5 bow,
+    /// 6 crossbow, 13 hand to hand, 14 scythe, anything else (and no weapon) the one-hand "combat_idle". The
+    /// figures carry these clips from canims.csv (mpk figures).
+    /// </summary>
+    public static string CombatIdle(string gearPath, System.Collections.Generic.IReadOnlyList<WornItem> worn, byte activeWeapons)
+    {
+        (byte? right, byte? left) = WornSlot.Active(activeWeapons);
+        int stance = 0;
+        if (Json(Items, gearPath) is { } gear)
+            foreach (byte? slot in new[] { right, left })
+                if (slot is { } sl && worn.FirstOrDefault(w => w.Slot == sl) is { Model: > 0 } item
+                    && gear.GetProperty("items").TryGetProperty(item.Model.ToString(System.Globalization.CultureInfo.InvariantCulture), out var entry)
+                    && !entry.GetProperty("shield").GetBoolean())
+                {
+                    stance = entry.GetProperty("stance").GetInt32();
+                    break;
+                }
+        return stance switch
+        {
+            2 => "combat_idle_2h", 3 => "combat_idle_pole", 4 => "combat_idle_staff", 5 => "combat_idle_bow",
+            6 => "combat_idle_xbow", 13 => "combat_idle_h2h", 14 => "combat_idle_scy", _ => "combat_idle",
+        };
     }
 
     private static Node3D? ItemModel(string modelsDir, string nif, string[] dirs)

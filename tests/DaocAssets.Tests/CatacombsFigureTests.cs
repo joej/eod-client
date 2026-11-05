@@ -24,7 +24,7 @@ public sealed class CatacombsFigureTests
         return string.Join(',', r);
     }
 
-    private static MonsterTables Tables() =>
+    private static MonsterTables Tables(string anims = "", string animnifs = "") =>
         MonsterTables.Parse(
             "Information,,NIF\nID,name,#\n" + MonsterRow(32, "Briton Male", "582", "3233", "3238", "") + "\n"
                 + MonsterRow(33, "No Catacombs", "", "", "", ""),
@@ -32,7 +32,8 @@ public sealed class CatacombsFigureTests
             "Information,,NIF\nID,Textual Name,Name\n582,Cata Briton Male,bri_m,233,178,70,70,70,0,4,1,,3,1,,1",
             "Information,,Skin\nID,Textual Name,Name\n3233,Briton ss Body,CthBody02_ss_bri_M.dds\n"
                 + "3238,briton head1,Bri_m_Head01.dds\n3778,head2,Bri_m_Head02.dds\n3804,hair,Bri_m_Hair01_blonde.dds\n"
-                + "3808,hair,bri_m_hair02_blonde.dds\n6275,eyes,eyecolor_1.dds\n6276,eyes,eyecolor_2.dds")
+                + "3808,hair,bri_m_hair02_blonde.dds\n6275,eyes,eyecolor_1.dds\n6276,eyes,eyecolor_2.dds",
+            anims, animnifs)
         .WithFig3(
             "id,,\n#,part,desc\n1,0,Briton Male Head,1306,,\n1,1,Briton Male Body,291,292,\n1,8,Briton Male Hair,5,,7,",
             "ID,Text,Part,Expansion,Test,Archive,Double\n1306,bri_m_head01,bri_m_head01,4,1,15,\n"
@@ -59,6 +60,27 @@ public sealed class CatacombsFigureTests
                 new CataPart(8, 15, "bri_m_Hair01.nif", "Bri_m_Hair01_blonde.dds"), // no hair skin: style 1, colour 1
             ],
             spec.Parts);
+    }
+
+    [Fact]
+    public void ACatacombsFigureCarriesItsSetsCombatIdlesFromCanims()
+    {
+        // anims.csv set 233: Idle (column 10); canims.csv set 233: C-Idle (6), C-Idle 2H (7), Scy C-Idle (115).
+        var anims = Enumerable.Repeat("", 11).ToArray();
+        (anims[0], anims[1], anims[10]) = ("233", "Cata Briton Male", "2630");
+        var canims = Enumerable.Repeat("", 116).ToArray();
+        (canims[0], canims[1], canims[6], canims[7], canims[115]) = ("233", "Cata Briton Male", "2637", "2607", "2608");
+        MonsterTables tables = Tables("x,,0\nID,name,Walk\n" + string.Join(',', anims),
+                "id\nID,name,file\n2630,Idle,Cat_I_H.kfa\n2637,Cata Combat Idle,Cat_CI_H_1S.kfa\n"
+                + "2607,Two handed combat idle,Cat_CI_H_N2S.kfa\n2608,Scythe combat idle,Cat_CI_H_Scythe.kfa")
+            .WithCombatClips("x,,0\nID,name,Att Med\n" + string.Join(',', canims));
+        Assert.Equal(
+            new Dictionary<string, string>
+            {
+                ["idle"] = "Cat_I_H.kfa", ["combat_idle"] = "Cat_CI_H_1S.kfa", ["combat_idle_2h"] = "Cat_CI_H_N2S.kfa",
+                ["combat_idle_scy"] = "Cat_CI_H_Scythe.kfa",
+            },
+            tables.ResolveCatacombs(32)!.Clips);
     }
 
     [Fact]

@@ -42,9 +42,17 @@ public sealed class MonsterTables
     private readonly Dictionary<(int, int), string[]> _hairColours = [];
     private readonly Dictionary<int, string[]> _faceMap = [], _eyeMap = [], _skinMap = [], _tints = [];
     private readonly Dictionary<int, string[]> _sliderLabels = [];
+    private readonly Dictionary<int, string[]> _canims = [];
 
     // anims.csv columns of the clips the client view uses (ID, name, Walk, Back, Run, ..., Idle at 10).
     private static readonly (string Clip, int Column)[] ClipColumns = [("walk", 2), ("back", 3), ("run", 4), ("idle", 10)];
+
+    // canims.csv (the combat set, same id as the animation set) columns of the combat idles, one per weapon
+    // stance (objects.csv "Combat Stance"; the Godot client picks by it): C-Idle, C-Idle 2H, C-Idle Pole,
+    // C-Idle Bow, C-Idle Staff, Xbow Idle, H2H Cidle, Scy C-Idle.
+    private static readonly (string Clip, int Column)[] CombatColumns = [("combat_idle", 6), ("combat_idle_2h", 7),
+        ("combat_idle_pole", 8), ("combat_idle_bow", 9), ("combat_idle_staff", 16), ("combat_idle_xbow", 23),
+        ("combat_idle_h2h", 106), ("combat_idle_scy", 115)];
 
     private MonsterTables(Dictionary<int, string[]> monsters, Dictionary<int, string[]> monnifs, Dictionary<int, string> skins,
         Dictionary<int, string[]> anims, Dictionary<int, string[]> animnifs) =>
@@ -60,7 +68,17 @@ public sealed class MonsterTables
         return Parse(Text("monsters.csv"), Text("monnifs.csv"), Text("skins.csv"), Text("anims.csv"), Text("animnifs.csv"))
             .WithFig3(Text("fig3map.csv"), Text("fig3parts.csv"), Text("fig3haircolormap.csv"))
             .WithFig3Looks(Text("fig3facemap.csv"), Text("fig3eyecolormap.csv"), Text("fig3skincolormap.csv"), Text("fig3tints.csv"),
-                Text("fig3descriptions.csv"));
+                Text("fig3descriptions.csv"))
+            .WithCombatClips(Text("canims.csv"));
+    }
+
+    /// <summary>Adds <c>canims.csv</c> (combat set id, the figure's animation set -> combat clip ids). Its combat
+    /// idles go into the Catacombs figures (<see cref="ResolveCatacombs"/>) only: players are drawn on those.</summary>
+    public MonsterTables WithCombatClips(string canimsCsv)
+    {
+        foreach ((int id, string[] row) in ById(canimsCsv))
+            _canims.TryAdd(id, row);
+        return this;
     }
 
     /// <summary>Adds the Catacombs tables: <c>fig3map.csv</c> ((figure, slot) -> part id per variant)
@@ -133,18 +151,29 @@ public sealed class MonsterTables
     /// Nif"), or null if it has none. Needs <see cref="WithFig3"/>.</summary>
     public CataSpec? ResolveCatacombs(int modelId) =>
         _monsters.TryGetValue(modelId, out string[]? m)
-            ? CatacombsFigure.Resolve(modelId, m, _monnifs, _skins, _fig3map, _fig3parts, ClipsOf, _hairColours)
+            ? CatacombsFigure.Resolve(modelId, m, _monnifs, _skins, _fig3map, _fig3parts, n => ClipsOf(n, combat: true), _hairColours)
             : null;
 
     // The figure's animation set (monnifs column 3) -> a clip id per action -> its .kfa file.
-    private Dictionary<string, string> ClipsOf(string[] monnif)
+    // (combat: also its combat idles from canims.csv, same set id.)
+    private Dictionary<string, string> ClipsOf(string[] monnif) => ClipsOf(monnif, combat: false);
+
+    private Dictionary<string, string> ClipsOf(string[] monnif, bool combat)
     {
         var clips = new Dictionary<string, string>();
-        if (monnif.Length > 3 && int.TryParse(monnif[3], out int set) && _anims.TryGetValue(set, out string[]? a))
-            foreach ((string clip, int col) in ClipColumns)
-                if (col < a.Length && int.TryParse(a[col], out int id) && id > 0
+        if (monnif.Length <= 3 || !int.TryParse(monnif[3], out int set))
+            return clips;
+        void Add(string[] row, (string Clip, int Column)[] columns)
+        {
+            foreach ((string clip, int col) in columns)
+                if (col < row.Length && int.TryParse(row[col], out int id) && id > 0
                     && _animnifs.TryGetValue(id, out string[]? kfa) && kfa.Length > 2 && kfa[2].Trim().Length > 0)
                     clips[clip] = kfa[2].Trim();
+        }
+        if (_anims.TryGetValue(set, out string[]? a))
+            Add(a, ClipColumns);
+        if (combat && _canims.TryGetValue(set, out string[]? c))
+            Add(c, CombatColumns);
         return clips;
     }
 

@@ -487,6 +487,17 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         return connection.SendAsync(CommandRequest.Code, CommandRequest.Payload(wire), cancellationToken);
     }
 
+    /// <summary>
+    /// Ask to enter or leave attack mode (0x74). The server answers with its own 0x74 AttackMode, which
+    /// arrives with the other unprompted packets: that, not this request, says whether weapons are drawn
+    /// (it refuses, e.g., melee with a bow readied, and ends attack mode itself).
+    /// </summary>
+    public Task AttackAsync(bool start, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(AttackRequest.Code, AttackRequest.Payload(start), cancellationToken);
+    }
+
     private void Require(SessionState state)
     {
         if (State != state)

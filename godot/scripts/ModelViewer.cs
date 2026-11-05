@@ -22,7 +22,8 @@
 // --wear dresses it in worn items by model id (objects.csv), each optionally with its slot and extension:
 // --wear 81,82,83,84,85 (a studded set), --wear 41:6,57 (a chain hauberk on body mesh 6, a cloak),
 // --wear 10@3,11@59,21@824 (a short sword, a round shield, a studded helm); --active 10 (0x15's active
-// weapons byte in hex: sword and shield in use; default FF, none); --hood puts a cloak's hood up.
+// weapons byte in hex: sword and shield in use; default FF, none); --hood puts a cloak's hood up; --drawn
+// shows them in attack mode (weapons in hand; with no --anim, the weapon's combat idle).
 
 using System;
 using System.Linq;
@@ -154,7 +155,7 @@ public partial class ModelViewer : Node3D
         int textured = ModelTexturing.Apply(scene, textureDir);
         string parts = ChooseFigureParts(scene, ArgValue("--parts"));
         string look = ApplyLook(scene, path, textureDir);
-        string anim = PlayClip(scene, ArgValue("--anim"), ArgValue("--anim-time"));
+        string anim = PlayClip(scene, ArgValue("--anim") ?? _combatIdle, ArgValue("--anim-time"));
 
         Aabb bounds = ComputeBounds(scene);
         FrameBounds(bounds);
@@ -194,8 +195,12 @@ public partial class ModelViewer : Node3D
             FigureLook.Dress(figure, options, System.IO.Path.Combine(dir, "cata_items.json"), System.IO.Path.Combine(dir, "cata_models.json"),
                 id, worn, hood, false, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) +
             FigureLook.Gear(figure, options, System.IO.Path.Combine(dir, "cata_gear.json"), dir, worn, active, false, hood,
-                System.IO.Path.Combine(lib, "overrides"), textureDir, lib) + $" (row {id})";
+                Drawn, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) + $" (row {id})" +
+            (Drawn ? $" drawn, {(_combatIdle = FigureLook.CombatIdle(System.IO.Path.Combine(dir, "cata_gear.json"), worn, active))}" : "");
     }
+
+    private static bool Drawn => OS.GetCmdlineUserArgs().Contains("--drawn");
+    private static string? _combatIdle;   // set by dressing with --drawn: the clip to play when --anim isn't given
 
     // Plays one of the model's animation clips (a figure converted with mpk figure has idle, walk, run,
     // back): --anim names it (default idle, else the first); --anim-time T holds it at T seconds, so a

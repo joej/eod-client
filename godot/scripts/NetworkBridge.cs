@@ -32,6 +32,14 @@ public sealed class NetworkBridge
     /// <summary>A living's visible gear (0x15 EquipmentUpdate): other players and NPCs, never us.</summary>
     public event Action<EquipmentUpdate>? EquipmentChanged;
 
+    /// <summary>Another player moved (S→C 0xA9) or turned (0xBA, keyed by session id); both carry its attack
+    /// mode (weapons drawn).</summary>
+    public event Action<PlayerPosition>? PlayerMoved;
+    public event Action<PlayerHeading>? PlayerTurned;
+
+    /// <summary>Our own attack mode as the server has it (S→C 0x74): weapons drawn or put away.</summary>
+    public event Action<bool>? AttackModeChanged;
+
     /// <summary>A static world object entered view (0xD9 ObjectCreate).</summary>
     public event Action<ObjectCreate>? ObjectSpawned;
 
@@ -80,6 +88,15 @@ public sealed class NetworkBridge
                     break;
                 case PlayerCreate.Code:
                     PlayerSpawned?.Invoke(PlayerCreate.Parse(packet.Payload));
+                    break;
+                case PlayerPosition.Code:
+                    PlayerMoved?.Invoke(PlayerPosition.Parse(packet.Payload));
+                    break;
+                case PlayerHeading.Code:
+                    PlayerTurned?.Invoke(PlayerHeading.Parse(packet.Payload));
+                    break;
+                case AttackMode.Code:
+                    AttackModeChanged?.Invoke(AttackMode.IsOn(packet.Payload));
                     break;
                 case ObjectCreate.Code:
                     ObjectSpawned?.Invoke(ObjectCreate.Parse(packet.Payload));

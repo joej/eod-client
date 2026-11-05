@@ -137,6 +137,8 @@ public partial class WorldView : Node3D
         public Node3D? Figure;        // a player's Catacombs figure, dressed by 0x15 (null otherwise)
         public ushort Model;
         public CharacterLook Look;
+        public bool InCombat;         // attack mode (the health byte's 0x80 in its 0xA9 / 0xBA): weapons drawn
+        public string CombatIdle = "combat_idle";   // the clip for standing in attack mode, by the weapon in use
     }
 
     /// <summary>Raised when the player presses Quit (connected).</summary>
@@ -178,6 +180,9 @@ public partial class WorldView : Node3D
 
     private AnimationPlayer? _bodyAnim;
     private string _bodyClip = "";
+    private Node3D? _ownFigure;               // the character's Catacombs figure, re-geared when attack mode changes
+    private bool _attacking;                  // attack mode as the server last told us (S→C 0x74)
+    private string _ownCombatIdle = "combat_idle";
 
     /// <summary>
     /// One line on where this view's zone assets came from, for the status panel (e.g. that the
@@ -374,6 +379,9 @@ public partial class WorldView : Node3D
         _bridge.NpcSpawned += OnNpcSpawned;
         _bridge.PlayerSpawned += OnPlayerSpawned;
         _bridge.EquipmentChanged += OnEquipmentChanged;
+        _bridge.PlayerMoved += OnPlayerMoved;
+        _bridge.PlayerTurned += OnPlayerTurned;
+        _bridge.AttackModeChanged += OnAttackModeChanged;
         _bridge.ObjectRemoved += OnObjectRemoved;
         _bridge.ChatReceived += OnChatReceived;
         _bridge.PingReplied += () => _pings++;
@@ -838,7 +846,9 @@ public partial class WorldView : Node3D
             return false;
         var inst = (Node3D)figure.Template.Duplicate();
         inst.Scale = new Vector3(figure.Scale, figure.Scale, figure.Scale);
-        string look = Outfit(inst, PlayerModel, PlayerLook, PlayerWorn, PlayerHoodUp, false, false, PlayerActiveWeapons);
+        string look = Outfit(inst, PlayerModel, PlayerLook, PlayerWorn, PlayerHoodUp, false, false, PlayerActiveWeapons, _attacking);
+        _ownFigure = inst;
+        _ownCombatIdle = CombatIdle(PlayerWorn, PlayerActiveWeapons);
         // A figure faces +Z (seen live: the chase camera, behind the body, met the face); the body
         // walks along -Z, so turn it half round.
         inst.Rotation = new Vector3(0, Mathf.Pi, 0);
@@ -995,6 +1005,12 @@ public partial class WorldView : Node3D
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F6 } && !ChatInputActive)
         {
             OpenTravel();
+        }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F } && !ChatInputActive)
+        {
+            // F toggles attack mode (our binding; retail's default key unconfirmed, open question W34). The server
+            // answers with 0x74, and that draws or sheathes the weapons.
+            _ = SendAttack(!_attacking);
         }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F4 })
         {
@@ -1240,6 +1256,16 @@ public partial class WorldView : Node3D
                 GetTree().CreateTimer(3.0).Timeout += () => { if (IsInstanceValid(dialog)) dialog.GoFirst(); };
             };
         }
+        // --attack SECONDS presses the attack key after 2 s and again SECONDS later, to check attack mode (the
+        // server's 0x74 answers, drawn weapons, the combat idle) without a keyboard; --shot can catch it drawn.
+        int attackArg = System.Array.IndexOf(args, "--attack");
+        if (attackArg >= 0 && attackArg + 1 < args.Length && double.TryParse(args[attackArg + 1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double attackFor))
+            GetTree().CreateTimer(2.0).Timeout += () =>
+            {
+                _ = SendAttack(true);
+                GetTree().CreateTimer(attackFor).Timeout += () => _ = SendAttack(false);
+            };
         // --drop METRES lifts the character that far once the world is up, to check falling and landing.
         int drop = System.Array.IndexOf(args, "--drop");
         if (drop >= 0 && drop + 1 < args.Length && float.TryParse(args[drop + 1], System.Globalization.NumberStyles.Float,
@@ -1423,7 +1449,7 @@ public partial class WorldView : Node3D
         Ground(delta);
 
         // DAoC's normal pace is a run; backing up has its own clip.
-        PlayBodyClip(!moving ? "idle" : forward < 0 ? "back" : "run");
+        PlayBodyClip(!moving ? Idle(_bodyAnim, _attacking, _ownCombatIdle) : forward < 0 ? "back" : "run");
 
         // Event-driven position send (adapted from OfflineDAoC's _send_position, GPL-3.0): ~10 Hz
         // while anything is changing, ~1 Hz standing still, and an immediate send the moment the
@@ -1672,6 +1698,7 @@ public partial class WorldView : Node3D
 
     private void OnPlayerSpawned(PlayerCreate p)
     {
+        _sessionObjects[p.SessionId] = p.ObjectId;
         Vector3 pos = ToGodot(p.X, p.Y, p.Z);
         // Drawn like your own character (its model id's Catacombs figure); without one, a capsule in a
         // brighter tint so other players read as players, not mobs.
@@ -1804,9 +1831,9 @@ public partial class WorldView : Node3D
             {
                 dressed = inst;
                 if (_equipment.TryGetValue(objectId, out EquipmentUpdate? gear))
-                    Outfit(inst, model, l, gear.Items, gear.HoodUp, gear.CloakHidden, gear.HelmHidden, gear.ActiveWeapons);
+                    Outfit(inst, model, l, gear.Items, gear.HoodUp, gear.CloakHidden, gear.HelmHidden, gear.ActiveWeapons, false);
                 else
-                    Outfit(inst, model, l, [], false, false, false, 0xFF);
+                    Outfit(inst, model, l, [], false, false, false, 0xFF, false);
             }
             node.AddChild(inst);
             anim = inst.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() as AnimationPlayer;
@@ -1917,19 +1944,101 @@ public partial class WorldView : Node3D
     {
         _equipment[gear.ObjectId] = gear;
         if (_entities.TryGetValue(gear.ObjectId, out Entity? e) && e.Figure is { } figure)
-            Outfit(figure, e.Model, e.Look, gear.Items, gear.HoodUp, gear.CloakHidden, gear.HelmHidden, gear.ActiveWeapons);
+        {
+            Outfit(figure, e.Model, e.Look, gear.Items, gear.HoodUp, gear.CloakHidden, gear.HelmHidden, gear.ActiveWeapons, e.InCombat);
+            e.CombatIdle = CombatIdle(gear.Items, gear.ActiveWeapons);
+        }
     }
+
+    // ----- Attack mode: weapons drawn -----
+
+    // Players' session ids (0xBA names a player by session, the rest by object id), from their 0x4B.
+    private readonly Dictionary<ushort, ushort> _sessionObjects = new();
+
+    private async System.Threading.Tasks.Task SendAttack(bool start)
+    {
+        if (_session is null)
+        {
+            OnAttackModeChanged(start);   // offline: no server to ask, so just draw or sheathe
+            return;
+        }
+        try { await _session.AttackAsync(start); }
+        catch (System.Exception e) { AppendChat($"(could not send: {e.Message})", new Color(0.8f, 0.5f, 0.5f)); }
+    }
+
+    // Our attack mode, as the server has it: draw or sheathe the weapons, and stand in the weapon's combat idle.
+    private void OnAttackModeChanged(bool on)
+    {
+        if (on == _attacking)
+            return;
+        _attacking = on;
+        GD.Print($"[world] attack mode {(on ? "on: weapons drawn" : "off: weapons put away")}");
+        if (_ownFigure is not null && IsInstanceValid(_ownFigure))
+            Regear(_ownFigure, PlayerModel, PlayerWorn, PlayerActiveWeapons, false, PlayerHoodUp, on);
+    }
+
+    // Another player moved (S→C 0xA9): its position, facing and attack mode.
+    private void OnPlayerMoved(PlayerPosition p)
+    {
+        if (p.ObjectId == _world.Position.ObjectId)
+            return;
+        _sessionObjects[p.SessionId] = p.ObjectId;
+        if (!_entities.TryGetValue(p.ObjectId, out Entity? e))
+            return;   // not seen created yet: its 0x4B will place it
+        e.TargetPosition = ToGodot(p.X, p.Y, p.Z);
+        e.TargetYaw = YawFromHeading(p.HeadingOnly);
+        SetCombat(p.ObjectId, e, p.InCombat);
+    }
+
+    // Another player turned, or its state changed standing still (0xBA).
+    private void OnPlayerTurned(PlayerHeading h)
+    {
+        if (!_sessionObjects.TryGetValue(h.SessionId, out ushort objectId) || !_entities.TryGetValue(objectId, out Entity? e))
+            return;
+        e.TargetYaw = YawFromHeading(h.HeadingOnly);
+        SetCombat(objectId, e, h.InCombat);
+    }
+
+    private void SetCombat(ushort objectId, Entity e, bool on)
+    {
+        if (e.InCombat == on)
+            return;
+        e.InCombat = on;
+        if (e.Figure is { } figure && _equipment.TryGetValue(objectId, out EquipmentUpdate? gear))
+            Regear(figure, e.Model, gear.Items, gear.ActiveWeapons, gear.HelmHidden, gear.HoodUp, on);
+    }
+
+    // Re-hangs a figure's weapons (FigureLook.Gear) for attack mode on or off; the look and armour stay.
+    private void Regear(Node3D figure, ushort model, IReadOnlyList<WornItem> worn, byte activeWeapons, bool helmHidden,
+        bool hoodUp, bool drawn)
+    {
+        string lib = _libraryPath ?? "";
+        _cataFig3 ??= ReadCataFigures(lib.PathJoin("models").PathJoin("catacombs.csv"));
+        if (_cataFig3.TryGetValue(model, out int fig3))
+            FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_gear.json"),
+                lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, drawn, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
+    }
+
+    private string CombatIdle(IReadOnlyList<WornItem> worn, byte activeWeapons) =>
+        FigureLook.CombatIdle((_libraryPath ?? "").PathJoin("models").PathJoin("cata_gear.json"), worn, activeWeapons);
+
+    // Standing still: the idle, or in attack mode the weapon's combat idle (else the one-hand one; a figure
+    // converted before the combat clips existed has neither and keeps its idle).
+    private static string Idle(AnimationPlayer? player, bool combat, string combatIdle) =>
+        !combat || player is null ? "idle"
+        : player.HasAnimation(combatIdle) ? combatIdle
+        : player.HasAnimation("combat_idle") ? "combat_idle" : "idle";
 
     // A player's Catacombs figure in full: its look (face, hair), its armour and cloak, then what it holds
     // and wears on its head. The look first, so a helm taken off gives the hair back.
     private string Outfit(Node3D figure, ushort model, CharacterLook look, IReadOnlyList<WornItem> worn,
-        bool hoodUp, bool cloakHidden, bool helmHidden, byte activeWeapons)
+        bool hoodUp, bool cloakHidden, bool helmHidden, byte activeWeapons, bool drawn)
     {
         string lib = _libraryPath ?? "";
         string text = ApplyLook(figure, model, look) + Dress(figure, model, worn, hoodUp, cloakHidden);
         if (_cataFig3 is not null && _cataFig3.TryGetValue(model, out int fig3))
             text += FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_gear.json"),
-                lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
+                lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, drawn, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
         return text;
     }
 
@@ -2008,7 +2117,7 @@ public partial class WorldView : Node3D
                 step.Y = 0;
                 e.Speed = Mathf.Lerp(e.Speed, step.Length() / (float)delta, Mathf.Min(1f, (float)delta * 4f));
                 e.LastPosition = e.Node.Position;
-                PlayClip(e, e.Speed > 3.2f ? "run" : e.Speed > 0.4f ? "walk" : "idle");
+                PlayClip(e, e.Speed > 3.2f ? "run" : e.Speed > 0.4f ? "walk" : Idle(e.Player, e.InCombat, e.CombatIdle));
             }
         }
     }
@@ -2068,7 +2177,7 @@ public partial class WorldView : Node3D
             $"body {_body.Position.X:0.0},{_body.Position.Y:0.0},{_body.Position.Z:0.0}   " +
             $"ground {(_groundHit ? "ON" : "--")}   mode {(_chase ? "chase" : "free")}\n" +
             (_chase
-                ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Shift sprint, wheel zoom   ·   Tab free-fly, P shot"
+                ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Space jump, Shift sprint, wheel zoom   ·   F attack   ·   Tab free-fly, P shot"
                 : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot")
             + "\nF1 panels · F2 render mode · F3 view distance · left-click inspect (Esc clears)";
     }
