@@ -138,23 +138,15 @@ public partial class ModelViewer : Node3D
             return;
         }
 
-        // Load a .glb from an arbitrary path at runtime (not an imported res:// resource).
-        var doc = new GltfDocument();
-        var state = new GltfState();
-        Error err = doc.AppendFromFile(path, state);
-        if (err != Error.Ok)
-        {
-            _status.Text = $"Failed to load ({err}):\n{path}";
-            return;
-        }
-        ModelTexturing.TagLayers(state);     // the extra texture layers (dark/detail maps, face decals)
-        Node scene = doc.GenerateScene(state);
-        _pivot.AddChild(scene);
-
         // Texture from a folder of extracted .dds. Default to the model's own folder, since the
         // asset pipeline (tools/pipeline.sh) gathers textures beside the .glb; --textures overrides.
         string textureDir = TextureDirFromArgs() ?? System.IO.Path.GetDirectoryName(path) ?? "";
-        int textured = ModelTexturing.Apply(scene, textureDir);
+        if (ModelTexturing.LoadGlb(path, out int textured, textureDir) is not Node3D scene)
+        {
+            _status.Text = $"Failed to load (see the log):\n{path}";
+            return;
+        }
+        _pivot.AddChild(scene);
         string parts = ChooseFigureParts(scene, ArgValue("--parts"));
         string look = ApplyLook(scene, path, textureDir);
         string anim = PlayClip(scene, ArgValue("--anim") ?? _combatIdle, ArgValue("--anim-time"));

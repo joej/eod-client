@@ -527,13 +527,9 @@ public partial class WorldView : Node3D
         if (string.IsNullOrEmpty(_terrainPath) || !Godot.FileAccess.FileExists(_terrainPath))
             return false;
 
-        var doc = new GltfDocument();
-        var state = new GltfState();
-        if (doc.AppendFromFile(_terrainPath, state) != Error.Ok || doc.GenerateScene(state) is not Node3D terrain)
-        {
-            GD.PrintErr($"[world] terrain failed to load: {_terrainPath}");
+        // Untextured here: each ground tile is textured below.
+        if (ModelTexturing.LoadGlb(_terrainPath) is not Node3D terrain)
             return false;
-        }
         // No scale: the .glb is already in metres (GltfExporter baked × 0.025). Scaling again here was
         // the double-scale that shrank the terrain to 1/40th and divorced it from the player position.
         terrain.Scale = Vector3.One;
@@ -675,13 +671,8 @@ public partial class WorldView : Node3D
 
         var rows = DaocAssets.Zone.ZoneWater.ReadCsv(Godot.FileAccess.GetFileAsString(csv));
 
-        var doc = new GltfDocument();
-        var state = new GltfState();
-        if (doc.AppendFromFile(glb, state) != Error.Ok || doc.GenerateScene(state) is not Node3D water)
-        {
-            GD.PrintErr($"[world] water failed to load: {glb}");
+        if (ModelTexturing.LoadGlb(glb) is not Node3D water)   // the water shader textures it below
             return 0;
-        }
         string lib = string.IsNullOrEmpty(_libraryPath) ? dir : _libraryPath;
         var shader = GD.Load<Shader>("res://shaders/water.gdshader");
         int bodies = 0;
@@ -818,23 +809,13 @@ public partial class WorldView : Node3D
             libraryDir.PathJoin(glb));
 
         Node3D? model = null;
-        if (path is not null)
+        // Texture search dirs, in priority order: overrides, textures, library root.
+        if (path is not null
+            && ModelTexturing.LoadGlb(path, out int t, libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir) is Node3D m)
         {
-            var doc = new GltfDocument();
-            var state = new GltfState();
-            if (doc.AppendFromFile(path, state) == Error.Ok && doc.GenerateScene(state) is Node3D m)
-            {
-                ModelTexturing.TagLayers(state);
-                // Texture search dirs, in priority order: overrides, textures, library root.
-                int t = ModelTexturing.Apply(m, libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir);
-                _zoneTexturedModels += t > 0 ? 1 : 0;
-                _zoneTexturedSurfaces += t;
-                model = m;
-            }
-            else
-            {
-                GD.PrintErr($"[world] zone model failed to load: {glb}");
-            }
+            _zoneTexturedModels += t > 0 ? 1 : 0;
+            _zoneTexturedSurfaces += t;
+            model = m;
         }
         cache[glb] = model;
         return model;
@@ -887,20 +868,10 @@ public partial class WorldView : Node3D
         if (string.IsNullOrEmpty(_modelPath) || !Godot.FileAccess.FileExists(_modelPath))
             return false;
 
-        var doc = new GltfDocument();
-        var state = new GltfState();
-        if (doc.AppendFromFile(_modelPath, state) != Error.Ok)
-        {
-            GD.PrintErr($"[world] could not load model {_modelPath}; using the capsule.");
-            return false;
-        }
-        Node scene = doc.GenerateScene(state);
-        if (scene is not Node3D model)
-            return false;
-
         // Texture from the extracted .dds beside the model (where tools/pipeline.sh puts them).
         string textureDir = System.IO.Path.GetDirectoryName(_modelPath) ?? "";
-        int textured = ModelTexturing.Apply(model, textureDir);
+        if (ModelTexturing.LoadGlb(_modelPath, out int textured, textureDir) is not Node3D model)
+            return false;   // keep the capsule
 
         // The model is already in metres (GltfExporter bakes NIF units × 0.025), so trust its own
         // size instead of forcing a fixed height — that lets a character stand at its true scale next
@@ -1328,6 +1299,7 @@ public partial class WorldView : Node3D
             _camera.GlobalPosition = ToGodot(c[0], c[1], c[2]);
             _camYaw = -Mathf.DegToRad(c[3]);
             _camPitch = Mathf.DegToRad(c[4]);
+            _nextStatus = 0;   // the shot's status text is the pose's, not up to 0.25 s old
             for (int k = 0; k < 4; k++)
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
@@ -1933,14 +1905,7 @@ public partial class WorldView : Node3D
         {
             if (!_figureFiles.TryGetValue(file, out Node3D? template))
             {
-                var doc = new GltfDocument();
-                var state = new GltfState();
-                if (doc.AppendFromFile(path, state) == Error.Ok && doc.GenerateScene(state) is Node3D m)
-                {
-                    ModelTexturing.TagLayers(state);
-                    ModelTexturing.Apply(m, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
-                    template = m;
-                }
+                template = ModelTexturing.LoadGlb(path, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
                 _figureFiles[file] = template;
             }
             if (template is not null)

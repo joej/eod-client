@@ -16,6 +16,30 @@ namespace EodClient;
 public static class ModelTexturing
 {
     /// <summary>
+    /// Loads a converted .glb at run time (not an imported res:// resource): its scene, with the extra
+    /// texture layers tagged (<see cref="TagLayers"/>) and textured from <paramref name="textureDirs"/>
+    /// in priority order (none: left untextured). Null, with an error logged, if it can't be loaded.
+    /// </summary>
+    public static Node3D? LoadGlb(string path, params string[] textureDirs) => LoadGlb(path, out _, textureDirs);
+
+    /// <summary>As <see cref="LoadGlb(string, string[])"/>, also giving how many surfaces were textured.</summary>
+    public static Node3D? LoadGlb(string path, out int textured, params string[] textureDirs)
+    {
+        textured = 0;
+        var doc = new GltfDocument();
+        var state = new GltfState();
+        Error err = doc.AppendFromFile(path, state);
+        if (err != Error.Ok || doc.GenerateScene(state) is not Node3D scene)
+        {
+            GD.PrintErr($"[models] could not load {path} ({err})");
+            return null;
+        }
+        TagLayers(state);
+        textured = Apply(scene, textureDirs);
+        return scene;
+    }
+
+    /// <summary>
     /// Walks <paramref name="modelRoot"/> for mesh surfaces and, for each material, loads
     /// &lt;material-name&gt;.dds from <paramref name="textureDir"/> and assigns it as the albedo.
     /// Materials whose texture is absent are left as-is. Returns how many surfaces were textured.

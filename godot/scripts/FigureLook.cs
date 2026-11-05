@@ -267,15 +267,7 @@ public static class FigureLook
         string path = System.IO.Path.Combine(modelsDir, nif + ".glb");
         if (ItemModels.TryGetValue(path, out Node3D? cached))
             return cached;
-        Node3D? result = null;
-        var doc = new GltfDocument();
-        var state = new GltfState();
-        if (Godot.FileAccess.FileExists(path) && doc.AppendFromFile(path, state) == Error.Ok && doc.GenerateScene(state) is Node3D m)
-        {
-            ModelTexturing.TagLayers(state);
-            ModelTexturing.Apply(m, dirs);
-            result = m;
-        }
+        Node3D? result = Godot.FileAccess.FileExists(path) ? ModelTexturing.LoadGlb(path, dirs) : null;
         ItemModels[path] = result;
         return result;
     }
