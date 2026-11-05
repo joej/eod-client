@@ -98,11 +98,11 @@ public partial class CharacterScreen : Control
             int? enter = Option(args, "--enter");
             // --stay N: CI/headless — spend N seconds in the world, then /quit and close. Without it,
             // stay in the world indefinitely for interactive play (close the window or press Quit).
-            _ = AutoLogin(args[i + 1], args[i + 2], port, enter, Option(args, "--stay"));
+            Fire(() => AutoLogin(args[i + 1], args[i + 2], port, enter, Option(args, "--stay")));
             return;
         }
         if (Current() is { AutoStart: not AutoStart.Off } start && _password.Text.Length > 0)
-            _ = StartProfile(start);
+            Fire(() => StartProfile(start));
     }
 
     private void OpenSettings() => SettingsDialog.Open(this);
@@ -256,20 +256,51 @@ public partial class CharacterScreen : Control
         }
     }
 
-    public override void _ExitTree() => _ = Disconnect();
+    public override void _ExitTree() => Fire(Disconnect);
 
     public override void _Notification(int what)
     {
         if (what == NotificationWMCloseRequest)
-            _ = CloseWindow();
+            Fire(CloseWindow);
     }
 
     private async Task CloseWindow()
     {
-        if (_world is not null && _world.ClosedReason is null)
-            await LeaveWorld();
-        await Disconnect();
-        GetTree().Quit();
+        try
+        {
+            if (_world is not null && _world.ClosedReason is null)
+                await LeaveWorld();
+            await Disconnect();
+        }
+        finally
+        {
+            GetTree().Quit();   // whatever happened, the window was asked to close
+        }
+    }
+
+    // Runs a UI action's task without awaiting it. Each action catches the failures it expects (a lost
+    // connection, a timeout); anything else would vanish with the unobserved task and could leave
+    // Connect or Enter disabled, so it is logged and the login form comes back.
+    private async void Fire(Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"[client] unexpected error: {e}");
+            if (!IsInsideTree())
+                return;
+            try
+            {
+                await BackToLogin($"Error: {e.Message}");
+            }
+            catch (Exception again)
+            {
+                GD.PrintErr($"[client] could not reset the login form: {again}");
+            }
+        }
     }
 
     // Two panels, used left to right: the server and account to log in with, then (once logged in)
@@ -325,7 +356,7 @@ public partial class CharacterScreen : Control
             _profiles = LoginProfiles.All();
         };
         _connect = new Button { Text = "Log in", SizeFlagsHorizontal = SizeFlags.ShrinkEnd, CustomMinimumSize = new Vector2(140, 0) };
-        _connect.Pressed += () => _ = OnConnectPressed();
+        _connect.Pressed += () => Fire(OnConnectPressed);
         login.AddChild(_connect);
         _status = new Label { Text = "Not connected.", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         login.AddChild(_status);
@@ -338,15 +369,15 @@ public partial class CharacterScreen : Control
         foreach (Realm realm in new[] { Realm.Albion, Realm.Midgard, Realm.Hibernia })
             _realm.AddItem(realm.ToString(), (int)realm);
         // At the character screen, picking a realm lists that realm's characters.
-        _realm.ItemSelected += index => _ = ListRealm((Realm)_realm.GetItemId((int)index));
+        _realm.ItemSelected += index => Fire(() => ListRealm((Realm)_realm.GetItemId((int)index)));
         realmRow.AddChild(_realm);
         character.AddChild(realmRow);
         _characters = new ItemList { SizeFlagsVertical = SizeFlags.ExpandFill };
         _characters.ItemSelected += index => _enter.Disabled = _session is null;
-        _characters.ItemActivated += index => _ = OnEnterPressed();
+        _characters.ItemActivated += index => Fire(OnEnterPressed);
         character.AddChild(_characters);
         _enter = new Button { Text = "Enter world", Disabled = true, SizeFlagsHorizontal = SizeFlags.ShrinkEnd, CustomMinimumSize = new Vector2(140, 0) };
-        _enter.Pressed += () => _ = OnEnterPressed();
+        _enter.Pressed += () => Fire(OnEnterPressed);
         character.AddChild(_enter);
 
         // --- bottom bar ---
@@ -363,7 +394,7 @@ public partial class CharacterScreen : Control
         _hexLog.Toggled += on => _packetLog.Hex = on;
         bar.AddChild(_hexLog);
 
-        _password.TextSubmitted += submitted => _ = OnConnectPressed();
+        _password.TextSubmitted += submitted => Fire(OnConnectPressed);
     }
 
     // A titled panel taking half the width; returns its content column.
@@ -496,7 +527,7 @@ public partial class CharacterScreen : Control
             // Pings from here on (OpenDAoC drops a client after 150 s without one, even at the
             // character screen); position updates are added while in the world.
             _keepAlive = new CancellationTokenSource();
-            _ = KeepAlive(session, _keepAlive.Token);
+            Fire(() => KeepAlive(session, _keepAlive.Token));
             _status.Text = $"{account} on {login.Granted!.ServerNameShort}: {overview.Characters.Count} character(s) in {realm}." +
                            (overview.Characters.Count > 0 ? " Select one and press Enter world." : "");
             return true;
@@ -590,10 +621,10 @@ public partial class CharacterScreen : Control
     {
         WorldView? old = _world;
         _world = NewWorldView(world, offline: false);
-        _world.QuitPressed += () => _ = LeaveWorld();
-        _world.BackToLoginPressed += () => _ = BackToLogin("Disconnected.");
+        _world.QuitPressed += () => Fire(LeaveWorld);
+        _world.BackToLoginPressed += () => Fire(() => BackToLogin("Disconnected."));
         _world.Relocated += moved => CallDeferred(MethodName.ShowWorldDeferred, moved.Zone.Id);
-        _world.RegionChanging += () => _ = FollowRegionChange();
+        _world.RegionChanging += () => Fire(FollowRegionChange);
         old?.QueueFree();
         GetTree().Root.AddChild(_world);
     }
@@ -718,7 +749,7 @@ public partial class CharacterScreen : Control
         if (_world is null && _connection is not null && _connection.Completion.IsCompleted)
         {
             string reason = _connection.Completion.Exception?.InnerException?.Message ?? "connection closed";
-            _ = BackToLogin($"Disconnected: {reason}");
+            Fire(() => BackToLogin($"Disconnected: {reason}"));
         }
     }
 

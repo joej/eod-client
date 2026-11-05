@@ -112,6 +112,7 @@ public partial class WorldView : Node3D
     private int _packets;
     private int _pings;
     private double _seconds;
+    private double _nextStatus;
     private string? _closedReason;
     private bool _draining = true;
     private string _note = "";
@@ -598,10 +599,13 @@ public partial class WorldView : Node3D
             if (line.Length == 0 || line.StartsWith("glb,")) // skip header/blank
                 continue;
             string[] c = line.Split(',');
+            // zone.csv is written with the invariant culture; the system's (e.g. "1,5") must not apply.
+            static bool Num(string s, out float v) => float.TryParse(s, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out v);
             if (c.Length < 6
-                || !float.TryParse(c[1], out float x) || !float.TryParse(c[2], out float y)
-                || !float.TryParse(c[3], out float z) || !float.TryParse(c[4], out float angleDeg)
-                || !float.TryParse(c[5], out float scale))
+                || !Num(c[1], out float x) || !Num(c[2], out float y)
+                || !Num(c[3], out float z) || !Num(c[4], out float angleDeg)
+                || !Num(c[5], out float scale))
                 continue;
 
             Node3D? template = LoadZoneModel(c[0], libraryDir, loaded);
@@ -635,6 +639,10 @@ public partial class WorldView : Node3D
         foreach (Node3D? m in loaded.Values) if (m is not null) distinct++;
         GD.Print($"[world] zone: {placed} object(s), {distinct} distinct model(s), " +
             $"{_zoneTexturedModels} textured ({_zoneTexturedSurfaces} surface(s))");
+        // The templates were only duplicated, never added to the tree, so nothing else frees them
+        // (the copies keep the shared meshes and materials alive).
+        foreach (Node3D? m in loaded.Values)
+            m?.Free();
         return placed;
     }
 
@@ -1035,7 +1043,16 @@ public partial class WorldView : Node3D
             ClientSettings.ApplyWindowMode();
     }
 
-    public override void _ExitTree() => ClientSettings.Changed -= OnSettingsChanged;
+    public override void _ExitTree()
+    {
+        ClientSettings.Changed -= OnSettingsChanged;
+        // Figure templates live outside the tree (only their copies are added), so freeing this view
+        // doesn't reach them; a new view is built on every zone change.
+        foreach (Node3D? template in _figureFiles.Values)
+            template?.Free();
+        _figureFiles.Clear();
+        _figures.Clear();
+    }
 
     // Left-click on the world (not on a panel: panels stop their clicks) queues an inspect pick.
     public override void _UnhandledInput(InputEvent @event)
@@ -2154,7 +2171,8 @@ public partial class WorldView : Node3D
         if (_draining && _session is not null)
             foreach (ServerPacket skipped in _session.TakeSkipped())
                 _bridge.Dispatch(skipped);
-        while (_draining && _connection is not null && _connection.TryReceive(out ServerPacket packet))
+        // A session method waiting for its reply (a jump, a quit) reads the queue itself.
+        while (_draining && _session?.AwaitingReply != true && _connection is not null && _connection.TryReceive(out ServerPacket packet))
             _bridge.Dispatch(packet);
         _packets = _bridge.PacketCount;
         InterpolateEntities(delta);
@@ -2167,6 +2185,10 @@ public partial class WorldView : Node3D
             _button.Disabled = false;
         }
 
+        // The status text is for reading, not animation: rebuilt 4 times a second, and not while F1 hides it.
+        if (!_dev.PanelsVisible || _seconds < _nextStatus)
+            return;
+        _nextStatus = _seconds + 0.25;
         PositionAndObjectId p = _world.Position;
         _dev.Status =
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
