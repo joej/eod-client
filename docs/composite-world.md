@@ -88,8 +88,8 @@ The live sources (NPCs, players, objects appearing, moving, leaving) all arrive 
 stream. The structural piece that keeps this sane is a **dispatcher**: the receive loop stops counting
 opcodes and routes each to a handler that raises a typed event; the renderer subscribes and spawns,
 moves or removes a scene entity. In our client that is
-[`NetworkBridge`](https://github.com/joej/eod-client/blob/main/godot/scripts/NetworkBridge.cs) — the
-one place the protocol library meets the engine. Everything above it is Godot; everything below it is
+[`NetworkBridge`](https://github.com/joej/eod-client/blob/main/src/DaocProtocol/Session/NetworkBridge.cs) — the
+one place the protocol library meets the engine (it lives in the protocol library, with no engine code). Everything above it is Godot; everything below it is
 plain .NET with no engine dependency, which keeps the protocol testable and the renderer replaceable.
 
 If you are building a client, this seam is worth creating early. It is the thing the rest of the world

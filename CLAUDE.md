@@ -336,9 +336,10 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │   │                              #   ChatPackets (0xAF in and out)
 │   ├── World/                     # ✓ Zones.cs + zones.tsv (embedded; OpenDAoC-Database, GPL)
 │   └── Session/
-│       └── ClientSession.cs       # ✓ login → character screen → list/create/delete → world;
+│       ├── ClientSession.cs       # ✓ login → character screen → list/create/delete → world;
 │                                  #   MoveToAsync, SayAsync/SendCommandAsync, QuitAsync;
 │                                  #   KeepAliveAsync; reply timeout
+│       └── NetworkBridge.cs       # ✓ drained world packets → typed events (entities, chat, pings, quit)
 ├── src/DaocAssets/                # ✓ asset reading (no Godot): Mpk/ (MPAK archives, CRC-checked),
 │                                  #   Nif/ (NIF 4.x/10.1 geometry reader, game.dll helper-shape
 │                                  #   and LOD rules, GltfExporter via SharpGLTF), Zone/ (zone
@@ -379,7 +380,6 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
         │                          #   .Zone (terrain, objects 0.025 m/unit, water, sky), .Player (chase
         │                          #   camera, movement via MoveToAsync, ground), .Entities (players/NPCs,
         │                          #   figures, gear), .Chat, .Inspect, .Shots (dev args, screenshots)
-        ├── NetworkBridge.cs       # ✓ drained packets → typed events (entities, chat, pings)
         ├── DevOverlay.cs          # ✓ dev panels: status, layer toggles, F2 render modes,
         │                          #   click-to-inspect readout (model/mesh/material/UVs)
         └── ModelTexturing.cs      # ✓ LoadGlb (run-time .glb load), binds library .dds textures to
@@ -420,8 +420,9 @@ and throws `TimeoutException` after `ReplyTimeout` (10 s): some server paths nev
 `DaocConnection` reads the socket on a background task and queues whole packets in a
 `System.Threading.Channels` channel. In Godot, awaiting the session from the main thread is
 fine (continuations return to it). Once in the world, `WorldView` drains unprompted packets
-(positions, creates, chat) per frame with `TryReceive` and hands them to `godot/scripts/NetworkBridge.cs`,
-which parses them and raises typed C# events: the only place Godot meets the protocol's packets. Sends are serialised, so a heartbeat timer may send
+(positions, creates, chat) per frame with `TryReceive` and hands them to `NetworkBridge` (in
+`DaocProtocol.Session`, no Godot), which parses them and raises typed C# events: the only place the
+game meets the protocol's packets. Sends are serialised, so a heartbeat timer may send
 while a session method waits.
 
 Logging: `new DaocConnection(new PacketLog(sink, hex))` logs every packet both ways. Godot

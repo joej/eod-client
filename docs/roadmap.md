@@ -149,7 +149,7 @@ Verified live on macOS against our OpenDAoC fork: standing in Cotswold, the vill
 capsules around the buildings and move in real time (176 entities tracked in one session). The
 receive loop no longer just counts packets — a dispatcher routes them to handlers and the world fills
 in.
-- ~~Build a **world-packet dispatcher**~~. `godot/scripts/NetworkBridge.cs` is the new seam between
+- ~~Build a **world-packet dispatcher**~~. `NetworkBridge` (now `src/DaocProtocol/Session/NetworkBridge.cs`) is the new seam between
   the protocol library and Godot: it parses each in-world opcode and raises typed events, replacing
   `WorldView`'s drain-and-count loop. The structural piece the client had lacked.
 - ~~Parse and apply the in-world server packets~~: 0xA1 ObjectUpdate (NPC/mob position, the bulk of

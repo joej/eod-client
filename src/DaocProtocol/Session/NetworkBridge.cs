@@ -1,24 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The seam between the protocol library and Godot (roadmap M5). WorldView drains whole
-// ServerPackets from the connection each frame and hands them here; this routes each opcode to a
-// parser and raises a typed event. Nothing above the protocol library touches raw bytes, and
-// nothing in the protocol library touches Godot — the bridge is the only place they meet.
+// The seam between the protocol library and a game front end (roadmap M5). The Godot client's
+// WorldView drains whole ServerPackets from the connection each frame and hands them here; this routes
+// each opcode to a parser and raises a typed event. Nothing above the protocol library touches raw
+// bytes, and nothing here touches Godot (it logs through a callback), so it is unit-tested.
 //
 // It replaces the old "drain and count" loop: opcodes we don't yet interpret are still counted
 // (so the status overlay's packet/ping totals keep working) and simply have no subscribers.
 
 using DaocProtocol.Net;
 using DaocProtocol.Packets;
-using Godot;
-
-namespace EodClient;
+namespace DaocProtocol.Session;
 
 /// <summary>
 /// Routes incoming server packets to typed events. Construct it once per world session, subscribe
 /// to the events you care about, then feed it every drained <see cref="ServerPacket"/>.
 /// </summary>
-public sealed class NetworkBridge
+public sealed class NetworkBridge(Action<string>? log = null)
 {
     /// <summary>An in-view entity moved or changed facing (0xA1 ObjectUpdate, the common case).</summary>
     public event Action<ObjectUpdate>? ObjectMoved;
@@ -139,7 +137,7 @@ public sealed class NetworkBridge
         }
         catch (InvalidDataException e)
         {
-            GD.PrintErr($"[bridge] 0x{packet.Code:X2} ({packet.Payload.Length} bytes) failed to parse: {e.Message}");
+            log?.Invoke($"[bridge] 0x{packet.Code:X2} ({packet.Payload.Length} bytes) failed to parse: {e.Message}");
         }
     }
 }
