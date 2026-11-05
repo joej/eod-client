@@ -937,7 +937,7 @@ internal static class Cli
             foreach ((int id, DaocAssets.Figures.CataSpec spec) in models)
             {
                 if (_figures.GetValueOrDefault(spec.Figure) is null) continue;
-                rows[id] = System.FormattableString.Invariant($"{id},{spec.Scale},{Path.GetFileNameWithoutExtension(spec.Skeleton)},{spec.Figure}");
+                rows[id] = DaocAssets.Figures.FigureTable.Row(new(id, spec.Scale, Path.GetFileNameWithoutExtension(spec.Skeleton), spec.Figure));
                 foreach (string skin in spec.Parts.Select(p => p.Skin).OfType<string>())
                     if (Gathered.Add(skin)) _library.GatherTexture(skin);
                 entries[id] = System.Text.Json.JsonSerializer.SerializeToNode(new
@@ -948,7 +948,7 @@ internal static class Cli
                     hair = spec.DefaultHair,
                 });
             }
-            File.WriteAllText(csvPath, "id,scale,figure,fig3\n" + string.Concat(rows.Values.Select(r => r + "\n")));
+            File.WriteAllText(csvPath, DaocAssets.Figures.FigureTable.CatacombsHeader + "\n" + string.Concat(rows.Values.Select(r => r + "\n")));
             var obj = new System.Text.Json.Nodes.JsonObject();
             foreach (var kv in entries) obj[kv.Key.ToString(CultureInfo.InvariantCulture)] = kv.Value;
             File.WriteAllText(jsonPath, obj.ToJsonString());
@@ -990,7 +990,7 @@ internal static class Cli
         var skins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string models = Path.Combine(libDir, "models");
         Directory.CreateDirectory(models);
-        var table = new System.Text.StringBuilder("id,scale,figure\n");
+        var table = new System.Text.StringBuilder(DaocAssets.Figures.FigureTable.ClassicHeader + "\n");
         int made = 0, catacombs = 0, missing = 0, failed = 0;
         foreach (int id in tables.ModelIds)
         {
@@ -1023,7 +1023,7 @@ internal static class Cli
                 File.Move(outPath + ".tmp", outPath, overwrite: true);
                 foreach (string skin in spec.Skins.Values)
                     if (skins.Add(skin)) library.GatherTexture(skin);
-                table.Append(System.FormattableString.Invariant($"{id},{spec.Scale},{Path.GetFileNameWithoutExtension(spec.Nif)}\n"));
+                table.Append(DaocAssets.Figures.FigureTable.Row(new(id, spec.Scale, Path.GetFileNameWithoutExtension(spec.Nif))) + "\n");
                 made++;
             }
             catch (Exception e) when (e is NifFormatException or InvalidOperationException or ArgumentException)

@@ -155,6 +155,25 @@ public static class ZoneWater
 
     public const string CsvHeader = "mesh,name,type,height,texture,multitexture,flow,color";
 
+    /// <summary>
+    /// Reads water.csv back: each body's mesh name to its texture and flow (the columns the client uses).
+    /// The name is the only free-text column (quoted when it holds a comma), so the others are taken
+    /// from the ends of the row. The header and malformed rows are skipped.
+    /// </summary>
+    public static Dictionary<string, WaterRow> ReadCsv(string csv)
+    {
+        var rows = new Dictionary<string, WaterRow>(StringComparer.Ordinal);
+        foreach (string raw in csv.Split('\n'))
+        {
+            string[] c = raw.Trim().Split(',');
+            if (c.Length < 8 || c[0] == "mesh")
+                continue;
+            float flow = float.TryParse(c[^2], NumberStyles.Float, CultureInfo.InvariantCulture, out float f) ? f : 0f;
+            rows[c[0]] = new WaterRow(c[0], c[^4], flow);
+        }
+        return rows;
+    }
+
     // Adds a triangle wound so its normal points up (+z), whatever order the banks run in.
     private static void AddUp(Vector3[] v, List<(ushort, ushort, ushort)> tris, ushort a, ushort b, ushort c)
     {
@@ -187,3 +206,7 @@ public static class ZoneWater
 
     private static string Csv(string s) => s.Contains(',') ? $"\"{s.Replace("\"", "\"\"")}\"" : s;
 }
+
+/// <summary>What the client reads from one water.csv row: the body's mesh, texture and flow
+/// (texture repeats per second ×1000, about -50..50).</summary>
+public sealed record WaterRow(string Mesh, string Texture, float Flow);

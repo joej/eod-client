@@ -10,5 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\src\DaocProtocol\DaocProtocol.csproj" />
+    <!-- The converter's file formats (zone.csv, water.csv, figure tables): read with the code that writes them. -->
+    <ProjectReference Include="..\src\DaocAssets\DaocAssets.csproj" />
   </ItemGroup>
 </Project>

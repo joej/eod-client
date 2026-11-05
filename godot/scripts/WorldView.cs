@@ -614,28 +614,15 @@ public partial class WorldView : Node3D
         string libraryDir = string.IsNullOrEmpty(_libraryPath)
             ? System.IO.Path.GetDirectoryName(_zonePath) ?? ""
             : _libraryPath;
-        string[] lines = Godot.FileAccess.GetFileAsString(_zonePath).Split('\n');
+        var placements = DaocAssets.Zone.ZoneCheck.ReadManifest(Godot.FileAccess.GetFileAsString(_zonePath));
         var loaded = new System.Collections.Generic.Dictionary<string, Node3D?>();
         var zoneRoot = new Node3D { Name = "Zone" };
         _zoneRoot = zoneRoot;
         int placed = 0;
 
-        foreach (string raw in lines)
+        foreach ((string glb, float x, float y, float z, float angleDeg, float scale) in placements)
         {
-            string line = raw.Trim();
-            if (line.Length == 0 || line.StartsWith("glb,")) // skip header/blank
-                continue;
-            string[] c = line.Split(',');
-            // zone.csv is written with the invariant culture; the system's (e.g. "1,5") must not apply.
-            static bool Num(string s, out float v) => float.TryParse(s, System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out v);
-            if (c.Length < 6
-                || !Num(c[1], out float x) || !Num(c[2], out float y)
-                || !Num(c[3], out float z) || !Num(c[4], out float angleDeg)
-                || !Num(c[5], out float scale))
-                continue;
-
-            Node3D? template = LoadZoneModel(c[0], libraryDir, loaded);
+            Node3D? template = LoadZoneModel(glb, libraryDir, loaded);
             if (template is null)
                 continue;
 
@@ -649,7 +636,7 @@ public partial class WorldView : Node3D
             // factor to shrink raw NIF units — that is now wrong and would scale the model twice.)
             inst.Scale = new Vector3(scale, scale, scale);
             // What the inspect readout reports for this placement (raw zone.csv values).
-            inst.SetMeta("glb", c[0]);
+            inst.SetMeta("glb", glb);
             inst.SetMeta("placement", $"x {x:0} y {y:0} z {z:0}  angle {angleDeg:0}°  scale {scale:0.##}");
             zoneRoot.AddChild(inst);
             // Trimesh collision per placed object, so the SpringArm chase camera pulls in off
@@ -686,13 +673,7 @@ public partial class WorldView : Node3D
         if (!Godot.FileAccess.FileExists(glb) || !Godot.FileAccess.FileExists(csv))
             return 0;
 
-        var rows = new System.Collections.Generic.Dictionary<string, string[]>();
-        foreach (string line in Godot.FileAccess.GetFileAsString(csv).Split('\n').Skip(1))
-        {
-            string[] c = line.Trim().Split(',');
-            if (c.Length >= 8)
-                rows[c[0]] = c;
-        }
+        var rows = DaocAssets.Zone.ZoneWater.ReadCsv(Godot.FileAccess.GetFileAsString(csv));
 
         var doc = new GltfDocument();
         var state = new GltfState();
@@ -708,15 +689,13 @@ public partial class WorldView : Node3D
         {
             // The node is named after the body (waterNN); the mesh instance may be it or its child.
             string name = rows.ContainsKey(mi.Name) ? mi.Name : mi.GetParent()?.Name ?? "";
-            if (!rows.TryGetValue(name, out string[]? row))
+            if (!rows.TryGetValue(name, out DaocAssets.Zone.WaterRow? row))
                 continue;
             var mat = new ShaderMaterial { Shader = shader };
-            if (ModelTexturing.Load(row[4], lib.PathJoin("overrides"), lib.PathJoin("textures"), lib) is { } tex)
+            if (ModelTexturing.Load(row.Texture, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib) is { } tex)
                 mat.SetShaderParameter("albedo_tex", tex);
             // DAoC's flow is about -50..50; as texture repeats per second, /1000 reads as a slow drift.
-            float flow = float.TryParse(row[6], System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out float f) ? f / 1000f : 0f;
-            mat.SetShaderParameter("flow", flow);
+            mat.SetShaderParameter("flow", row.Flow / 1000f);
             mi.MaterialOverride = mat;
             bodies++;
         }
@@ -2130,36 +2109,16 @@ public partial class WorldView : Node3D
             : "";
     }
 
-    // models/catacombs.csv: "id,scale,figure,fig3"; fig3 is the race's options file number.
-    internal static Dictionary<int, int> ReadCataFigures(string path)
-    {
-        var figures = new Dictionary<int, int>();
-        if (!Godot.FileAccess.FileExists(path))
-            return figures;
-        foreach (string line in Godot.FileAccess.GetFileAsString(path).Split('\n'))
-        {
-            string[] c = line.Split(',');
-            if (c.Length >= 4 && int.TryParse(c[0], out int id) && int.TryParse(c[3], out int fig3))
-                figures[id] = fig3;
-        }
-        return figures;
-    }
+    // models/figures.csv and catacombs.csv (written by mpk figures; DaocAssets.Figures.FigureTable).
+    private static Dictionary<int, DaocAssets.Figures.FigureRow> ReadFigureTable(string path) =>
+        Godot.FileAccess.FileExists(path) ? DaocAssets.Figures.FigureTable.Read(Godot.FileAccess.GetFileAsString(path)) : new();
 
-    // models/figures.csv and catacombs.csv (written by mpk figures): "id,scale,figure" per converted model id.
-    private static Dictionary<int, float> ReadFigureScales(string path)
-    {
-        var scales = new Dictionary<int, float>();
-        if (!Godot.FileAccess.FileExists(path))
-            return scales;
-        foreach (string line in Godot.FileAccess.GetFileAsString(path).Split('\n'))
-        {
-            string[] c = line.Split(',');
-            if (c.Length >= 2 && int.TryParse(c[0], out int id)
-                && float.TryParse(c[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float s))
-                scales[id] = s;
-        }
-        return scales;
-    }
+    // catacombs.csv's fig3 per model id: the race's options file number.
+    internal static Dictionary<int, int> ReadCataFigures(string path) =>
+        ReadFigureTable(path).Values.Where(r => r.Fig3 is not null).ToDictionary(r => r.Id, r => r.Fig3!.Value);
+
+    private static Dictionary<int, float> ReadFigureScales(string path) =>
+        ReadFigureTable(path).ToDictionary(kv => kv.Key, kv => kv.Value.Scale);
 
     // Ease each entity toward the last position/facing the server reported. The per-NPC update rate
     // is low (~1 Hz in the capture), so without this they teleport; with it they glide. The rate is

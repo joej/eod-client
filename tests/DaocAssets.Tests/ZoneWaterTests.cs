@@ -115,6 +115,19 @@ public class ZoneWaterTests
         Assert.Equal("water00,Test River,RIVER,1916,watery,ripl,-50,16776960", ZoneWater.CsvRow(r));
     }
 
+    [Fact]
+    public void ReadsBackWhatCsvRowWrote()
+    {
+        // A name with a comma is quoted, so it splits in two: the client's columns come from the row's ends.
+        WaterBody r = ZoneWater.Parse(Sector)[0];
+        string csv = string.Join("\n", ZoneWater.CsvHeader, ZoneWater.CsvRow(r),
+            ZoneWater.CsvRow(r with { Index = 1, Name = "Lake, North", Flow = 12.5f }), "bad,row");
+        var rows = ZoneWater.ReadCsv(csv);
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(new WaterRow("water00", "watery", -50f), rows["water00"]);
+        Assert.Equal(new WaterRow("water01", "watery", 12.5f), rows["water01"]);
+    }
+
     [LiveFact("live-terrain/SECTOR.DAT")]
     public void CamelotHillsRiverRunsUnderTheBridge()
     {
