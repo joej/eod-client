@@ -21,29 +21,14 @@ started 2026-11-05: what was found, what is done, and what is left. Pick the wor
 | 2bc30e5 | `NetworkBridge` moved into `DaocProtocol.Session` (no Godot), with tests over the recorded session. |
 | d8f7d0a | `CharacterScreen` split into partial-class files (`.Ui`, `.Profiles`, `.World`, `.CommandLine`). Moved code only. |
 | f229cfa | The old NIF 10.1 byte-offset fallback scan is gone: a 10.1 file that doesn't decode to the footer is reported as unsupported (only `dr_demonroom2b`, a Darkness Falls room with a particle system; see `docs/nif-coverage.md`). One geometry decoder (`NifGeometry`, 4.x and 10.1) for the converter and the audit. Checked over the whole install: every other NIF reads to identical geometry (hash of vertices, normals, colours, UVs, triangles), the audit report is unchanged, and a full `make check-zones` reconversion left all 5,507 outputs byte-identical. The 28 live fixture tests ran and pass (`DAOC_REQUIRE_FIXTURES=1`). |
+| f7a79bf | Quit timer verified live on a player account (`DaocCli --quit-checks`, `eodtest2`): all four cases pass. Moving stands the character up on the server, so the client no longer sends 0xC7 after moving (it drew "You are not sitting!"), and a jump in place no longer cancels the client's quit while the server's goes on. Open question L13 resolved. |
 
 Godot changes were checked with `tools/shots.sh` before and after (pixel comparison: the scene is
 unchanged; only the live counters in the status and layer panels differ between runs).
 
 ## Next
 
-### 1. Verify the quit timer live (needs a player account)
-
-The usual test account is a GM, and OpenDAoC skips the quit timer for GMs, so the sit-and-cancel
-path (e6edb11) has not been seen live. On a **player** account (PrivLevel 1: a newly created
-account, or `UPDATE account SET PrivLevel = 1 WHERE Name = '<account>';` on the server's database
-and back to 2 or 3 afterwards, since Travel needs GM rights):
-
-1. Type `/quit` and stand still: the character screen after about 20 s.
-2. Type `/quit`, press W within the 20 s: "Quit cancelled: you moved." in the chat; play on.
-3. Click Quit afterwards: the character screen again.
-4. Press Quit while running: the quit is called off at once (the server refuses to start one while
-   moving).
-
-Record the result in `docs/protocol.md` ("Logging out", now marked "from source, not yet seen
-live") and open question L13.
-
-### 2. Work that needs the owner's client install
+### 1. Work that needs the owner's client install
 
 - **Sit animation** for the quit: the converter exports only idle, walk, back, run and the combat
   idles (`MonsterFigure.ClipColumns`). Find the sit clip's column in `anims.csv`, export it, and
@@ -55,7 +40,7 @@ live") and open question L13.
   zone 107 Vanern Swamp, `Outcrop1.glb` x4 under the ground (and x2 floating); zone 334 Midgard Event,
   `rockrandom3.glb` x1 under the ground. `make check-zones` fails on them. Fix or explain each one.
 
-### 3. Lower priority
+### 2. Lower priority
 
 - Split `tools/AssetExtract/Program.cs` (about 1,500 lines): one file per command, one option
   parser (`--size`/`--offset` parsing is copied), and the zone size passed as a value instead of the

@@ -370,19 +370,25 @@ and logins in the meantime are refused (0x2C, 0x11 AccountIsInLogoutProcedure). 
    (The 1.127 server skips one byte, then reads the text.)
 2. Keep sending 0xA9 and 0xA3: the server's quit timer runs **20 s** (up to 60 s after combat;
    immediate for GM accounts or with `disable_quit_timer`, so a GM test account never sees the
-   timer or the sitting below; 0xA4 follows the `&quit` at once). It sits the character down. It refuses
-   to start while the last 0xA9 had a speed ("can't quit while standing"), and stops on death,
-   link death, crafting, or when the character stands up: **0xC7 PlayerSitRequest** (C→S) with
-   `00` (`01` sits). Moving alone does not stand the character up on the server, so a client that
-   lets the player move away must send 0xC7 `00` to call the quit off (`GamePlayer.Quit`/`Sit`,
-   OpenDAoC 2026.09.36; the cancel path is from source, not yet seen live).
+   timer or the sitting below; 0xA4 follows the `&quit` at once). It sits the character down
+   (0xAD status, sitting byte `02`; chat "You will quit after sitting for 20 seconds", then a
+   countdown every 5 s) and also sends the `/stats` summary as a chat line. It refuses to start
+   while the last 0xA9 had a speed ("You must be standing still to quit."), and stops on death,
+   link death, crafting, or when the character stands up. **Moving stands the character up:** the
+   first 0xA9 with a new X/Y (`PlayerMovementComponent.UpdatePosition` → `OnPlayerMove`) gets
+   "You stand up." and "You are no longer waiting to quit.", so a client only has to stop waiting.
+   A turn or a jump in place (Z only) doesn't. `/stand` or **0xC7 PlayerSitRequest** `00` also
+   stands up; sent after moving it only earns "You are not sitting!".
 3. **0xA4 Quit** (S→C, `PacketLib168.SendPlayerQuit`): `00` = back to the character screen (`01` =
    leave the game), then the character's level. The character is saved and removed.
 4. **Request 0xFC for the realm.** Until then the server still treats the connection as "playing",
    and disconnecting right after 0xA4 still triggers link death (L9). After the listing the
    connection is at the character screen and closing it is a normal logout.
 
-*Verified live:* quit after 20 s, back at the character screen, and an immediate new login accepted.
+*Verified live* (2026-11-05, player account, `DaocCli --enter 0 --quit-checks`): quit after 20.1 s
+and back at the character screen; quit then moving after 5 s calls it off (no 0xA4 in the next 30 s);
+a second quit after that works; a quit sent while running is refused at once. An immediate new login
+after a quit is accepted.
 
 ## Code map
 
