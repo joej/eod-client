@@ -256,3 +256,17 @@ public sealed record MaxSpeed(ushort Percent, bool TurningDisabled, byte WaterSp
         return new MaxSpeed(r.U16BE(), r.U8() != 0, r.U8());
     }
 }
+
+/// <summary>
+/// C→S 0xBE: asks the server to send an object's create packet again, for an object the client gets
+/// updates for but never saw created (OpenDAoC CreateObjectRequestHandler: object id as u16
+/// little-endian on 1.126+, answered only for an object in the region within visibility distance).
+/// The handler's comment says game.dll writes a u32; we send the id as u32 LE, whose first two
+/// bytes are what the server reads. Retail's exact payload is unconfirmed.
+/// </summary>
+public static class CreateObjectRequest
+{
+    public const byte Code = 0xBE;
+
+    public static byte[] Payload(ushort objectId) => new PayloadWriter().U32LE(objectId).ToArray();
+}

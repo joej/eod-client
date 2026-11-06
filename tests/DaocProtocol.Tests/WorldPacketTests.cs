@@ -25,6 +25,15 @@ public class WorldPacketTests
     }
 
     [Fact]
+    public void AnObjectCreateRequestCarriesTheIdAsTheServerReadsIt()
+    {
+        // OpenDAoC (1.126+) reads the id as u16 little-endian from the payload's start.
+        byte[] payload = CreateObjectRequest.Payload(0x2A93);
+        Assert.Equal(new byte[] { 0x93, 0x2A, 0, 0 }, payload);
+        Assert.Equal(0x2A93, payload[0] | payload[1] << 8);
+    }
+
+    [Fact]
     public void RequestsMatchRecordedClient()
     {
         // Recorded order after the character list: 9D A3 10 D4 E8 BF (packets 8–13), slot 0 in Albion.

@@ -542,6 +542,14 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// sent as the "&amp;"-prefixed form the server reads (see WorldPackets.CommandRequest). The
     /// server's reply, if any, arrives asynchronously as a 0xAF Message for the chat log.
     /// </summary>
+    /// <summary>Asks the server to send an object's create packet (0xBE), for one we get updates for but
+    /// never saw created. No reply if it is out of range or gone.</summary>
+    public Task RequestObjectAsync(ushort objectId, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(CreateObjectRequest.Code, CreateObjectRequest.Payload(objectId), cancellationToken);
+    }
+
     public Task SendCommandAsync(string command, CancellationToken cancellationToken = default)
     {
         Require(SessionState.InWorld);

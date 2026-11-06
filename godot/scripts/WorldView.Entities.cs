@@ -57,9 +57,14 @@ public partial class WorldView
         else
         {
             // An update for something we never saw spawn (we entered mid-session, or the create
-            // packet is one we don't parse yet): place a plain capsule so the world isn't empty.
-            GD.Print($"[entity] {u.ObjectId}: seen only by its position updates (no create packet): a grey capsule");
+            // packet is one we don't parse yet): place a plain capsule so the world isn't empty, and ask
+            // the server for its create packet (0xBE, as retail does), once per object.
+            bool ask = _session is not null && _closedReason is null && _objectsRequested.Add(u.ObjectId);
+            GD.Print($"[entity] {u.ObjectId}: seen only by its position updates (no create packet): a grey capsule" +
+                (ask ? ", create requested" : ""));
             SpawnEntity(u.ObjectId, pos, yaw, new Color(0.55f, 0.55f, 0.6f));
+            if (ask)
+                _ = RequestObject(u.ObjectId);
         }
     }
 
@@ -89,8 +94,18 @@ public partial class WorldView
             GD.Print($"[entity] {p.ObjectId} \"{p.Name}\": no figure for model {DaocProtocol.Packets.PlayerModel.Id(p.Model)} (sent {p.Model}): a capsule");
     }
 
+    // Objects whose create we asked for (0xBE), so each is asked for once while in view.
+    private readonly HashSet<ushort> _objectsRequested = new();
+
+    private async System.Threading.Tasks.Task RequestObject(ushort objectId)
+    {
+        try { await _session!.RequestObjectAsync(objectId); }
+        catch (System.Exception e) { GD.Print($"[entity] {objectId}: create request failed: {e.Message}"); }
+    }
+
     private void OnObjectRemoved(ushort objectId)
     {
+        _objectsRequested.Remove(objectId);
         _equipment.Remove(objectId);
         _worldObjects.Remove(objectId);
         _hiddenNpcs.Remove(objectId);
