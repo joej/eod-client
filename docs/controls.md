@@ -12,7 +12,32 @@ RPG and FPS; darkageofcamelot.com's current page names RPG, FPS and "MMO Default
   Space jump, NumLock auto-run, Z dive, V sprint; mouse: left-drag pans the camera, right button looks
   where you run. That is the layout most players use today.
 
-## Default layout (manual; alternative in parentheses)
+## Today's layout (owner's reference, 2026-11-06)
+
+| Action | Key |
+|---|---|
+| Move forward / backward | W / S |
+| Turn left / right | A / D (or strafe, by layout choice) |
+| Strafe left / right | Q / E |
+| Jump | Space |
+| Dive | Z |
+| Sprint | V |
+| Auto-run | NumLock |
+| Follow target | Shift+F |
+| Stick to target (melee) | Shift+V |
+| Face target | F |
+| Pan camera | left-drag |
+| Align camera / mouse-look | right-drag |
+| Save the current camera as default | `/setcamera` |
+| Spells, champion and master-level skills | K |
+| Melee combat styles | L |
+| Realm abilities, crafting, other skills | P |
+| Options / configuration | Esc |
+
+Quickbars: up to three visible, each with 10 pages of 10 buttons, drag and drop; `/qbind` binds a slot to a
+key. Not in this list: a walk toggle (the 2001 manual's F is now "face target"), sit, attack mode, consider.
+
+## Default layout, 2001 (manual; alternative in parentheses)
 
 | Action | Key |
 |---|---|
