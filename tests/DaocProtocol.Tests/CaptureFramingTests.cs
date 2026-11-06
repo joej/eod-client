@@ -59,6 +59,17 @@ public class CaptureFramingTests
     }
 
     [Fact]
+    public void APacketTheServerCouldNotReadIsNeverBuilt()
+    {
+        // OpenDAoC reads into a 1024-byte buffer and disconnects a client whose packet doesn't fit.
+        // The recorded client stays inside it; one byte past the limit is refused before it is sent.
+        Assert.All(ReadClientStream(), p => Assert.True(p.Raw.Length <= ClientPacket.MaxWireSize));
+        Assert.Equal(1024, new ClientPacket(0, 0, 0, 0xAF, new byte[ClientPacket.MaxPayload]).ToBytes().Length);
+        Assert.Throws<InvalidOperationException>(() =>
+            new ClientPacket(0, 0, 0, 0xAF, new byte[ClientPacket.MaxPayload + 1]).ToBytes());
+    }
+
+    [Fact]
     public void ServerPacketsRebuildByteForByte()
     {
         Assert.Equal(Capture.ServerStream, ReadServerStream().SelectMany(p => p.ToBytes()).ToArray());

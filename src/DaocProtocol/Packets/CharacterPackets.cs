@@ -211,6 +211,9 @@ public static class CharacterCreateRequest
     private const byte OperationCreate = 1;
     private const byte OperationDelete = 3;
 
+    /// <summary>The highest class id OpenDAoC knows (eCharacterClass, 2026.09.36).</summary>
+    public const byte MaxClassId = 62;
+
     /// <summary>
     /// Throws <see cref="ArgumentException"/> for a name a player account may not use: the server
     /// disconnects (and with BAN_HACKERS on, bans) a player sending a non-empty name that is
@@ -223,6 +226,9 @@ public static class CharacterCreateRequest
         if (name.Length < 3 || !char.IsAsciiLetterUpper(name[0]) || !name.All(char.IsAsciiLetter))
             throw new ArgumentException($"Name '{name}' must be 3+ ASCII letters starting with a capital.", nameof(character));
         CharacterStats s = character.Stats;
+        // eCharacterClass runs 0 (unknown) to 62; an id past it bans a player with BAN_HACKERS on.
+        if (character.ClassId is < 1 or > MaxClassId)
+            throw new ArgumentOutOfRangeException(nameof(character), $"Class id {character.ClassId} is not a class (1-{MaxClassId}).");
         if (character.Size is < 1 or > 3)
             throw new ArgumentOutOfRangeException(nameof(character), "Size must be 1 (short), 2 (average) or 3 (tall).");
         return Body(CharacterSlot.ToWire(character.Realm, character.Slot), name, OperationCreate, character.Look)

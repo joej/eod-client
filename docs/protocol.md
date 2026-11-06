@@ -68,6 +68,11 @@ checksum = (val2 − ((val1 + val2) << 8)) mod 65536     (computed as int, then 
 Examples: empty input → `0x047E`; `[0x01]` → `0x84FD`. Those two never wrap, so they don't catch a
 port that forgets the byte arithmetic; real traffic does.
 
+**Size limit.** OpenDAoC reads client bytes into a 1024-byte buffer (`BaseClient.TCP_RECEIVE_BUFFER_SIZE`)
+and disconnects a client whose packet doesn't fit, so one client packet is at most 1024 bytes on the
+wire (payload ≤ 1012). `ClientPacket.ToBytes` refuses a longer one. The largest recorded packet, the
+second 0xF4, is 272 bytes.
+
 *Verified:* all 171 recorded client packets have valid checksums; all 1,886 recorded server packets
 split exactly with the 3-byte header; every packet rebuilds byte for byte (`CaptureFramingTests`).
 
@@ -223,7 +228,8 @@ u8   "new constitution" (customisation only)   u8 0
   disconnected (and banned with `ban_hackers` on; C6). Stats must be the race's base values plus
   exactly 30 points (+1 each, +2 above +10, +3 above +15). A rejected create gets the same 0x2A as
   a successful one (C1); only the next listing tells. OpenDAoC's StartAsBaseClass script turns the
-  requested class into its base class (Armsman → Fighter).
+  requested class into its base class (Armsman → Fighter). A class id outside `eCharacterClass`
+  (0-62) bans with `ban_hackers` on; our builder accepts only 1-62.
 - **Delete:** operation 3, empty name, realm byte **0** (a non-zero realm makes the server apply
   the realm offset twice; C3). Deleting an empty slot gets no answer at all (C2).
 - RustDAoC's builder puts a region byte 40 bytes after the stats and new constitution at +44;
@@ -304,6 +310,21 @@ and 0x0C flying (without permission) ban the account and its IP when `ban_hacker
 exemption; 0x14 (playing dead while alive) is stripped. All three (0x1C) is climbing and allowed. With
 `ban_hackers` off (the default) the bits are stripped instead. `ClientSession.MoveToAsync` refuses
 these pairs, so a jump while swimming or sitting can't send both bits.
+
+**Speed.** The server sends the player's allowed run speed in 0xB6 MaxSpeed (`PacketLib168.SendUpdateMaxSpeed`):
+
+```
+u16 BE  speed %           of the base run, 191 region units/s (GamePlayer.PLAYER_BASE_SPEED)
+u8      turning disabled  1 while stunned or mezzed
+u8      water speed       the WaterSpeed property
+```
+
+It comes on world entry and whenever buffs, encumbrance or a mount change it (the recording: 125 at
+entry, 170 later). The server never trusts 0xA9's speed field; it measures x/y distance between
+updates (`PlayerMovementMonitor`) against 1.15 × this speed (the old speed for 750 ms after a
+decrease). Six violations within 1.5 s move the player back to where they began; the sixth such move
+in a row disconnects (no ban). GMs and players allowed to fly are exempt; Z isn't checked. Our client
+runs at the 0xB6 speed; its Shift sprint (×4) is a dev toggle, off by default, for GM accounts.
 
 The zone id is the zone containing the position. The real client knows it from its map data; we
 look it up in OpenDAoC's zone table (`src/DaocProtocol/World/zones.tsv`, from OpenDAoC-Database,

@@ -45,10 +45,11 @@ public partial class WorldView : Node3D
     private const float MovingSendInterval = 0.2f;
     private const float IdleSendInterval = 2.0f;
     private const float PositionEpsilon = 1.0f;      // region units; ~0.025 m, below a frame's step
-    // Ground-plane walk speed in region units/second and the matching 0xA9 "speed" value. 191 is
-    // DAoC's base run; the server trusts our X/Y/Z, so this only has to look right and move at a
-    // plausible rate. Metres/s = units/s × 0.025.
-    private const float WalkUnitsPerSecond = 191f;
+    // Ground-plane run speed in region units/second and the matching 0xA9 "speed" value: the base run
+    // (191) until the server's 0xB6 says otherwise (buffs, encumbrance, mounts). Its speed check allows
+    // 1.15 × that over x/y, snaps a faster player back and disconnects one snapped back six times in a
+    // row, so we never run faster (except the GM-only dev sprint). Metres/s = units/s × 0.025.
+    private float _runUnitsPerSecond = DaocProtocol.Packets.MaxSpeed.BaseUnitsPerSecond;
     private string? _modelPath;
     private string? _zonePath;
     private string? _libraryPath;
@@ -406,6 +407,11 @@ public partial class WorldView : Node3D
         _bridge.PlayerMoved += OnPlayerMoved;
         _bridge.PlayerTurned += OnPlayerTurned;
         _bridge.AttackModeChanged += OnAttackModeChanged;
+        _bridge.MaxSpeedChanged += speed =>
+        {
+            _runUnitsPerSecond = speed.UnitsPerSecond;
+            GD.Print($"[world] max speed {speed.Percent}% ({speed.UnitsPerSecond:0} units/s)");
+        };
         _bridge.ObjectRemoved += OnObjectRemoved;
         _bridge.ObjectSpawned += OnWorldObject;
         _bridge.ChatReceived += OnChatReceived;
@@ -476,6 +482,8 @@ public partial class WorldView : Node3D
         _dev.AddToggle("Entities", true, on => _entityRoot.Visible = on);
         _dev.AddToggle("Own character", true, on => _body.Visible = on);
         _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);
+        // Off by default: the server's speed check exempts GMs only, and kicks a player who sprints.
+        _dev.AddToggle("Shift sprint ×4 (GM only)", ClientSettings.Sprint, on => ClientSettings.Sprint = on);
         if (PacketLogging is var (getLog, setLog))
             _togglePacketLog = _dev.AddToggle("F4 packet log", getLog(), setLog);
         _dev.AddInfo($"{zoneObjects} fixtures · {_zoneTexturedModels} textured models · {_waterBodies} water\n" +

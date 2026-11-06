@@ -25,12 +25,23 @@ public sealed record ClientPacket(ushort Sequence, ushort SessionId, ushort Para
     /// <summary>Header plus checksum: bytes on the wire beyond the payload (GSPacketIn.HDR_SIZE).</summary>
     public const int Overhead = HeaderSize + Checksum.Size;
 
+    /// <summary>
+    /// The most bytes one packet may take on the wire. The server reads into a 1024-byte buffer
+    /// (CoreBase/Network/BaseClient.cs TCP_RECEIVE_BUFFER_SIZE) and disconnects when a packet doesn't
+    /// fit, so a longer one would never be read.
+    /// </summary>
+    public const int MaxWireSize = 1024;
+
+    /// <summary>The largest payload that fits <see cref="MaxWireSize"/>.</summary>
+    public const int MaxPayload = MaxWireSize - Overhead;
+
     public byte Code => (byte)PacketId;
 
     public byte[] ToBytes()
     {
-        if (Payload.Length > ushort.MaxValue)
-            throw new InvalidOperationException($"Payload of {Payload.Length} bytes does not fit the 16-bit size field.");
+        if (Payload.Length > MaxPayload)
+            throw new InvalidOperationException(
+                $"Payload of {Payload.Length} bytes is over the server's {MaxPayload}: it would disconnect us.");
 
         var bytes = new byte[Payload.Length + Overhead];
         Span<byte> span = bytes;

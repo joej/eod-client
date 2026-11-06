@@ -104,6 +104,14 @@ public static class ClientSettings
         set => Save("sun_shadows", value);
     }
 
+    /// <summary>Shift runs four times as fast (dev). Off by default: the server's speed check exempts only
+    /// GMs, and snaps back and then disconnects a player who does it.</summary>
+    public static bool Sprint
+    {
+        get => Load().GetValue("graphics", "sprint", false).AsBool();
+        set => Save("sprint", value);
+    }
+
     /// <summary>Puts the window in the saved mode (no-op without a display, e.g. headless checks).</summary>
     public static void ApplyWindowMode()
     {

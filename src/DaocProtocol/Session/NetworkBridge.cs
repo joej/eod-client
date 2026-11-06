@@ -38,6 +38,9 @@ public sealed class NetworkBridge(Action<string>? log = null)
     /// <summary>Our own attack mode as the server has it (S→C 0x74): weapons drawn or put away.</summary>
     public event Action<bool>? AttackModeChanged;
 
+    /// <summary>How fast the server lets us run (0xB6): run no faster, or its speed check snaps us back.</summary>
+    public event Action<MaxSpeed>? MaxSpeedChanged;
+
     /// <summary>A static world object entered view (0xD9 ObjectCreate).</summary>
     public event Action<ObjectCreate>? ObjectSpawned;
 
@@ -102,6 +105,9 @@ public sealed class NetworkBridge(Action<string>? log = null)
                     break;
                 case AttackMode.Code:
                     AttackModeChanged?.Invoke(AttackMode.IsOn(packet.Payload));
+                    break;
+                case MaxSpeed.Code:
+                    MaxSpeedChanged?.Invoke(MaxSpeed.Parse(packet.Payload));
                     break;
                 case ObjectCreate.Code:
                     ObjectSpawned?.Invoke(ObjectCreate.Parse(packet.Payload));

@@ -131,6 +131,16 @@ public class CharacterCreateTests
         Assert.Throws<ArgumentException>(() => CharacterCreateRequest.CreatePayload(Character(name)));
     }
 
+    [Theory]
+    [InlineData(0)]     // eCharacterClass.Unknown: the server ignores the request
+    [InlineData(63)]    // past the enum: with BAN_HACKERS on, the server bans account and IP
+    public void RejectsClassIdsThatAreNoClass(byte classId)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            CharacterCreateRequest.CreatePayload(Character() with { ClassId = classId }));
+        Assert.NotEmpty(CharacterCreateRequest.CreatePayload(Character() with { ClassId = CharacterCreateRequest.MaxClassId }));
+    }
+
     [Fact]
     public void RejectsBadSlotsAndMissingRealm()
     {

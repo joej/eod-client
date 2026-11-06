@@ -37,6 +37,8 @@ public partial class WorldView
 
         _chatInput = new LineEdit
         {
+            // Well inside one packet (CommandRequest.MaxLength) even with the longest command in front.
+            MaxLength = 512,
             PlaceholderText = "Press Enter to chat (/say by default; /who, /gu … work too)",
             AnchorLeft = 0f,
             AnchorRight = 0f,

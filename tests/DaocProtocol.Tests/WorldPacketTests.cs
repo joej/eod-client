@@ -13,6 +13,17 @@ public class WorldPacketTests
     private static readonly List<ClientPacket> Client = Capture.ClientPackets();
     private static readonly List<ServerPacket> Server = Capture.ServerPackets();
 
+    [Theory]
+    [InlineData(13, 125)]     // world entry
+    [InlineData(1415, 170)]   // later in the session (a speed buff or mount)
+    public void MaxSpeedIsAPercentOfTheBaseRunSpeed(int index, int percent)
+    {
+        Assert.Equal(MaxSpeed.Code, Server[index].Code);
+        MaxSpeed speed = MaxSpeed.Parse(Server[index].Payload);
+        Assert.Equal(new MaxSpeed((ushort)percent, false, 0), speed);
+        Assert.Equal(191f * percent / 100, speed.UnitsPerSecond);
+    }
+
     [Fact]
     public void RequestsMatchRecordedClient()
     {

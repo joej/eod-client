@@ -165,10 +165,15 @@ public static class CommandRequest
 {
     public const byte Code = 0xAF;
 
+    /// <summary>The longest command that fits one packet (the two framing zero bytes aside).</summary>
+    public const int MaxLength = ClientPacket.MaxPayload - 2;
+
     public static byte[] Payload(string command)
     {
         if (command.Length < 2 || command[0] != '&' || command.Contains('\0'))
             throw new ArgumentException("Commands start with '&' (for '/') and contain no zero byte.", nameof(command));
+        if (command.Length > MaxLength)
+            throw new ArgumentException($"Commands are at most {MaxLength} characters.", nameof(command));
         return new PayloadWriter().U8(0).Bytes(System.Text.Encoding.Latin1.GetBytes(command)).U8(0).ToArray();
     }
 }
@@ -227,4 +232,27 @@ public sealed record RegionChanged(ushort RegionId, ushort ZoneId)
 
     public byte[] ToBytes() => new PayloadWriter().U16BE(RegionId).U16BE(ZoneId)
         .U16BE(0).U16BE(1).U8(0x0C).U8(0).U16BE(0xFFBF).ToArray();
+}
+
+/// <summary>
+/// 0xB6 (server → client): how fast the player may run, as a percentage of the base run speed
+/// (OpenDAoC PacketLib168.SendUpdateMaxSpeed; 191 units/s = 100). Sent on world entry and whenever a
+/// buff, debuff, encumbrance or mount changes it. Payload: percent u16 BE, turning disabled u8 (1 while
+/// stunned or mezzed), water speed u8 (the WaterSpeed property). The server's speed check allows 1.15 ×
+/// this speed; a client that runs faster is snapped back and, after six snap-backs, disconnected.
+/// </summary>
+public sealed record MaxSpeed(ushort Percent, bool TurningDisabled, byte WaterSpeed)
+{
+    public const byte Code = 0xB6;
+
+    /// <summary>OpenDAoC GamePlayer.PLAYER_BASE_SPEED: region units per second at 100%.</summary>
+    public const int BaseUnitsPerSecond = 191;
+
+    public float UnitsPerSecond => BaseUnitsPerSecond * Percent / 100f;
+
+    public static MaxSpeed Parse(ReadOnlySpan<byte> payload)
+    {
+        var r = new PayloadReader(payload);
+        return new MaxSpeed(r.U16BE(), r.U8() != 0, r.U8());
+    }
 }

@@ -82,10 +82,11 @@ public partial class WorldView
             move.Y = 0;
             if (move.LengthSquared() > 0)
             {
-                // Shift sprints (×4) so you can cross a ~15 km zone to reach distant terrain/keep for
-                // testing; base is DAoC run (191 units/s). The sent 0xA9 speed stays the base value.
-                float sprint = Input.IsKeyPressed(Key.Shift) ? 4f : 1f;
-                float metresPerSec = WalkUnitsPerSecond * RegionMetresPerUnit * sprint;
+                // Shift sprints (×4) to cross a ~15 km zone quickly, when the dev toggle allows it: only a
+                // GM may (the server snaps a player back and then kicks them). The sent 0xA9 speed stays
+                // the allowed run speed.
+                float sprint = ClientSettings.Sprint && Input.IsKeyPressed(Key.Shift) ? 4f : 1f;
+                float metresPerSec = _runUnitsPerSecond * RegionMetresPerUnit * sprint;
                 _body.Position += move.Normalized() * metresPerSec * (float)delta;
             }
         }
@@ -128,7 +129,7 @@ public partial class WorldView
 
         if (_posLeft <= 0f || _landingSpeed > 0 || (changed && !_sendingChanges))
         {
-            SendMove(moving ? WalkUnitsPerSecond : 0f);
+            SendMove(moving ? _runUnitsPerSecond : 0f);
             _posLeft = changed ? MovingSendInterval : IdleSendInterval;
             _sendingChanges = changed;
         }
