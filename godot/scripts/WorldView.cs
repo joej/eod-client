@@ -514,6 +514,25 @@ public partial class WorldView : Node3D
         _bodyClip = clip;
     }
 
+    // Sitting out the quit timer (the server sits the character down): sit down once, then hold the sit
+    // idle. Moving cancels the quit and the walk/run clip takes over. A figure converted before the sit
+    // clips existed keeps its idle.
+    private void Sit()
+    {
+        if (_bodyAnim is null || _bodyClip == "sit")
+            return;
+        if (!_bodyAnim.HasAnimation("sit_down") || !_bodyAnim.HasAnimation("sit_idle"))
+        {
+            PlayBodyClip("idle");
+            return;
+        }
+        _bodyAnim.GetAnimation("sit_down").LoopMode = Animation.LoopModeEnum.None;
+        _bodyAnim.GetAnimation("sit_idle").LoopMode = Animation.LoopModeEnum.Linear;
+        _bodyAnim.Play("sit_down", customBlend: 0.2);
+        _bodyAnim.Queue("sit_idle");
+        _bodyClip = "sit";
+    }
+
     private bool TryAddModel(Node3D body)
     {
         if (string.IsNullOrEmpty(_modelPath) || !Godot.FileAccess.FileExists(_modelPath))

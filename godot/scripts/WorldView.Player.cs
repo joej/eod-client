@@ -100,7 +100,10 @@ public partial class WorldView
         Ground(delta);
 
         // DAoC's normal pace is a run; backing up has its own clip.
-        PlayBodyClip(!moving ? Idle(_bodyAnim, _attacking, _ownCombatIdle) : forward < 0 ? "back" : "run");
+        if (_quitting && !moving)
+            Sit();
+        else
+            PlayBodyClip(!moving ? Idle(_bodyAnim, _attacking, _ownCombatIdle) : forward < 0 ? "back" : "run");
 
         // Position send (the event-driven shape adapted from OfflineDAoC's _send_position, GPL-3.0; the
         // rates are retail 1.127's): every 0.2 s while anything is changing, every 2 s standing still,
