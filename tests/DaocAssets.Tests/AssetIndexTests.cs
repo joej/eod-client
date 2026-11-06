@@ -75,6 +75,38 @@ public sealed class AssetIndexTests : IDisposable
     }
 
     [Fact]
+    public void AFigureItemOrEffectAsksForItsOwnFolderAndKeepsItThroughSaveAndLoad()
+    {
+        // The giant again, and a creature skin packed in figures/skins/*.mpk that a loose housing texture of
+        // the same name beat (a wolf-skin rug's layout on the wolf: owner's install, 2026-11-06).
+        Directory.CreateDirectory(Path.Combine(_client, "figures", "skins"));
+        File.WriteAllText(Path.Combine(_client, "figures", "Giant.NIF"), "creature");
+        File.WriteAllBytes(Path.Combine(_client, "figures", "skins", "skin002.mpk"),
+            MpkBuilder.Build(("wolf_black.dds", "wolf skin"u8.ToArray())));
+        Directory.CreateDirectory(Path.Combine(_client, "phousing", "nifs"));
+        File.WriteAllText(Path.Combine(_client, "phousing", "nifs", "wolf_black.dds"), "rug");
+        Directory.CreateDirectory(Path.Combine(_client, "zones", "Nifs"));
+        File.WriteAllBytes(Path.Combine(_client, "zones", "Nifs", "GIANT.npk"),
+            MpkBuilder.Build(("giant.nif", "zone object"u8.ToArray())));
+
+        AssetIndex built = AssetIndex.Build(_client);
+        built.Save(_json);
+        foreach (AssetIndex index in new[] { built, AssetIndex.Load(_json) })
+        {
+            string[] figures = ["figures/"];
+            Assert.Equal("zone object"u8.ToArray(), index.Read("giant.nif"));            // zones keep their default
+            Assert.Equal("creature"u8.ToArray(), index.Read("giant.nif", figures));
+            Assert.Equal("rug"u8.ToArray(), index.Read("wolf_black.dds"));
+            Assert.Equal("wolf skin"u8.ToArray(), index.Read("wolf_black.dds", figures));
+            Assert.Equal("wolf skin"u8.ToArray(), index.ReadTexture("wolf_black.tga", figures)!.Value.Bytes);
+            Assert.False(index.IsDefault("wolf_black.dds", figures));
+            // No copy in the preferred folder: the default.
+            Assert.Equal("rug"u8.ToArray(), index.Read("wolf_black.dds", ["effects/"]));
+            Assert.True(index.IsDefault("wolf_black.dds", ["effects/"]));
+        }
+    }
+
+    [Fact]
     public void ReadsBytesFromLooseAndFromArchive()
     {
         Seed();

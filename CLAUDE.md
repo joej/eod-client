@@ -391,9 +391,12 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 ```
 
 Rule: after any change to the NIF reader, rerun `mpk audit <client-dir> --out
-private/audit/nif-audit.md` and keep its integrity section clean (every decoded block ends on a real
-boundary); update `NifSurvey.Coverage` when the reader starts or stops using a block type. Asset gaps
-are found by measurement (`docs/nif-coverage.md`), not by waiting for them to show up in the world.
+private/audit/nif-audit.md --index private/asset-index/index.json` and keep its integrity section clean
+(every decoded block ends on a real boundary); update `NifSurvey.Coverage` when the reader starts or stops
+using a block type. Asset gaps are found by measurement (`docs/nif-coverage.md`), not by waiting for them
+to show up in the world. The report's "Name clashes" section counts names whose figure, item or effect file
+differs from the zone file of the same name; a new kind of asset the converter reads by name gets its own
+install folders (`Cli.FigureFolders` etc.) and `AssetLibrary.Scoped`, never the zone-first default.
 
 Rule: an asset change is checked by its **result**, not by counts ("1,536 placements converted" said
 nothing about 546 of them being underground). Before handing any converter or rendering change to the

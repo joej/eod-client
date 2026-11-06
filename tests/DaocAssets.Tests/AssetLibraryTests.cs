@@ -165,4 +165,26 @@ public sealed class AssetLibraryTests : IDisposable
         var library = new AssetLibrary(IndexWith(("present.dds", "x"u8.ToArray())), _lib);
         Assert.Null(library.GatherTexture("absent.tga"));
     }
+
+    [Fact]
+    public void AScopedViewStoresAFileThatDiffersFromTheZoneOneInItsOwnFolder()
+    {
+        // wolf_black: the creature's skin (figures/) and a housing rug's texture (loose, the default) differ;
+        // spider: the same file in both places, so the shared copy serves both.
+        Directory.CreateDirectory(Path.Combine(_client, "figures", "skins"));
+        File.WriteAllBytes(Path.Combine(_client, "figures", "skins", "skin002.mpk"), MpkBuilder.Build(
+            ("wolf_black.dds", "wolf skin"u8.ToArray()), ("spider.dds", "spider"u8.ToArray())));
+        Directory.CreateDirectory(Path.Combine(_client, "phousing", "nifs"));
+        File.WriteAllText(Path.Combine(_client, "phousing", "nifs", "wolf_black.dds"), "rug");
+        File.WriteAllText(Path.Combine(_client, "phousing", "nifs", "spider.dds"), "spider");
+        var shared = new AssetLibrary(AssetIndex.Build(_client), _lib);
+        AssetLibrary figures = shared.Scoped("figures", "figures/");
+
+        Assert.Equal(Path.Combine(_lib, "textures", "figures", "wolf_black.dds"), figures.GatherTexture("wolf_black.tga"));
+        Assert.Equal("wolf skin", File.ReadAllText(Path.Combine(_lib, "textures", "figures", "wolf_black.dds")));
+        Assert.Equal(Path.Combine(_lib, "textures", "spider.dds"), figures.GatherTexture("spider.tga"));
+        // The zone/house consumer still gets its own file, and the two never overwrite each other.
+        Assert.Equal("rug", File.ReadAllText(shared.GatherTexture("wolf_black.tga")!));
+        Assert.Equal("wolf skin", File.ReadAllText(figures.GatherTexture("wolf_black.tga", refresh: true)!));
+    }
 }

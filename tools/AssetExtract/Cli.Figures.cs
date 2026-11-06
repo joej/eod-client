@@ -20,10 +20,12 @@ internal static partial class Cli
         if (bytes is null) { Console.Error.WriteLine($"figure: {spec.Nif} is not among the install's figures"); return 3; }
         NifModel dressed = DaocAssets.Figures.MonsterFigure.Dress(NifFile.ReadFigure(bytes), spec);
 
-        var library = new AssetLibrary(index, libDir);
+        var library = new AssetLibrary(index, libDir).Scoped("figures", FigureFolders);
         foreach (string skin in spec.Skins.Values.Distinct(StringComparer.OrdinalIgnoreCase))
             if (library.GatherTexture(skin) is null)
                 Console.Error.WriteLine($"  skin {skin}: not found");
+        foreach (string t in FigureTextures(dressed))
+            library.GatherTexture(t);
         // The clips (anims/<name>.kfa), bone names from figures/animnode.dat beside the install's figures.
         var clips = new Dictionary<string, KfaClip>();
         string install = Path.GetDirectoryName(Path.GetFullPath(gamedata))!;
@@ -57,7 +59,7 @@ internal static partial class Cli
 
         var tables = DaocAssets.Figures.MonsterTables.Read(gamedata);
         var index = AssetIndex.Load(indexPath);
-        var library = new AssetLibrary(index, libDir);
+        var library = new AssetLibrary(index, libDir).Scoped("figures", FigureFolders);
         string install = Path.GetDirectoryName(Path.GetFullPath(gamedata))!;
         string animNode = Path.Combine(install, "figures", "animnode.dat");
         string[] boneNames = File.Exists(animNode)
@@ -104,6 +106,9 @@ internal static partial class Cli
                 File.Move(outPath + ".tmp", outPath, overwrite: true);
                 foreach (string skin in spec.Skins.Values)
                     if (skins.Add(skin)) library.GatherTexture(skin);
+                // Textures the visible shapes carry themselves (a part the table gives no skin, layers).
+                foreach (string t in FigureTextures(dressed))
+                    if (skins.Add(t)) library.GatherTexture(t);
                 table.Append(DaocAssets.Figures.FigureTable.Row(new(id, spec.Scale, Path.GetFileNameWithoutExtension(spec.Nif))) + "\n");
                 made++;
             }
@@ -118,7 +123,7 @@ internal static partial class Cli
             $"{clipCache.Count(c => c.Value is not null)} clips, {skins.Count} skins); {catacombs} whose own figure is a Catacombs one (skipped), " +
             $"{missing} without a figure, {failed} failed");
 
-        int effectsFailed = WriteEffects(tables, models, library);
+        int effectsFailed = WriteEffects(tables, models, library.Scoped("effects", EffectFolders));
 
         // Each model id's Catacombs version (how retail draws players): one figure per race and sex
         // (models/cata_fig<N>.glb), and the model's own default skins in models/cata_models.json.
@@ -128,8 +133,8 @@ internal static partial class Cli
             if (tables.ResolveCatacombs(id) is { } cspec && cata.Figure(cspec) is not null)
                 cataModels.Add((id, cspec));
         cata.WriteModels(cataModels);
-        WriteCataItems(gamedata, models, library, cata.Gathered);
-        WriteCataGear(gamedata, models, library, index);
+        WriteCataItems(gamedata, models, library.Scoped("items", ItemFolders), []);
+        WriteCataGear(gamedata, models, library.Scoped("items", ItemFolders), index);
         WriteItemColours(gamedata, models, library);
         int cataFailed = cata.Failed;
         Console.WriteLine($"figures: {cataModels.Count} model ids on {cata.FigureCount} Catacombs figures, " +
@@ -156,7 +161,7 @@ internal static partial class Cli
                 if (!converted.TryGetValue(e.Nif, out string? stem))
                 {
                     ModelResult r = library.GetModel(e.Nif, reconvert: true);
-                    stem = r.GlbPath is null ? null : Path.GetFileNameWithoutExtension(r.GlbPath);
+                    stem = r.GlbPath is null ? null : ModelStem(modelsDir, r.GlbPath);
                     // Not shipped in this install, or particles only (no triangles: our reader draws none):
                     // nothing to draw, not an error. Anything else is.
                     switch (r.Origin)
@@ -190,12 +195,12 @@ internal static partial class Cli
         var tables = DaocAssets.Figures.MonsterTables.Read(gamedata);
         DaocAssets.Figures.CataSpec? spec = tables.ResolveCatacombs(modelId);
         if (spec is null) { Console.Error.WriteLine($"cata: model {modelId} has no Catacombs figure in gamedata.mpk"); return 3; }
-        var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir);
+        var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir).Scoped("figures", FigureFolders);
         using var cata = new CataConverter(gamedata, tables, library, Path.Combine(libDir, "models"));
         string? made = cata.Figure(spec);
         if (made is null) return 1;
         cata.WriteModels([(modelId, spec)], merge: true);
-        WriteCataItems(gamedata, Path.Combine(libDir, "models"), library, cata.Gathered);
+        WriteCataItems(gamedata, Path.Combine(libDir, "models"), library.Scoped("items", ItemFolders), []);
         Console.WriteLine($"cata {modelId} ({spec.Name}): fig3 {spec.Figure} -> {made}; " +
             $"skins {string.Join(" ", spec.Parts.Select(p => $"{DaocAssets.Figures.CataSlots.Names[p.Slot]}={p.Skin}"))}");
         return 0;
@@ -227,8 +232,8 @@ internal static partial class Cli
             // Reconverted every run: this step runs only when the converter changed (make figures), and the
             // item models must follow it (an emblem shield's third UV set).
             ModelResult converted = library.GetModel(nif, reconvert: true);
-            if (converted.GlbPath is null || index.Read(nif) is not byte[] bytes) { failed++; continue; }
-            string stem = Path.GetFileNameWithoutExtension(converted.GlbPath);
+            if (converted.GlbPath is null || index.Read(nif, ItemFolders) is not byte[] bytes) { failed++; continue; }
+            string stem = ModelStem(modelsDir, converted.GlbPath);
             stems[Path.GetFileNameWithoutExtension(nif)] = stem;
             NifModel model;
             try { model = NifFile.Read(bytes); }
@@ -322,24 +327,35 @@ internal static partial class Cli
         Console.WriteLine($"cata items: {items.Count} items with a Catacombs look, {missing} of their textures not in the install");
     }
 
-    // A figure's NIF, only from the install's figures folder (loose or in an archive there). Names are looked
-    // up across the whole install, and a figure can share its name with a zone model: the index resolves
-    // giant.nif to zones/Nifs/GIANT.npk (a giant statue) rather than figures/Giant.NIF (the creature).
-    private static byte[]? FigureFile(AssetIndex index, string nif)
+    // Install folders each kind of asset comes from first. Names are looked up across the whole install,
+    // and the install reuses them for different files: giant.nif is the creature in figures/ and a statue in
+    // zones/Nifs/GIANT.npk; a creature skin in figures/skins/*.mpk can share its name with a housing trophy's
+    // loose texture. Zone conversion keeps the index's default (zone files first).
+    internal static readonly string[] FigureFolders = ["figures/"];
+    internal static readonly string[] ItemFolders = ["items/", "figures/"];
+    internal static readonly string[] EffectFolders = ["effects/"];
+
+    // A figure's NIF, only from the install's figures folder (loose or in an archive there).
+    private static byte[]? FigureFile(AssetIndex index, string nif) =>
+        InFolder(index, index.Locate(nif, FigureFolders), "figures/") ? index.Read(nif, FigureFolders) : null;
+
+    // Every texture a dressed figure's visible shapes use (base, layers).
+    private static IEnumerable<string> FigureTextures(NifModel dressed) =>
+        dressed.Meshes.Where(m => !m.Helper)
+            .SelectMany(m => new[] { m.TextureFile, m.DarkTextureFile, m.DetailTextureFile, m.DecalTextureFile, m.GlowTextureFile })
+            .OfType<string>().Where(t => t.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase);
+
+    // A converted model's name for the client, relative to models/: "helm2", or "items/helm2" when the item's
+    // file differs from the zone model of that name.
+    private static string ModelStem(string modelsDir, string glbPath) =>
+        Path.ChangeExtension(Path.GetRelativePath(modelsDir, glbPath), null)!.Replace('\\', '/');
+
+    private static bool InFolder(AssetIndex index, AssetLocation? loc, string folder)
     {
-        if (index.Locate(nif) is not { } loc)
-            return null;
-        string path = (loc.LoosePath ?? loc.Archive ?? "").Replace('\\', '/');
-        string root = index.Root.Replace('\\', '/').TrimEnd('/');
-        string rel = path.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? path[root.Length..] : path;
-        if (rel.StartsWith("/figures/", StringComparison.OrdinalIgnoreCase))
-            return index.Read(nif);
-        // The index keeps one place per name and preferred the zone statue: read the figures folder's own file.
-        string dir = Path.Combine(index.Root, "figures");
-        string? own = Directory.Exists(dir)
-            ? Directory.EnumerateFiles(dir).FirstOrDefault(f => string.Equals(Path.GetFileName(f), nif, StringComparison.OrdinalIgnoreCase))
-            : null;
-        return own is null ? null : File.ReadAllBytes(own);
+        if (loc is not { } l) return false;
+        string path = (l.LoosePath ?? l.Archive ?? "").Replace('\\', '/');
+        string root = index.Root.Replace('\\', '/').TrimEnd('/') + "/";
+        return path.StartsWith(root + folder, StringComparison.OrdinalIgnoreCase);
     }
 
     // --gamedata gamedata.mpk --index index.json --library LIBDIR, all three required.

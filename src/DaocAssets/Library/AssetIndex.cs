@@ -39,14 +39,19 @@ public sealed class AssetIndex
     // over archived ones, then first seen (see Build).
     private readonly Dictionary<string, AssetLocation> _byName;
 
+    // The other places a name is found, in rank order: a figure, item or effect asks for its own folder
+    // (see Read with a preference) instead of taking what zone conversion wants.
+    private readonly Dictionary<string, List<AssetLocation>> _others;
+
     /// <summary>Root the index was built against (loose paths are absolute; archive paths too).</summary>
     public string Root { get; }
     public int Count => _byName.Count;
 
-    private AssetIndex(string root, Dictionary<string, AssetLocation> byName)
+    private AssetIndex(string root, Dictionary<string, AssetLocation> byName, Dictionary<string, List<AssetLocation>>? others = null)
     {
         Root = root;
         _byName = byName;
+        _others = others ?? new Dictionary<string, List<AssetLocation>>(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -61,6 +66,12 @@ public sealed class AssetIndex
         string root = Path.GetFullPath(clientDir);
         var map = new Dictionary<string, AssetLocation>(StringComparer.Ordinal);
         var rank = new Dictionary<string, int>(StringComparer.Ordinal);
+        var others = new Dictionary<string, List<(AssetLocation Loc, int Rank)>>(StringComparer.Ordinal);
+        void Other(string key, AssetLocation loc, int r)
+        {
+            if (!others.TryGetValue(key, out var list)) others[key] = list = [];
+            list.Add((loc, r));
+        }
 
         // The index is keyed by bare name, but the install reuses names across folders: a zone's NIF
         // table says "giant.nif" and means zones/Nifs/GIANT.npk (a zone object), while figures/Giant.NIF
@@ -68,10 +79,14 @@ public sealed class AssetIndex
         // often lower-resolution copies in items/. Zone data is what the library converts, so the zone
         // NIF folder wins: zones/Nifs loose (0), zones/Nifs archives (1), other loose (2), other
         // archives (3). Within a rank the first seen wins. Measured 2026-11-02 (docs/world-coverage.md).
+        // Every other place stays on record for a lookup with a folder preference.
         void Offer(string key, AssetLocation loc, int r)
         {
-            if (rank.TryGetValue(key, out int have) && have <= r)
-                return;
+            if (rank.TryGetValue(key, out int have))
+            {
+                if (have <= r) { Other(key, loc, r); return; }
+                Other(key, map[key], have);
+            }
             map[key] = loc;
             rank[key] = r;
         }
@@ -108,7 +123,56 @@ public sealed class AssetIndex
             }
         }
 
-        return new AssetIndex(root, map);
+        return new AssetIndex(root, map, others.ToDictionary(kv => kv.Key,
+            kv => kv.Value.OrderBy(x => x.Rank).Select(x => x.Loc).ToList(), StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Where <paramref name="name"/> is, preferring a copy under one of <paramref name="folders"/> (paths
+    /// relative to the install, e.g. "figures/"); without one there, the default place (zone files first).
+    /// The install reuses names across folders for different files: a creature skin in figures/skins/*.mpk
+    /// and a housing trophy's loose texture of the same name, or the giant figure and a zone's giant statue.
+    /// </summary>
+    public AssetLocation? Locate(string name, IReadOnlyList<string>? folders)
+    {
+        string key = KeyFromAny(name);
+        if (!_byName.TryGetValue(key, out AssetLocation main))
+            return null;
+        if (folders is null || folders.Count == 0 || Under(main, folders))
+            return main;
+        if (_others.TryGetValue(key, out var list))
+            foreach (AssetLocation l in list)
+                if (Under(l, folders))
+                    return l;
+        return main;
+    }
+
+    /// <summary>True when the preferred copy is the default one (so a converted copy can be shared).</summary>
+    public bool IsDefault(string name, IReadOnlyList<string>? folders) =>
+        Locate(name, folders) is not { } l || _byName.TryGetValue(KeyFromAny(name), out AssetLocation main) && l == main;
+
+    /// <summary>The bytes of <paramref name="name"/>, preferring a copy under <paramref name="folders"/>.</summary>
+    public byte[]? Read(string name, IReadOnlyList<string>? folders) =>
+        Locate(name, folders) is { } loc ? ReadAt(loc) : null;
+
+    private bool Under(AssetLocation loc, IReadOnlyList<string> folders)
+    {
+        string path = (loc.LoosePath ?? loc.Archive ?? "").Replace('\\', '/');
+        string root = Root.Replace('\\', '/').TrimEnd('/') + "/";
+        string rel = path.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? path[root.Length..] : path;
+        return folders.Any(f => rel.StartsWith(f, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static byte[]? ReadAt(AssetLocation loc)
+    {
+        if (loc.LoosePath is not null)
+            return File.Exists(loc.LoosePath) ? File.ReadAllBytes(loc.LoosePath) : null;
+        if (loc.Archive is not null && loc.Member is not null && File.Exists(loc.Archive))
+        {
+            using MpkArchive mpk = MpkArchive.Open(loc.Archive);
+            return mpk.TryGetEntry(loc.Member, out MpkEntry e) ? mpk.Extract(e) : null;
+        }
+        return null;
     }
 
     /// <summary>Resolves <paramref name="name"/> (a bare or path-qualified file name) to its bytes,
@@ -140,13 +204,16 @@ public sealed class AssetIndex
     /// texture with that stem is indexed. This is how a NIF's stale <c>.tga</c> reference finds the
     /// <c>.dds</c> the client actually ships (see <see cref="TextureExtensions"/>).
     /// </summary>
-    public (byte[] Bytes, string FileName)? ReadTexture(string name)
+    public (byte[] Bytes, string FileName)? ReadTexture(string name) => ReadTexture(name, null);
+
+    /// <summary>As <see cref="ReadTexture(string)"/>, preferring a copy under <paramref name="folders"/>.</summary>
+    public (byte[] Bytes, string FileName)? ReadTexture(string name, IReadOnlyList<string>? folders)
     {
         // Try the exact name first (covers a correct reference and an already-bare name with ext).
         string exact = KeyFromAny(name);
         if (Path.GetExtension(exact).Length > 0 && _byName.ContainsKey(exact))
         {
-            byte[]? b = Read(exact);
+            byte[]? b = Read(exact, folders);
             if (b is not null)
                 return (b, BareName(name));
         }
@@ -156,9 +223,9 @@ public sealed class AssetIndex
         foreach (string ext in TextureExtensions)
         {
             string candidate = stem + ext;
-            if (_byName.TryGetValue(candidate, out AssetLocation loc))
+            if (Locate(candidate, folders) is { } loc)
             {
-                byte[]? b = Read(candidate);
+                byte[]? b = ReadAt(loc);
                 if (b is not null)
                 {
                     // Name the output by the real file (e.g. the .dds), so the stem-based loader finds it.
@@ -179,7 +246,8 @@ public sealed class AssetIndex
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         var dto = new IndexDto(Root, _byName.ToDictionary(
             kv => kv.Key,
-            kv => new LocationDto(kv.Value.LoosePath, kv.Value.Archive, kv.Value.Member)));
+            kv => new LocationDto(kv.Value.LoosePath, kv.Value.Archive, kv.Value.Member)),
+            _others.ToDictionary(kv => kv.Key, kv => kv.Value.Select(l => new LocationDto(l.LoosePath, l.Archive, l.Member)).ToList()));
         File.WriteAllText(path, JsonSerializer.Serialize(dto, JsonOpts));
     }
 
@@ -191,7 +259,9 @@ public sealed class AssetIndex
             kv => kv.Key,
             kv => new AssetLocation(kv.Value.LoosePath, kv.Value.Archive, kv.Value.Member),
             StringComparer.Ordinal);
-        return new AssetIndex(dto.Root, map);
+        var others = (dto.Others ?? []).ToDictionary(kv => kv.Key,
+            kv => kv.Value.Select(l => new AssetLocation(l.LoosePath, l.Archive, l.Member)).ToList(), StringComparer.Ordinal);
+        return new AssetIndex(dto.Root, map, others);
     }
 
     /// <summary>Counts of loose vs archived entries, for reporting.</summary>
@@ -220,6 +290,7 @@ public sealed class AssetIndex
     }
 
     // JSON DTOs (kept internal to the file; the index's public surface is AssetLocation).
-    private sealed record IndexDto(string Root, Dictionary<string, LocationDto> Entries);
+    private sealed record IndexDto(string Root, Dictionary<string, LocationDto> Entries,
+        Dictionary<string, List<LocationDto>>? Others = null);
     private sealed record LocationDto(string? LoosePath, string? Archive, string? Member);
 }

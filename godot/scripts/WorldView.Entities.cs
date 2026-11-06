@@ -221,7 +221,7 @@ public partial class WorldView
         {
             if (!_figureFiles.TryGetValue(file, out Node3D? template))
             {
-                template = ModelTexturing.LoadGlb(path, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
+                template = ModelTexturing.LoadGlb(path, TexDirs("figures"));
                 _figureFiles[file] = template;
             }
             if (template is not null)
@@ -342,7 +342,7 @@ public partial class WorldView
         _cataFig3 ??= ReadCataFigures(lib.PathJoin("models").PathJoin("catacombs.csv"));
         if (_cataFig3.TryGetValue(model, out int fig3))
             FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_gear.json"), lib.PathJoin("models").PathJoin("colours.json"),
-                lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, drawn, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
+                lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, drawn, TexDirs("items"));
     }
 
     private string CombatIdle(IReadOnlyList<WornItem> worn, byte activeWeapons) =>
@@ -364,7 +364,7 @@ public partial class WorldView
         string text = ApplyLook(figure, model, look) + Dress(figure, model, look, worn, hoodUp, cloakHidden);
         if (_cataFig3 is not null && _cataFig3.TryGetValue(model, out int fig3))
             text += FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_gear.json"), lib.PathJoin("models").PathJoin("colours.json"),
-                lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, drawn, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
+                lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, drawn, TexDirs("items"));
         return text;
     }
 
@@ -376,7 +376,7 @@ public partial class WorldView
         return _cataFig3.TryGetValue(model, out int fig3)
             ? FigureLook.Dress(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_items.json"),
                 lib.PathJoin("models").PathJoin("cata_models.json"), lib.PathJoin("models").PathJoin("colours.json"), model, look, worn, hoodUp, cloakHidden,
-                lib.PathJoin("overrides"), lib.PathJoin("textures"), lib)
+                TexDirs("items"))
             : "";
     }
 
@@ -387,7 +387,7 @@ public partial class WorldView
         _cataFig3 ??= ReadCataFigures(lib.PathJoin("models").PathJoin("catacombs.csv"));
         return _cataFig3.TryGetValue(model, out int fig3)
             ? FigureLook.Apply(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), look,
-                lib.PathJoin("overrides"), lib.PathJoin("textures"), lib)
+                TexDirs("figures"))
             : "";
     }
 
@@ -438,7 +438,7 @@ public partial class WorldView
             {
                 string path = lib.PathJoin("models").PathJoin(file);
                 template = Godot.FileAccess.FileExists(path)
-                    ? ModelTexturing.LoadGlb(path, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib) : null;
+                    ? ModelTexturing.LoadGlb(path, TexDirs("effects")) : null;
                 _figureFiles[file] = template;
             }
             if (template is null)
@@ -457,6 +457,18 @@ public partial class WorldView
             else
                 figure.AddChild(fx);
         }
+    }
+
+    // Texture folders for one kind of model, in search order: overrides, the kind's own converted copies
+    // (textures/figures, textures/items, textures/effects: the install's file of that name where it differs
+    // from the zone one), the shared textures, the library. Items fall back to the figures' copies.
+    private string[] TexDirs(string scope)
+    {
+        string lib = _libraryPath ?? "";
+        string tex = lib.PathJoin("textures");
+        return scope == "items"
+            ? [lib.PathJoin("overrides"), tex.PathJoin("items"), tex.PathJoin("figures"), tex, lib]
+            : [lib.PathJoin("overrides"), tex.PathJoin(scope), tex, lib];
     }
 
     private static Dictionary<int, float> ReadFigureScales(string path) =>

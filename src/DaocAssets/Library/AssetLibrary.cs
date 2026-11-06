@@ -35,6 +35,38 @@ public sealed class AssetLibrary
     private readonly string _models;
     private readonly string _textures;
     private readonly string _overrides;
+    // A scoped view (Scoped): files come from these install folders first, and a file that differs from
+    // the default one of its name is stored under models/<scope>/ or textures/<scope>/.
+    private string? _scope;
+    private IReadOnlyList<string>? _prefer;
+
+    /// <summary>
+    /// A view of the library for one kind of asset ("figures", "items", "effects"): names resolve to the
+    /// install's <paramref name="folders"/> first. Where that is a different file from the one zone
+    /// conversion uses, it is stored under its own folder, so neither overwrites the other: the client
+    /// looks in textures/&lt;scope&gt;/ (models/&lt;scope&gt;/) first for these models.
+    /// </summary>
+    public AssetLibrary Scoped(string scope, params string[] folders) =>
+        new(_index, _root) { _scope = scope, _prefer = folders };
+
+    // Where a converted model or texture of this name goes: the shared folder, or the scope's own when the
+    // scope's file differs from the default one (a byte-identical copy elsewhere still shares).
+    private string Folder(string shared, string name, bool texture)
+    {
+        if (_scope is null || _prefer is null)
+            return shared;
+        bool isDefault = _index.IsDefault(name, _prefer);
+        string stem = Path.GetFileNameWithoutExtension(BareName(name));
+        if (texture)
+            foreach (string ext in TextureExts)
+                if (_index.Locate(stem + ext, null) is not null)
+                    isDefault &= _index.IsDefault(stem + ext, _prefer);
+        if (isDefault)
+            return shared;
+        byte[]? mine = texture ? _index.ReadTexture(name, _prefer)?.Bytes : _index.Read(name, _prefer);
+        byte[]? theirs = texture ? _index.ReadTexture(name)?.Bytes : _index.Read(name);
+        return mine is not null && theirs is not null && mine.AsSpan().SequenceEqual(theirs) ? shared : Path.Combine(shared, _scope);
+    }
 
     public AssetLibrary(AssetIndex index, string libraryRoot)
     {
@@ -62,18 +94,19 @@ public sealed class AssetLibrary
         if (File.Exists(overridePath))
             return new ModelResult(overridePath, AssetOrigin.Override);
 
-        string glbPath = Path.Combine(_models, glbName);
+        string models = Folder(_models, nifName, texture: false);
+        string glbPath = Path.Combine(models, glbName);
         if (!reconvert && File.Exists(glbPath))
             return new ModelResult(glbPath, AssetOrigin.Converted);
 
-        byte[]? nifBytes = _index.Read(nifName);
+        byte[]? nifBytes = _index.Read(nifName, _prefer);
         if (nifBytes is null)
             return new ModelResult(null, AssetOrigin.Missing);
 
         try
         {
             NifModel model = NifFile.Read(nifBytes);
-            Directory.CreateDirectory(_models);
+            Directory.CreateDirectory(models);
             // Textures first, the glb last: a glb on disk means its model converted completely.
             // Base textures and the extra layers (dark and detail maps) the client binds by name.
             foreach (NifMesh mesh in model.Meshes)
@@ -116,22 +149,23 @@ public sealed class AssetLibrary
             }
 
         // Already gathered? (match by stem — we store under the real on-disk name).
-        if (!refresh && Directory.Exists(_textures))
+        string textures = Folder(_textures, textureName, texture: true);
+        if (!refresh && Directory.Exists(textures))
             foreach (string ext in TextureExts)
             {
-                string ep = Path.Combine(_textures, stem + ext);
+                string ep = Path.Combine(textures, stem + ext);
                 if (File.Exists(ep))
                     return ep;
             }
 
-        (byte[] Bytes, string FileName)? found = _index.ReadTexture(textureName);
+        (byte[] Bytes, string FileName)? found = _index.ReadTexture(textureName, _prefer);
         if (found is null)
             return null;
-        Directory.CreateDirectory(_textures);
+        Directory.CreateDirectory(textures);
         // Store under a lower-cased name so the stem-based loader finds it on case-sensitive
         // filesystems too (the NIF reference, the on-disk file and the glTF material name disagree on
         // case; the loader lower-cases the stem it looks up, so we lower-case what we write).
-        string dest = Path.Combine(_textures, found.Value.FileName.ToLowerInvariant());
+        string dest = Path.Combine(textures, found.Value.FileName.ToLowerInvariant());
         WriteAtomically(dest, tmp => File.WriteAllBytes(tmp, found.Value.Bytes));
         return dest;
     }

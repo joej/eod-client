@@ -210,4 +210,25 @@ public sealed class MonsterFigureTests
         Assert.Empty(tables.Effects(8));
         Assert.Empty(tables.Effects(4242));
     }
+
+    [Fact]
+    public void AOneShapeCreatureWearsTheTablesBodySkinWithoutTheNifsTint()
+    {
+        // Model 2173 "Brown Horse w/ Saddle": Classic_Body01_Mount_Horse.nif is one unnamed shape ("Editable Poly")
+        // carrying Horse_Medium_palamino and a green material; the table's Body skin is Horse_Medium_Brown. The
+        // owner saw a pale green horse at a Camelot Hills stable (2026-11-06).
+        var horse = new NifModel
+        {
+            Version = new NifVersion(10, 1, 0, 0),
+            Meshes = [new NifMesh
+            {
+                Name = "mesh237", ShapeName = "Editable Poly", Vertices = [Vector3.Zero, Vector3.UnitX, Vector3.UnitY],
+                Triangles = [(0, 1, 2)], TextureFile = "Horse_Medium_palamino.tga", BaseColor = new Vector4(0.39f, 0.53f, 0.19f, 1),
+            }],
+        };
+        var spec = new FigureSpec(2173, "Brown Horse w/ Saddle - Monster", "Classic_Body01_Mount_Horse.nif", 1,
+            new Dictionary<string, string> { ["Body"] = "Horse_Medium_Brown.dds" }, 1.1f);
+        NifMesh dressed = Assert.Single(MonsterFigure.Dress(horse, spec).Meshes);
+        Assert.Equal(("Horse_Medium_Brown.dds", (Vector4?)null, false), (dressed.TextureFile, dressed.BaseColor, dressed.Helper));
+    }
 }

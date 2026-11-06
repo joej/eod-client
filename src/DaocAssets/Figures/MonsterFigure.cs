@@ -273,6 +273,12 @@ public static class MonsterFigure
         // unnamed shapes) are left as read.
         var slots = figure.Meshes.Select(m => SlotOf(m.ShapeName).Slot).ToList();
         bool unnamedAreLods = slots.Count(s => s.Length > 0) >= FullFigureParts && !slots.Contains("Lod");
+        // A creature drawn as one unnamed shape wears the model's Body skin even when the shape names a texture of
+        // its own: the table picks the coat (model 2173 "Brown Horse w/ Saddle": Classic_Body01_Mount_Horse.nif
+        // carries Horse_Medium_palamino; the table says Horse_Medium_Brown). With several unnamed shapes (a body
+        // and its own textured extras) only an untextured one does.
+        bool singleBody = !unnamedAreLods && figure.Meshes.Count(m => !m.Helper && SlotOf(m.ShapeName).Slot.Length == 0) == 1
+            && slots.All(s => s.Length == 0);
         foreach (NifMesh mesh in figure.Meshes)
         {
             (string slot, string variant) = SlotOf(mesh.ShapeName);
@@ -293,12 +299,17 @@ public static class MonsterFigure
             // sets Head and Face to 0.
             if (head && mesh.TextureFile is null && face is null && !spec.Skins.ContainsKey(skinSlot))
                 shown = false;
-            string? skin = shown && (slot.Length > 0 || mesh.TextureFile is null)
+            string? skin = shown && (slot.Length > 0 || mesh.TextureFile is null || singleBody)
                 && spec.Skins.TryGetValue(skinSlot, out string? s) ? s : null;
+            // A textured part is drawn without the NIF's material colour, as retail draws figures (the Catacombs
+            // figures' finding, M7b: the NIF's 0.59 grey is not applied). Model 2173's horse carries a green
+            // diffuse (0.39, 0.53, 0.19) that turned its brown coat olive.
+            string? texture = skin ?? mesh.TextureFile;
             meshes.Add(mesh with
             {
                 Helper = mesh.Helper || !shown,
-                TextureFile = skin ?? mesh.TextureFile,
+                BaseColor = texture is null ? mesh.BaseColor : null,
+                TextureFile = texture,
                 DecalTextureFile = shown ? face : null,
                 DecalTexCoords = shown && face is not null ? mesh.UvSets![1] : null,
             });

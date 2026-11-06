@@ -10,7 +10,7 @@ internal static partial class Cli
     private static int AuditCmd(string[] args)
     {
         string root = args[1];
-        if (Options.Parse(args, 2, ["--out"]) is not { } o || o["--out"] is not { } outPath || !Directory.Exists(root))
+        if (Options.Parse(args, 2, ["--out", "--index"]) is not { } o || o["--out"] is not { } outPath || !Directory.Exists(root))
             return Usage();
 
         var audit = new NifAudit();
@@ -46,7 +46,12 @@ internal static partial class Cli
                 Console.WriteLine($"  {done}/{files.Count} files, {audit.Files} NIFs");
         }
 
-        File.WriteAllText(outPath, audit.ToMarkdown("NIF coverage audit"));
+        string report = audit.ToMarkdown("NIF coverage audit");
+        string gamedata = Path.Combine(root, "gamedata.mpk");
+        report += o["--index"] is { } indexPath && File.Exists(gamedata)
+            ? NameClashes(AssetIndex.Load(indexPath), gamedata)
+            : "\n## Name clashes\n\nNot checked: run with `--index private/asset-index/index.json`.\n";
+        File.WriteAllText(outPath, report);
         Console.WriteLine($"Surveyed {audit.Files} NIF(s) ({audit.Unreadable} unreadable, " +
             $"{audit.BoundaryMismatches} block-scan mismatches) -> {Path.GetFullPath(outPath)}");
         return 0;
@@ -118,4 +123,55 @@ internal static partial class Cli
             audit.AddUnreadable(folder, source, e.Message);
         }
     }
+
+    // The install reuses file names across folders for different files, and the index keeps zone files first.
+    // For each kind of asset the converter requests by name (from gamedata.mpk's tables), how many names have a
+    // different file in that kind's own folder than the default: the converter reads those from its folder and
+    // stores them apart (AssetLibrary.Scoped). A rise here is new clashes; "not in its folder" are names whose
+    // only copies are elsewhere (read from there).
+    private static string NameClashes(AssetIndex index, string gamedataPath)
+    {
+        using MpkArchive gd = MpkArchive.Open(gamedataPath);
+        IEnumerable<string> Column(string file, int col, string suffix = "") =>
+            System.Text.Encoding.Latin1.GetString(gd.Extract(file)).Split('\n')
+                .Select(l => l.TrimEnd('\r').Split(','))
+                .Where(c => c.Length > col && int.TryParse(c[0], out _) && c[col].Trim().Length > 0)
+                .Select(c => c[col].Trim() + suffix).Distinct(StringComparer.OrdinalIgnoreCase);
+        var kinds = new (string Kind, string[] Folders, IEnumerable<string> Names, bool Texture)[]
+        {
+            ("figure NIFs (monnifs.csv)", FigureFolders, Column("monnifs.csv", 2, ".nif"), false),
+            ("creature skins (skins.csv)", FigureFolders, Column("skins.csv", 2), true),
+            ("effect NIFs (moneffectnifs.csv)", EffectFolders, Column("moneffectnifs.csv", 2, ".nif"), false),
+            ("item NIFs (items.csv)", ItemFolders, Column("items.csv", 2, ".nif"), false),
+            ("item skins (pskins.csv)", ItemFolders, Column("pskins.csv", 2), true),
+        };
+        var sb = new System.Text.StringBuilder("\n## Name clashes\n\n| Asset kind | Names | Different file in its own folder | Same file as the default | Not in its folder | Not in the install |\n|---|---:|---:|---:|---:|---:|\n");
+        var examples = new List<string>();
+        foreach (var (kind, folders, names, texture) in kinds)
+        {
+            int total = 0, differ = 0, same = 0, elsewhere = 0, missing = 0;
+            foreach (string n in names)
+            {
+                total++;
+                byte[]? def = texture ? index.ReadTexture(n)?.Bytes : index.Read(n);
+                if (def is null) { missing++; continue; }
+                AssetLocation? mine = texture ? null : index.Locate(n, folders);
+                bool inFolder = texture
+                    ? new[] { ".dds", ".tga", ".bmp" }.Any(e => InFolders(index, index.Locate(Path.ChangeExtension(n, e), folders), folders))
+                    : InFolders(index, mine, folders);
+                if (!inFolder) { elsewhere++; continue; }
+                byte[]? own = texture ? index.ReadTexture(n, folders)?.Bytes : index.Read(n, folders);
+                if (own is null || own.AsSpan().SequenceEqual(def)) { same++; continue; }
+                differ++;
+                if (examples.Count < 20) examples.Add($"{n} ({kind.Split(' ')[0]} {kind.Split(' ')[1]})");
+            }
+            sb.Append($"| {kind} | {total} | {differ} | {same} | {elsewhere} | {missing} |\n");
+        }
+        if (examples.Count > 0)
+            sb.Append("\nExamples of a different file: ").Append(string.Join(", ", examples)).Append(".\n");
+        return sb.ToString();
+    }
+
+    private static bool InFolders(AssetIndex index, AssetLocation? loc, string[] folders) =>
+        folders.Any(f => InFolder(index, loc, f));
 }
