@@ -408,8 +408,11 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     {
         PositionAndObjectId p = world.Position;
         _lastPositionSent = Environment.TickCount64;
+        // On the ground: not in a jump and not falling, or the update that lands.
+        bool onGround = landed || (verticalSpeed == 0 && (stateFlags & 0x08) == 0);
         return connection.SendAsync(PositionUpdate.Code,
-            PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, world.Zone.Id, p.Heading, speed,
+            PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, world.Zone.Id,
+                PositionUpdate.Heading(p.Heading, onGround), speed,
                 verticalSpeed, stateFlags, landed: landed),
             cancellationToken);
     }

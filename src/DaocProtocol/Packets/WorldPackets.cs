@@ -123,13 +123,19 @@ public static class PositionUpdate
     /// <param name="sessionId">Read and skipped by the server.</param>
     /// <param name="objectId">Read and skipped by the server (1.127+); the recorded client sends 0.</param>
     /// <param name="zoneId">Must be a zone the server knows, or the player is kicked to the character screen.</param>
-    /// <param name="heading">0–4095; the recorded client also sets bit 0x1000 at times (meaning unknown).</param>
+    /// <param name="heading">0–4095, plus bit 0x1000 when on the ground (<see cref="Heading"/>).</param>
     /// <param name="actionFlags">Bit 0x80 = torch; the recorded client sends 0x80.</param>
     /// <param name="verticalSpeed">Non-zero while falling or jumping (the server's FallSpeed).</param>
     /// <param name="health">Percent; the server skips it.</param>
     /// <param name="landed">Set on the one update that lands from a fall: the falling-damage field's bit 15.
     /// The server then charges fall damage from <paramref name="verticalSpeed"/> (OpenDAoC: none until
     /// 500 units/s, minus 100 per Safe Fall level). The recorded client never sets it while standing.</param>
+    /// <summary>The heading word as retail 1.130 builds it (open question L7): the heading in the low 12
+    /// bits and 0x1000 when the player is on the ground (not jumping or falling). The server stores the
+    /// word as sent and relays it to other clients.</summary>
+    public static ushort Heading(ushort heading, bool onGround) =>
+        (ushort)((heading & 0x0FFF) | (onGround ? 0x1000 : 0));
+
     public static byte[] Payload(float x, float y, float z, ushort sessionId, ushort objectId, ushort zoneId,
         ushort heading, float speed = 0, float verticalSpeed = 0, byte stateFlags = 0, byte actionFlags = 0, byte health = 100,
         bool landed = false) =>

@@ -286,13 +286,15 @@ f32 LE x, y, z, speed, vertical speed
 u16 BE session id        skipped by the server
 u16 BE object id         1.127+, skipped; the recorded client sends 0
 u16 BE zone id           must exist or the player is kicked to the character screen
-u8     state flags       sitting 0x10, jumping 0x08, swimming 0x04, strafing 0x20/0x40/0x80
+u8     state flags       (mode << 2) | strafe: mode 1 swimming 0x04, 2 jumping 0x08, 4 sitting 0x10,
+                         5 dead 0x14 (dead outranks sitting, sitting the movement mode);
+                         strafe 0x20 any, 0x40 left, 0x80 right
 u8     unknown
 u16 BE falling damage     bit 15 = landed (see below); the recorded client sends 0
-u16 BE heading           the recorded client sometimes sets 0x1000 (L7)
-u8     action flags      0x80 "torch" in the server's enum; the recorded client sends 0x80
+u16 BE heading           0-4095, plus 0x1000 while on the ground (L7)
+u8     action flags      0x80 "torch" in the server's enum (the recorded client sends it); 0x02 underwater
 2      unknown
-u8     health %          skipped
+u8     health %          skipped by the server; 0x80 = attack mode
 4      zero
 ```
 

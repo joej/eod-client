@@ -225,7 +225,7 @@ public class ClientSessionTests
         Assert.Null(server.Error);
         ClientPacket command = Assert.Single(server.Received, IsJump);
         Assert.Equal(CommandRequest.Payload("&jump to 560000 570000 1000 1"), command.Payload);
-        Assert.Equal(PositionUpdate.Payload(560001, 570000, 1000, sessionId: 1, objectId: 0, zoneId: 1, heading: 2048),
+        Assert.Equal(PositionUpdate.Payload(560001, 570000, 1000, sessionId: 1, objectId: 0, zoneId: 1, heading: 0x1000 | 2048),
             server.Received.Last(p => p.Code == PositionUpdate.Code).Payload);
     }
 
@@ -355,7 +355,7 @@ public class ClientSessionTests
         Assert.True(after.Take(firstUpdate).Count(p => p.Code == PingRequest.Code) >= 4);
         // ...and every 0xA9 after the command carries the new position, none the old one.
         Assert.All(after.Where(p => p.Code == PositionUpdate.Code),
-            u => Assert.Equal(PositionUpdate.Payload(560000, 570000, 1000, sessionId: 1, objectId: 0, zoneId: 1, heading: 0), u.Payload));
+            u => Assert.Equal(PositionUpdate.Payload(560000, 570000, 1000, sessionId: 1, objectId: 0, zoneId: 1, heading: 0x1000 | 0), u.Payload));
     }
 
     [Fact]
@@ -427,7 +427,7 @@ public class ClientSessionTests
         Assert.Null(server.Error);
         Assert.Equal(new byte[] { 0x9D, 0x10, 0xD4, 0xE8, 0xBF }, server.Received.Skip(5).Take(5).Select(p => p.Code));
 
-        byte[] expected = PositionUpdate.Payload(560871f, 511685f, 2344f, sessionId: 1, objectId: 0, zoneId: 0, heading: 1512);
+        byte[] expected = PositionUpdate.Payload(560871f, 511685f, 2344f, sessionId: 1, objectId: 0, zoneId: 0, heading: 0x1000 | 1512);
         List<ClientPacket> updates = server.Received.Where(p => p.Code == PositionUpdate.Code).ToList();
         Assert.InRange(updates.Count, 5, 20);
         Assert.All(updates, u => Assert.Equal(expected, u.Payload));
@@ -483,7 +483,7 @@ public class ClientSessionTests
         Assert.Null(server.Error);
         List<ClientPacket> updates = server.Received.Where(p => p.Code == PositionUpdate.Code).ToList();
         Assert.Single(updates); // no keep-alive ran; MoveToAsync sent exactly one 0xA9
-        byte[] expected = PositionUpdate.Payload(561000f, 511700f, 2344f, sessionId: 1, objectId: 0, zoneId: 0, heading: 2048, speed: 191f);
+        byte[] expected = PositionUpdate.Payload(561000f, 511700f, 2344f, sessionId: 1, objectId: 0, zoneId: 0, heading: 0x1000 | 2048, speed: 191f);
         Assert.Equal(expected, updates[0].Payload);
     }
 
@@ -705,7 +705,7 @@ public class ClientSessionTests
 
             List<ClientPacket> moving = server.Received.Skip(start).Take(moved - start).ToList();
             List<ClientPacket> idle = server.Received.Skip(moved).ToList();
-            byte[] lastMove = PositionUpdate.Payload(p.X + 12, p.Y, p.Z, sessionId: 1, objectId: 0, session.World.Zone.Id, p.Heading, speed: 191);
+            byte[] lastMove = PositionUpdate.Payload(p.X + 12, p.Y, p.Z, sessionId: 1, objectId: 0, session.World.Zone.Id, (ushort)(0x1000 | p.Heading), speed: 191);
             // While moving, at most the keep-alive's first send (at start) besides our 12.
             Assert.InRange(moving.Count(u => u.Code == PositionUpdate.Code), 12, 13);
             Assert.True(moving.Count(u => u.Code == PingRequest.Code) >= 4);
@@ -794,4 +794,13 @@ public class ClientSessionTests
     [InlineData(0x1C, null)]        // climbing: all three, allowed
     public void StateFlagPairsTheServerTakesAsForgedAreNamed(byte flags, string? forged) =>
         Assert.Equal(forged, ClientSession.ForbiddenStateFlags(flags));
+
+    [Fact]
+    public void TheHeadingWordMarksBeingOnTheGround()
+    {
+        Assert.Equal(0x1800, PositionUpdate.Heading(0x0800, onGround: true));
+        Assert.Equal(0x0800, PositionUpdate.Heading(0x0800, onGround: false));
+        Assert.Equal(0x1FFF, PositionUpdate.Heading(0x1FFF, onGround: true));   // a stray high bit doesn't carry over
+        Assert.Equal(0x0FFF, PositionUpdate.Heading(0xFFFF, onGround: false));
+    }
 }
