@@ -616,6 +616,15 @@ public partial class WorldView : Node3D
             GetViewport().SetInputAsHandled();
             return;
         }
+        // Typing '/' starts a command at once, as in retail: the box takes focus with the '/' already in it.
+        if (@event is InputEventKey { Pressed: true, Echo: false, Unicode: '/' } && !ChatInputActive)
+        {
+            _chatInput.GrabFocus();
+            _chatInput.Text = "/";
+            _chatInput.CaretColumn = 1;
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (ChatInputActive)
         {
             if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })

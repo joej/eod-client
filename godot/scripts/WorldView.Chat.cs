@@ -39,7 +39,7 @@ public partial class WorldView
         {
             // Well inside one packet (CommandRequest.MaxLength) even with the longest command in front.
             MaxLength = 512,
-            PlaceholderText = "Press Enter to chat (/say by default; /who, /gu … work too)",
+            PlaceholderText = "Enter to chat (says by default), or type / for a command (/who, /gu …)",
             AnchorLeft = 0f,
             AnchorRight = 0f,
             AnchorTop = 1f,
