@@ -335,6 +335,12 @@ and 0x02: the server appends "-DOR" and "-NON" to the name instead (OpenDAoC's t
 1923, reaches a GM as "[]-DOR-NON"). Model 1923's client figure is "Corpse Light Node"; the recording has two
 of these indicators and a swarm of flies flagged 0x03 among its 111 NPCs.
 
+**Hidden NPCs.** OpenDAoC hides a creature without removing it (`HideableNpc`: night spawns by day, day
+spawns by night) by sending its 0xDA again as **model 1**, can't-target, name hidden and peaceful; it sends
+the real model when the creature shows. Model 1 is the client table's "Demon", so a client that draws it
+puts demons where nothing should be (Camelot Hills' zombie boars by day). Our client draws nothing for model 1
+sent untargetable. What retail 1.127 draws for it is open question W44.
+
 The zone id is the zone containing the position. The real client knows it from its map data; we
 look it up in OpenDAoC's zone table (`src/DaocProtocol/World/zones.tsv`, from OpenDAoC-Database,
 GPL): zone offsets and sizes × 8192, half-open rectangle, first match.

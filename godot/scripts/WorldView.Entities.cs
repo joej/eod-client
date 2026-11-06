@@ -32,6 +32,9 @@ public partial class WorldView
     // gate is part of its zone model), and a position update for one must not turn it into a capsule.
     private readonly Dictionary<ushort, ObjectCreate> _worldObjects = new();
 
+    // OpenDAoC's model for a creature it has hidden (HideableNpc.HiddenModel).
+    private const ushort HiddenModel = 1;
+
     // Untargetable NPCs with no figure (markers and effects, e.g. a teleporter's light node): not drawn,
     // and kept here so their position updates don't spawn a grey capsule either.
     private readonly HashSet<ushort> _hiddenNpcs = new();
@@ -71,15 +74,24 @@ public partial class WorldView
     private void OnNpcSpawned(NpcCreate npc)
     {
         Vector3 pos = ToGodot(npc.X, npc.Y, npc.Z);
-        if (npc.Untargetable && Figure(npc.ModelId) is null && EffectsOf(npc.ModelId).Count == 0)
+        // OpenDAoC hides a creature without removing it (HideableNpc: a night spawn by day) by sending it as
+        // model 1, untargetable, name hidden and peaceful, and sends it again with its real model when it shows.
+        // Model 1 is the client table's "Demon": drawn, the hidden zombie boars of Camelot Hills stood in a field
+        // as red demons (owner, 2026-11-06).
+        bool serverHidden = npc.ModelId == HiddenModel && npc.Untargetable;
+        if (serverHidden || npc.Untargetable && Figure(npc.ModelId) is null && EffectsOf(npc.ModelId).Count == 0)
         {
             // A marker we have neither a figure nor an effect for: a capsule would stand where the real
             // client shows no creature.
             OnObjectRemoved(npc.ObjectId);
             _hiddenNpcs.Add(npc.ObjectId);
-            GD.Print($"[entity] {npc.ObjectId} \"{npc.Name}\": untargetable, no figure for model {npc.ModelId}: not drawn");
+            GD.Print($"[entity] {npc.ObjectId} \"{npc.Name}\": " + (serverHidden
+                ? "hidden by the server (model 1, untargetable): not drawn"
+                : $"untargetable, no figure for model {npc.ModelId}: not drawn"));
             return;
         }
+        // Shown again (a night spawn at nightfall): its position updates count once more.
+        _hiddenNpcs.Remove(npc.ObjectId);
         if (!SpawnEntity(npc.ObjectId, pos, YawFromHeading(npc.HeadingOnly), RealmColor(npc.Flags >> 6), npc.ModelId, npc.Size))
             GD.Print($"[entity] {npc.ObjectId} \"{npc.Name}\": no figure for model {npc.ModelId} (sent {npc.Model}): a capsule");
     }
