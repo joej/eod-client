@@ -183,8 +183,13 @@ returns "1 player currently online" — both the receive and send halves of the 
   control to the game, so typing never drives the character.
 - **Done when:** you can `/say` and see it, and read what NPCs/system/other players send. **Met.**
 
-### M7 — The world and its inhabitants render as DAoC (textured world + skinned models)
+### M7 — The world and its inhabitants render as DAoC (textured world + skinned models) ✅
+**Done** 2026-11-06 · shot 2026-11-06_21_prydwen-gate-models-and-teleporter
+(earlier steps: 2026-11-06_22_prydwen-keep-across-the-river)
 *What you walk through, and who you see, looks like DAoC — not placeholders.*
+Verified live 2026-11-06 by the owner walking Camelot Hills: the keep, village, water and sky as DAoC, the
+player's Catacombs figure in armour, and the zone's NPCs and creatures as animated DAoC figures (zombies,
+giants, horses, wolves and bears included, after W40 and W43); effects such as the teleporter's ring drawn.
 
 This is the MVP-completing milestone and the hardest. A live walk-through of Prydwen Keep
 (2026-10-31) catalogued exactly what "renders as DAoC" still needs; it splits into two buckets plus a
