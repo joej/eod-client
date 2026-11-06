@@ -1,0 +1,67 @@
+# Controls: the original client's key bindings
+
+Reference for the controls review (roadmap M8, open question W41). The client's keys are configurable
+(Options → Configure Keyboard, or `/keyboard`), with presets the player picks from (the original manual names
+RPG and FPS; darkageofcamelot.com's current page names RPG, FPS and "MMO Default").
+
+## Sources
+
+- The original US game manual (2001), "The Commands", pages 42-45: the default layout, with a second
+  layout's key in parentheses. Facts only are listed here, not the manual's text.
+- darkageofcamelot.com, "Control and Movement" (current): W/S forward and back, A/D turn, Q/E strafe,
+  Space jump, NumLock auto-run, Z dive, V sprint; mouse: left-drag pans the camera, right button looks
+  where you run. That is the layout most players use today.
+
+## Default layout (manual; alternative in parentheses)
+
+| Action | Key |
+|---|---|
+| Move forward / backward | Up / Down arrow; right / left mouse button |
+| Turn left / right | Left / Right arrow |
+| Strafe left / right | Q (Z) / W (X); a strafe toggle is unset |
+| Jump / up | A (Space) |
+| Down (swimming) | Z (D) |
+| Walk (toggle walk and run) | F (W) |
+| Run lock (auto-run) | NumLock |
+| Sprint | V |
+| Sit / stand | C (S) |
+| Look up / down | S (PgUp) / X (PgDown) |
+| Reset camera | D (Home) |
+| Pan camera | Tilde |
+| Mouselook | hold Ctrl; toggle M |
+| Attack mode | F6 (A) |
+| Consider | N (C) |
+| Nearest enemy / object / friend | F8 / F7 / F9 |
+| Nearest loot | H |
+| Last attacker | F10 |
+| Target group member 1-8 | Shift+F1 ... Shift+F8 (F1 ... F6, Shift+F1, Shift+F2) |
+| Ground target | F5 (Shift+T) |
+| Select / open | Space (U) |
+| Get item | G |
+| Use item / use item 2 | F4 (E) / Shift+U |
+| Sell / destroy item | Shift+S / Shift+D |
+| Torch | T |
+| Toggle names | Shift+N (N) |
+| Follow / stick / face | Shift+F / Shift+G / Shift+H (Shift+E) |
+| Inventory | I |
+| Status / group / spells / skills / combat | P (O) / O (P) / U (Shift+I) / [ (Shift+O) / Y (Shift+P) |
+| Reply | R |
+| Chat log page up / down | PgUp / PgDown |
+| System log page up / down | Shift+PgUp (Shift+Insert) / Shift+PgDown (Shift+Delete) |
+| Command window | Colon (Y) |
+| Chat logging | L |
+| Help | F1 (Shift+H) |
+| Performance meter | Shift+P (Shift+X) |
+| Compass | Shift+C |
+| Information / delve | Shift+I (Shift+N) |
+| Craft / salvage | Shift+R |
+| Right-hand / two-handed / ranged weapon | , / (not legible in the text) / B |
+
+Quick binds: any free key can be bound to a quickbar slot (`/qbind bar slot`, `/qunbind`, `/qbind` lists
+them), saved per character.
+
+## Our client today
+
+W/S walk forward and back, A/D or right-drag turn, Q/E strafe, Space jump, V sprint (`/sprint`), mouse wheel
+zoom, H attack mode (retail: F6 or A by layout), Tab free-fly camera (ours), Enter or `/` to chat. No walk
+toggle, auto-run, consider or targeting keys yet.
