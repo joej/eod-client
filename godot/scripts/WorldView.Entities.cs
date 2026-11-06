@@ -32,6 +32,10 @@ public partial class WorldView
     // gate is part of its zone model), and a position update for one must not turn it into a capsule.
     private readonly Dictionary<ushort, ObjectCreate> _worldObjects = new();
 
+    // Untargetable NPCs with no figure (markers and effects, e.g. a teleporter's light node): not drawn,
+    // and kept here so their position updates don't spawn a grey capsule either.
+    private readonly HashSet<ushort> _hiddenNpcs = new();
+
     private void OnWorldObject(ObjectCreate o)
     {
         _worldObjects[o.ObjectId] = o;
@@ -41,7 +45,7 @@ public partial class WorldView
     private void OnObjectMoved(ObjectUpdate u)
     {
         // The server sends 0xA1 for our own character too; we drive that from input, so skip it.
-        if (u.ObjectId == _world.Position.ObjectId || _worldObjects.ContainsKey(u.ObjectId))
+        if (u.ObjectId == _world.Position.ObjectId || _worldObjects.ContainsKey(u.ObjectId) || _hiddenNpcs.Contains(u.ObjectId))
             return;
         Vector3 pos = ZoneLocalToGodot(u.XOffsetInZone, u.YOffsetInZone, u.Z, u.ZoneSkinId);
         float yaw = YawFromHeading(u.HeadingOnly);
@@ -62,6 +66,15 @@ public partial class WorldView
     private void OnNpcSpawned(NpcCreate npc)
     {
         Vector3 pos = ToGodot(npc.X, npc.Y, npc.Z);
+        if (npc.Untargetable && Figure(npc.ModelId) is null)
+        {
+            // A marker or effect we have no figure for (retail draws a light or nothing): a capsule
+            // would stand where the real client shows no creature.
+            OnObjectRemoved(npc.ObjectId);
+            _hiddenNpcs.Add(npc.ObjectId);
+            GD.Print($"[entity] {npc.ObjectId} \"{npc.Name}\": untargetable, no figure for model {npc.ModelId}: not drawn");
+            return;
+        }
         if (!SpawnEntity(npc.ObjectId, pos, YawFromHeading(npc.HeadingOnly), RealmColor(npc.Flags >> 6), npc.ModelId, npc.Size))
             GD.Print($"[entity] {npc.ObjectId} \"{npc.Name}\": no figure for model {npc.ModelId} (sent {npc.Model}): a capsule");
     }
@@ -80,6 +93,7 @@ public partial class WorldView
     {
         _equipment.Remove(objectId);
         _worldObjects.Remove(objectId);
+        _hiddenNpcs.Remove(objectId);
         if (_entities.Remove(objectId, out Entity? e))
             e.Node.QueueFree();
     }
@@ -216,6 +230,7 @@ public partial class WorldView
         _ = SendTravel(command);
     });
 
+    // Sends a slash command and reports a failure in the chat log (travel, sprint).
     private async System.Threading.Tasks.Task SendTravel(string command)
     {
         try { await _session!.SendCommandAsync(command); }

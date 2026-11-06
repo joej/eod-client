@@ -100,4 +100,32 @@ public class WorldEntityPacketTests
         ObjectDelete d = ObjectDelete.Parse([0x12, 0x34, 0x00, 0x01]);
         Assert.Equal(0x1234, d.ObjectId);
     }
+
+    private static byte[] NpcCreatePayload(byte flags2, string name) => new PayloadWriter()
+        .U16BE(4778).U16BE(0).U16BE(0).U16BE(2897).U32BE(574000).U32BE(530000).Zeros(2)
+        .U16BE(1923).U8(255).U8(0).U8(0x30)          // model, size, level, flags (peace, flying)
+        .U8(0x20).U8(flags2).U8(0).Zeros(2)          // max stick, flags2, flags3, unknown
+        .U8((byte)name.Length).Bytes(System.Text.Encoding.ASCII.GetBytes(name)).U8(0).ToArray();
+
+    [Theory]
+    [InlineData(0x03, "", true)]            // a player sees the bits (can't target, name hidden)
+    [InlineData(0x00, "[]-DOR-NON", true)]  // a GM sees name suffixes instead (PacketLib1124.SendNPCCreate)
+    [InlineData(0x02, "Guard", false)]      // a hidden name alone is still a creature
+    public void AnUntargetableNpcIsMarkedByItsBitOrItsGmSuffix(byte flags2, string name, bool untargetable)
+    {
+        NpcCreate npc = NpcCreate.Parse(NpcCreatePayload(flags2, name));
+        Assert.Equal((flags2, name, (ushort)1923, untargetable), (npc.Flags2, npc.Name, npc.ModelId, npc.Untargetable));
+    }
+
+    [Fact]
+    public void TheRecordingsUntargetableNpcsAreMarkersAndEffects()
+    {
+        // 111 NPC creates: two nameless teleporter indicators (model 1923) and a swarm of flies; every
+        // other NPC can be targeted.
+        List<NpcCreate> npcs = ParseAll(NpcCreate.Code, NpcCreate.Parse);
+        Assert.Equal(111, npcs.Count);
+        Assert.Equal(
+            ["1923 3 ", "1923 3 ", "2020 3 swarm of flies"],
+            npcs.Where(n => n.Untargetable).Select(n => $"{n.ModelId} {n.Flags2} {n.Name}").Order());
+    }
 }

@@ -483,7 +483,7 @@ public partial class WorldView : Node3D
         _dev.AddToggle("Own character", true, on => _body.Visible = on);
         _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);
         // Off by default: the server's speed check exempts GMs only, and kicks a player who sprints.
-        _dev.AddToggle("Shift sprint ×4 (GM only)", ClientSettings.Sprint, on => ClientSettings.Sprint = on);
+        _dev.AddToggle("Shift fast move ×4 (GM only)", ClientSettings.Sprint, on => ClientSettings.Sprint = on);
         if (PacketLogging is var (getLog, setLog))
             _togglePacketLog = _dev.AddToggle("F4 packet log", getLog(), setLog);
         _dev.AddInfo($"{zoneObjects} fixtures · {_zoneTexturedModels} textured models · {_waterBodies} water\n" +
@@ -599,6 +599,10 @@ public partial class WorldView : Node3D
                 yield return m;
     }
 
+    // Zooms the chase camera by wheel notches: positive moves away, ×1/0.88 per notch.
+    private void Zoom(float notches) =>
+        _camDistance = Mathf.Clamp(_camDistance * Mathf.Pow(0.88f, -notches), CamMin, CamMax);
+
     // Right mouse button toggles mouse-look; while held, relative motion turns the camera.
     // P saves a screenshot of the current view.
     public override void _Input(InputEvent @event)
@@ -628,11 +632,18 @@ public partial class WorldView : Node3D
         else if (@event is InputEventMouseButton { Pressed: true } wheel && _chase)
         {
             // Mouse wheel zooms the chase camera (OfflineDAoC: ×0.88 per notch, clamped 1.25–12.5 m).
+            // Smooth-scrolling wheels report fractional notches in Factor (0 = a plain notch).
+            float notches = wheel.Factor > 0 ? wheel.Factor : 1f;
             if (wheel.ButtonIndex == MouseButton.WheelUp)
-                _camDistance = Mathf.Clamp(_camDistance * 0.88f, CamMin, CamMax);
+                Zoom(-notches);
             else if (wheel.ButtonIndex == MouseButton.WheelDown)
-                _camDistance = Mathf.Clamp(_camDistance / 0.88f, CamMin, CamMax);
+                Zoom(notches);
         }
+        // macOS trackpads and the Magic Mouse scroll with pan gestures, not wheel buttons; a pinch magnifies.
+        else if (@event is InputEventPanGesture pan && _chase)
+            Zoom(pan.Delta.Y);
+        else if (@event is InputEventMagnifyGesture pinch && _chase && pinch.Factor > 0)
+            _camDistance = Mathf.Clamp(_camDistance / pinch.Factor, CamMin, CamMax);
         else if (@event is InputEventMouseMotion mm && _lookActive)
         {
             if (_freshCapture)
@@ -681,6 +692,14 @@ public partial class WorldView : Node3D
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F6 } && !ChatInputActive)
         {
             OpenTravel();
+        }
+        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.V } && !ChatInputActive)
+        {
+            // V toggles sprint (retail's default key, darkageofcamelot.com "Control and Movement"). The
+            // server does the rest: /sprint gives 1.3x speed while endurance lasts, drains it while moving
+            // and ends sprint itself, each time sending 0xB6, which sets how fast we run.
+            if (_session is not null && _closedReason is null)
+                _ = SendTravel("/sprint");
         }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.H } && !ChatInputActive)
         {
@@ -820,7 +839,7 @@ public partial class WorldView : Node3D
             $"body {_body.Position.X:0.0},{_body.Position.Y:0.0},{_body.Position.Z:0.0}   " +
             $"ground {(_groundHit ? "ON" : "--")}   mode {(_chase ? "chase" : "free")}\n" +
             (_chase
-                ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Space jump, Shift sprint, wheel zoom   ·   H attack   ·   Tab free-fly, P shot"
+                ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Space jump, V sprint, wheel zoom   ·   H attack   ·   Tab free-fly, P shot"
                 : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot")
             + "\nF1 panels · F2 render mode · F3 view distance · left-click inspect (Esc clears)";
     }

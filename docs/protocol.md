@@ -326,6 +326,15 @@ decrease). Six violations within 1.5 s move the player back to where they began;
 in a row disconnects (no ban). GMs and players allowed to fly are exempt; Z isn't checked. Our client
 runs at the 0xB6 speed; its Shift sprint (×4) is a dev toggle, off by default, for GM accounts.
 
+**Sprint** is the server's: `/sprint` (retail's V key) toggles ×1.3 speed while endurance lasts, and every
+change, including the server ending it when endurance runs out, arrives as a new 0xB6.
+
+**Untargetable NPCs.** 0xDA's second flags byte (`PacketLib1124.SendNPCCreate`) has 0x01 can't target, 0x02
+name hidden, 0x04 stealthed, 0x08/0x10 quest available/finishable, 0x80 pet. A GM account gets none of 0x01
+and 0x02: the server appends "-DOR" and "-NON" to the name instead (OpenDAoC's teleporter indicator, model
+1923, reaches a GM as "[]-DOR-NON"). Model 1923's client figure is "Corpse Light Node"; the recording has two
+of these indicators and a swarm of flies flagged 0x03 among its 111 NPCs.
+
 The zone id is the zone containing the position. The real client knows it from its map data; we
 look it up in OpenDAoC's zone table (`src/DaocProtocol/World/zones.tsv`, from OpenDAoC-Database,
 GPL): zone offsets and sizes × 8192, half-open rectangle, first match.

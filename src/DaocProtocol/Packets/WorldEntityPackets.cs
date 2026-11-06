@@ -93,6 +93,17 @@ public sealed record NpcCreate(
 
     public ushort HeadingOnly => (ushort)(Heading & 0x0FFF);
 
+    /// <summary>The second flags byte (PacketLib1124.SendNPCCreate): 0x01 can't be targeted, 0x02 name
+    /// hidden, 0x04 stealthed, 0x08/0x10 quest available/finishable, 0x80 a pet.</summary>
+    public byte Flags2 { get; init; }
+
+    /// <summary>
+    /// The NPC can't be targeted: an effect or marker rather than a creature (e.g. OpenDAoC's teleporter
+    /// indicator, model 1923, whose figure is the client's "Corpse Light Node"). A GM account gets no bit
+    /// for it: the server appends "-DOR" to the name instead (and "-NON" for a hidden name).
+    /// </summary>
+    public bool Untargetable => (Flags2 & 0x01) != 0 || Name.Contains("-DOR", StringComparison.Ordinal);
+
     public static NpcCreate Parse(ReadOnlySpan<byte> payload)
     {
         var r = new PayloadReader(payload);
@@ -108,12 +119,12 @@ public sealed record NpcCreate(
         byte level = r.U8();
         byte flags = r.U8();
         r.Skip(1);              // maxStickDistance (hardcoded 0x20)
-        r.Skip(1);              // flags2 (pet/stealth/quest)
+        byte flags2 = r.U8();
         r.Skip(1);              // flags3 (quest indicators)
         r.Skip(2);              // unknown ("new in 1.71")
         string name = r.StringU8();
         string guild = r.StringU8();
-        return new NpcCreate(objectId, speed, heading, z, x, y, model, size, level, flags, name, guild);
+        return new NpcCreate(objectId, speed, heading, z, x, y, model, size, level, flags, name, guild) { Flags2 = flags2 };
     }
 }
 
