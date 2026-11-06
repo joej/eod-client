@@ -97,12 +97,20 @@ public partial class WorldView
             _airborne = true;
             _jumping = true;
         }
+        bool wasAirborne = _airborne;
         Ground(delta);
 
+        // In the air, the jump clip (legs tucked, held to its end); on landing standing still, the land clip
+        // (down out of the tuck) before the idle; landing on the move goes straight back to the run.
         // DAoC's normal pace is a run; backing up has its own clip.
-        if (_quitting && !moving)
+        _landLeft -= (float)delta;
+        if (wasAirborne && !_airborne && !moving)
+            PlayOnce("land", LandTime);
+        if (_airborne)
+            PlayOnce("jump");
+        else if (_quitting && !moving)
             Sit();
-        else
+        else if (_landLeft <= 0 || moving)
             PlayBodyClip(!moving ? Idle(_bodyAnim, _attacking, _ownCombatIdle) : forward < 0 ? "back" : "run");
 
         // Position send (the event-driven shape adapted from OfflineDAoC's _send_position, GPL-3.0; the
@@ -229,6 +237,8 @@ public partial class WorldView
     private bool _jumping;                    // airborne from a jump: 0xA9 state flag 0x08 (others see it)
     private float _verticalSpeed;             // metres per second, up positive
     private float _landingSpeed;              // a landing's impact speed (m/s), until it is reported
+    private float _landLeft;                  // seconds of the land clip still to show before the idle
+    private const float LandTime = 0.8f;      // Cat_JU_H_B is standing again by about 1 s (the rest holds)
     private const float StepUp = 1.5f;        // a rise walked up at once (a stair)
     private const float StepDown = 2f;        // a drop walked down at once
     private const float Gravity = 9.8f;       // ours; retail's value is unknown

@@ -514,6 +514,18 @@ public partial class WorldView : Node3D
         _bodyClip = clip;
     }
 
+    // A clip played once and held on its last frame (jump: the tucked pose in the air; land), for
+    // <paramref name="hold"/> seconds before the frame loop may change it. A figure without it keeps its clip.
+    private void PlayOnce(string clip, float hold = 0)
+    {
+        if (_bodyAnim is null || _bodyClip == clip || !_bodyAnim.HasAnimation(clip))
+            return;
+        _bodyAnim.GetAnimation(clip).LoopMode = Animation.LoopModeEnum.None;
+        _bodyAnim.Play(clip, customBlend: 0.1);
+        _bodyClip = clip;
+        _landLeft = hold;
+    }
+
     // Sitting out the quit timer (the server sits the character down): sit down once, then hold the sit
     // idle. Moving cancels the quit and the walk/run clip takes over. A figure converted before the sit
     // clips existed keeps its idle.
