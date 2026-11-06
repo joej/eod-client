@@ -494,9 +494,6 @@ public partial class WorldView : Node3D
         _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);
         // Off by default: the server's speed check exempts GMs only, and kicks a player who sprints.
         _dev.AddToggle("Shift fast move ×4 (GM only)", ClientSettings.Sprint, on => ClientSettings.Sprint = on);
-        // The key layout (docs/controls.md): today's (W/S) or the 2001 manual's (arrows, mouse buttons).
-        _dev.AddChoice("Keys", KeyBindings.Presets, System.Array.IndexOf(KeyBindings.Presets, KeyBindings.Preset),
-            i => KeyBindings.Preset = KeyBindings.Presets[i]);
         if (PacketLogging is var (getLog, setLog))
             _togglePacketLog = _dev.AddToggle("F4 packet log", getLog(), setLog);
         _dev.AddInfo($"{zoneObjects} fixtures · {_zoneTexturedModels} textured models · {_waterBodies} water\n" +
@@ -611,6 +608,10 @@ public partial class WorldView : Node3D
             foreach (MeshInstance3D m in FindMeshes(child))
                 yield return m;
     }
+
+    // An action's keys for the help line ("-" when it has none), from the current layout and the player's own keys.
+    private static string Keys(ControlAction a) =>
+        KeyBindings.KeysFor(a) is { Length: > 0 } k ? string.Join("+", System.Linq.Enumerable.Select(k, OS.GetKeycodeString)) : "-";
 
     // Zooms the chase camera by wheel notches: positive moves away, ×1/0.88 per notch.
     private void Zoom(float notches) =>
@@ -886,7 +887,9 @@ public partial class WorldView : Node3D
             $"body {_body.Position.X:0.0},{_body.Position.Y:0.0},{_body.Position.Z:0.0}   " +
             $"ground {(_groundHit ? "ON" : "--")}   mode {(_chase ? "chase" : "free")}\n" +
             (_chase
-                ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Space jump, V sprint, NumLock auto-run, wheel zoom, left-drag pan   ·   H attack   ·   Tab free-fly, P shot"
+                ? $"move: {Keys(ControlAction.Forward)}/{Keys(ControlAction.Back)} walk, {Keys(ControlAction.TurnLeft)}/{Keys(ControlAction.TurnRight)} or right-drag turn, " +
+                  $"{Keys(ControlAction.StrafeLeft)}/{Keys(ControlAction.StrafeRight)} strafe, {Keys(ControlAction.Jump)} jump, {Keys(ControlAction.Sprint)} sprint, " +
+                  $"{Keys(ControlAction.AutoRun)} auto-run, wheel zoom, left-drag pan   ·   {Keys(ControlAction.AttackMode)} attack   ·   Tab free-fly, P shot"
                 : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot")
             + "\nF1 panels · F2 render mode · F3 view distance · left-click inspect (Esc clears)";
     }

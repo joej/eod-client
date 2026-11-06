@@ -83,9 +83,11 @@ public partial class CharacterScreen : Control
         // --packets: log every packet's code and size (off by default: the client prints its own
         // status and asset messages, which a packet stream would bury).
         _logPackets.ButtonPressed = Array.IndexOf(args, "--packets") >= 0;
-        // --settings: open the settings window at start (for checking it in a screenshot).
-        if (Array.IndexOf(args, "--settings") >= 0)
-            CallDeferred(MethodName.OpenSettings);
+        // --settings [TAB]: open the settings window at start on that tab (0 Display, 1 Keyboard), for checking it in
+        // a screenshot.
+        int st = Array.IndexOf(args, "--settings");
+        if (st >= 0)
+            CallDeferred(MethodName.OpenSettings, st + 1 < args.Length && int.TryParse(args[st + 1], out int tab) ? tab : 0);
         // --offline X Y Z [REGION]: the world view at that position with no server (no login, no
         // entities, nothing sent). For checking converted assets (with --shots) any time.
         int o = Array.IndexOf(args, "--offline");

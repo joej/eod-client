@@ -140,6 +140,31 @@ public static class ClientSettings
         }
     }
 
+    /// <summary>The player's own key bindings (section "keys": action name = key codes, comma-separated; empty =
+    /// no key). Actions not listed use the preset's keys.</summary>
+    public static Dictionary<ControlAction, Key[]> LoadKeys()
+    {
+        ConfigFile cfg = Load();
+        var keys = new Dictionary<ControlAction, Key[]>();
+        if (!cfg.HasSection("keys"))
+            return keys;
+        foreach (string name in cfg.GetSectionKeys("keys"))
+            if (System.Enum.TryParse(name, out ControlAction action))
+                keys[action] = cfg.GetValue("keys", name).AsString().Split(',', System.StringSplitOptions.RemoveEmptyEntries)
+                    .Select(k => long.TryParse(k, out long code) ? (Key)code : Key.None).Where(k => k != Key.None).ToArray();
+        return keys;
+    }
+
+    public static void SaveKeys(Dictionary<ControlAction, Key[]> keys)
+    {
+        ConfigFile cfg = Load();
+        if (cfg.HasSection("keys"))
+            cfg.EraseSection("keys");
+        foreach ((ControlAction action, Key[] k) in keys)
+            cfg.SetValue("keys", action.ToString(), string.Join(",", k.Select(x => ((long)x).ToString(System.Globalization.CultureInfo.InvariantCulture))));
+        cfg.Save(Path);
+    }
+
     /// <summary>Puts the window in the saved mode (no-op without a display, e.g. headless checks).</summary>
     public static void ApplyWindowMode()
     {

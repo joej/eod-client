@@ -103,7 +103,7 @@ them), saved per character.
 
 ## Our client today
 
-Presets RPG (default), MMO, FPS and classic (the 2001 layout), chosen in the dev overlay ("Keys") and saved.
+Presets RPG (default), MMO, FPS and classic (the 2001 layout), chosen in Settings → Keyboard (login screen or F10 in game), with your own keys kept over the layout as retail keeps user.dat's (click a key, press the new one; Backspace: no key; a key taken from another action leaves it).
 Backing up and strafing at 85 of 191 (scaled with the server's speed), backward sent negative; V sprint
 (`/sprint`); NumLock auto-run (forward or back stops it); left-drag pans the camera round the character, a click
 inspects, right-drag turns and re-aligns; mouse wheel zoom; `/setcamera` saves the camera's distance and tilt;

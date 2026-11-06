@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The player's settings window (login screen button; F10 or the Settings button in the world):
-// window mode (window, borderless, fullscreen), window size (fit the screen, or a common size that
-// fits it), frame rate cap and field of view. Changes are saved at once (ClientSettings) and raise ClientSettings.Changed, so the world
+// a Display tab (window mode: window, borderless, fullscreen; window size: fit the screen, or a common size that
+// fits it; frame rate cap; field of view) and a Keyboard tab (KeyboardPanel: layout and key bindings). Changes are saved at once (ClientSettings) and raise ClientSettings.Changed, so the world
 // applies them live.
 
 using Godot;
@@ -22,9 +22,13 @@ public partial class SettingsDialog : AcceptDialog
     // 0 = the monitor's refresh rate (vsync), -1 = unlimited.
     private static readonly int[] FrameCaps = [0, 30, 60, 75, 90, 120, 144, 165, 240, -1];
     private readonly List<Vector2I> _sizes = [];
+    private TabContainer _tabs = null!;
 
     /// <summary>Opens the window over <paramref name="parent"/>'s scene (one at a time).</summary>
-    public static void Open(Node parent)
+    public static void Open(Node parent) => Open(parent, 0);
+
+    /// <summary>Opens the window on tab <paramref name="tab"/> (0 Display, 1 Keyboard).</summary>
+    public static void Open(Node parent, int tab)
     {
         foreach (Node n in parent.GetTree().Root.GetChildren())
             if (n is SettingsDialog open)
@@ -35,6 +39,7 @@ public partial class SettingsDialog : AcceptDialog
         var dialog = new SettingsDialog();
         parent.GetTree().Root.AddChild(dialog);
         dialog.PopupCentered(new Vector2I(460, 0));
+        dialog._tabs.CurrentTab = tab;
     }
 
     public override void _Ready()
@@ -45,10 +50,13 @@ public partial class SettingsDialog : AcceptDialog
         Confirmed += QueueFree;
         Canceled += QueueFree;
 
-        // AcceptDialog lays out one child: a column holding the settings grid and a note.
-        var column = new VBoxContainer();
+        // AcceptDialog lays out one child: tabs, Display (a column holding the settings grid and a note) and Keyboard.
+        var tabs = _tabs = new TabContainer();
+        AddChild(tabs);
+        var column = new VBoxContainer { Name = "Display" };
         column.AddThemeConstantOverride("separation", 14);
-        AddChild(column);
+        tabs.AddChild(column);
+        tabs.AddChild(new KeyboardPanel());
         var grid = new GridContainer { Columns = 2 };
         grid.AddThemeConstantOverride("h_separation", 12);
         grid.AddThemeConstantOverride("v_separation", 10);

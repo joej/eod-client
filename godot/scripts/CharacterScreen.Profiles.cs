@@ -11,7 +11,7 @@ namespace EodClient;
 
 public partial class CharacterScreen
 {
-    private void OpenSettings() => SettingsDialog.Open(this);
+    private void OpenSettings(int tab) => SettingsDialog.Open(this, tab);
 
     /// <summary>The profile the form shows, as last saved (null for a new one).</summary>
     private LoginProfile? Current() =>
