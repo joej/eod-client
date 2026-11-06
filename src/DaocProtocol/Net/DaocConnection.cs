@@ -10,6 +10,13 @@ namespace DaocProtocol.Net;
 /// <see cref="ServerPacket"/>s and queues them. Read them with <see cref="ReceiveAsync"/>, or
 /// poll with <see cref="TryReceive"/> (e.g. once per frame from a game loop). Sends are
 /// serialised, so a timer may send while another task waits for a reply.
+/// <para>
+/// The queue is unbounded, so whoever owns the connection must keep reading it: in the world the
+/// server sends about 23 packets a second (mostly NPC updates), so a pause such as a zone load only
+/// queues a few hundred. A bound would be worse either way: dropping packets loses state the server
+/// never resends, and making the receive loop wait stalls the socket until the server's sends back up.
+/// <see cref="Pending"/> shows how far behind the reader is.
+/// </para>
 /// </summary>
 public sealed class DaocConnection : IAsyncDisposable
 {
@@ -65,6 +72,9 @@ public sealed class DaocConnection : IAsyncDisposable
     }
 
     public bool TryReceive(out ServerPacket packet) => _inbound.Reader.TryRead(out packet!);
+
+    /// <summary>Packets received and not yet read (see the class remarks on the unbounded queue).</summary>
+    public int Pending => _inbound.Reader.Count;
 
     /// <summary>
     /// The next packet. Throws <see cref="IOException"/> (or the receive loop's error) once the

@@ -33,6 +33,27 @@ internal sealed class FakeServer : IAsyncDisposable
 
     private readonly List<ClientPacket> _received = [];
 
+    /// <summary>
+    /// Waits (up to 5 s) until <paramref name="count"/> received packets match: a client send returns
+    /// once the bytes are written, before this server has read them.
+    /// </summary>
+    public async Task WaitForAsync(Func<ClientPacket, bool> match, int count = 1)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (Received.Count(match) < count)
+        {
+            if (DateTime.UtcNow > deadline)
+                throw new TimeoutException($"FakeServer saw {Received.Count(match)} of {count} matching packets.");
+            await Task.Delay(5);
+        }
+    }
+
+    /// <summary>
+    /// Waits (up to 5 s) for the client to close the connection and every packet before that to be
+    /// read: call after disposing the client, before asserting on <see cref="Received"/>.
+    /// </summary>
+    public async Task ClosedAsync() => await _run.WaitAsync(TimeSpan.FromSeconds(5));
+
     /// <summary>Whatever went wrong on the server side (bad frame, bad checksum), or null.</summary>
     public Exception? Error { get; private set; }
 

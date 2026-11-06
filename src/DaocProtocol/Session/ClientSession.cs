@@ -352,15 +352,17 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// </summary>
     public async Task MoveToAsync(float x, float y, float z, ushort heading, float speed = 0,
         CancellationToken cancellationToken = default) =>
-        await MoveToAsync(x, y, z, heading, speed, verticalSpeed: 0, landed: false, cancellationToken).ConfigureAwait(false);
+        await MoveToAsync(x, y, z, heading, speed, verticalSpeed: 0, landed: false, cancellationToken: cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// As <see cref="MoveToAsync(float, float, float, ushort, float, CancellationToken)"/>, with the vertical
     /// speed in region units per second (negative falling: OpenDAoC's FallSpeed) and, on the one update that
     /// lands from a fall, <paramref name="landed"/>: the server then charges fall damage from that speed.
+    /// <paramref name="stateFlags"/> is 0xA9's state byte, which other players see (retail: 0x08 in the
+    /// air, 0x04 swimming, 0x10 sitting).
     /// </summary>
     public async Task MoveToAsync(float x, float y, float z, ushort heading, float speed, float verticalSpeed, bool landed,
-        CancellationToken cancellationToken = default, byte stateFlags = 0)
+        byte stateFlags = 0, CancellationToken cancellationToken = default)
     {
         await _positionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try

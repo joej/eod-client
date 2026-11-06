@@ -221,6 +221,7 @@ public class ClientSessionTests
             await session.MoveToAsync(560001, 570000, 1000, heading: 2048);
         }
 
+        await server.ClosedAsync();   // the last 0xA9 may still be in flight
         Assert.Null(server.Error);
         ClientPacket command = Assert.Single(server.Received, IsJump);
         Assert.Equal(CommandRequest.Payload("&jump to 560000 570000 1000 1"), command.Payload);
@@ -261,6 +262,51 @@ public class ClientSessionTests
             server.Received.Skip(jump + 1).Where(p => p.Code != PositionUpdate.Code && p.Code != PingRequest.Code).Select(p => p.Code));
         // The re-entry names the same character as the first one.
         Assert.Equal(WorldInitRequest.Payload(Realm.Albion, 0), server.Received.Skip(jump).First(p => p.Code == WorldInitRequest.Code).Payload);
+    }
+
+    [Fact]
+    public async Task ChangeRegionAfterAnUnpromptedRegionChangeEntersTheNewWorld()
+    {
+        // A region change the session didn't ask for (a portal, a recall): the world drains the 0xB7 and
+        // calls ChangeRegionAsync, which re-enters from 0xD4 and takes the new world's position.
+        int worldInits = 0;
+        await using var server = new FakeServer(Recording(p =>
+        {
+            if (p.Code == WorldInitRequest.Code && ++worldInits == 2)
+                return [PositionPacket(455000, 488000, 3000, region: 200, heading: 100), new ServerPacket(WorldInitRequest.EndOfBurstCode, [0])];
+            return WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null);
+        }));
+        var (connection, session) = await InWorld(server);
+        await using (connection)
+        {
+            int before = server.Received.Count;
+            WorldPosition world = await session.ChangeRegionAsync();
+
+            Assert.Equal(SessionState.InWorld, session.State);
+            Assert.Equal(world, session.World);
+            Assert.Equal((455000f, 488000f, (ushort)200, (ushort)100),
+                (world.Position.X, world.Position.Y, world.Position.RegionId, world.Position.Heading));
+            Assert.Equal("Cursed Forest", world.Zone.Name);
+            Assert.Equal(new byte[] { 0xD4, 0xE8, 0xBF },
+                server.Received.Skip(before).Where(p => p.Code is not (PositionUpdate.Code or PingRequest.Code)).Select(p => p.Code));
+        }
+
+        Assert.Null(server.Error);
+        Assert.Equal(2, worldInits);
+    }
+
+    [Fact]
+    public async Task ChangeRegionNeedsTheWorld()
+    {
+        await using var server = new FakeServer(Recording());
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await Assert.ThrowsAsync<InvalidOperationException>(() => session.ChangeRegionAsync());
+            Assert.Equal(SessionState.CharacterScreen, session.State);
+        }
     }
 
     [Fact]
@@ -504,6 +550,51 @@ public class ClientSessionTests
         // ...and after 0xA4 the client asked for the realm's characters (back to the character screen).
         ClientPacket listing = server.Received.Skip(quit).First(p => p.Code == CharacterOverviewRequest.Code);
         Assert.Equal(CharacterOverviewRequest.Payload(Realm.Albion), listing.Payload);
+    }
+
+    [Fact]
+    public async Task AQuitThatLeavesTheGameEndsTheSession()
+    {
+        // 0xA4 with 1 first: leave the game, not the character screen. Nothing is listed afterwards.
+        await using var server = new FakeServer(Recording(p =>
+            p.Code == CommandRequest.Code ? [new ServerPacket(QuitReply.Code, [0x01, 0x01])]
+            : WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await InWorld(server);
+        await using (connection)
+        {
+            int before = server.Received.Count;
+            Assert.Null(await session.QuitAsync());
+            Assert.Equal(SessionState.LoggedOut, session.State);
+            Assert.Null(session.World);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => session.SendCommandAsync("/who"));
+            Assert.Equal(new[] { CommandRequest.Code }, server.Received.Skip(before).Select(p => p.Code).Where(c => c != PositionUpdate.Code));
+        }
+
+        Assert.Null(server.Error);
+    }
+
+    [Theory]
+    [InlineData("/who", "&who")]
+    [InlineData("&who", "&who")]
+    [InlineData("who", "&who")]
+    [InlineData("  /say hello there", "&say hello there")]
+    public async Task CommandsGoOutInTheServersAmpersandForm(string typed, string wire)
+    {
+        await using var server = new FakeServer(Recording(p =>
+            p.Code == CommandRequest.Code ? []
+            : WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await InWorld(server);
+        await using (connection)
+        {
+            await session.SendCommandAsync(typed);
+            await session.SendCommandAsync("   ");                // nothing to send
+            await session.SayAsync("hi");
+            await server.WaitForAsync(p => p.Code == CommandRequest.Code, count: 2);
+        }
+
+        Assert.Null(server.Error);
+        Assert.Equal([CommandRequest.Payload(wire), CommandRequest.Payload("&say hi")],
+            server.Received.Where(p => p.Code == CommandRequest.Code).Select(p => p.Payload).ToArray());
     }
 
     [Fact]
