@@ -187,7 +187,17 @@ public readonly record struct CharacterStats(
 /// <param name="Stats">Race base stats plus 30 bonus points (CharacterStatValidator: each point
 /// above base costs 1, above +10 costs 2, above +15 costs 3).</param>
 public sealed record NewCharacter(
-    string Name, Realm Realm, int Slot, byte ClassId, byte Race, bool Female, ushort Model, CharacterStats Stats);
+    string Name, Realm Realm, int Slot, byte ClassId, byte Race, bool Female, ushort Model, CharacterStats Stats)
+{
+    /// <summary>The appearance, stored as sent (custom mode 1). Default: the retail creator's starting
+    /// look, every slider mid, hair style 1, mood neutral. A player's bytes are drawn as they are, so all
+    /// zeros would mean sliders at their low ends and no hair (open question W30).</summary>
+    public CharacterLook Look { get; init; } = CharacterLook.CreatorDefault;
+
+    /// <summary>Body size, 1 short, 2 average, 3 tall: bits 11-12 of the model field, as the retail
+    /// creator sends it (OpenDAoC bans a player account that customises with size 0 when BAN_HACKERS is on).</summary>
+    public int Size { get; init; } = 2;
+}
 
 /// <summary>
 /// 0xFF: create or delete a character (the server also handles customisation, not built here).
@@ -213,11 +223,13 @@ public static class CharacterCreateRequest
         if (name.Length < 3 || !char.IsAsciiLetterUpper(name[0]) || !name.All(char.IsAsciiLetter))
             throw new ArgumentException($"Name '{name}' must be 3+ ASCII letters starting with a capital.", nameof(character));
         CharacterStats s = character.Stats;
-        return Body(CharacterSlot.ToWire(character.Realm, character.Slot), name, OperationCreate)
+        if (character.Size is < 1 or > 3)
+            throw new ArgumentOutOfRangeException(nameof(character), "Size must be 1 (short), 2 (average) or 3 (tall).");
+        return Body(CharacterSlot.ToWire(character.Realm, character.Slot), name, OperationCreate, character.Look)
             .U8(character.ClassId)
             .U8((byte)character.Realm)
             .U8((byte)((character.Race & 0x1F) | (character.Female ? 0x80 : 0)))
-            .U16LE(character.Model)
+            .U16LE((ushort)(PlayerModel.Id(character.Model) | character.Size << 11))
             .U8(s.Strength).U8(s.Dexterity).U8(s.Constitution).U8(s.Quickness)
             .U8(s.Intelligence).U8(s.Piety).U8(s.Empathy).U8(s.Charisma)
             .Zeros(43)
@@ -240,15 +252,18 @@ public static class CharacterCreateRequest
             .ToArray();
     }
 
-    private static PayloadWriter Body(byte wireSlot, string name, byte operation) =>
+    // look: stored with custom mode 1 (as the retail creator sends a new character); null for custom mode
+    // 0, whose look bytes the server ignores (a delete).
+    private static PayloadWriter Body(byte wireSlot, string name, byte operation, CharacterLook? look = null) =>
         new PayloadWriter()
             .U8(wireSlot)
             .StringIntLE(name)
             .U32LE(0x18)          // constant the server skips
-            .U8(0)                // custom mode 0: no face customisation, the server ignores the next six bytes
-            .Zeros(6)             // eye size, lip size, eye colour, hair colour, face type, hair style
+            .U8((byte)(look is null ? 0 : 1))
+            .U8(look?.EyeSize ?? 0).U8(look?.LipSize ?? 0).U8(look?.EyeColor ?? 0)
+            .U8(look?.HairColor ?? 0).U8(look?.FaceType ?? 0).U8(look?.HairStyle ?? 0)
             .Zeros(3)
-            .U8(0)                // mood
+            .U8(look?.MoodType ?? 0)
             .Zeros(9)
             .U8(operation)
             .U8(0)                // customise type (face/attributes), only for customisation

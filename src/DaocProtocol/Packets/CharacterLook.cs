@@ -21,6 +21,10 @@ namespace DaocProtocol.Packets;
 public readonly record struct CharacterLook(
     byte EyeSize, byte LipSize, byte EyeColor, byte HairColor, byte FaceType, byte HairStyle, byte MoodType)
 {
+    /// <summary>The retail creator's starting look: every slider mid, face, colours and mood at their
+    /// first option, hair style 1.</summary>
+    public static CharacterLook CreatorDefault => new(0x44, 0x44, 0, 0, 0, 0x10, 0);
+
     /// <summary>The face (fig3facemap column, from 0).</summary>
     public int Face => FaceType >> 4;
     /// <summary>The decal or tattoo (fig3decalmap column, from 0).</summary>

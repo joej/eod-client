@@ -75,18 +75,21 @@ public sealed record ObjectUpdate(
 /// 0xDA NPCCreate (PacketLib1124.SendNPCCreate): an NPC/mob enters view. Variable length; we read
 /// through the trailing strings. X/Y are region-global BIG-endian u32 integers.
 /// </summary>
-/// <param name="Model">The model field as sent: the model id (monsters.csv row) in the low 13 bits; see
-/// <see cref="ModelId"/>.</param>
+/// <param name="Model">The model field as sent: the model id (monsters.csv row) in the low 14 bits, and
+/// <see cref="Swimming"/> in bit 15.</param>
 public sealed record NpcCreate(
     ushort ObjectId, ushort Speed, ushort Heading, ushort Z, uint X, uint Y,
     ushort Model, byte Size, byte Level, byte Flags, string Name, string GuildName)
 {
     public const byte Code = 0xDA;
 
-    /// <summary>The model id. OpenDAoC sends the stored value as it is, and 1,178 of its 97,737 spawns
-    /// (every one a water or swamp creature: river sprites, frogs, eels, crabs) store 0x8000 above a normal
-    /// id (32904 = sprite 136); the client's ids end at 2493. What that bit means is open question W39.</summary>
-    public ushort ModelId => (ushort)(Model & 0x1FFF);
+    /// <summary>The model id: the field's low 14 bits, as the retail client reads it (open question W39).</summary>
+    public ushort ModelId => (ushort)(Model & 0x3FFF);
+
+    /// <summary>Bit 15: the NPC is created swimming (retail: swim animations, height from the water
+    /// surface; the same state a player's 0xA9 flag 0x04 sets). OpenDAoC stores it on its water and swamp
+    /// creatures (1,178 of 97,737 spawns: river sprite 32904 = 136, frogs, eels, crabs).</summary>
+    public bool Swimming => (Model & 0x8000) != 0;
 
     public ushort HeadingOnly => (ushort)(Heading & 0x0FFF);
 

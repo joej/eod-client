@@ -21,7 +21,10 @@ public class CharacterCreateTests
     /// <summary>What the server reads from a 1.126+ 0xFF payload.</summary>
     private sealed record ServerView(
         int CharacterSlot, string CharName, int CustomMode, uint Operation, int Class, int Realm,
-        int Race, int Gender, ushort CreationModel, byte[] Stats, int NewConstitution, int Unread);
+        int Race, int Gender, ushort CreationModel, byte[] Stats, int NewConstitution, int Unread)
+    {
+        public CharacterLook Look { get; init; }
+    }
 
     private static ServerView ServerReads(byte[] payload)
     {
@@ -30,9 +33,9 @@ public class CharacterCreateTests
         string charName = p.StringIntLE();
         p.Skip(4);
         int customMode = p.U8();
-        p.Skip(6);       // eye size, lip size, eye colour, hair colour, face type, hair style
+        byte eyeSize = p.U8(), lipSize = p.U8(), eyeColor = p.U8(), hairColor = p.U8(), faceType = p.U8(), hairStyle = p.U8();
         p.Skip(3);
-        p.Skip(1);       // mood
+        byte mood = p.U8();
         p.Skip(9);
         uint operation = p.U8();
         p.Skip(1);       // customise type
@@ -52,7 +55,8 @@ public class CharacterCreateTests
         p.Skip(43);
         int newConstitution = p.U8();
         return new ServerView(characterSlot, charName, customMode, operation, @class, realm,
-            race, gender, creationModel, stats, newConstitution, p.Remaining);
+            race, gender, creationModel, stats, newConstitution, p.Remaining)
+        { Look = new CharacterLook(eyeSize, lipSize, eyeColor, hairColor, faceType, hairStyle, mood) };
     }
 
     [Fact]
@@ -62,13 +66,16 @@ public class CharacterCreateTests
 
         Assert.Equal(0, view.CharacterSlot);
         Assert.Equal("Testarms", view.CharName);
-        Assert.Equal(0, view.CustomMode);
+        // Custom mode 1 stores the look as sent: the retail creator's start, not seven zeros (bald).
+        Assert.Equal(1, view.CustomMode);
+        Assert.Equal(CharacterLook.CreatorDefault, view.Look);
+        Assert.Equal((1, 4, 4), (view.Look.Hair, view.Look.Slider(0), view.Look.Mood));
         Assert.Equal(1u, view.Operation);
         Assert.Equal(2, view.Class);
         Assert.Equal(1, view.Realm);
         Assert.Equal(1, view.Race);
         Assert.Equal(0, view.Gender);
-        Assert.Equal(32, view.CreationModel);
+        Assert.Equal((32, 2), (PlayerModel.Id(view.CreationModel), PlayerModel.Size(view.CreationModel)));   // average size
         Assert.Equal(new byte[] { 70, 70, 70, 60, 60, 60, 60, 60 }, view.Stats);
         Assert.Equal(70, view.NewConstitution);
         Assert.Equal(1, view.Unread); // the trailing zero the server's comment mentions
@@ -102,6 +109,7 @@ public class CharacterCreateTests
     {
         ServerView view = ServerReads(CharacterCreateRequest.DeletePayload(accountRealm, slot));
         Assert.Equal(3u, view.Operation);
+        Assert.Equal(0, view.CustomMode);   // a delete carries no look
         Assert.Equal("", view.CharName);
         Assert.Equal(0, view.Realm);
         Assert.Equal(1, view.Unread);
