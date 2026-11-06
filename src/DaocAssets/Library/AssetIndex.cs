@@ -127,6 +127,10 @@ public sealed class AssetIndex
         return null;
     }
 
+    /// <summary>Where <paramref name="name"/> is in the install, or null if not indexed.</summary>
+    public AssetLocation? Locate(string name) =>
+        _byName.TryGetValue(KeyFromAny(name), out AssetLocation loc) ? loc : null;
+
     /// <summary>True if the index has an entry for this name.</summary>
     public bool Contains(string name) => _byName.ContainsKey(KeyFromAny(name));
 

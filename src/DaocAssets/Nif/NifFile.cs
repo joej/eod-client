@@ -17,8 +17,18 @@ public static partial class NifFile
     private static readonly NifVersion V1010 = new(10, 1, 0, 0);
     private static readonly NifVersion V1020 = new(10, 2, 0, 0);
     private static readonly NifVersion V41012 = new(4, 1, 0, 12);   // TexDesc has Unknown1 up to here
+    private static readonly NifVersion V4210 = new(4, 2, 1, 0);     // NiSkinData's Has Vertex Weights from here
 
-    public static NifModel Read(ReadOnlySpan<byte> bytes)
+    public static NifModel Read(ReadOnlySpan<byte> bytes) => Read(bytes, figure: false);
+
+    /// <summary>
+    /// Reads a creature or character figure: as <see cref="Read(ReadOnlySpan{byte})"/>, and a 4.x figure
+    /// built from rigid parts hung under its bone nodes (giant.nif: no skin at all) also gets a skeleton,
+    /// each part bound wholly to its node, so the figure's animation clips move it.
+    /// </summary>
+    public static NifModel ReadFigure(ReadOnlySpan<byte> bytes) => Read(bytes, figure: true);
+
+    private static NifModel Read(ReadOnlySpan<byte> bytes, bool figure)
     {
         var c = new NifCursor(bytes);
         string header = c.LineString();
@@ -43,7 +53,7 @@ public static partial class NifFile
             throw new NifFormatException($"NIF version {version} is older than supported (4.1.0.1+).");
 
         int blockCount = checked((int)c.U32());
-        return ReadNetImmerse4x(bytes, version, blockCount);
+        return ReadNetImmerse4x(bytes, version, blockCount, figure);
     }
 
     // A rigid transform (rotation 3x3 + uniform scale + translation), applied to a point.
@@ -94,6 +104,11 @@ public static partial class NifFile
         public int[] Children = [];
         public float[] LodNear = [];  // NiLODNode -> each level's near extent (same order as Children)
         public int DataRef = -1;      // NiTriShape -> its NiTriShapeData/NiTriStripsData block
+        public int SkinRef = -1;      // NiTriShape -> its NiSkinInstance (-1: rigid)
+        public int SkinDataRef = -1;  // NiSkinInstance -> its NiSkinData
+        public int[] Bones = [];      // NiSkinInstance -> the bone node per skin bone
+        public NifTransform[] BoneBinds = [];          // NiSkinData -> each bone's bind transform
+        public (ushort Vertex, float Weight)[][] BoneWeights = [];   // NiSkinData -> each bone's vertex weights
         public int[] Props = [];      // NiTriShape -> its property refs (one is a NiTexturingProperty)
         public int BaseTextureRef = -1; // NiTexturingProperty -> its base NiSourceTexture block
         public int DarkTextureRef = -1, DarkUvSet;     // NiTexturingProperty dark slot (baked shading)
@@ -113,7 +128,7 @@ public static partial class NifFile
     // its type string (bodies aren't self-sized), parse the NiNode/NiTriShape transforms and refs,
     // walk from the scene root composing transforms, and bake them into the geometry each shape
     // points at. Verified against a 57-node/118-shape keep.
-    private static NifModel ReadNetImmerse4x(ReadOnlySpan<byte> bytes, NifVersion version, int blockCount)
+    private static NifModel ReadNetImmerse4x(ReadOnlySpan<byte> bytes, NifVersion version, int blockCount, bool figure = false)
     {
         Block[] blocks = IndexBlocks4x(bytes, blockCount);
 
@@ -154,7 +169,25 @@ public static partial class NifFile
                         b.Local = sx;
                         b.Props = props;
                         b.DataRef = c.I32();   // NiGeometry: Data ref (the geometry-data block)
+                        b.SkinRef = c.I32();   // Skin Instance ref (-1 when rigid)
                     }
+                    break;
+                case "NiSkinInstance":
+                    try
+                    {
+                        // 4.x (nif.xml): Data ref, Skeleton Root ptr, Num Bones, Bones ptrs; the Skin
+                        // Partition ref only comes in 10.2.
+                        b.SkinDataRef = c.I32();
+                        c.I32();
+                        uint nbones = c.U32();
+                        if (nbones > 1000) break;
+                        b.Bones = new int[nbones];
+                        for (int k = 0; k < b.Bones.Length; k++) b.Bones[k] = c.I32();
+                    }
+                    catch (NifFormatException) { b.Bones = []; }
+                    break;
+                case "NiSkinData":
+                    ReadSkinData4x(ref c, b, version);
                     break;
                 case "NiTexturingProperty":
                     ReadTexturingProperty(ref c, b, version);
@@ -186,7 +219,12 @@ public static partial class NifFile
         // into the geometry it references.
         var meshes = new List<NifMesh>();
         var seen = new HashSet<int>();
-        Walk4x(bytes, blocks, 0, Xform.Identity, seen, meshes);
+        // A figure or creature whose shapes are skinned to bones in this file: every node becomes a joint
+        // and skinned shapes keep their vertices in skin space, as the 10.1 path does (open question W40).
+        Skeleton4x? skeleton = figure || blocks.Any(x => x.Type is "NiTriShape" or "NiTriStrips" && SelfContained4x(blocks, x))
+            ? new Skeleton4x { RigidToNodes = figure } : null;
+        Walk4x(bytes, blocks, 0, Xform.Identity, seen, meshes, skeleton: skeleton);
+        skeleton?.Bind(blocks, meshes);
 
         // Fallback: bake any shape that is not in the root's hierarchy at all (a file whose root isn't
         // block 0, or a shape outside the hierarchy) at its own local transform, so we still get its
@@ -211,7 +249,8 @@ public static partial class NifFile
         if (meshes.Count == 0)
             throw new NifFormatException("No NiTriShapeData geometry found in NIF.");
 
-        return new NifModel { Version = version, Meshes = meshes, NodeWorlds = NodeWorlds4x(blocks) };
+        return new NifModel { Version = version, Meshes = meshes, NodeWorlds = NodeWorlds4x(blocks),
+            Joints = skeleton is not null && meshes.Any(m => m.SkinJoints is { Length: > 0 }) ? skeleton.Joints : [] };
     }
 
     // Every named node's world transform, walking every child from the root (LOD levels and helpers
@@ -269,12 +308,15 @@ public static partial class NifFile
     // its own of the same type.
     private static void Walk4x(ReadOnlySpan<byte> bytes, Block[] blocks, int index, Xform world,
         HashSet<int> seen, List<NifMesh> meshes, bool helper = false, int alpha = -1, int stencil = -1,
-        bool numberedHelper = false, int vertexColor = -1)
+        bool numberedHelper = false, int vertexColor = -1, Skeleton4x? skeleton = null, int parentJoint = -1)
     {
         if (index < 0 || index >= blocks.Length || !seen.Add(index))
             return;
         Block b = blocks[index];
         Xform w = world.Compose(b.Local);
+        int joint = -1;
+        if (skeleton is not null && b.Type is "NiNode" or "NiLODNode" or "NiBillboardNode")
+            joint = skeleton.Add(index, b.Name, parentJoint, ToMatrix(b.Local));
         bool underHelper = helper || IsHelperNodeName(b.Name) || IsHidden(b.Flags);
         bool underNumbered = numberedHelper || IsNumberedHelperName(b.Name);
         if (b.Type is "NiNode" or "NiLODNode" or "NiBillboardNode")
@@ -292,7 +334,7 @@ public static partial class NifFile
             int nodeVertexColor = FindProperty(blocks, b.Props, "NiVertexColorProperty", vertexColor);
             foreach (int child in children)
                 Walk4x(bytes, blocks, child, w, seen, meshes, underHelper, nodeAlpha, nodeStencil, underNumbered,
-                    nodeVertexColor);
+                    nodeVertexColor, skeleton, joint);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
         {
@@ -300,7 +342,13 @@ public static partial class NifFile
             if (geom is not null)
             {
                 string? texture = ShapeTexture(blocks, b);
-                meshes.Add(WithSurface(BakeTransform(geom, w, $"mesh{index}",
+                // A skinned shape's vertices stay in skin space: the skin's bones place them.
+                bool skinned = skeleton is not null && SelfContained4x(blocks, b);
+                if (skinned)
+                    skeleton!.Pending.Add((meshes.Count, index));
+                else if (skeleton is { RigidToNodes: true } && parentJoint >= 0)
+                    skeleton.Rigid.Add((meshes.Count, parentJoint, ToMatrix(world)));
+                meshes.Add(WithSurface(BakeTransform(geom, skinned ? Xform.Identity : w, $"mesh{index}",
                     texture, ShapeMaterialColor(blocks, b)), blocks, b, alpha, stencil, vertexColor)
                     with { Helper = underHelper || (underNumbered && texture is null) });
             }
@@ -889,5 +937,118 @@ public static partial class NifFile
             }
         }
         return false;
+    }
+
+    // ----- 4.x skins (open question W40): classic creatures such as zombie.nif (4.1.0.12) and the ogres -----
+
+    // An Xform as a row-vector matrix (p' = p * M), the 10.1 path's convention.
+    private static Matrix4x4 ToMatrix(Xform x) => new(
+        x.Rot[0] * x.Scale, x.Rot[3] * x.Scale, x.Rot[6] * x.Scale, 0,
+        x.Rot[1] * x.Scale, x.Rot[4] * x.Scale, x.Rot[7] * x.Scale, 0,
+        x.Rot[2] * x.Scale, x.Rot[5] * x.Scale, x.Rot[8] * x.Scale, 0,
+        x.Trans.X, x.Trans.Y, x.Trans.Z, 1);
+
+    // A shape skinned to distinct nodes of this file, with bind transforms for its bones.
+    private static bool SelfContained4x(Block[] blocks, Block shape)
+    {
+        if (shape.SkinRef < 0 || shape.SkinRef >= blocks.Length || blocks[shape.SkinRef] is not { Type: "NiSkinInstance" } skin)
+            return false;
+        return skin.Bones.Length > 0
+            && skin.Bones.All(i => i >= 0 && i < blocks.Length && blocks[i].Type == "NiNode")
+            && skin.Bones.Distinct().Count() == skin.Bones.Length
+            && skin.SkinDataRef >= 0 && skin.SkinDataRef < blocks.Length
+            && blocks[skin.SkinDataRef].BoneBinds.Length == skin.Bones.Length;
+    }
+
+    // NiSkinData (4.x, nif.xml): Skin Transform, Num Bones, Skin Partition ref, Has Vertex Weights (from
+    // 4.2.1.0; before it every bone lists its weights), then per bone: its bind transform, a bounding
+    // sphere, and its vertex weights (u16 vertex, f32 weight).
+    private static void ReadSkinData4x(ref NifCursor c, Block b, NifVersion version)
+    {
+        try
+        {
+            Gamebryo1010.SkinTransform(ref c);
+            uint bones = c.U32();
+            if (bones > 1000) return;
+            c.I32();
+            bool hasWeights = version < V4210 || c.U8() != 0;
+            var binds = new NifTransform[bones];
+            var weights = new (ushort, float)[bones][];
+            for (int i = 0; i < bones; i++)
+            {
+                binds[i] = Gamebryo1010.SkinTransform(ref c);
+                for (int k = 0; k < 4; k++) c.F32();   // bounding sphere
+                int nv = c.U16();
+                var list = new (ushort, float)[hasWeights ? nv : 0];
+                for (int v = 0; v < list.Length; v++)
+                    list[v] = (c.U16(), c.F32());
+                weights[i] = list;
+            }
+            (b.BoneBinds, b.BoneWeights) = (binds, weights);
+        }
+        catch (NifFormatException) { b.BoneBinds = []; b.BoneWeights = []; }
+    }
+
+    // The joints of a 4.x file (every node walked, parents first) and the skinned shapes waiting to be
+    // bound to them once the walk has seen every bone.
+    private sealed class Skeleton4x
+    {
+        public readonly List<NifJoint> Joints = [];
+        public readonly List<(int Mesh, int Shape)> Pending = [];
+        // A figure's rigid parts: (mesh, its parent node's joint, that node's world transform).
+        public readonly List<(int Mesh, int Joint, Matrix4x4 NodeWorld)> Rigid = [];
+        public bool RigidToNodes { get; init; }
+        private readonly Dictionary<int, int> _jointOf = [];
+
+        public int Add(int block, string name, int parent, Matrix4x4 local)
+        {
+            _jointOf[block] = Joints.Count;
+            Joints.Add(new NifJoint { Name = name, Parent = parent, Local = local });
+            return Joints.Count - 1;
+        }
+
+        // As the 10.1 builder: a vertex v is placed at v * BoneBind_i * BoneWorld_i, so bone i's inverse
+        // bind matrix is its NiSkinData bind transform; four strongest influences per vertex, renormalised.
+        public void Bind(Block[] blocks, List<NifMesh> meshes)
+        {
+            foreach ((int meshIndex, int shapeIndex) in Pending)
+            {
+                Block skin = blocks[blocks[shapeIndex].SkinRef];
+                Block data = blocks[skin.SkinDataRef];
+                NifMesh mesh = meshes[meshIndex];
+                var bones = new List<(int Joint, Matrix4x4 InverseBind)>();
+                var influences = new List<(int Bone, float Weight)>[mesh.Vertices.Length];
+                for (int i = 0; i < skin.Bones.Length; i++)
+                {
+                    if (!_jointOf.TryGetValue(skin.Bones[i], out int joint))
+                        continue;
+                    int bone = bones.Count;
+                    bones.Add((joint, NifFile.ToMatrix(data.BoneBinds[i])));
+                    foreach ((ushort v, float w) in data.BoneWeights[i])
+                        if (v < influences.Length && w > 0)
+                            (influences[v] ??= []).Add((bone, w));
+                }
+                var weights = new (int, float)[mesh.Vertices.Length][];
+                for (int v = 0; v < weights.Length; v++)
+                {
+                    var top = (influences[v] ?? []).OrderByDescending(x => x.Weight).Take(4).ToArray();
+                    float sum = top.Sum(x => x.Weight);
+                    weights[v] = top.Select(x => (x.Bone, x.Weight / sum)).ToArray();
+                }
+                meshes[meshIndex] = mesh with { SkinJoints = [.. bones], Skin = weights };
+            }
+            // A rigid part, baked to world, follows its node: one bone, weight 1, whose inverse bind is the
+            // node's world inverse (so in the bind pose the part stays where it was baked).
+            foreach ((int meshIndex, int joint, Matrix4x4 nodeWorld) in Rigid)
+            {
+                if (!Matrix4x4.Invert(nodeWorld, out Matrix4x4 inverse))
+                    continue;
+                NifMesh mesh = meshes[meshIndex];
+                var weights = new (int, float)[mesh.Vertices.Length][];
+                for (int v = 0; v < weights.Length; v++)
+                    weights[v] = [(0, 1f)];
+                meshes[meshIndex] = mesh with { SkinJoints = [(joint, inverse)], Skin = weights };
+            }
+        }
     }
 }

@@ -16,9 +16,9 @@ internal static partial class Cli
         if (spec.Version >= 3) { Console.Error.WriteLine($"figure: model {modelId} ({spec.Name}) is a Catacombs figure: use mpk cata"); return 2; }
 
         var index = AssetIndex.Load(indexPath);
-        byte[]? bytes = index.Read(spec.Nif);
-        if (bytes is null) { Console.Error.WriteLine($"figure: {spec.Nif} is not in the install index"); return 3; }
-        NifModel dressed = DaocAssets.Figures.MonsterFigure.Dress(NifFile.Read(bytes), spec);
+        byte[]? bytes = FigureFile(index, spec.Nif);
+        if (bytes is null) { Console.Error.WriteLine($"figure: {spec.Nif} is not among the install's figures"); return 3; }
+        NifModel dressed = DaocAssets.Figures.MonsterFigure.Dress(NifFile.ReadFigure(bytes), spec);
 
         var library = new AssetLibrary(index, libDir);
         foreach (string skin in spec.Skins.Values.Distinct(StringComparer.OrdinalIgnoreCase))
@@ -80,7 +80,7 @@ internal static partial class Cli
             if (spec.Version >= 3) { catacombs++; continue; }
             if (!figures.TryGetValue(spec.Nif, out NifModel? figure))
             {
-                try { figure = index.Read(spec.Nif) is byte[] b ? NifFile.Read(b) : null; }
+                try { figure = FigureFile(index, spec.Nif) is byte[] b ? NifFile.ReadFigure(b) : null; }
                 catch (NifFormatException) { figure = null; }
                 figures[spec.Nif] = figure;
             }
@@ -320,6 +320,26 @@ internal static partial class Cli
             if (gathered.Add(t) && library.GatherTexture(t) is null)
                 missing++;
         Console.WriteLine($"cata items: {items.Count} items with a Catacombs look, {missing} of their textures not in the install");
+    }
+
+    // A figure's NIF, only from the install's figures folder (loose or in an archive there). Names are looked
+    // up across the whole install, and a figure can share its name with a zone model: the index resolves
+    // giant.nif to zones/Nifs/GIANT.npk (a giant statue) rather than figures/Giant.NIF (the creature).
+    private static byte[]? FigureFile(AssetIndex index, string nif)
+    {
+        if (index.Locate(nif) is not { } loc)
+            return null;
+        string path = (loc.LoosePath ?? loc.Archive ?? "").Replace('\\', '/');
+        string root = index.Root.Replace('\\', '/').TrimEnd('/');
+        string rel = path.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? path[root.Length..] : path;
+        if (rel.StartsWith("/figures/", StringComparison.OrdinalIgnoreCase))
+            return index.Read(nif);
+        // The index keeps one place per name and preferred the zone statue: read the figures folder's own file.
+        string dir = Path.Combine(index.Root, "figures");
+        string? own = Directory.Exists(dir)
+            ? Directory.EnumerateFiles(dir).FirstOrDefault(f => string.Equals(Path.GetFileName(f), nif, StringComparison.OrdinalIgnoreCase))
+            : null;
+        return own is null ? null : File.ReadAllBytes(own);
     }
 
     // --gamedata gamedata.mpk --index index.json --library LIBDIR, all three required.

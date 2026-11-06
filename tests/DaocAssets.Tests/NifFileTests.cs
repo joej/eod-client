@@ -710,4 +710,28 @@ public sealed class NifFileTests
         Assert.Contains("mesh175", names);   // keepNear:0
         Assert.Equal(names.Length, names.Distinct().Count());
     }
+
+    // zombie.nif (NetImmerse 4.1.0.12, open question W40): one skinned body on a 54-node skeleton. Before 4.x
+    // skins were read it had no joints, so the client drew zombies as capsules. In the rest pose the skin must
+    // put every vertex where the file's own transforms put the shape (as the 10.1 figures do).
+    [LiveFact("live-nif/zombie-41012.nif")]
+    public void A4xSkinnedFigureGetsItsSkeletonAndHoldsTogetherInTheRestPose()
+    {
+        NifModel m = NifFile.ReadFigure(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "live-nif", "zombie-41012.nif")));
+        Assert.Equal(54, m.Joints.Count);
+        NifMesh body = Assert.Single(m.Meshes, x => x.Skin is not null && x.SkinJoints!.Length > 1);
+        Assert.All(body.Skin!, w => Assert.InRange(w.Sum(x => x.Item2), 0.999f, 1.001f));
+        System.Numerics.Vector3[] posed = m.Posed(body);
+        // A broken bind scatters the parts or lifts them off the ground.
+        float height = posed.Max(v => v.Z) - posed.Min(v => v.Z);
+        float width = posed.Max(v => v.X) - posed.Min(v => v.X);
+        float depth = posed.Max(v => v.Y) - posed.Min(v => v.Y);
+        // Measured: a T-pose 71.8 tall, 76.8 across the arms, 10.2 deep, feet at z 0.01.
+        Assert.InRange(height, 68f, 76f);
+        Assert.InRange(width, 72f, 82f);
+        Assert.InRange(depth, 5f, 15f);
+        Assert.InRange(posed.Min(v => v.Z), -1f, 1f);
+        // Without the figure read, the same file still has its skin (it is self-contained), so it keeps joints.
+        Assert.Equal(54, NifFile.Read(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "live-nif", "zombie-41012.nif"))).Joints.Count);
+    }
 }

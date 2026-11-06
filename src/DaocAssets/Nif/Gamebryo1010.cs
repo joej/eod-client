@@ -746,7 +746,7 @@ internal static class Gamebryo1010
     }
 
     // SkinTransform: Rotation (3x3), Translation, Scale.
-    private static NifTransform SkinTransform(ref NifCursor c)
+    internal static NifTransform SkinTransform(ref NifCursor c)
     {
         float[] rot = new float[9];
         for (int i = 0; i < 9; i++) rot[i] = c.F32();
