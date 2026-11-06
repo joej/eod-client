@@ -296,6 +296,13 @@ u8     health %          skipped
 4      zero
 ```
 
+**State flag pairs the server bans for.** OpenDAoC (`PlayerPositionUpdateHandler.ProcessStateFlags`)
+reads two of sitting, jumping and swimming together as a forged state: 0x18 riding (while not mounted)
+and 0x0C flying (without permission) ban the account and its IP when `ban_hackers` is on, with no GM
+exemption; 0x14 (playing dead while alive) is stripped. All three (0x1C) is climbing and allowed. With
+`ban_hackers` off (the default) the bits are stripped instead. `ClientSession.MoveToAsync` refuses
+these pairs, so a jump while swimming or sitting can't send both bits.
+
 The zone id is the zone containing the position. The real client knows it from its map data; we
 look it up in OpenDAoC's zone table (`src/DaocProtocol/World/zones.tsv`, from OpenDAoC-Database,
 GPL): zone offsets and sizes × 8192, half-open rectangle, first match.

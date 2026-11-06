@@ -781,4 +781,17 @@ public class ClientSessionTests
         log.Sent(ping);
         Assert.Equal(["C→S [F4] 19 bytes"], lines);
     }
+
+    [Theory]
+    [InlineData(0x18, "riding")]
+    [InlineData(0x0C, "flying")]
+    [InlineData(0x14, "dead")]
+    [InlineData(0x98, "riding")]    // a strafe bit doesn't hide it
+    [InlineData(0x00, null)]
+    [InlineData(0x08, null)]        // a jump: what our client sends in the air
+    [InlineData(0x04, null)]
+    [InlineData(0x10, null)]
+    [InlineData(0x1C, null)]        // climbing: all three, allowed
+    public void StateFlagPairsTheServerTakesAsForgedAreNamed(byte flags, string? forged) =>
+        Assert.Equal(forged, ClientSession.ForbiddenStateFlags(flags));
 }

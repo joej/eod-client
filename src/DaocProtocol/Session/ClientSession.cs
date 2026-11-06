@@ -350,6 +350,21 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// (4096 = 360°). The zone must still contain the new position; crossing a zone boundary needs
     /// a zone lookup the caller does not do yet (see roadmap M4), so this keeps the current zone.
     /// </summary>
+    /// <summary>
+    /// The name of the forged state <paramref name="stateFlags"/> spells, or null. OpenDAoC reads two of
+    /// sitting (0x10), jumping (0x08) and swimming (0x04) together as riding (0x18) while not mounted,
+    /// flying (0x0C) or playing dead (0x14); the first two ban the account and its IP when BAN_HACKERS is on,
+    /// with no GM exemption (PlayerPositionUpdateHandler.ProcessStateFlags). All three is climbing, allowed.
+    /// So a jump while swimming or sitting must not send both bits.
+    /// </summary>
+    public static string? ForbiddenStateFlags(byte stateFlags) => (stateFlags & 0x1C) switch
+    {
+        0x18 => "riding",
+        0x0C => "flying",
+        0x14 => "dead",
+        _ => null,
+    };
+
     public async Task MoveToAsync(float x, float y, float z, ushort heading, float speed = 0,
         CancellationToken cancellationToken = default) =>
         await MoveToAsync(x, y, z, heading, speed, verticalSpeed: 0, landed: false, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -359,11 +374,14 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// speed in region units per second (negative falling: OpenDAoC's FallSpeed) and, on the one update that
     /// lands from a fall, <paramref name="landed"/>: the server then charges fall damage from that speed.
     /// <paramref name="stateFlags"/> is 0xA9's state byte, which other players see (retail: 0x08 in the
-    /// air, 0x04 swimming, 0x10 sitting).
+    /// air, 0x04 swimming, 0x10 sitting). Throws <see cref="ArgumentException"/> for a pair of those that
+    /// OpenDAoC takes as a forged packet (<see cref="ForbiddenStateFlags"/>).
     /// </summary>
     public async Task MoveToAsync(float x, float y, float z, ushort heading, float speed, float verticalSpeed, bool landed,
         byte stateFlags = 0, CancellationToken cancellationToken = default)
     {
+        if (ForbiddenStateFlags(stateFlags) is { } forged)
+            throw new ArgumentException($"State flags 0x{stateFlags:X2} read as {forged} on the server, which bans for it.", nameof(stateFlags));
         await _positionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
