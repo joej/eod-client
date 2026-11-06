@@ -27,6 +27,14 @@ public readonly record struct ModelBounds(Vector3 Min, Vector3 Max, Vector3[]? S
 
 public enum CheckSeverity { Warning, Error }
 
+/// <summary>A reviewed finding from the known list: a model (case-insensitive) and kind, optionally at one spot.</summary>
+public sealed record KnownFinding(string Glb, string Kind, string Reason, (float X, float Y)? At = null)
+{
+    public bool Matches(ZoneFinding f) =>
+        string.Equals(Glb, f.Placement.Glb, StringComparison.OrdinalIgnoreCase) && Kind == f.Kind
+        && (At is not (float x, float y) || (Math.Abs(f.Placement.X - x) <= 1 && Math.Abs(f.Placement.Y - y) <= 1));
+}
+
 public sealed record ZoneFinding(CheckSeverity Severity, string Kind, ZonePlacement Placement, string Detail)
 {
     /// <summary>Why this finding was reviewed and believed intended (tools/zonecheck-known.txt), or null.</summary>
@@ -199,34 +207,42 @@ public static class ZoneCheck
     /// <summary>
     /// Reads the reviewed-findings list: lines "model.glb | kind | reason" ('#' comments). A finding
     /// whose model and kind match is reported as known, not counted, so a clean check means "nothing
-    /// new" rather than "nothing we haven't got used to".
+    /// new" rather than "nothing we haven't got used to". "model.glb @ X Y" (region-global, as the
+    /// report prints it) matches only the placement at that spot, within a unit: for a single
+    /// misplaced object in the data, without hiding the same fault anywhere else.
     /// </summary>
-    public static Dictionary<(string Glb, string Kind), string> ReadKnown(string text)
+    public static IReadOnlyList<KnownFinding> ReadKnown(string text)
     {
-        var known = new Dictionary<(string, string), string>(new KnownComparer());
+        var known = new List<KnownFinding>();
         foreach (string raw in text.Split('\n'))
         {
             string line = raw.Split('#')[0].Trim();
             string[] f = line.Split('|', StringSplitOptions.TrimEntries);
-            if (f.Length == 3 && f[0].Length > 0)
-                known[(f[0], f[1])] = f[2];
+            if (f.Length != 3 || f[0].Length == 0)
+                continue;
+            string[] at = f[0].Split('@', StringSplitOptions.TrimEntries);
+            (float, float)? where = null;
+            if (at.Length == 2)
+            {
+                string[] xy = at[1].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (xy.Length != 2
+                    || !float.TryParse(xy[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float x)
+                    || !float.TryParse(xy[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float y))
+                    throw new FormatException($"Known finding \"{f[0]}\": expected \"model.glb @ X Y\".");
+                where = (x, y);
+            }
+            known.Add(new KnownFinding(at[0], f[1], f[2], where));
         }
         return known;
     }
 
-    private sealed class KnownComparer : IEqualityComparer<(string, string)>
-    {
-        public bool Equals((string, string) a, (string, string) b) =>
-            string.Equals(a.Item1, b.Item1, StringComparison.OrdinalIgnoreCase) && a.Item2 == b.Item2;
-        public int GetHashCode((string, string) k) => HashCode.Combine(k.Item1.ToLowerInvariant(), k.Item2);
-    }
-
-    /// <summary>Marks findings that match the reviewed list.</summary>
-    public static ZoneCheckReport ApplyKnown(ZoneCheckReport report, IReadOnlyDictionary<(string Glb, string Kind), string> known) =>
+    /// <summary>Marks findings that match the reviewed list (the first matching entry gives the reason).</summary>
+    public static ZoneCheckReport ApplyKnown(ZoneCheckReport report, IReadOnlyList<KnownFinding> known) =>
         new()
         {
             Placements = report.Placements,
-            Findings = report.Findings.Select(f => known.TryGetValue((f.Placement.Glb, f.Kind), out string? why) ? f with { Known = why } : f).ToList(),
+            Findings = report.Findings.Select(f =>
+                known.FirstOrDefault(k => k.Matches(f)) is KnownFinding k ? f with { Known = k.Reason } : f).ToList(),
         };
 
     /// <summary>A converted model's bounds as the client draws it: every triangle evaluated through

@@ -103,8 +103,8 @@ public sealed class TerrainTests
             // texXX-YY is column (cell X), then row (cell Y). Verified on Camelot Hills (2026-11-02):
             // only this reading makes the 64 tiles continue across their edges, and the assembled
             // ground then matches the zone's shademap.pcx (r = 0.76; transposed or mirrored ~0).
-            var east = tiles.Single(t => t.Vertices.All(v => v.X >= 2 * 8192f / 7 - 1 && v.X <= 4 * 8192f / 7 + 1)
-                                         && t.Vertices.All(v => -v.Y <= 2 * 8192f / 7 + 1));
+            var east = tiles.Single(t => t.Vertices.All(v => v.X >= 2 * 8192f / 8 - 1 && v.X <= 4 * 8192f / 8 + 1)
+                                         && t.Vertices.All(v => -v.Y <= 2 * 8192f / 8 + 1));
             Assert.Equal("tex01-00.dds", east.TextureFile);
 
             foreach (var t in tiles)
@@ -159,10 +159,10 @@ public sealed class TerrainTests
             SharpGLTF.Schema2.ModelRoot gltf = DaocAssets.Nif.GltfExporter.BuildScene(model).ToGltf2();
 
             // The plane in glTF axes: height rises 8 units per cell east (+X) and 16 per cell south (+Z).
-            float step = 8192f / 7;
+            float step = 8192f / 8;                 // 8 cells, 1024 units apart (open question W20)
             var expected = System.Numerics.Vector3.Normalize(new(-8 / step, 1, -16 / step));
-            // The tiled mesh runs one cell past the heightmap (its last row and column take the edge's
-            // heights: open question W20), so the plane holds only inside the map.
+            // The tiled mesh's last row and column, at the zone's edge, are one cell past the heightmap and
+            // take the edge's heights (open question W20), so the plane holds only up to the last cell.
             float lastX = (16384 + 7 * step) * 0.025f + 0.01f, lastZ = (8192 + 7 * step) * 0.025f + 0.01f;
             int triangles = 0;
             foreach (var (a, b, c, _) in SharpGLTF.Schema2.Toolkit.EvaluateTriangles(gltf.DefaultScene))
@@ -239,10 +239,11 @@ public sealed class TerrainTests
         {
             File.WriteAllBytes(tmp, mpk);
             ZoneTerrain terrain = ZoneTerrain.Read(tmp, sizeX: 1, sizeY: 1);
-            float step = 8192f / 7;                                  // 8 cells span the zone's 8192 units
+            float step = 8192f / 8;                                  // 8 cells, 1024 units apart (W20)
             Assert.Equal(0f, terrain.HeightAt(0, 5000), 3);
             Assert.Equal(3 * 8f, terrain.HeightAt(3 * step, 100), 3);  // on cell 3
             Assert.Equal(3.5f * 8f, terrain.HeightAt(3.5f * step, 4000), 3);   // halfway to cell 4
+            Assert.Equal(7 * 8f, terrain.HeightAt(7.5f * step, 0), 3); // the zone's last cell: the edge's height
             Assert.Equal(7 * 8f, terrain.HeightAt(99999, 0), 3);      // clamped at the far edge
         }
         finally

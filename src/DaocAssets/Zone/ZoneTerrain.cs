@@ -28,6 +28,16 @@ public sealed class ZoneTerrain
     public int RegionHeight { get; }
     public int Cells => _terrain.Width; // square, == Height
 
+    /// <summary>
+    /// Region units between adjacent heightmap cells: the zone's width over the cell count (256 for an
+    /// 8-sector zone), so cell 0 is at the zone's corner and the 256th cell at 65,280, one cell short of
+    /// the next zone. Measured 2026-11-05 (open question W20): over the 882 objects in 8 x 8 outdoor
+    /// zones that store their own Z, 253 match this ground exactly against 128 with 65,536/255, and in
+    /// the zone's far quarter the median gap is 3 units against 28. It also makes each 32-cell texture
+    /// tile one 8,192-unit sector.
+    /// </summary>
+    public float CellSize => (float)RegionWidth / Cells;
+
     private ZoneTerrain(Pcx terrain, Pcx offset, int scaleFactor, int offsetFactor, int sizeX, int sizeY)
     {
         if (terrain.Width != offset.Width || terrain.Height != offset.Height)
@@ -61,12 +71,13 @@ public sealed class ZoneTerrain
 
     /// <summary>
     /// Ground height (region Z) at a zone-local position (region units from the zone's corner),
-    /// interpolated between the four surrounding heightmap cells; outside the map, the nearest edge.
+    /// interpolated between the four surrounding heightmap cells; past the last cell (the zone's last
+    /// 256 units) and outside the map, the nearest edge.
     /// </summary>
     public float HeightAt(float localX, float localY)
     {
         int n = Cells;
-        float step = (float)RegionWidth / (n - 1);
+        float step = CellSize;
         float fx = Math.Clamp(localX / step, 0, n - 1), fy = Math.Clamp(localY / step, 0, n - 1);
         int x0 = Math.Min((int)fx, n - 2), y0 = Math.Min((int)fy, n - 2);
         float tx = fx - x0, ty = fy - y0;
@@ -88,8 +99,8 @@ public sealed class ZoneTerrain
     public System.Numerics.Vector3 NormalAtCell(int cx, int cy)
     {
         int n = Cells;
-        float step = (float)RegionWidth / (n - 1);
-        // The tiled mesh's last row and column sit one cell past the map (heights clamp to the edge);
+        float step = CellSize;
+        // The tiled mesh's last row and column sit at the zone's edge, one cell past the map (heights clamp to the edge);
         // without clamping here their differences would be 0/0.
         cx = Math.Clamp(cx, 0, n - 1);
         cy = Math.Clamp(cy, 0, n - 1);
@@ -130,7 +141,7 @@ public sealed class ZoneTerrain
             return [BuildMesh(offsetX, offsetY)];
 
         int cellsPerTile = n / tiles;            // 256 / 8 = 32 cells (quads) per tile
-        float step = (float)RegionWidth / (n - 1); // region units between adjacent cells
+        float step = CellSize;                   // region units between adjacent cells
         var meshes = new List<Nif.NifMesh>(tiles * tiles);
 
         for (int tr = 0; tr < tiles; tr++)       // tile row  (cell-Y block)
@@ -191,13 +202,14 @@ public sealed class ZoneTerrain
     /// <summary>
     /// Builds the terrain as a grid mesh in region-global coordinates (the zone's offset added), so
     /// it sits in the same space as placed objects and the player. One vertex per heightmap cell,
-    /// two triangles per cell quad. UVs span 0..1 across the zone (for a future terrain texture).
+    /// two triangles per cell quad, so it stops one cell short of the far edges (the tiled mesh doesn't).
+    /// UVs span 0..1 across the zone (for a future terrain texture).
     /// Coordinates are region units; the Godot side applies the usual region→Godot scale and axis map.
     /// </summary>
     public Nif.NifMesh BuildMesh(int offsetX, int offsetY)
     {
         int n = _terrain.Width;                 // cells per side (square)
-        float step = (float)RegionWidth / (n - 1); // region units between adjacent cells
+        float step = CellSize;                  // region units between adjacent cells
         var verts = new System.Numerics.Vector3[n * n];
         var uvs = new System.Numerics.Vector2[n * n];
 
@@ -209,7 +221,7 @@ public sealed class ZoneTerrain
             float y = offsetY + cy * step;
             float z = HeightAtCell(cx, cy);
             verts[i] = new System.Numerics.Vector3(x, y, z);
-            uvs[i] = new System.Numerics.Vector2(cx / (float)(n - 1), cy / (float)(n - 1));
+            uvs[i] = new System.Numerics.Vector2(cx / (float)n, cy / (float)n);
         }
 
         // Two triangles per cell. Winding is chosen so the exporter's Z-up→Y-up flip yields an

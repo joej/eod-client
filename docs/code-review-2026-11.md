@@ -37,9 +37,6 @@ unchanged; only the live counters in the status and layer panels differ between 
 - **Measure before caching archives in `AssetIndex`**: `Read` reopens the archive for every asset.
   Time a zone conversion; keep archives open (making `AssetIndex` disposable, about nine call sites
   in `AssetExtract`) only if it is slow.
-- **Unexplained zone-check errors** (there before this review, not in `tools/zonecheck-known.txt`):
-  zone 107 Vanern Swamp, `Outcrop1.glb` x4 under the ground (and x2 floating); zone 334 Midgard Event,
-  `rockrandom3.glb` x1 under the ground. `make check-zones` fails on them. Fix or explain each one.
 
 ### 2. Lower priority
 

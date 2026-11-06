@@ -104,4 +104,17 @@ public sealed class ZoneCheckTests
         // A known model with a different kind of fault is still reported.
         Assert.Equal(1, ZoneCheck.ApplyKnown(Run((_, _) => 1000, At(0, glb: "raft1.glb")), known).Errors);
     }
+
+    [Fact]
+    public void AKnownFindingWithAPositionMatchesOnlyThatPlacement()
+    {
+        // One misplaced object in the data is listed by where it is; the same model elsewhere still counts.
+        var known = ZoneCheck.ReadKnown("cube.glb @ 4000 4000 | under the ground | buried in the data\n");
+        ZoneCheckReport r = ZoneCheck.ApplyKnown(
+            Run((_, _) => 1000, At(0), At(0, x: 4100)), known);   // both buried
+        Assert.Equal(1, r.KnownCount);
+        Assert.Equal(1, r.Errors);
+        Assert.Equal(4100, Assert.Single(r.Findings, f => f.Known is null).Placement.X);
+        Assert.Throws<FormatException>(() => ZoneCheck.ReadKnown("cube.glb @ 4000 | floating | no y\n"));
+    }
 }
