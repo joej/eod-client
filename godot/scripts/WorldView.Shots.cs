@@ -87,6 +87,20 @@ public partial class WorldView
                 _ = SendTravel(command);
             };
         }
+        // --npc MODEL[,MODEL...] spawns Albion NPCs with those models 5 m apart in front of the character, through the
+        // same path a server's 0xDA takes (OnNpcSpawned): to check a creature as the game draws it, offline.
+        int npcArg = System.Array.IndexOf(args, "--npc");
+        if (npcArg >= 0 && npcArg + 1 < args.Length)
+        {
+            string[] models = args[npcArg + 1].Split(',');
+            for (int k = 0; k < models.Length; k++)
+                if (ushort.TryParse(models[k], out ushort model))
+                {
+                    float x = _world.Position.X + 200 * (k - (models.Length - 1) / 2f), y = _world.Position.Y - 300;
+                    OnNpcSpawned(new DaocProtocol.Packets.NpcCreate((ushort)(60000 + k), 0, 0, (ushort)_world.Position.Z,
+                        (uint)x, (uint)y, model, 50, 1, 0x40, $"npc {model}", ""));
+                }
+        }
         // --drop METRES lifts the character that far once the world is up, to check falling and landing.
         int drop = System.Array.IndexOf(args, "--drop");
         if (drop >= 0 && drop + 1 < args.Length && float.TryParse(args[drop + 1], System.Globalization.NumberStyles.Float,
