@@ -60,7 +60,7 @@ public partial class WorldView
         Vector3 pos = ToGodot(p.X, p.Y, p.Z);
         // Drawn like your own character (its model id's Catacombs figure); without one, a capsule in a
         // brighter tint so other players read as players, not mobs.
-        SpawnEntity(p.ObjectId, pos, YawFromHeading(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f), p.Model, look: p.Look);
+        SpawnEntity(p.ObjectId, pos, YawFromHeading(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f), DaocProtocol.Packets.PlayerModel.Id(p.Model), look: p.Look);
     }
 
     private void OnObjectRemoved(ushort objectId)
@@ -302,7 +302,7 @@ public partial class WorldView
         bool hoodUp, bool cloakHidden, bool helmHidden, byte activeWeapons, bool drawn)
     {
         string lib = _libraryPath ?? "";
-        string text = ApplyLook(figure, model, look) + Dress(figure, model, worn, hoodUp, cloakHidden);
+        string text = ApplyLook(figure, model, look) + Dress(figure, model, look, worn, hoodUp, cloakHidden);
         if (_cataFig3 is not null && _cataFig3.TryGetValue(model, out int fig3))
             text += FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_gear.json"), lib.PathJoin("models").PathJoin("colours.json"),
                 lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, drawn, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib);
@@ -310,13 +310,13 @@ public partial class WorldView
     }
 
     // Dresses a player's Catacombs figure in worn items (FigureLook.Dress); a description for the log.
-    private string Dress(Node3D figure, ushort model, IReadOnlyList<WornItem> worn, bool hoodUp, bool cloakHidden)
+    private string Dress(Node3D figure, ushort model, CharacterLook look, IReadOnlyList<WornItem> worn, bool hoodUp, bool cloakHidden)
     {
         string lib = _libraryPath ?? "";
         _cataFig3 ??= ReadCataFigures(lib.PathJoin("models").PathJoin("catacombs.csv"));
         return _cataFig3.TryGetValue(model, out int fig3)
             ? FigureLook.Dress(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_items.json"),
-                lib.PathJoin("models").PathJoin("cata_models.json"), lib.PathJoin("models").PathJoin("colours.json"), model, worn, hoodUp, cloakHidden,
+                lib.PathJoin("models").PathJoin("cata_models.json"), lib.PathJoin("models").PathJoin("colours.json"), model, look, worn, hoodUp, cloakHidden,
                 lib.PathJoin("overrides"), lib.PathJoin("textures"), lib)
             : "";
     }

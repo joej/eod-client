@@ -24,7 +24,7 @@ public partial class CharacterScreen
             _status.Text = "Entering the world…";
             WorldPosition world = await _session.EnterWorldAsync(_listedRealm, slot);
             CharacterSummary? entered = _listed.FirstOrDefault(c => c.Slot == slot);
-            _playerModel = entered?.Model ?? 0;
+            _playerModel = entered is null ? (ushort)0 : PlayerModel.Id(entered.Model);
             _playerLook = entered?.Look ?? default;
             _playerWorn = entered?.Worn ?? [];
             _playerHoodUp = entered?.HoodUp ?? false;

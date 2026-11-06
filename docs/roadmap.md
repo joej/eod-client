@@ -242,8 +242,11 @@ become real figures:
   Seen live: Eodarms as the Catacombs Briton in the City of Camelot. **Appearance (2026-11-04):** the
   character list's and 0x4B's appearance bytes (`CharacterLook`) pick the face, eye colour, hair style and
   hair colour from the race's options (`models/fig3_<n>.json`, every hair style in the figure), and the
-  four face sliders drive the head's morph targets (all 36 races; each slider's feature found by its code
-  pair in the head's "FM" labels). **Worn items (2026-11-04):** players wear their body, arms, legs,
+  four face sliders and the mood drive the head's morph targets. **Retail's reading (2026-11-06, W30):**
+  the bytes as retail's creator stores them, the morph targets by their position in the head, and the skin
+  tone as retail draws it (the material colour on the head and the model's bare-skin limbs, with a faint
+  untinted glow on every part). A character made in the retail creator is drawn by its model id (the field
+  also carries its body size). **Worn items (2026-11-04):** players wear their body, arms, legs,
   gloves, boots and cloak (0x15 for others, the character list for you; `objects.csv`'s Catacombs columns;
   robes on the long body; hood up). One figure per race and sex (`cata_fig<N>.glb`, 36 in all, 58 MB)
   carries every mesh variant; each model id's own skins are in `cata_models.json`. **Helms and weapons
@@ -255,8 +258,8 @@ become real figures:
   updates (S→C 0xA9 / 0xBA), which now also move them. Seen live: Eodarms drawing his sword in the City of
   Camelot. **Dyes and emblems (2026-11-05):** armour, cloaks, helms and weapons wear their dye
   (`tints.csv`), and cloaks and shields their guild emblem: the logo over a two-colour pattern on the item's
-  own surface (`models/colours.json`). Not yet: skin tone (W30), mood, tattoos, NPC gear on classic figures
-  (W31, W33), swings and other combat animation (M10).
+  own surface (`models/colours.json`). Not yet: tattoos, the creator's outfit (W38), NPC gear on classic
+  figures (W31, W33), swings and other combat animation (M10).
 
 **M7c — strafe (small, but MVP).** ~~Done 2026-10-31~~ (commit 87c7d90). Add strafe-left/right (Q/E) to the existing WASD + turn rig: with
 the mouse-chase camera, forward + strafe is how you actually navigate. A couple of input reads and a

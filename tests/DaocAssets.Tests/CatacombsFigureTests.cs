@@ -21,6 +21,7 @@ public sealed class CatacombsFigureTests
         var r = Enumerable.Repeat("", 82).ToArray();
         (r[0], r[1], r[2]) = (id.ToString(), name, "206");
         (r[67], r[68], r[70], r[76], r[81]) = (cataNif, body, head, hair, "110");
+        (r[78], r[79]) = ("1", "1");     // Cata Tint Arms, hands (a Briton's); Legs (80) empty
         return string.Join(',', r);
     }
 
@@ -53,6 +54,7 @@ public sealed class CatacombsFigureTests
     {
         CataSpec spec = Tables().ResolveCatacombs(32)!;
         Assert.Equal(("Cata Briton Male", 1, "bri_m_skeleton.nif", 1.1f), (spec.Name, spec.SkeletonArchive, spec.Skeleton, spec.Scale));
+        Assert.Equal(["arms", "gloves"], spec.TintedSlots);   // bare forearms and hands take the skin tone
         Assert.Equal(
             [
                 new CataPart(1, 3, "Body02_BC_m.nif", "CthBody02_ss_bri_M.dds"),   // the skin's 02: body variant 2
@@ -130,21 +132,17 @@ public sealed class CatacombsFigureTests
     }
 
     [Fact]
-    public void EachSliderTakesTheHeadsMorphPairForItsFeature()
+    public void SlidersDriveMorphTargetsByTheirPositionInTheHead()
     {
-        // bri_m_head01's codes in file order: eyes, nose, lips, jaw, then four moods.
-        int[] briton = [3, 4, 1, 2, 5, 6, 7, 8, 21, 22, 23, 24];
-        Assert.Equal(
-            [new CataSlider("Nose", 2, 3), new CataSlider("Eyes", 0, 1), new CataSlider("Lips", 4, 5), new CataSlider("Jaw", 6, 7)],
-            CatacombsFigure.Sliders(["Nose", "Eyes", "Lips", "Jaw"], briton));
-        // dwa_m_head01: nose width (11/12) before ears (9/10), as its slider list has them.
-        int[] dwarf = [3, 4, 1, 2, 11, 12, 9, 10, 21, 22, 23, 24];
-        Assert.Equal([4, 6], CatacombsFigure.Sliders(["Nose Length", "Eyes", "Nose Width", "Ears"], dwarf).Skip(2).Select(x => x.Low));
-        // elf_m_head01 says "Jaw" but carries lips (5/6): the head's unused pair stands in.
-        int[] elf = [3, 4, 1, 2, 5, 6, 9, 10, 21, 22, 23, 24];
-        Assert.Equal(new CataSlider("Jaw", 4, 5), CatacombsFigure.Sliders(["Nose", "Eyes", "Jaw", "Ears"], elf)[2]);
-        // Unlabelled head: no slider reaches a target.
-        Assert.All(CatacombsFigure.Sliders(["Nose", "Eyes"], new int[12]), sl => Assert.Equal((-1, -1), (sl.Low, sl.High)));
+        // The retail creator's Testjoe (open question W30): Nose 0, Eyes 8, Lips 2, Jaw 6, Mood 0. Retail
+        // drives target 4 fully (nose low end), 1 fully (eyes high end), 6 and 7 halfway, 11 fully (mood).
+        float[] w = new float[12];
+        foreach ((int morph, float weight) in CatacombsFigure.MorphWeights([0, 8, 2, 6, 0]))
+            w[morph] = weight;
+        Assert.Equal([1, 0, 0, 1, 0, 0.5f, 0.5f, 0, 0, 0, 1, 0], w);
+        // All neutral: nothing moves. Every target is listed, so a previous look's weights are cleared.
+        Assert.All(CatacombsFigure.MorphWeights([4, 4, 4, 4, 4]), m => Assert.Equal(0, m.Weight));
+        Assert.Equal(12, CatacombsFigure.MorphWeights([4, 4, 4, 4, 4]).Count);
     }
 
     public static IEnumerable<object[]> BritonHead()

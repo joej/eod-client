@@ -3,8 +3,8 @@
 // A player's Catacombs appearance on its figure (roadmap M7b): the character's appearance bytes
 // (DaocProtocol CharacterLook: face, hair style and colour, eye colour, skin tone) picked from the
 // race's options file, models/fig3_<n>.json, which mpk figures writes from the install's fig3 tables.
-// The face sliders drive the head's morph targets (models/fig3_<n>.json "sliders": each slider's low and
-// high target). Not yet: the skin tone (read, not drawn: open question W30), mood, tattoos.
+// The face sliders and mood drive the head's morph targets by position, and the skin tone tints the head as
+// retail does (open question W30). Not yet: tattoos (fig3decalmap), the Vampiir look.
 
 using DaocProtocol.Packets;
 using Godot;
@@ -28,11 +28,12 @@ public static class FigureLook
     /// gloves and boots take mesh 3; under 8 the arms hide and the gloves take mesh 3 (the client's rule, as
     /// published by OfflineDAoC, GPL-3.0). A cloak shows only when worn and not hidden; with the hood up,
     /// its mesh 2. A variant the race lacks falls back to the default. Each piece wears its item's dye
-    /// (<see cref="ItemPaint.Dye"/>, models/colours.json), and a cloak its guild emblem. Returns a description
-    /// for the log.
+    /// (<see cref="ItemPaint.Dye"/>, models/colours.json), and a cloak its guild emblem. A bare limb the model marks
+    /// as skin (cata_models.json "tint": arms, gloves, legs) takes the character's skin tone; every other part is
+    /// white, with retail's figure material (<see cref="Tinted"/>; open question W30). Returns a description for the log.
     /// </summary>
     public static string Dress(Node3D figure, string optionsPath, string itemsPath, string modelsPath, string coloursPath, int model,
-        System.Collections.Generic.IReadOnlyList<WornItem> worn, bool hoodUp, bool cloakHidden, params string[] dirs)
+        CharacterLook look, System.Collections.Generic.IReadOnlyList<WornItem> worn, bool hoodUp, bool cloakHidden, params string[] dirs)
     {
         if (Options(optionsPath) is not { } o)
             return "";
@@ -46,6 +47,11 @@ public static class FigureLook
         var have = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<int>>();
         foreach (var p in o.GetProperty("variants").EnumerateObject())
             have[p.Name] = p.Value.EnumerateArray().Select(x => x.GetInt32()).ToHashSet();
+        var tinted = row is { } rt && rt.TryGetProperty("tint", out var tl)
+            ? tl.EnumerateArray().Select(x => x.GetString() ?? "").ToHashSet() : [];
+        var tones = o.GetProperty("skins");
+        Color? skin = look.SkinTone < tones.GetArrayLength() && tones[look.SkinTone] is var st && st.ValueKind == System.Text.Json.JsonValueKind.Array
+            ? new Color(st[0].GetSingle(), st[1].GetSingle(), st[2].GetSingle()) : null;
         foreach (var p in (row is { } rd && rd.TryGetProperty("defaults", out var md) ? md : o.GetProperty("defaults")).EnumerateObject())
             chosen[p.Name] = p.Value.GetInt32();
         chosen["cloak"] = 0;
@@ -97,23 +103,25 @@ public static class FigureLook
                 continue;
             string slot = m.Groups[1].Value;
             mi.Visible = int.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture) == chosen.GetValueOrDefault(slot);
-            if (!mi.Visible || !textures.TryGetValue(slot, out string? texName))
-                continue;
-            if (!loaded.TryGetValue(texName, out ImageTexture? tex))
-                loaded[texName] = tex = ModelTexturing.Load(System.IO.Path.GetFileNameWithoutExtension(texName), dirs);
             // From the imported material each time, so a dye or emblem taken off doesn't linger.
-            if (tex is null || mi.Mesh?.SurfaceGetMaterial(0) is not BaseMaterial3D original)
+            if (!mi.Visible || mi.Mesh?.SurfaceGetMaterial(0) is not BaseMaterial3D original)
                 continue;
+            ImageTexture? tex = null;
+            if (textures.TryGetValue(slot, out string? texName) && !loaded.TryGetValue(texName, out tex))
+                loaded[texName] = tex = ModelTexturing.Load(System.IO.Path.GetFileNameWithoutExtension(texName), dirs);
             WornItem? by = itemOf.TryGetValue(slot, out WornItem it) ? it : null;
-            Color dye = (by is { } d ? ItemPaint.Dye(coloursPath, d.Dye) : null) ?? Colors.White;
-            if (slot == "cloak" && by?.Emblem is { } emblem)
+            if (slot == "cloak" && by?.Emblem is { } emblem && tex is not null)
             {
-                mi.MaterialOverride = ItemPaint.Material(coloursPath, tex, emblem, itemLayout: false, original.AlbedoColor, dirs);
+                mi.MaterialOverride = ItemPaint.Material(coloursPath, tex, emblem, itemLayout: false, Colors.White, dirs);
                 continue;
             }
+            // Retail's figure material: the item's dye, else the skin tone on a bare limb, else white.
+            Color colour = by is { } d ? ItemPaint.Dye(coloursPath, d.Dye) ?? Colors.White
+                : skin is { } tone && tinted.Contains(slot) ? tone : Colors.White;
             var mat = (BaseMaterial3D)original.Duplicate();
-            mat.AlbedoTexture = tex;
-            mat.AlbedoColor = original.AlbedoColor * dye;
+            if (tex is not null)
+                mat.AlbedoTexture = tex;
+            Tinted(mat, colour);
             mi.MaterialOverride = mat;
         }
         return " wearing " + string.Join(" ", chosen.Where(kv => kv.Value > 0)
@@ -297,11 +305,14 @@ public static class FigureLook
     private static readonly System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement?> Looks = new();
 
     /// <summary>
-    /// Dresses a Catacombs figure in a character's appearance: the chosen hair style shows (the other
-    /// styles hide; none for a bald style), wearing its colour's texture and tint; the head wears the
-    /// chosen face texture with the eye colour texture multiplied over it (same UVs). Materials are per-instance copies. An index the race doesn't offer keeps the figure's own.
-    /// <paramref name="optionsPath"/> is the race's models/fig3_<n>.json (mpk figures); <paramref name="dirs"/>
-    /// are searched for textures. Returns a short description for the log ("" if the figure has no options).
+    /// Dresses a Catacombs figure in a character's appearance (open question W30, retail's reading): the
+    /// chosen hair style shows (hair style 0: none; the other styles hide), wearing its colour's texture and
+    /// tint; the head wears the chosen face texture with the eye colour texture multiplied over it (white but
+    /// for the iris, on the same UVs) and the skin tone; the face sliders and the mood drive the head's morph
+    /// targets (<see cref="DaocAssets.Figures.CatacombsFigure.MorphWeights"/>). Materials are per-instance
+    /// copies. An index the race doesn't offer keeps the figure's own. <paramref name="optionsPath"/> is the
+    /// race's models/fig3_&lt;n&gt;.json (mpk figures); <paramref name="dirs"/> are searched for textures.
+    /// Returns a short description for the log ("" if the figure has no options).
     /// </summary>
     public static string Apply(Node3D figure, string optionsPath, CharacterLook look, params string[] dirs)
     {
@@ -313,13 +324,16 @@ public static class FigureLook
         ImageTexture? Tex(System.Text.Json.JsonElement? name) =>
             name?.GetString() is { } n ? ModelTexturing.Load(System.IO.Path.GetFileNameWithoutExtension(n), dirs) : null;
 
+        // Hair styles count from 1 ("hair"[s] is style s + 1); 0 is no hair at all.
         System.Text.Json.JsonElement hairList = o.GetProperty("hair");
-        int style = look.Hair < hairList.GetArrayLength() ? look.Hair : o.GetProperty("default_hair").GetInt32();
-        System.Text.Json.JsonElement chosen = hairList[style];
-        string? node = chosen.GetProperty("node").GetString();
-        System.Text.Json.JsonElement? colour = Pick(chosen.GetProperty("colours"), look.HairColour);
+        int style = look.Hair == 0 ? -1 : look.Hair <= hairList.GetArrayLength() ? look.Hair - 1 : o.GetProperty("default_hair").GetInt32();
+        System.Text.Json.JsonElement? chosen = style >= 0 ? hairList[style] : null;
+        string? node = chosen?.GetProperty("node").GetString();
+        System.Text.Json.JsonElement? colour = chosen is { } ch ? Pick(ch.GetProperty("colours"), look.HairColour) : null;
         ImageTexture? face = Tex(Pick(o.GetProperty("faces"), look.Face));
         ImageTexture? eyes = Tex(Pick(o.GetProperty("eyes"), look.EyeColour));
+        Color? skin = Pick(o.GetProperty("skins"), look.SkinTone) is { } st ? Rgb(st) : null;
+        int[] sliders = [look.Slider(0), look.Slider(1), look.Slider(2), look.Slider(3), look.Mood];
 
         foreach (Node n in figure.FindChildren("*", "MeshInstance3D", true, false))
         {
@@ -337,8 +351,13 @@ public static class FigureLook
                     m.DetailUVLayer = BaseMaterial3D.DetailUV.UV1;
                     m.DetailBlendMode = BaseMaterial3D.BlendModeEnum.Mul;
                 }
+                if (skin is { } tint)
+                    Tinted(m, tint);
                 mi.MaterialOverride = m;
-                SetSliders(mi, o, look);
+                int shapes = mi.GetBlendShapeCount();
+                foreach ((int morph, float weight) in DaocAssets.Figures.CatacombsFigure.MorphWeights(sliders))
+                    if (morph < shapes)
+                        mi.SetBlendShapeValue(morph, weight);
             }
             else if (name.StartsWith("hair", StringComparison.Ordinal))
             {
@@ -347,31 +366,30 @@ public static class FigureLook
                 if (mi.Visible && colour is { } c && mi.GetActiveMaterial(0)?.Duplicate() is BaseMaterial3D m)
                 {
                     if (Tex(c.GetProperty("tex")) is { } t) m.AlbedoTexture = t;
-                    m.AlbedoColor = Rgb(c.GetProperty("tint"));
+                    Tinted(m, Rgb(c.GetProperty("tint")));
                     mi.MaterialOverride = m;
                 }
             }
         }
-        return $" (face {look.Face}, hair {style}{(node is null ? " bald" : "")} colour {look.HairColour}, eyes {look.EyeColour}, skin {look.SkinTone} not drawn, " +
-            $"sliders {look.Slider(0)}{look.Slider(1)}{look.Slider(2)}{look.Slider(3)})";
-
-        static void SetSliders(MeshInstance3D head, System.Text.Json.JsonElement options, CharacterLook look)
-        {
-            // Eye size and lip size both 0: a character never customised (ours, made with custom mode 0:
-            // step 1, "generated"); retail-made ones store 0x44 (all neutral). Drawn neutral, not all-low.
-            if (!options.TryGetProperty("sliders", out System.Text.Json.JsonElement sliders) || (look.EyeSize == 0 && look.LipSize == 0))
-                return;
-            int shapes = head.GetBlendShapeCount();
-            for (int k = 0; k < sliders.GetArrayLength() && k < 4; k++)
-            {
-                // 0..8, 4 neutral: below 4 blends toward the low target, above toward the high one.
-                float v = Mathf.Clamp(look.Slider(k), 0, 8);
-                int low = sliders[k].GetProperty("low").GetInt32(), high = sliders[k].GetProperty("high").GetInt32();
-                if (low >= 0 && low < shapes) head.SetBlendShapeValue(low, Mathf.Clamp((4 - v) / 4, 0, 1));
-                if (high >= 0 && high < shapes) head.SetBlendShapeValue(high, Mathf.Clamp((v - 4) / 4, 0, 1));
-            }
-        }
+        return $" (face {look.Face}, hair {(node is null ? "none" : look.Hair.ToString(System.Globalization.CultureInfo.InvariantCulture))} " +
+            $"colour {look.HairColour}, eyes {look.EyeColour}, skin {look.SkinTone}, sliders {string.Join("", sliders)})";
 
         static bool Part(string name, string label) => name == label || name.StartsWith(label + "_", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Retail's tinted figure material (fixed-function path, open question W30): the tint is the material
+    /// colour the lights fall on, plus an untinted 0.12 of the texture as emission, and no specular:
+    /// colour = texture × (ambient × tint + Σ light × N·L × tint) + texture × 0.12. A dark tone darkens the
+    /// lit texture but never below that glow, so skin stays brown instead of turning red-orange.
+    /// </summary>
+    public static void Tinted(BaseMaterial3D m, Color tint)
+    {
+        m.AlbedoColor = tint;
+        m.EmissionEnabled = true;
+        m.Emission = Colors.White;
+        m.EmissionTexture = m.AlbedoTexture;
+        m.EmissionEnergyMultiplier = 0.12f;
+        m.MetallicSpecular = 0;
     }
 }

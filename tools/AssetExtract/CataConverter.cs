@@ -82,7 +82,7 @@ internal sealed class CataConverter : IDisposable
             foreach (string skin in parts.Select(p => p.Skin).OfType<string>())
                 if (Gathered.Add(skin)) _library.GatherTexture(skin);
             if (looks is not null)
-                WriteLooks(spec, looks, _models, _library, Gathered, parts);
+                WriteLooks(spec, looks, _models, _library, Gathered);
             result = file;
         }
         catch (Exception e) when (e is NifFormatException or InvalidOperationException or ArgumentException)
@@ -120,6 +120,7 @@ internal sealed class CataConverter : IDisposable
                     .ToDictionary(p => DaocAssets.Figures.CataSlots.Names[p.Slot], p => p.Skin),
                 defaults = spec.DefaultVariants.ToDictionary(kv => DaocAssets.Figures.CataSlots.Names[kv.Key], kv => kv.Value),
                 hair = spec.DefaultHair,
+                tint = spec.TintedSlots,
             });
         }
         File.WriteAllText(csvPath, DaocAssets.Figures.FigureTable.CatacombsHeader + "\n" + string.Concat(rows.Values.Select(r => r + "\n")));
@@ -143,8 +144,6 @@ internal sealed class CataConverter : IDisposable
         foreach (DaocAssets.Figures.CataPart part in spec.Parts.Where(p => p.Slot != 8 && !spec.Variants.ContainsKey(p.Slot)))
         {
             if (load(part) is not { } model) { missing(part.Nif); continue; }
-            if (part.Slot == 0)
-                model = LabelledHead(model, part, load);
             list.Add((model, part.Skin, DaocAssets.Figures.CataSlots.Names[part.Slot]));
         }
         // Every mesh variant of the worn slots as <slot><n> (from 1), wearing the row's skin for that slot;
@@ -179,39 +178,13 @@ internal sealed class CataConverter : IDisposable
         return list;
     }
 
-    // A head's face-slider labels ("FM1=3 ..."): fig3parts often names a copy in fig014.mpk whose morphs
-    // carry none, while the same head in another archive (fig015.mpk for all 36 races) has them. The
-    // codes are taken from the labelled copy when its morphs match (same vertex and target counts); the
-    // geometry stays the named copy's.
-    private static NifModel LabelledHead(NifModel head, DaocAssets.Figures.CataPart part, Func<DaocAssets.Figures.CataPart, NifModel?> load)
-    {
-        if (!head.Meshes.Any(m => m.MorphTargets is not null && m.MorphCodes!.All(c => c == 0)))
-            return head;
-        for (int archive = 1; archive <= 30; archive++)
-        {
-            if (archive == part.Archive || load(part with { Archive = archive }) is not { } other)
-                continue;
-            // Matched by the morphing shape, not mesh by mesh: sar_f_Head01's fig014 copy also carries ten
-            // hidden boxes the labelled copy lacks.
-            var meshes = head.Meshes.Select(m =>
-                m.MorphTargets is not null && other.Meshes.FirstOrDefault(o => o.MorphCodes is { } c && c.Any(x => x != 0)
-                    && o.Vertices.Length == m.Vertices.Length && c.Length == m.MorphTargets.Length) is { } labelled
-                    ? m with { MorphCodes = labelled.MorphCodes } : m).ToList();
-            if (meshes.Any(m => m.MorphCodes?.Any(c => c != 0) == true))
-                return new NifModel { Version = head.Version, Joints = head.Joints, Meshes = meshes };
-        }
-        return head;
-    }
-
     // models/fig3_<figure>.json: a Catacombs race's appearance options for the client (faces, eye colours,
-    // skin tints, and per hair style its node and colours), indexed as the appearance bytes count; every
-    // texture it names is gathered into the library.
+    // skin tints, and per hair style its node and colours), indexed as the appearance bytes count except the
+    // hair: "hair"[s] is hair style s + 1, as the byte counts them from 1. Every texture it names is gathered
+    // into the library.
     private static void WriteLooks(DaocAssets.Figures.CataSpec spec, DaocAssets.Figures.CataLooks looks, string modelsDir,
-        AssetLibrary library, HashSet<string> gathered, IEnumerable<(NifModel Part, string? Skin, string Label)> parts)
+        AssetLibrary library, HashSet<string> gathered)
     {
-        int[] headCodes = parts.Where(p => p.Label == "head").SelectMany(p => p.Part.Meshes)
-            .FirstOrDefault(m => m.MorphCodes is not null)?.MorphCodes ?? [];
-        var sliders = DaocAssets.Figures.CatacombsFigure.Sliders(looks.SliderLabels, headCodes);
         static double[] Rgb(System.Numerics.Vector3 v) => [Math.Round(v.X, 3), Math.Round(v.Y, 3), Math.Round(v.Z, 3)];
         int styles = Math.Max(spec.HairStyles.Count, looks.HairColours.Count);
         var json = new
@@ -231,7 +204,6 @@ internal sealed class CataConverter : IDisposable
             variants = spec.Variants.ToDictionary(kv => DaocAssets.Figures.CataSlots.Names[kv.Key],
                 kv => kv.Value.Select((p, i) => p is null ? 0 : i + 1).Where(n => n > 0).ToArray()),
             defaults = spec.DefaultVariants.ToDictionary(kv => DaocAssets.Figures.CataSlots.Names[kv.Key], kv => kv.Value),
-            sliders = sliders.Select(sl => new { label = sl.Label, low = sl.Low, high = sl.High }),
         };
         Directory.CreateDirectory(modelsDir);
         File.WriteAllText(Path.Combine(modelsDir, $"fig3_{spec.Figure}.json"), System.Text.Json.JsonSerializer.Serialize(json));

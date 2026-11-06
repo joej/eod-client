@@ -41,7 +41,6 @@ public sealed class MonsterTables
     private readonly Dictionary<int, string[]> _fig3parts = [];
     private readonly Dictionary<(int, int), string[]> _hairColours = [];
     private readonly Dictionary<int, string[]> _faceMap = [], _eyeMap = [], _skinMap = [], _tints = [];
-    private readonly Dictionary<int, string[]> _sliderLabels = [];
     private readonly Dictionary<int, string[]> _canims = [];
 
     // anims.csv columns of the clips the client view uses (ID, name, Walk, Back, Run, ..., Idle at 10,
@@ -69,8 +68,7 @@ public sealed class MonsterTables
             : throw new MpkFormatException($"gamedata.mpk has no {name}.");
         return Parse(Text("monsters.csv"), Text("monnifs.csv"), Text("skins.csv"), Text("anims.csv"), Text("animnifs.csv"))
             .WithFig3(Text("fig3map.csv"), Text("fig3parts.csv"), Text("fig3haircolormap.csv"))
-            .WithFig3Looks(Text("fig3facemap.csv"), Text("fig3eyecolormap.csv"), Text("fig3skincolormap.csv"), Text("fig3tints.csv"),
-                Text("fig3descriptions.csv"))
+            .WithFig3Looks(Text("fig3facemap.csv"), Text("fig3eyecolormap.csv"), Text("fig3skincolormap.csv"), Text("fig3tints.csv"))
             .WithCombatClips(Text("canims.csv"));
     }
 
@@ -108,15 +106,8 @@ public sealed class MonsterTables
     /// <summary>Adds the appearance tables: <c>fig3facemap</c>, <c>fig3eyecolormap</c> (figure -> a skin
     /// id per option), <c>fig3skincolormap</c> (figure -> a tint id per option) and <c>fig3tints</c>
     /// (tint id -> red, green, blue).</summary>
-    public MonsterTables WithFig3Looks(string faceCsv, string eyeCsv, string skinCsv, string tintsCsv, string descriptionsCsv = "")
+    public MonsterTables WithFig3Looks(string faceCsv, string eyeCsv, string skinCsv, string tintsCsv)
     {
-        // fig3descriptions.csv: figure, row (4 = the face sliders), description, then one label each.
-        foreach (string raw in descriptionsCsv.Split('\n'))
-        {
-            string[] c = raw.TrimEnd('\r').Split(',');
-            if (c.Length > 3 && int.TryParse(c[0], out int figure) && c[1].Trim() == "4")
-                _sliderLabels.TryAdd(figure, c[3..].Select(x => x.Trim()).Where(x => x.Length > 0).ToArray());
-        }
         foreach ((Dictionary<int, string[]> d, string csv) in new[] { (_faceMap, faceCsv), (_eyeMap, eyeCsv), (_skinMap, skinCsv), (_tints, tintsCsv) })
             foreach ((int id, string[] row) in ById(csv))
                 d.TryAdd(id, row.Select(x => x.Trim()).ToArray());
@@ -145,8 +136,7 @@ public sealed class MonsterTables
             hair.Add(colours);
         }
         return new CataLooks(Options(faces).Select(Skin).ToList(), Options(_eyeMap.GetValueOrDefault(figure)).Select(Skin).ToList(),
-            Options(_skinMap.GetValueOrDefault(figure)).Select(Tint).ToList(), hair)
-        { SliderLabels = _sliderLabels.GetValueOrDefault(figure) ?? [] };
+            Options(_skinMap.GetValueOrDefault(figure)).Select(Tint).ToList(), hair);
     }
 
     /// <summary>The Catacombs version of server model id <paramref name="modelId"/> (monsters.csv "Cata

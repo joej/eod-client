@@ -47,6 +47,11 @@ public sealed record CataSpec(int ModelId, string Name, int SkeletonArchive, str
 
     /// <summary>Clip name (idle, walk, run, back) -> .kfa file in anims/.</summary>
     public IReadOnlyDictionary<string, string> Clips { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>The limb slots that are bare skin and take the character's skin tone, as the model's
+    /// monsters.csv row marks them ("Cata Tint Arms/hands/Legs": "arms", "gloves", "legs"). The head always
+    /// takes it, the body and boots never (retail's rule, open question W30).</summary>
+    public IReadOnlyList<string> TintedSlots { get; init; } = [];
 }
 
 /// <summary>
@@ -57,17 +62,7 @@ public sealed record CataSpec(int ModelId, string Name, int SkeletonArchive, str
 /// </summary>
 public sealed record CataLooks(
     IReadOnlyList<string?> Faces, IReadOnlyList<string?> Eyes, IReadOnlyList<Vector3> SkinTints,
-    IReadOnlyList<IReadOnlyList<(string? Texture, Vector3 Tint)>> HairColours)
-{
-    /// <summary>The race's face sliders, in its creation screen's order (fig3descriptions "Morphs":
-    /// Nose, Eyes, Lips, Jaw for a Briton).</summary>
-    public IReadOnlyList<string> SliderLabels { get; init; } = [];
-}
-
-/// <summary>A face slider: its label and the head's morph targets at its two ends (indices into the
-/// head mesh's targets, -1 when the head lacks that end). 0 on the slider is fully <see cref="Low"/>,
-/// 8 fully <see cref="High"/>, 4 neither.</summary>
-public sealed record CataSlider(string Label, int Low, int High);
+    IReadOnlyList<IReadOnlyList<(string? Texture, Vector3 Tint)>> HairColours);
 
 /// <summary>Body slot names, as the mesh names a figure's parts carry (fig3map slot numbers 0..9).</summary>
 public static class CataSlots
@@ -82,6 +77,9 @@ public static partial class CatacombsFigure
 
     // monsters.csv columns (0-based) of a model's Catacombs version.
     internal const int CataNifColumn = 67;
+
+    // monsters.csv "Cata Tint Arms", "Cata Tint hands", "Cata Tint Legs": 1 = that part is bare skin.
+    private static readonly (int Column, string Slot)[] TintColumns = [(78, "arms"), (79, "gloves"), (80, "legs")];
     private static readonly (int Slot, int Column)[] SkinColumns =
         [(1, 68), (2, 69), (0, 70), (5, 71), (6, 72), (3, 73), (4, 74), (8, 76)];
 
@@ -153,40 +151,36 @@ public static partial class CatacombsFigure
             ? s / 100f : 1f;
         return new CataSpec(int.Parse(monster[0], CultureInfo.InvariantCulture), n[1].Trim(), skeletonArchive,
             n[2].Trim() + "_skeleton.nif", parts, scale)
-        { Clips = clips(n), Figure = figure, HairStyles = hairStyles, DefaultHair = defaultHair, Variants = slotVariants, DefaultVariants = defaults };
+        {
+            Clips = clips(n), Figure = figure, HairStyles = hairStyles, DefaultHair = defaultHair, Variants = slotVariants, DefaultVariants = defaults,
+            TintedSlots = TintColumns.Where(t => t.Column < monster.Length && monster[t.Column].Trim().Length > 0).Select(t => t.Slot).ToList(),
+        };
     }
 
-    // A head's morph feature codes come in pairs, one feature each (surveyed over all 36 race heads,
-    // whose labels "FM1=3 ..." match their race's slider names in 35): 1/2 nose, 3/4 eyes, 5/6 lips,
-    // 7/8 jaw, 9/10 ears, 11/12 nose width, 13/14 tusks, 15/16 sharpness, 17/18 tines, 19/20 spines;
-    // 21-24 are moods. Which end of a pair is the slider's low end is unconfirmed (odd taken as low).
-    private static readonly (string Label, int Code)[] FeatureCodes =
-    [
-        ("Nose Length", 1), ("Nose Width", 11), ("Jaw Length", 7), ("Nose", 1), ("Eyes", 3), ("Lips", 5),
-        ("Jaw", 7), ("Ears", 9), ("Tusks", 13), ("Sharpness", 15), ("Tines", 17), ("Spines", 19),
-    ];
+    // Retail's face sliders (open question W30, read from the retail client and checked against a
+    // character made in its creator): each drives two morph targets by their position in the head's
+    // morph list (1 = the first after the base; the file's "FMn=c" labels are not used), the low end
+    // at 0 and the high end at 8. Sliders 0-3 are the race's creation-screen sliders in order (nose,
+    // eyes, lips, jaw for a Briton); the last pair is the mood.
+    private static readonly (int Low, int High)[] SliderTargets = [(4, 3), (2, 1), (6, 5), (8, 7), (11, 12)];
 
     /// <summary>
-    /// The head's face sliders: each label's feature pair by name; a label whose feature the head lacks
-    /// (the elf man's "Jaw", where his head carries lips) takes the head's next unused pair below the
-    /// moods, in file order. <paramref name="codes"/> is the head mesh's <see cref="NifMesh.MorphCodes"/>.
+    /// The head's morph weights for slider positions <paramref name="sliders"/> (sliders 0-3, then the
+    /// mood; each 0..8 with 4 neutral): per slider, its low target weighs 1 - v/4 below 4, its high
+    /// target (v - 4)/4 above. Pairs are (morph index from 0, i.e. position - 1, weight); every target
+    /// of the 12 the sliders use is listed, unused ones at 0, so stale weights get cleared.
     /// </summary>
-    public static IReadOnlyList<CataSlider> Sliders(IReadOnlyList<string> labels, IReadOnlyList<int> codes)
+    public static IReadOnlyList<(int Morph, float Weight)> MorphWeights(IReadOnlyList<int> sliders)
     {
-        var used = new HashSet<int>();
-        var pairs = codes.Where(c => c is > 0 and < 21).Select(c => (c + 1) / 2).Distinct().ToList();
-        var sliders = new List<CataSlider>();
-        foreach (string label in labels)
+        var weights = new float[12];
+        for (int k = 0; k < SliderTargets.Length && k < sliders.Count; k++)
         {
-            int code = FeatureCodes.FirstOrDefault(f => f.Label.Equals(label.Trim(), StringComparison.OrdinalIgnoreCase)).Code;
-            int pair = code > 0 && pairs.Contains((code + 1) / 2) && !used.Contains((code + 1) / 2) ? (code + 1) / 2
-                : pairs.FirstOrDefault(p => !used.Contains(p));
-            if (pair > 0) used.Add(pair);
-            sliders.Add(new CataSlider(label.Trim(), Index(2 * pair - 1), Index(2 * pair)));
+            float v = Math.Clamp(sliders[k], 0, 8);
+            (int low, int high) = SliderTargets[k];
+            weights[low - 1] = Math.Max(0, (4 - v) / 4);
+            weights[high - 1] = Math.Max(0, (v - 4) / 4);
         }
-        return sliders;
-
-        int Index(int c) => c > 0 ? codes.ToList().IndexOf(c) : -1;
+        return weights.Select((w, i) => (i, w)).ToList();
     }
 
     // "CthBody01_ss_bri_M.dds" -> 1, "chnBody05_..." -> 5; 1 when the name carries none.

@@ -169,12 +169,26 @@ u8   race/gender: race = (b & 0x0F) | ((b & 0x40) >> 2); female = b & 0x80
 
 **Appearance bytes.** Stored by the server as the client sent them at creation and sent back here and
 in 0x4B PlayerCreate (whose order is eye size, lip size, **mood**, eye colour, hair colour, face, hair
-style). Each byte holds two settings, one per half-byte: eye size = eyes (high) and nose (low); lip size
-= lips (high) and jaw (low); eye colour = eye colour (high) and skin tone (low); hair colour = colour
-(low); face and hair style in the high half. Styles and colours count from 0; the face sliders run 0–8
-with 4 neutral. *Seen:* characters made with the retail client store `44 44 00 00 00 10` and
-`44 44 20 01 00 20` (all sliders neutral). The meaning of each index is our reading, not yet confirmed
-against the retail creation screen.
+style). As the retail client reads them:
+
+| Byte | High half | Low half |
+|---|---|---|
+| eye size | face slider 0 (Briton: nose) | slider 1 (eyes) |
+| lip size | slider 2 (lips) | slider 3 (jaw) |
+| mood | mood slider: 0 = neutral (position 4), 1–4 = positions 0–3, 5–8 as they are | 0 |
+| eye colour | eye colour | skin tone |
+| hair colour | the whole byte: hair colour | |
+| face | face | decal (tattoo) |
+| hair style | hair style, **from 1** (0 = no hair) | |
+
+Every other index counts from 0; sliders are positions 0–8 with 4 neutral. *Verified:* a Briton made
+in the retail 1.130 creator with known choices (face 4, nose and eyes at the ends, lips 2, jaw 6, mood
+far left, eye colour 2, darkest skin, hair 3, hair colour 6) stores `08 26 10 17 05 30 30`.
+
+**Model.** A player's model field (here and in 0x4B) holds the model id in its low 11 bits and the body
+size in bits 11–12 (1 short, 2 average, 3 tall; OpenDAoC `GamePlayer.Size`). The retail creator sets the
+size: its Briton male is 45528 = model 472, average; its kobold male 53777 = model 529, average. A
+character made without a size (ours) stores the bare id (32).
 
 **Dyes and emblems.** Each worn item carries one number (the overview's colours; 0x15's colour field,
 announced by model bit 0x8000 for a u16 or 0x4000 for a u8): the guild emblem when the item has one,

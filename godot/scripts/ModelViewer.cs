@@ -190,7 +190,7 @@ public partial class ModelViewer : Node3D
         return FigureLook.Apply(figure, options, look, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) +
             FigureLook.Dress(figure, options, System.IO.Path.Combine(dir, "cata_items.json"), System.IO.Path.Combine(dir, "cata_models.json"),
                 System.IO.Path.Combine(dir, "colours.json"),
-                id, worn, hood, false, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) +
+                id, look, worn, hood, false, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) +
             FigureLook.Gear(figure, options, System.IO.Path.Combine(dir, "cata_gear.json"), System.IO.Path.Combine(dir, "colours.json"), dir, worn, active, false, hood,
                 Drawn, System.IO.Path.Combine(lib, "overrides"), textureDir, lib) + $" (row {id})" +
             (Drawn ? $" drawn, {(_combatIdle = FigureLook.CombatIdle(System.IO.Path.Combine(dir, "cata_gear.json"), worn, active))}" : "");

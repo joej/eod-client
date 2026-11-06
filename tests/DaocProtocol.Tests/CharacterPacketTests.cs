@@ -87,13 +87,32 @@ public class CharacterPacketTests
     }
 
     [Fact]
-    public void AppearanceBytesDecodeOneSettingPerHalfByte()
+    public void AppearanceBytesDecodeAsTheRetailCreatorStoresThem()
     {
-        var look = new CharacterLook(EyeSize: 0x37, LipSize: 0x52, EyeColor: 0x63, HairColor: 0x0B,
-            FaceType: 0x40, HairStyle: 0x50, MoodType: 0);
-        Assert.Equal((4, 5, 11, 6, 3), (look.Face, look.Hair, look.HairColour, look.EyeColour, look.SkinTone));
-        Assert.Equal([7, 3, 5, 2, 4], Enumerable.Range(0, 5).Select(look.Slider));
+        // Made in the retail 1.130 creator (open question W30): Face 4, Nose far left, Eyes far right,
+        // Lips 2, Jaw 6, Mood far left, Eye Color 2, darkest Skin Tone, Hair 3, Hair Color 6.
+        var look = new CharacterLook(EyeSize: 0x08, LipSize: 0x26, EyeColor: 0x17, HairColor: 0x05,
+            FaceType: 0x30, HairStyle: 0x30, MoodType: 0x10);
+        Assert.Equal((3, 0, 3, 5, 1, 7), (look.Face, look.Decal, look.Hair, look.HairColour, look.EyeColour, look.SkinTone));
+        Assert.Equal([0, 8, 2, 6, 4], Enumerable.Range(0, 5).Select(look.Slider));
+        Assert.Equal(0, look.Mood);
     }
+
+    [Theory]
+    [InlineData(45528, 472, 2)]     // Briton male made in the retail 1.130 creator (Testjoe)
+    [InlineData(53777, 529, 2)]     // kobold male, same creator
+    [InlineData(32, 32, 0)]         // made by our creator: the bare id
+    public void APlayersModelFieldCarriesItsSizeAboveTheId(int field, int id, int size) =>
+        Assert.Equal((id, size), ((int)PlayerModel.Id((ushort)field), PlayerModel.Size((ushort)field)));
+
+    [Theory]
+    [InlineData(0x00, 4)]
+    [InlineData(0x10, 0)]
+    [InlineData(0x40, 3)]
+    [InlineData(0x50, 5)]
+    [InlineData(0x80, 8)]
+    public void MoodZeroIsNeutralAndTheRestShiftAroundIt(byte mood, int position) =>
+        Assert.Equal(position, new CharacterLook(0, 0, 0, 0, 0, 0, mood).Mood);
 
     [Fact]
     public void EquipmentUpdateParsesRecordedPackets()
