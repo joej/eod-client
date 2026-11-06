@@ -34,6 +34,15 @@ public class NifAlphaTests(ITestOutputHelper output)
         Assert.Equal(cutoff, c, 3);
     }
 
+    [Theory]
+    [InlineData(0x110D, true)]    // teleporter_ground.nif: SRCALPHA onto DESTALPHA
+    [InlineData(0x0001, true)]    // onto ONE
+    [InlineData(0x00ED, false)]   // SRCALPHA onto INVSRCALPHA: ordinary transparency
+    [InlineData(0x0061, false)]   // onto INVSRCCOLOR (screen)
+    [InlineData(0x1100, false)]   // DESTALPHA bits without blending
+    public void BlendingOntoOneOrDestAlphaIsAdditive(int flags, bool additive) =>
+        Assert.Equal(additive, NifFile.Additive((ushort)flags));
+
     public static IEnumerable<object[]> Trees()
     {
         foreach (string name in new[] { "elm1-421.nif", "oak1-4101.nif" })

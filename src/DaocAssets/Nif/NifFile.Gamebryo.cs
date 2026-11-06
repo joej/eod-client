@@ -309,6 +309,7 @@ public static partial class NifFile
                 DetailTexCoords = detail is null ? null : Set(detailUv),
                 BaseColor = color,
                 Alpha = mode,
+                Additive = a >= 0 && Additive(blocks[a].AlphaFlags),
                 AlphaCutoff = cutoff,
                 DoubleSided = bothSides,
                 SkinBoneNames = byName?.Names,

@@ -85,6 +85,18 @@ public static class ModelTexturing
                 if (copy.Transparency == BaseMaterial3D.TransparencyEnum.AlphaScissor)
                     copy.AlphaAntialiasingMode = BaseMaterial3D.AlphaAntiAliasing.AlphaToCoverage;
                 ApplyLayers(copy, material, dirs, cache);
+                // An additive surface (the exporter's "additive" mark: the NIF blends onto ONE/DESTALPHA) adds its
+                // light to what is behind it, unlit, as glows and effects do (the teleporter's ground ring).
+                if (material.HasMeta(LayersMeta)
+                    && material.GetMeta(LayersMeta).AsGodotDictionary() is { } marks
+                    && marks.TryGetValue("additive", out Variant add) && add.AsBool())
+                {
+                    mi.SetSurfaceOverrideMaterial(s, EffectMaterial(tex,
+                        marks.TryGetValue("dark", out Variant dk) ? LoadTexture(dirs, dk.AsString(), cache) : null,
+                        marks.TryGetValue("glow", out Variant gl) ? LoadTexture(dirs, gl.AsString(), cache) : null));
+                    textured++;
+                    continue;
+                }
                 mi.SetSurfaceOverrideMaterial(s, copy);
                 textured++;
             }
@@ -93,6 +105,37 @@ public static class ModelTexturing
     }
 
     private const string LayersMeta = "eod_layers";
+
+    // An additive effect surface drawn as the original's fixed-function texture stages did: the base texture,
+    // multiplied by the dark map (an effect's mist, on the second UV set), plus the glow map (the thin bright
+    // line of the teleporter ring), weighted by the base's alpha and added to what is behind (SRCALPHA onto
+    // ONE), unlit: the texturing property's apply mode "replace" leaves out lighting and the material colour.
+    // Not yet: the detail map and the UV scrolling (NiUVController), open question W42.
+    private static Shader? _effectShader;
+
+    private static ShaderMaterial EffectMaterial(Texture2D baseTex, Texture2D? dark, Texture2D? glow)
+    {
+        _effectShader ??= new Shader
+        {
+            Code = """
+                shader_type spatial;
+                render_mode blend_add, unshaded, cull_disabled, depth_draw_never, shadows_disabled;
+                uniform sampler2D base_tex : source_color, filter_linear_mipmap, repeat_enable;
+                uniform sampler2D dark_tex : source_color, hint_default_white, filter_linear_mipmap, repeat_enable;
+                uniform sampler2D glow_tex : source_color, hint_default_black, filter_linear_mipmap, repeat_enable;
+                void fragment() {
+                    vec4 b = texture(base_tex, UV);
+                    ALBEDO = b.rgb * texture(dark_tex, UV2).rgb + texture(glow_tex, UV).rgb;
+                    ALPHA = b.a;
+                }
+                """,
+        };
+        var m = new ShaderMaterial { Shader = _effectShader };
+        m.SetShaderParameter("base_tex", baseTex);
+        if (dark is not null) m.SetShaderParameter("dark_tex", dark);
+        if (glow is not null) m.SetShaderParameter("glow_tex", glow);
+        return m;
+    }
 
     /// <summary>
     /// Copies each material's glTF <c>extras</c> (the converter's extra layers: dark and detail map

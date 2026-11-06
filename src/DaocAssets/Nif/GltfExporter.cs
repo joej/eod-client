@@ -358,6 +358,10 @@ public static class GltfExporter
             extras["decal"] = System.IO.Path.GetFileNameWithoutExtension(m.DecalTextureFile);
         if (m.VertexColors is not null)
             extras["vertexColors"] = true;
+        if (!string.IsNullOrEmpty(m.GlowTextureFile))
+            extras["glow"] = System.IO.Path.GetFileNameWithoutExtension(m.GlowTextureFile);
+        if (m.Additive && m.Alpha == SurfaceAlpha.Blend)
+            extras["additive"] = true;
         if (extras.Count > 0)
             material.Extras = extras;
         return material;

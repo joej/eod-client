@@ -98,6 +98,7 @@ public static partial class NifFile
         public int BaseTextureRef = -1; // NiTexturingProperty -> its base NiSourceTexture block
         public int DarkTextureRef = -1, DarkUvSet;     // NiTexturingProperty dark slot (baked shading)
         public int DetailTextureRef = -1, DetailUvSet; // NiTexturingProperty detail slot
+        public int GlowTextureRef = -1, GlowUvSet;     // NiTexturingProperty glow slot (added light: effects)
         public int VertexMode = -1;   // NiVertexColorProperty: 0 ignore, 1 emissive, 2 ambient + diffuse
         public string? TextureFile;   // for NiSourceTexture blocks
         public Vector4? MaterialColor; // NiMaterialProperty -> diffuse RGB + alpha (0..1)
@@ -491,10 +492,14 @@ public static partial class NifFile
         int tp = FindProperty(blocks, shape.Props, "NiTexturingProperty", -1);
         (string? dark, Vector2[]? darkUv) = tp < 0 ? (null, null) : Slot(blocks, mesh, blocks[tp].DarkTextureRef, blocks[tp].DarkUvSet);
         (string? detail, Vector2[]? detailUv) = tp < 0 ? (null, null) : Slot(blocks, mesh, blocks[tp].DetailTextureRef, blocks[tp].DetailUvSet);
+        // The glow is kept when it shares the base texture's coordinates (set 0), the case in the effects.
+        string? glow = tp >= 0 && blocks[tp].GlowUvSet == 0 ? Slot(blocks, mesh, blocks[tp].GlowTextureRef, 0).Item1 : null;
         return mesh with
         {
             Alpha = mode, AlphaCutoff = cutoff, DoubleSided = bothSides, VertexColors = colors,
+            Additive = a >= 0 && Additive(blocks[a].AlphaFlags),
             DarkTextureFile = dark, DarkTexCoords = darkUv, DetailTextureFile = detail, DetailTexCoords = detailUv,
+            GlowTextureFile = glow,
         };
     }
 
@@ -517,6 +522,14 @@ public static partial class NifFile
     /// and decals; a blend onto ONE/DESTALPHA (additive glow) or INVSRCCOLOR (screen) stays blended,
     /// the nearest glTF can express.
     /// </summary>
+    /// <summary>
+    /// True when a NiAlphaProperty adds the surface's light to what is behind it: blending onto ONE or
+    /// DESTALPHA (an opaque frame buffer's alpha is 1, so the same). glTF can't say so; the exporter marks
+    /// such a material and the client blends it additively (effects: the teleporter's ground ring,
+    /// flags 0x110D = SRCALPHA onto DESTALPHA).
+    /// </summary>
+    public static bool Additive(ushort flags) => (flags & 0x1) != 0 && ((flags >> 5) & 0xF) is 0 or 8;
+
     public static (SurfaceAlpha Mode, float Cutoff) AlphaMode(ushort flags, byte threshold)
     {
         bool blend = (flags & 0x1) != 0;
@@ -711,8 +724,8 @@ public static partial class NifFile
             c.I32(); c.I32();  // Extra Data ref, Controller ref
             c.U16();           // Flags
             c.U32();           // Apply Mode
-            c.U32();           // Texture Count
-            for (int slot = 0; slot < 3; slot++)
+            uint count = c.U32(); // Texture Count: slots base, dark, detail, gloss, glow, bump, decal...
+            for (int slot = 0; slot < Math.Min(count, 7u); slot++)
             {
                 if (!c.Bool())
                     continue;
@@ -721,9 +734,14 @@ public static partial class NifFile
                 int uvSet = (int)c.U32();
                 c.U16(); c.U16();                       // PS2 L, PS2 K
                 if (version <= V41012) c.U16();         // Unknown1
-                if (slot == 0) b.BaseTextureRef = source;
-                else if (slot == 1) (b.DarkTextureRef, b.DarkUvSet) = (source, uvSet);
-                else (b.DetailTextureRef, b.DetailUvSet) = (source, uvSet);
+                if (slot == 5) for (int k = 0; k < 6; k++) c.U32();   // bump: luma scale, luma offset, 2x2 matrix
+                switch (slot)
+                {
+                    case 0: b.BaseTextureRef = source; break;
+                    case 1: (b.DarkTextureRef, b.DarkUvSet) = (source, uvSet); break;
+                    case 2: (b.DetailTextureRef, b.DetailUvSet) = (source, uvSet); break;
+                    case 4: (b.GlowTextureRef, b.GlowUvSet) = (source, uvSet); break;
+                }
             }
         }
         catch (NifFormatException)

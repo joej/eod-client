@@ -31,6 +31,9 @@ public sealed record NifMesh
     /// <summary>Transparency from the shape's (or an ancestor's) <c>NiAlphaProperty</c>.</summary>
     public SurfaceAlpha Alpha { get; init; }
 
+    /// <summary>Blended additively (its NiAlphaProperty blends onto ONE or DESTALPHA): glows and effects.</summary>
+    public bool Additive { get; init; }
+
     /// <summary>Alpha below which a <see cref="SurfaceAlpha.Cutout"/> surface is discarded (0..1).</summary>
     public float AlphaCutoff { get; init; } = 0.5f;
 
@@ -73,6 +76,10 @@ public sealed record NifMesh
     public string? DarkTextureFile { get; init; }
     public Vector2[]? DarkTexCoords { get; init; }
     /// <summary>The detail map (a finely repeating texture layered over the base) and its UV set.</summary>
+    /// <summary>The glow map (NiTexturingProperty slot 4), on the base texture's coordinates: light added
+    /// on top of the surface (an effect's bright line, the teleporter ring's plasma_ring02).</summary>
+    public string? GlowTextureFile { get; init; }
+
     public string? DetailTextureFile { get; init; }
     public Vector2[]? DetailTexCoords { get; init; }
     /// <summary>A decal laid over the base through its own alpha, on its own UV set: a classic figure's
@@ -96,6 +103,7 @@ public sealed record NifMesh
         (TextureFile is null ? "" : $", tex {TextureFile}") +
         (DarkTextureFile is null ? "" : $", dark {DarkTextureFile}{SetOf(DarkTexCoords)}") +
         (DetailTextureFile is null ? "" : $", detail {DetailTextureFile}{SetOf(DetailTexCoords)}") +
+        (GlowTextureFile is null ? "" : $", glow {GlowTextureFile}") +
         (DecalTextureFile is null ? "" : $", decal {DecalTextureFile}{SetOf(DecalTexCoords)}") +
         (UvSets is { Length: > 1 } sets ? $", {sets.Length} UV sets" : "") +
         (VertexColors is null ? "" : ", vertex colours") +
