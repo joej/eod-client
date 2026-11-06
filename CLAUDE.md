@@ -763,8 +763,8 @@ changes; this file keeps working notes.
 ## Code review in progress
 
 `docs/code-review-2026-11.md` tracks the November 2026 quality review: what landed, and what is
-next (a live quit-timer check on a player account; NIF reader clean-ups that need the client
-install and `mpk audit`). Start there when picking the work up; delete it once nothing is open.
+next (only splitting `tools/AssetExtract/Program.cs` is left). Start there when picking the work up;
+delete it once nothing is open.
 
 ## Open questions
 
