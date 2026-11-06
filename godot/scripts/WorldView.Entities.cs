@@ -28,10 +28,20 @@ public partial class WorldView
         return ToGodot(zone.X + xOffset, zone.Y + yOffset, z);
     }
 
+    // Static world objects (0xD9: doors, items, banners), by object id: not drawn as entities (a keep's
+    // gate is part of its zone model), and a position update for one must not turn it into a capsule.
+    private readonly Dictionary<ushort, ObjectCreate> _worldObjects = new();
+
+    private void OnWorldObject(ObjectCreate o)
+    {
+        _worldObjects[o.ObjectId] = o;
+        GD.Print($"[object] {o.ObjectId} \"{o.Name}\" model {o.Model} at {o.X} {o.Y} {o.Z} (not drawn)");
+    }
+
     private void OnObjectMoved(ObjectUpdate u)
     {
         // The server sends 0xA1 for our own character too; we drive that from input, so skip it.
-        if (u.ObjectId == _world.Position.ObjectId)
+        if (u.ObjectId == _world.Position.ObjectId || _worldObjects.ContainsKey(u.ObjectId))
             return;
         Vector3 pos = ZoneLocalToGodot(u.XOffsetInZone, u.YOffsetInZone, u.Z, u.ZoneSkinId);
         float yaw = YawFromHeading(u.HeadingOnly);
@@ -69,6 +79,7 @@ public partial class WorldView
     private void OnObjectRemoved(ushort objectId)
     {
         _equipment.Remove(objectId);
+        _worldObjects.Remove(objectId);
         if (_entities.Remove(objectId, out Entity? e))
             e.Node.QueueFree();
     }

@@ -407,6 +407,7 @@ public partial class WorldView : Node3D
         _bridge.PlayerTurned += OnPlayerTurned;
         _bridge.AttackModeChanged += OnAttackModeChanged;
         _bridge.ObjectRemoved += OnObjectRemoved;
+        _bridge.ObjectSpawned += OnWorldObject;
         _bridge.ChatReceived += OnChatReceived;
         _bridge.PingReplied += () => _pings++;
         _bridge.Jumped += OnJumped;
