@@ -85,7 +85,7 @@ C→S 10 CharacterSelectRequest S→C 2A, 28
 C→S D4 WorldInitRequest       S→C burst: … 20 PositionAndObjectID … ends with 4E
 C→S E8 PlayerInitRequest
 C→S BF GameOpenRequest        S→C 2D GameOpenReply                ← in the world
-C→S A9 PositionUpdate every 1 s, A3 PingRequest every 10 s (S→C 29 PingReply)
+C→S A9 PositionUpdate every 2 s (0.2 s moving), A3 PingRequest every 5 s (S→C 29 PingReply)
 C→S AF "&quit"                S→C … A4 Quit after the quit timer
 C→S FC overview, realm 1–3    S→C FC CharacterOverview           ← back at the character screen
 ```
@@ -249,11 +249,17 @@ recorded client then reported; live entry placed our character at its database p
 
 | What | OpenDAoC limit (source) | Our client |
 |---|---|---|
-| 0xA3 PingRequest | disconnect after **150 s** without one, in every state including the character screen (`ClientService.HARD_TIMEOUT`) | every 10 s from the character screen on |
-| 0xA9 PositionUpdate | link death after **5 s** without one while playing (`PlayerMovementComponent.SOFT_LINK_DEATH_THRESHOLD`) | every 1 s in the world, even when idle |
+| 0xA3 PingRequest | disconnect after **150 s** without one, in every state including the character screen (`ClientService.HARD_TIMEOUT`) | every 5 s from the character screen on |
+| 0xA9 PositionUpdate | link death after **5 s** without one while playing (`PlayerMovementComponent.SOFT_LINK_DEATH_THRESHOLD`) | every 2 s in the world standing still, every 0.2 s while moving or turning |
 | Idle kick | to the character screen after 60 min, only if `kick_idle_player_status` is on (off by default) | — |
 
-*Verified live:* 330 s in the world with 31/31 pings answered; 180 s at the character screen
+These are the retail 1.127 client's rates, measured against our server: 0xA9 every 2.07–2.09 s
+standing still and every 0.20–0.22 s while moving, turning, jumping or swimming (plus one on each
+change of state); 0xA3 every 5.000 s. The keep-alive sends an 0xA9 only when none has gone out for
+2 s, so it adds nothing while movement updates flow.
+
+*Verified live:* 2026-11-05, 30 s standing in the world: 0xA9 every 2.00 s, 0xA3 every 5.00 s, every
+ping answered, then a clean quit. Earlier, at the old rates (1 s, 10 s): 330 s in the world with 31/31 pings answered; 180 s at the character screen
 without pings → disconnected at exactly 150 s; with pings → still connected.
 
 **0xA3 PingRequest** (C→S): 4 bytes the server skips, u32 **BE** timestamp, 4 zero bytes.

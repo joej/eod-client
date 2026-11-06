@@ -89,11 +89,18 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// </summary>
     public float MoveSpeed { get; set; }
 
-    /// <summary>How often <see cref="KeepAliveAsync"/> sends 0xA9. The server marks a player link-dead after 5 s without one.</summary>
-    public TimeSpan PositionInterval { get; set; } = TimeSpan.FromSeconds(1);
+    /// <summary>
+    /// The longest <see cref="KeepAliveAsync"/> lets pass without an 0xA9: it sends one when nothing
+    /// else (<see cref="MoveToAsync"/>) has for this long. Retail 1.127 sends one every 2.08 s standing
+    /// still; the server marks a player link-dead after 5 s without one.
+    /// </summary>
+    public TimeSpan PositionInterval { get; set; } = TimeSpan.FromSeconds(2);
 
-    /// <summary>How often <see cref="KeepAliveAsync"/> sends 0xA3. The server disconnects after 150 s without one.</summary>
-    public TimeSpan PingInterval { get; set; } = TimeSpan.FromSeconds(10);
+    /// <summary>How often <see cref="KeepAliveAsync"/> sends 0xA3: every 5 s, as retail 1.127 does. The server disconnects after 150 s without one.</summary>
+    public TimeSpan PingInterval { get; set; } = TimeSpan.FromSeconds(5);
+
+    // Environment.TickCount64 of the last 0xA9 sent, by the keep-alive or MoveToAsync.
+    private long _lastPositionSent = long.MinValue / 2;
 
     /// <summary>The account's realm from the last 0xFE; <see cref="Realm.None"/> = not chosen yet or all realms allowed.</summary>
     public Realm AccountRealm { get; private set; }
@@ -337,7 +344,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
 
     /// <summary>
     /// Moves the player to a new region-global position and heading, then sends one 0xA9 so the
-    /// server sees it at once (the 1 s keep-alive would otherwise hold it until its next tick).
+    /// server sees it at once (the keep-alive would otherwise hold it for up to 2 s).
     /// Call this from the input/physics loop while the player moves; the server trusts the X/Y/Z
     /// it is given, so updating them is the movement. <paramref name="heading"/> is 0–4095
     /// (4096 = 360°). The zone must still contain the new position; crossing a zone boundary needs
@@ -380,6 +387,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         float verticalSpeed = 0, bool landed = false, byte stateFlags = 0)
     {
         PositionAndObjectId p = world.Position;
+        _lastPositionSent = Environment.TickCount64;
         return connection.SendAsync(PositionUpdate.Code,
             PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, world.Zone.Id, p.Heading, speed,
                 verticalSpeed, stateFlags, landed: landed),
@@ -388,28 +396,30 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
 
     /// <summary>
     /// Keeps the session alive until cancelled: 0xA3 every <see cref="PingInterval"/> from the
-    /// character screen on (OpenDAoC's 150 s ping timeout applies there too), plus 0xA9 (standing
-    /// still at the entry position) every <see cref="PositionInterval"/> while in the world. Start
-    /// it once after <see cref="OpenCharacterScreenAsync"/>; it follows the session into and out
-    /// of the world. It only sends: replies are skipped by the session's own waits, and in the
-    /// world the caller drains incoming packets.
+    /// character screen on (OpenDAoC's 150 s ping timeout applies there too), plus, in the world,
+    /// an 0xA9 at the current position whenever none has gone out for <see cref="PositionInterval"/>
+    /// (so while <see cref="MoveToAsync"/> is sending, this adds none). Start it once after
+    /// <see cref="OpenCharacterScreenAsync"/>; it follows the session into and out of the world.
+    /// It only sends: replies are skipped by the session's own waits, and in the world the caller
+    /// drains incoming packets.
     /// </summary>
     public async Task KeepAliveAsync(CancellationToken cancellationToken)
     {
         if (State is not (SessionState.CharacterScreen or SessionState.InWorld))
             throw new InvalidOperationException($"Session is {State}; keep-alive needs the character screen or the world.");
 
-        DateTime nextPing = DateTime.UtcNow;
-        // Relocating counts as staying: pings go on, 0xA9 waits for the new position.
-        using var timer = new PeriodicTimer(PositionInterval);
+        long nextPing = Environment.TickCount64;
         try
         {
-            do
+            // Relocating counts as staying: pings go on, 0xA9 waits for the new position.
+            while (State is SessionState.CharacterScreen or SessionState.InWorld or SessionState.Relocating)
             {
+                long positionInterval = (long)PositionInterval.TotalMilliseconds;
                 await _positionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    if (State == SessionState.InWorld && World is WorldPosition world)
+                    if (State == SessionState.InWorld && World is WorldPosition world
+                        && Environment.TickCount64 - _lastPositionSent >= positionInterval)
                         await SendPositionAsync(world, MoveSpeed, cancellationToken).ConfigureAwait(false);
                 }
                 finally
@@ -417,14 +427,21 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
                     _positionLock.Release();
                 }
 
-                if (DateTime.UtcNow >= nextPing)
+                long now = Environment.TickCount64;
+                if (now >= nextPing)
                 {
                     await connection.SendAsync(PingRequest.Code, PingRequest.Payload((uint)Environment.TickCount), cancellationToken).ConfigureAwait(false);
-                    nextPing = DateTime.UtcNow + PingInterval;
+                    nextPing = now + (long)PingInterval.TotalMilliseconds;
                 }
+
+                // Wake for whichever is due first: the next 0xA9 counts from the last one sent (a timer
+                // that fires a tick early then retries at once). Outside the world none is due, but wake
+                // every position interval so entering the world is noticed.
+                long nextPosition = (State == SessionState.InWorld ? _lastPositionSent : now) + positionInterval;
+                long due = Math.Min(nextPing, nextPosition);
+                await Task.Delay(TimeSpan.FromMilliseconds(Math.Max(1, due - Environment.TickCount64)), cancellationToken)
+                    .ConfigureAwait(false);
             }
-            while (State is SessionState.CharacterScreen or SessionState.InWorld or SessionState.Relocating
-                   && await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

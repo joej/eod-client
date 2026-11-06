@@ -38,11 +38,12 @@ public partial class WorldView : Node3D
     private Node3D? _terrain;            // terrain root with trimesh collision, for ground raycasts
     private bool _chase = true;          // chase camera (default) vs free-fly debug camera
     private float _bodyYaw;              // the body's facing, radians (Godot sense)
-    // Movement sent to the server is throttled to this rate while moving (well under the 5 s
-    // link-death threshold, and gentle on the TCP position channel). 0 when standing still.
+    // Position sends follow retail 1.127: every 0.2 s while moving, turning or in the air, every
+    // 2 s standing still (well under OpenDAoC's 5 s link-death threshold).
     private float _posLeft;              // countdown to the next position send, seconds
-    private const float MovingSendInterval = 0.1f;   // 10 Hz while moving/turning (OfflineDAoC)
-    private const float IdleSendInterval = 1.0f;     // 1 Hz standing still
+    private bool _sendingChanges;        // the last send was of a change (moving/turning)
+    private const float MovingSendInterval = 0.2f;
+    private const float IdleSendInterval = 2.0f;
     private const float PositionEpsilon = 1.0f;      // region units; ~0.025 m, below a frame's step
     // Ground-plane walk speed in region units/second and the matching 0xA9 "speed" value. 191 is
     // DAoC's base run; the server trusts our X/Y/Z, so this only has to look right and move at a

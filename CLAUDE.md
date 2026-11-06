@@ -176,7 +176,8 @@ payloads with a port of the server's reader.
 - Timeouts (OpenDAoC source): link death after 5 s without 0xA9, disconnect after 150 s without
   0xA3, in every state including the character screen (verified live: idle there without pings
   → disconnected at exactly 150 s). `KeepAliveAsync` runs from the character screen on: 0xA3
-  every 10 s, plus 0xA9 every 1 s in the world (our choice; retail rates unknown).
+  every 5 s, plus 0xA9 whenever none has gone out for 2 s in the world (retail 1.127's rates, measured
+  2026-11-05; the Godot client sends every 0.2 s while moving, as retail does).
   Live 2026-10-14 (`DaocCli --enter 0 --stay 330`): 330 s in world, 31/31 pings answered, ~23
   packets/s received (mostly 0xA1 NPC updates), no link death until we closed the socket.
 - Being moved (verified live 2026-11-03; `ClientSession.JumpAsync`/`ApplyJump`/`ChangeRegionAsync`,
@@ -300,7 +301,8 @@ float headingRadians = (heading / 4096f) * 2f * Mathf.Pi;
 For MVC: scale region-global coords down (e.g. /100) for Godot units. Tune from there.
 
 ### Position Heartbeat
-Implemented (`ClientSession.KeepAliveAsync`): 0xA9 every 1 s even when idle, 0xA3 every 10 s.
+Implemented (`ClientSession.KeepAliveAsync`): 0xA9 after 2 s without one (so every 2 s standing still),
+0xA3 every 5 s; the Godot client adds 0xA9 every 0.2 s while moving. These are retail 1.127's rates.
 OpenDAoC marks a player link-dead after 5 s without 0xA9 and disconnects after 150 s without
 0xA3 (see World entry above).
 

@@ -102,11 +102,10 @@ public partial class WorldView
         // DAoC's normal pace is a run; backing up has its own clip.
         PlayBodyClip(!moving ? Idle(_bodyAnim, _attacking, _ownCombatIdle) : forward < 0 ? "back" : "run");
 
-        // Event-driven position send (adapted from OfflineDAoC's _send_position, GPL-3.0): ~10 Hz
-        // while anything is changing, ~1 Hz standing still, and an immediate send the moment the
-        // position or heading changes even if the timer hasn't elapsed — crisp under motion, quiet at
-        // rest, and well under OpenDAoC's 5 s link-death threshold. (We compare against what the
-        // keep-alive/World already holds, so "changed" also covers mouse-look turns from _Input.)
+        // Position send (the event-driven shape adapted from OfflineDAoC's _send_position, GPL-3.0; the
+        // rates are retail 1.127's): every 0.2 s while anything is changing, every 2 s standing still,
+        // and at once on the first change after standing still, and on a landing. (We compare against
+        // what the keep-alive/World already holds, so "changed" also covers mouse-look turns from _Input.)
         _posLeft -= (float)delta;
         ushort heading = HeadingFromYaw(_bodyYaw);
         (float rx, float ry, float rz) = ToRegion(_body.Position);
@@ -116,11 +115,11 @@ public partial class WorldView
             || Mathf.Abs(ry - _world.Position.Y) > PositionEpsilon
             || Mathf.Abs(rz - _world.Position.Z) > PositionEpsilon;
 
-        // Send when the timer runs out, or at once on a change (unless we just sent this tick).
-        if (_posLeft <= 0f || _landingSpeed > 0 || (changed && _posLeft < MovingSendInterval - 0.02))
+        if (_posLeft <= 0f || _landingSpeed > 0 || (changed && !_sendingChanges))
         {
             SendMove(moving ? WalkUnitsPerSecond : 0f);
             _posLeft = changed ? MovingSendInterval : IdleSendInterval;
+            _sendingChanges = changed;
         }
     }
 

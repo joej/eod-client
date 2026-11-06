@@ -586,6 +586,48 @@ public class ClientSessionTests
     }
 
     [Fact]
+    public async Task KeepAliveSendsPositionsOnlyWhenNothingElseHas()
+    {
+        // Retail rates: 0xA9 every ~2 s standing still, but none extra while movement updates go out;
+        // pings keep their own rate whatever the position interval.
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await InWorld(server);
+        await using (connection)
+        {
+            session.PositionInterval = TimeSpan.FromMilliseconds(300);
+            session.PingInterval = TimeSpan.FromMilliseconds(100);
+            using var stop = new CancellationTokenSource();
+            int start = server.Received.Count;
+            Task keepAlive = session.KeepAliveAsync(stop.Token);
+
+            // Moving: an update every 50 ms for 600 ms, each at a new X.
+            PositionAndObjectId p = session.World!.Position;
+            for (int i = 1; i <= 12; i++)
+            {
+                await session.MoveToAsync(p.X + i, p.Y, p.Z, p.Heading, speed: 191);
+                await Task.Delay(50);
+            }
+            int moved = server.Received.Count;
+            await Task.Delay(1000); // standing still
+            stop.Cancel();
+            await keepAlive;
+
+            List<ClientPacket> moving = server.Received.Skip(start).Take(moved - start).ToList();
+            List<ClientPacket> idle = server.Received.Skip(moved).ToList();
+            byte[] lastMove = PositionUpdate.Payload(p.X + 12, p.Y, p.Z, sessionId: 1, objectId: 0, session.World.Zone.Id, p.Heading, speed: 191);
+            // While moving, at most the keep-alive's first send (at start) besides our 12.
+            Assert.InRange(moving.Count(u => u.Code == PositionUpdate.Code), 12, 13);
+            Assert.True(moving.Count(u => u.Code == PingRequest.Code) >= 4);
+            // Standing still: about one per 300 ms, at the last position.
+            Assert.InRange(idle.Count(u => u.Code == PositionUpdate.Code), 2, 4);
+            Assert.All(idle.Where(u => u.Code == PositionUpdate.Code), u => Assert.Equal(lastMove, u.Payload));
+            Assert.True(idle.Count(u => u.Code == PingRequest.Code) >= 7);
+        }
+
+        Assert.Null(server.Error);
+    }
+
+    [Fact]
     public async Task EnterWorldNeedsTheRealmListedLast()
     {
         await using var server = new FakeServer(Recording());
