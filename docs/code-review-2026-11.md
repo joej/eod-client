@@ -22,6 +22,7 @@ started 2026-11-05: what was found, what is done, and what is left. Pick the wor
 | d8f7d0a | `CharacterScreen` split into partial-class files (`.Ui`, `.Profiles`, `.World`, `.CommandLine`). Moved code only. |
 | f229cfa | The old NIF 10.1 byte-offset fallback scan is gone: a 10.1 file that doesn't decode to the footer is reported as unsupported (only `dr_demonroom2b`, a Darkness Falls room with a particle system; see `docs/nif-coverage.md`). One geometry decoder (`NifGeometry`, 4.x and 10.1) for the converter and the audit. Checked over the whole install: every other NIF reads to identical geometry (hash of vertices, normals, colours, UVs, triangles), the audit report is unchanged, and a full `make check-zones` reconversion left all 5,507 outputs byte-identical. The 28 live fixture tests ran and pass (`DAOC_REQUIRE_FIXTURES=1`). |
 | f7a79bf | Quit timer verified live on a player account (`DaocCli --quit-checks`, `eodtest2`): all four cases pass. Moving stands the character up on the server, so the client no longer sends 0xC7 after moving (it drew "You are not sitting!"), and a jump in place no longer cancels the client's quit while the server's goes on. Open question L13 resolved. |
+| 69b7cbb | Send rates set to retail 1.127's, from a retail session against our server: 0xA9 every 2 s standing still and every 0.2 s while moving, 0xA3 every 5 s. The keep-alive sends 0xA9 only when nothing else has for 2 s, and pings on their own clock. The Godot client's send-at-once check had fired every other frame while moving (about 30 a second). Verified live with `DaocCli` (2.00 s, 5.00 s, every ping answered); the Godot moving rate is not yet checked live. Open questions R3, R4 resolved. |
 
 Godot changes were checked with `tools/shots.sh` before and after (pixel comparison: the scene is
 unchanged; only the live counters in the status and layer panels differ between runs).
@@ -48,5 +49,7 @@ unchanged; only the live counters in the status and layer panels differ between 
 - `DaocConnection`'s inbound channel is unbounded (about 23 packets/s in the world): bound it, or
   document that the game loop must keep draining.
 - `ClientSession.MoveToAsync`: the cancellation token comes before the optional `stateFlags`.
+- `JumpWithinTheRegionTakesOverTheServersPosition` failed once in about 20 runs: it reads
+  `server.Received` right after closing the connection, so the last 0xA9 may not have arrived yet.
 - More protocol tests: `ChangeRegionAsync` called directly, `QuitAsync` when the server ends the
   game (`LeavesGame`), `SendCommandAsync`'s `/`, `&` and bare forms.
