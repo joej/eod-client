@@ -75,12 +75,18 @@ public sealed record ObjectUpdate(
 /// 0xDA NPCCreate (PacketLib1124.SendNPCCreate): an NPC/mob enters view. Variable length; we read
 /// through the trailing strings. X/Y are region-global BIG-endian u32 integers.
 /// </summary>
-/// <param name="Model">Appearance model id (into the asset library later; a capsule for now).</param>
+/// <param name="Model">The model field as sent: the model id (monsters.csv row) in the low 13 bits; see
+/// <see cref="ModelId"/>.</param>
 public sealed record NpcCreate(
     ushort ObjectId, ushort Speed, ushort Heading, ushort Z, uint X, uint Y,
     ushort Model, byte Size, byte Level, byte Flags, string Name, string GuildName)
 {
     public const byte Code = 0xDA;
+
+    /// <summary>The model id. OpenDAoC sends the stored value as it is, and 1,178 of its 97,737 spawns
+    /// (every one a water or swamp creature: river sprites, frogs, eels, crabs) store 0x8000 above a normal
+    /// id (32904 = sprite 136); the client's ids end at 2493. What that bit means is open question W39.</summary>
+    public ushort ModelId => (ushort)(Model & 0x1FFF);
 
     public ushort HeadingOnly => (ushort)(Heading & 0x0FFF);
 

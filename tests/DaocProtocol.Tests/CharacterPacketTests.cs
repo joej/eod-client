@@ -106,6 +106,12 @@ public class CharacterPacketTests
         Assert.Equal((id, size), ((int)PlayerModel.Id((ushort)field), PlayerModel.Size((ushort)field)));
 
     [Theory]
+    [InlineData(32904, 136)]        // river sprite: OpenDAoC stores 0x8000 on water creatures' models
+    [InlineData(2027, 2027)]        // pack horse: a plain id past 2047 stays whole
+    public void AnNpcsModelIdIsItsLowThirteenBits(int field, int id) =>
+        Assert.Equal(id, new NpcCreate(1, 0, 0, 0, 0, 0, (ushort)field, 50, 1, 0, "n", "").ModelId);
+
+    [Theory]
     [InlineData(0x00, 4)]
     [InlineData(0x10, 0)]
     [InlineData(0x40, 3)]

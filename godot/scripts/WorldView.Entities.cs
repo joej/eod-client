@@ -44,6 +44,7 @@ public partial class WorldView
         {
             // An update for something we never saw spawn (we entered mid-session, or the create
             // packet is one we don't parse yet): place a plain capsule so the world isn't empty.
+            GD.Print($"[entity] {u.ObjectId}: seen only by its position updates (no create packet): a grey capsule");
             SpawnEntity(u.ObjectId, pos, yaw, new Color(0.55f, 0.55f, 0.6f));
         }
     }
@@ -51,7 +52,8 @@ public partial class WorldView
     private void OnNpcSpawned(NpcCreate npc)
     {
         Vector3 pos = ToGodot(npc.X, npc.Y, npc.Z);
-        SpawnEntity(npc.ObjectId, pos, YawFromHeading(npc.HeadingOnly), RealmColor(npc.Flags >> 6), npc.Model, npc.Size);
+        if (!SpawnEntity(npc.ObjectId, pos, YawFromHeading(npc.HeadingOnly), RealmColor(npc.Flags >> 6), npc.ModelId, npc.Size))
+            GD.Print($"[entity] {npc.ObjectId} \"{npc.Name}\": no figure for model {npc.ModelId} (sent {npc.Model}): a capsule");
     }
 
     private void OnPlayerSpawned(PlayerCreate p)
@@ -60,7 +62,8 @@ public partial class WorldView
         Vector3 pos = ToGodot(p.X, p.Y, p.Z);
         // Drawn like your own character (its model id's Catacombs figure); without one, a capsule in a
         // brighter tint so other players read as players, not mobs.
-        SpawnEntity(p.ObjectId, pos, YawFromHeading(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f), DaocProtocol.Packets.PlayerModel.Id(p.Model), look: p.Look);
+        if (!SpawnEntity(p.ObjectId, pos, YawFromHeading(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f), DaocProtocol.Packets.PlayerModel.Id(p.Model), look: p.Look))
+            GD.Print($"[entity] {p.ObjectId} \"{p.Name}\": no figure for model {DaocProtocol.Packets.PlayerModel.Id(p.Model)} (sent {p.Model}): a capsule");
     }
 
     private void OnObjectRemoved(ushort objectId)
@@ -79,7 +82,8 @@ public partial class WorldView
     };
 
     // look: a player (drawn with its Catacombs figure, dressed in its face and hair); null for an NPC.
-    private void SpawnEntity(ushort objectId, Vector3 pos, float yaw, Color color, ushort model = 0, byte size = 50,
+    // Returns whether it is drawn as a figure (false: a capsule).
+    private bool SpawnEntity(ushort objectId, Vector3 pos, float yaw, Color color, ushort model = 0, byte size = 50,
         CharacterLook? look = null)
     {
         // Free any node we already have for this id before replacing it. This happens normally: an
@@ -93,10 +97,12 @@ public partial class WorldView
         var node = new Node3D { Position = pos, Rotation = new Vector3(0, yaw, 0) };
         AnimationPlayer? anim = null;
         Node3D? dressed = null;
+        bool figured = false;
         if (model != 0 && ((look is not null ? Figure(model, catacombs: true) : null) ?? Figure(model)) is { } figure)
         {
             // The server's model id is the client's monsters.csv row; mpk figures converted it to
             // models/model<id>.glb. Size 50 is normal; the table's own scale applies on top.
+            figured = true;
             var inst = (Node3D)figure.Template.Duplicate();
             float scale = figure.Scale * Mathf.Max(size, 1) / 50f;
             inst.Scale = new Vector3(scale, scale, scale);
@@ -126,6 +132,7 @@ public partial class WorldView
             Figure = dressed, Model = model, Look = look ?? default };
         _entities[objectId] = entity;
         PlayClip(entity, "idle");
+        return figured;
     }
 
     // A figure's clip, looping; a no-op for a capsule or a clip the figure lacks.
