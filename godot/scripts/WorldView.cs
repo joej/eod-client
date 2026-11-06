@@ -144,6 +144,7 @@ public partial class WorldView : Node3D
         public CharacterLook Look;
         public bool InCombat;         // attack mode (the health byte's 0x80 in its 0xA9 / 0xBA): weapons drawn
         public string CombatIdle = "combat_idle";   // the clip for standing in attack mode, by the weapon in use
+        public Node3D? QuestGlyph;    // the glyph over a quest giver's head (null: none)
     }
 
     /// <summary>Raised when the player presses Quit (connected).</summary>
@@ -407,6 +408,11 @@ public partial class WorldView : Node3D
         _bridge.PlayerMoved += OnPlayerMoved;
         _bridge.PlayerTurned += OnPlayerTurned;
         _bridge.AttackModeChanged += OnAttackModeChanged;
+        _bridge.QuestChanged += (id, quest) =>
+        {
+            if (_entities.TryGetValue(id, out Entity? e))
+                SetQuestGlyph(e, quest);
+        };
         _bridge.MaxSpeedChanged += speed =>
         {
             _runUnitsPerSecond = speed.UnitsPerSecond;

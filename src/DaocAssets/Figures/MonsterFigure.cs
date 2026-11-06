@@ -93,6 +93,30 @@ public sealed class MonsterTables
         return this;
     }
 
+    /// <summary>
+    /// The glyphs over a quest giver's head, by state ("available", "finish", "lesson", "lore", "pending"), from
+    /// moneffects.csv's rows of those names ("Quest Completed Indicator", "Quest Pending Indicator", "Lore Quest
+    /// Indicator", "Lesson Quest Indicator": quest_knot_complete, quest_knot_inactive_01, quest_lore, quest_lesson,
+    /// attached at "Bip01 Helmet"). "Available" has no row; effects/quest_knot.nif is the same knot in gold (the
+    /// completed one is cyan), as retail shows a quest to take and one to hand in.
+    /// </summary>
+    public IReadOnlyDictionary<string, MonsterEffect> QuestGlyphs()
+    {
+        var states = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Quest Completed Indicator"] = "finish", ["Quest Pending Indicator"] = "pending",
+            ["Lore Quest Indicator"] = "lore", ["Lesson Quest Indicator"] = "lesson",
+        };
+        var glyphs = new Dictionary<string, MonsterEffect>();
+        foreach (string[] fx in _effects.Values)
+            if (fx.Length > 4 && states.TryGetValue(fx[1], out string? state) && int.TryParse(fx[2], out int nif)
+                && _effectNifs.TryGetValue(nif, out string[]? file) && file.Length > 2 && file[2].Length > 0)
+                glyphs.TryAdd(state, new MonsterEffect(file[2] + ".nif", fx[3], int.TryParse(fx[4], out int r) ? r : 0));
+        if (glyphs.TryGetValue("finish", out MonsterEffect? finish))
+            glyphs["available"] = finish with { Nif = "quest_knot.nif" };
+        return glyphs;
+    }
+
     /// <summary>The effects the client attaches to server model id <paramref name="modelId"/> (none for most).
     /// Needs <see cref="WithEffects"/>.</summary>
     public IReadOnlyList<MonsterEffect> Effects(int modelId)

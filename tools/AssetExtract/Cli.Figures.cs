@@ -178,6 +178,16 @@ internal static partial class Cli
             }
         }
         File.WriteAllText(Path.Combine(modelsDir, "effects.csv"), table.ToString());
+
+        // models/quest.csv: the glyph over a quest giver's head per state (state, effect model, attach node).
+        var quest = new System.Text.StringBuilder("state,effect,attach\n");
+        foreach ((string state, DaocAssets.Figures.MonsterEffect e) in tables.QuestGlyphs().OrderBy(kv => kv.Key))
+        {
+            ModelResult r = library.GetModel(e.Nif, reconvert: true);
+            if (r.GlbPath is null) { failed++; Console.Error.WriteLine($"  quest glyph {state} ({e.Nif}): {r.Origin} {r.Error}"); continue; }
+            quest.Append($"{state},{ModelStem(modelsDir, r.GlbPath)},{e.Attach}\n");
+        }
+        File.WriteAllText(Path.Combine(modelsDir, "quest.csv"), quest.ToString());
         Console.WriteLine($"effects: {rows} on {models} model ids, {converted.Count(c => c.Value is not null)} effect models; " +
             $"{absent} not in the install, {unsupported} not drawable (particles only), {failed} failed");
         return failed;

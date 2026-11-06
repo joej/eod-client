@@ -335,6 +335,15 @@ and 0x02: the server appends "-DOR" and "-NON" to the name instead (OpenDAoC's t
 1923, reaches a GM as "[]-DOR-NON"). Model 1923's client figure is "Corpse Light Node"; the recording has two
 of these indicators and a swarm of flies flagged 0x03 among its 111 NPCs.
 
+**Quest glyphs.** The knot over a quest giver's head comes from 0xDA (`PacketLib1124.SendNPCCreate`): flags2
+0x08 available, 0x10 finish; flags3 (the byte after flags2) 0x01 lesson, 0x02 lore, 0x20 pending. It changes
+later through **0x4C VisualEffect** (`PacketLib173.SendNPCsQuestEffect`): object id u16 BE, kind u8 = 7, then
+the indicator u8 (OpenDAoC's eQuestIndicator: 0x01 available, 0x02 finish, 0x04 lesson, 0x08 lore, 0x10 pending,
+0 none) and a u32 0. The recorded session's 0x4C packets are other kinds (5, 9). The client's glyphs are effect
+files: moneffects.csv's "Quest Completed/Pending Indicator", "Lore/Lesson Quest Indicator" rows, and
+`effects/quest_knot.nif` (gold) for a quest to take; retail shows a gold knot for one to take and a cyan one to
+hand in.
+
 **Hidden NPCs.** OpenDAoC hides a creature without removing it (`HideableNpc`: night spawns by day, day
 spawns by night) by sending its 0xDA again as **model 1**, can't-target, name hidden and peaceful; it sends
 the real model when the creature shows. Model 1 is the client table's "Demon", so a client that draws it

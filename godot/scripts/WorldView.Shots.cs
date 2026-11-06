@@ -87,19 +87,27 @@ public partial class WorldView
                 _ = SendTravel(command);
             };
         }
-        // --npc MODEL[,MODEL...] spawns Albion NPCs with those models 5 m apart in front of the character, through the
+        // --npc MODEL[:STATE][,MODEL...] spawns Albion NPCs with those models 5 m apart in front of the character, through the
         // same path a server's 0xDA takes (OnNpcSpawned): to check a creature as the game draws it, offline.
         int npcArg = System.Array.IndexOf(args, "--npc");
         if (npcArg >= 0 && npcArg + 1 < args.Length)
         {
             string[] models = args[npcArg + 1].Split(',');
+            // MODEL:STATE gives it a quest glyph (available, finish, lesson, lore, pending), sent as the server's
+            // 0xDA flag bits.
             for (int k = 0; k < models.Length; k++)
-                if (ushort.TryParse(models[k], out ushort model))
-                {
-                    float x = _world.Position.X + 200 * (k - (models.Length - 1) / 2f), y = _world.Position.Y - 300;
-                    OnNpcSpawned(new DaocProtocol.Packets.NpcCreate((ushort)(60000 + k), 0, 0, (ushort)_world.Position.Z,
-                        (uint)x, (uint)y, model, 50, 1, 0x40, $"npc {model}", ""));
-                }
+            {
+                string[] part = models[k].Split(':');
+                if (!ushort.TryParse(part[0], out ushort model))
+                    continue;
+                var quest = part.Length > 1 && System.Enum.TryParse(part[1], true, out DaocProtocol.Packets.QuestIndicator q)
+                    ? q : DaocProtocol.Packets.QuestIndicator.None;
+                byte flags2 = quest switch { DaocProtocol.Packets.QuestIndicator.Available => 0x08, DaocProtocol.Packets.QuestIndicator.Finish => 0x10, _ => 0 };
+                byte flags3 = quest switch { DaocProtocol.Packets.QuestIndicator.Lesson => 0x01, DaocProtocol.Packets.QuestIndicator.Lore => 0x02, DaocProtocol.Packets.QuestIndicator.Pending => 0x20, _ => 0 };
+                float x = _world.Position.X + 200 * (k - (models.Length - 1) / 2f), y = _world.Position.Y - 300;
+                OnNpcSpawned(new DaocProtocol.Packets.NpcCreate((ushort)(60000 + k), 0, 0, (ushort)_world.Position.Z,
+                    (uint)x, (uint)y, model, 50, 1, 0x40, $"npc {model}", "") { Flags2 = flags2, Flags3 = flags3 });
+            }
         }
         // --drop METRES lifts the character that far once the world is up, to check falling and landing.
         int drop = System.Array.IndexOf(args, "--drop");

@@ -92,7 +92,10 @@ public partial class WorldView
         }
         // Shown again (a night spawn at nightfall): its position updates count once more.
         _hiddenNpcs.Remove(npc.ObjectId);
-        if (!SpawnEntity(npc.ObjectId, pos, YawFromHeading(npc.HeadingOnly), RealmColor(npc.Flags >> 6), npc.ModelId, npc.Size))
+        bool drawn = SpawnEntity(npc.ObjectId, pos, YawFromHeading(npc.HeadingOnly), RealmColor(npc.Flags >> 6), npc.ModelId, npc.Size);
+        if (_entities.TryGetValue(npc.ObjectId, out Entity? spawned))
+            SetQuestGlyph(spawned, npc.Quest);
+        if (!drawn)
             GD.Print($"[entity] {npc.ObjectId} \"{npc.Name}\": no figure for model {npc.ModelId} (sent {npc.Model}): a capsule");
     }
 
@@ -462,6 +465,7 @@ public partial class WorldView
             {
                 var bone = new BoneAttachment3D { Name = "EffectOn_" + attach, BoneName = attach };
                 skeleton.AddChild(bone);
+                fx.Transform = FromGltf;   // a bone's frame is the NIF's (units, Z up); the effect was converted to glTF
                 bone.AddChild(fx);
             }
             else if (figure.FindChild(attach, true, false) is Node3D node)
@@ -469,6 +473,88 @@ public partial class WorldView
             else
                 figure.AddChild(fx);
         }
+    }
+
+    // Undoes the converter's NIF→glTF transform (units to metres, Z up to Y up) for a converted model hung on a figure's
+    // bone, whose frame stays the NIF's: as the gear's frames do (cata_gear.json, WriteCataGear).
+    private static readonly Transform3D FromGltf = MakeFromGltf();
+
+    private static Transform3D MakeFromGltf()
+    {
+        System.Numerics.Matrix4x4.Invert(DaocAssets.Nif.GltfExporter.NifToGltfMatrix, out var m);
+        return new Transform3D(new Basis(new Vector3(m.M11, m.M12, m.M13), new Vector3(m.M21, m.M22, m.M23), new Vector3(m.M31, m.M32, m.M33)),
+            new Vector3(m.M41, m.M42, m.M43));
+    }
+
+    // ----- Quest glyphs (the knot over a quest giver's head) -----
+
+    // models/quest.csv (state, effect model, attach node), read once.
+    private Dictionary<string, (string Effect, string Attach)>? _questGlyphs;
+
+    // Puts the glyph for `quest` over the entity (replacing any it has), or takes it away for None. It hangs on the
+    // figure's helmet bone (where the client's table attaches it), else its head, else above the entity.
+    private void SetQuestGlyph(Entity e, QuestIndicator quest)
+    {
+        if (e.QuestGlyph is { } old)
+        {
+            old.QueueFree();
+            e.QuestGlyph = null;
+        }
+        if (quest == QuestIndicator.None)
+            return;
+        string lib = _libraryPath ?? "";
+        if (_questGlyphs is null)
+        {
+            _questGlyphs = new();
+            string path = lib.PathJoin("models").PathJoin("quest.csv");
+            if (lib.Length > 0 && Godot.FileAccess.FileExists(path))
+                foreach (string line in Godot.FileAccess.GetFileAsString(path).Split('\n').Skip(1))
+                    if (line.Trim().Split(',') is { Length: >= 3 } c)
+                        _questGlyphs[c[0]] = (c[1], c[2]);
+        }
+        if (!_questGlyphs.TryGetValue(quest.ToString().ToLowerInvariant(), out var glyph))
+            return;
+        string file = glyph.Effect + ".glb";
+        if (!_figureFiles.TryGetValue(file, out Node3D? template))
+        {
+            string path = lib.PathJoin("models").PathJoin(file);
+            template = Godot.FileAccess.FileExists(path) ? ModelTexturing.LoadGlb(path, TexDirs("effects")) : null;
+            _figureFiles[file] = template;
+        }
+        if (template is null)
+            return;
+        var node = (Node3D)template.Duplicate();
+        node.Name = "QuestGlyph";
+        // Placed as retail shows it (Wicoessa's gold knot, Astoissi's cyan one): upright, centred 0.9 m over
+        // the head, room for the name between. The files don't say how retail gets there: hung on the helmet frame as stored, the knot (under a
+        // node flipped 180 degrees, "Dummy01") would sit a metre below it. Their small glow cards are billboards
+        // authored at other offsets, so they are left out.
+        var box = new Aabb();
+        bool any = false;
+        foreach (MeshInstance3D mi in node.FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>())
+        {
+            if (mi.Mesh is null || mi.Mesh.GetFaces().Length <= 6)
+            {
+                mi.Visible = false;
+                continue;
+            }
+            Aabb b = mi.Transform * mi.GetAabb();
+            box = any ? box.Merge(b) : b;
+            any = true;
+        }
+        node.Position = HeadHeight(e) + new Vector3(0, 0.9f, 0) - (any ? box.GetCenter() : Vector3.Zero);
+        e.Node.AddChild(node);
+        e.QuestGlyph = node;
+    }
+
+    // Where an entity's head is, in its own node's space: the figure's helmet or head bone at spawn, else 2 m up.
+    private static Vector3 HeadHeight(Entity e)
+    {
+        foreach (Skeleton3D sk in e.Node.FindChildren("*", "Skeleton3D", true, false).OfType<Skeleton3D>())
+            foreach (string name in new[] { "Bip01 Helmet", "Bip01 Head" })
+                if (sk.FindBone(name) is int bone and >= 0)
+                    return (e.Node.GlobalTransform.AffineInverse() * sk.GlobalTransform * sk.GetBoneGlobalPose(bone)).Origin;
+        return new Vector3(0, 2f, 0);
     }
 
     // Texture folders for one kind of model, in search order: overrides, the kind's own converted copies

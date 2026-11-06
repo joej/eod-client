@@ -231,4 +231,22 @@ public sealed class MonsterFigureTests
         NifMesh dressed = Assert.Single(MonsterFigure.Dress(horse, spec).Meshes);
         Assert.Equal(("Horse_Medium_Brown.dds", (Vector4?)null, false), (dressed.TextureFile, dressed.BaseColor, dressed.Helper));
     }
+
+    [Fact]
+    public void QuestGlyphsComeFromTheirEffectRowsAndAvailableIsTheGoldKnot()
+    {
+        // Rows as in the install's moneffects.csv / moneffectnifs.csv.
+        var tables = MonsterTables.Parse("", Monnifs, Skins).WithEffects("",
+            "Effect,Desc\n189,Lore Quest Indicator,186,Bip01 Helmet,4000,100,1,0,0,0,0,,\n" +
+            "190,Lesson Quest Indicator,187,Bip01 Helmet,4000,100,1,0,0,0,0,,\n" +
+            "191,Quest Completed Indicator,188,Bip01 Helmet,4000,100,1,0,0,0,0,,\n" +
+            "192,Quest Pending Indicator,189,Bip01 Helmet,4000,100,1,0,0,0,0,,\n",
+            "Effect,Desc\n186,Lore Quest Indicator,quest_lore,1,0,4000\n187,Lesson Quest Indicator,quest_lesson,1,0,4000\n" +
+            "188,Quest Completed Indicator,quest_knot_complete,1,0,4000\n189,Quest Pending Indicator,quest_knot_inactive_01,1,0,4000\n");
+        IReadOnlyDictionary<string, MonsterEffect> g = tables.QuestGlyphs();
+        Assert.Equal(new MonsterEffect("quest_knot.nif", "Bip01 Helmet", 4000), g["available"]);
+        Assert.Equal("quest_knot_complete.nif", g["finish"].Nif);
+        Assert.Equal("quest_knot_inactive_01.nif", g["pending"].Nif);
+        Assert.Equal(("quest_lore.nif", "quest_lesson.nif"), (g["lore"].Nif, g["lesson"].Nif));
+    }
 }

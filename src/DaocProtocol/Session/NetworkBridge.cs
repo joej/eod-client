@@ -38,6 +38,9 @@ public sealed class NetworkBridge(Action<string>? log = null)
     /// <summary>Our own attack mode as the server has it (S→C 0x74): weapons drawn or put away.</summary>
     public event Action<bool>? AttackModeChanged;
 
+    /// <summary>An NPC's quest glyph changed (0x4C kind 7): object id and the new state.</summary>
+    public event Action<ushort, QuestIndicator>? QuestChanged;
+
     /// <summary>How fast the server lets us run (0xB6): run no faster, or its speed check snaps us back.</summary>
     public event Action<MaxSpeed>? MaxSpeedChanged;
 
@@ -105,6 +108,12 @@ public sealed class NetworkBridge(Action<string>? log = null)
                     break;
                 case AttackMode.Code:
                     AttackModeChanged?.Invoke(AttackMode.IsOn(packet.Payload));
+                    break;
+                case VisualEffect.Code:
+                    if (VisualEffect.Parse(packet.Payload) is { Quest: { } quest } effect)
+                        QuestChanged?.Invoke(effect.ObjectId, quest);
+                    else
+                        _unhandled[packet.Code] = _unhandled.GetValueOrDefault(packet.Code) + 1;
                     break;
                 case MaxSpeed.Code:
                     MaxSpeedChanged?.Invoke(MaxSpeed.Parse(packet.Payload));

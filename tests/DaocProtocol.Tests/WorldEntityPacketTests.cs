@@ -101,10 +101,10 @@ public class WorldEntityPacketTests
         Assert.Equal(0x1234, d.ObjectId);
     }
 
-    private static byte[] NpcCreatePayload(byte flags2, string name) => new PayloadWriter()
+    private static byte[] NpcCreatePayload(byte flags2, string name, byte flags3 = 0) => new PayloadWriter()
         .U16BE(4778).U16BE(0).U16BE(0).U16BE(2897).U32BE(574000).U32BE(530000).Zeros(2)
         .U16BE(1923).U8(255).U8(0).U8(0x30)          // model, size, level, flags (peace, flying)
-        .U8(0x20).U8(flags2).U8(0).Zeros(2)          // max stick, flags2, flags3, unknown
+        .U8(0x20).U8(flags2).U8(flags3).Zeros(2)     // max stick, flags2, flags3, unknown
         .U8((byte)name.Length).Bytes(System.Text.Encoding.ASCII.GetBytes(name)).U8(0).ToArray();
 
     [Theory]
@@ -127,5 +127,28 @@ public class WorldEntityPacketTests
         Assert.Equal(
             ["1923 3 ", "1923 3 ", "2020 3 swarm of flies"],
             npcs.Where(n => n.Untargetable).Select(n => $"{n.ModelId} {n.Flags2} {n.Name}").Order());
+    }
+
+    [Theory]
+    [InlineData(0x00, 0x00, QuestIndicator.None)]
+    [InlineData(0x08, 0x00, QuestIndicator.Available)]   // PacketLib1124.SendNPCCreate: flags2 0x08
+    [InlineData(0x10, 0x00, QuestIndicator.Finish)]      // flags2 0x10
+    [InlineData(0x00, 0x01, QuestIndicator.Lesson)]      // flags3 0x01
+    [InlineData(0x00, 0x02, QuestIndicator.Lore)]        // flags3 0x02
+    [InlineData(0x00, 0x20, QuestIndicator.Pending)]     // flags3 0x20
+    [InlineData(0x04, 0x00, QuestIndicator.None)]        // stealthed only
+    public void AnNpcCarriesItsQuestGlyphInItsFlagBytes(byte flags2, byte flags3, QuestIndicator quest) =>
+        Assert.Equal(quest, NpcCreate.Parse(NpcCreatePayload(flags2, "Wicoessa", flags3)).Quest);
+
+    [Fact]
+    public void AQuestEffectChangesTheGlyphAndOtherEffectsDoNot()
+    {
+        // PacketLib173.SendNPCsQuestEffect: object id, kind 7, indicator, u32 0.
+        VisualEffect quest = VisualEffect.Parse(new PayloadWriter().U16BE(0x1234).U8(7).U8(0x02).U32BE(0).ToArray());
+        Assert.Equal(((ushort)0x1234, (QuestIndicator?)QuestIndicator.Finish), (quest.ObjectId, quest.Quest));
+        // The recording's two 0x4C packets are other kinds (5 and 9): no glyph.
+        List<VisualEffect> recorded = ParseAll(VisualEffect.Code, VisualEffect.Parse);
+        Assert.Equal([5, 9], recorded.Select(e => (int)e.Kind));
+        Assert.All(recorded, e => Assert.Null(e.Quest));
     }
 }

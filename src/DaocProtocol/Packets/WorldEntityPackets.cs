@@ -104,6 +104,19 @@ public sealed record NpcCreate(
     /// </summary>
     public bool Untargetable => (Flags2 & 0x01) != 0 || Name.Contains("-DOR", StringComparison.Ordinal);
 
+    /// <summary>The third flags byte: quest states (0x01 lesson, 0x02 lore, 0x20 pending).</summary>
+    public byte Flags3 { get; init; }
+
+    /// <summary>The glyph over the NPC's head (PacketLib1124.SendNPCCreate): flags2 0x08 available, 0x10 finish;
+    /// flags3 0x01 lesson, 0x02 lore, 0x20 pending.</summary>
+    public QuestIndicator Quest =>
+        (Flags2 & 0x08) != 0 ? QuestIndicator.Available
+        : (Flags2 & 0x10) != 0 ? QuestIndicator.Finish
+        : (Flags3 & 0x01) != 0 ? QuestIndicator.Lesson
+        : (Flags3 & 0x02) != 0 ? QuestIndicator.Lore
+        : (Flags3 & 0x20) != 0 ? QuestIndicator.Pending
+        : QuestIndicator.None;
+
     public static NpcCreate Parse(ReadOnlySpan<byte> payload)
     {
         var r = new PayloadReader(payload);
@@ -120,11 +133,11 @@ public sealed record NpcCreate(
         byte flags = r.U8();
         r.Skip(1);              // maxStickDistance (hardcoded 0x20)
         byte flags2 = r.U8();
-        r.Skip(1);              // flags3 (quest indicators)
+        byte flags3 = r.U8();
         r.Skip(2);              // unknown ("new in 1.71")
         string name = r.StringU8();
         string guild = r.StringU8();
-        return new NpcCreate(objectId, speed, heading, z, x, y, model, size, level, flags, name, guild) { Flags2 = flags2 };
+        return new NpcCreate(objectId, speed, heading, z, x, y, model, size, level, flags, name, guild) { Flags2 = flags2, Flags3 = flags3 };
     }
 }
 
@@ -276,5 +289,41 @@ public sealed record PlayerHeading(ushort SessionId, ushort Heading, byte Action
         byte state = r.U8();
         byte health = r.U8();
         return new PlayerHeading(session, heading, action, state, health);
+    }
+}
+
+/// <summary>A quest giver's glyph state; the values are OpenDAoC's eQuestIndicator, which 0x4C sends as is.</summary>
+public enum QuestIndicator : byte
+{
+    None = 0x00,
+    /// <summary>A quest to take (retail: a gold knot).</summary>
+    Available = 0x01,
+    /// <summary>A quest to hand in (a cyan knot).</summary>
+    Finish = 0x02,
+    Lesson = 0x04,
+    Lore = 0x08,
+    /// <summary>Taken, not finished yet (a grey knot).</summary>
+    Pending = 0x10,
+}
+
+/// <summary>
+/// 0x4C (server → client): a visual effect on an object. Object id u16 BE, kind u8, then the kind's data.
+/// Kind 7 (PacketLib173.SendNPCsQuestEffect) changes an NPC's quest glyph: indicator u8, then u32 0. The
+/// recorded session has only kinds 5 and 9.
+/// </summary>
+public sealed record VisualEffect(ushort ObjectId, byte Kind, byte[] Data)
+{
+    public const byte Code = 0x4C;
+    public const byte QuestKind = 0x07;
+
+    /// <summary>The new glyph when this is a quest effect, else null.</summary>
+    public QuestIndicator? Quest => Kind == QuestKind && Data.Length > 0 ? (QuestIndicator)Data[0] : null;
+
+    public static VisualEffect Parse(ReadOnlySpan<byte> payload)
+    {
+        var r = new PayloadReader(payload);
+        ushort id = r.U16BE();
+        byte kind = r.U8();
+        return new VisualEffect(id, kind, payload[3..].ToArray());
     }
 }
