@@ -105,7 +105,11 @@ public partial class WorldView : Node3D
     private SpringArm3D _camArm = null!;
     private float _camYaw;               // chase: orbit yaw (free-fly: camera yaw)
     private float _camPitch;
-    private float _camDistance = 5.5f;   // spring length target, metres (OfflineDAoC default)
+    private float _camDistance = ClientSettings.Camera?.Distance ?? 5.5f;   // spring length target, metres (OfflineDAoC default; /setcamera)
+    private float _camOrbit;              // a left-drag pan round the character (radians); right-click resets it
+    private bool _panActive, _panMoved;   // a left press on the world, and whether it has become a drag
+    private Vector2 _panFrom;
+    private bool _autoRun;                // NumLock auto-run
     private const float CamMin = 1.25f;  // 50 DAoC units; game.dll cameradistance clamp
     private const float CamMax = 12.5f;  // 500 DAoC units
     private bool _lookActive;
@@ -396,7 +400,7 @@ public partial class WorldView : Node3D
         // -Z the pivot yaw is the body yaw turned 180°. Matching them put the camera in front, looking
         // at the nose (so walking read as "backwards toward the camera").
         _camYaw = _bodyYaw + Mathf.Pi;          // start behind the body
-        _camPitch = -0.22f;                     // ~-12.6°, OfflineDAoC default
+        _camPitch = ClientSettings.Camera?.Pitch ?? -0.22f;   // ~-12.6°, OfflineDAoC default; /setcamera
 
         // Dispatcher: route drained packets to entity handlers (M5). Subscribe before the first
         // drain in _Process so no world packet is missed.
@@ -490,6 +494,9 @@ public partial class WorldView : Node3D
         _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);
         // Off by default: the server's speed check exempts GMs only, and kicks a player who sprints.
         _dev.AddToggle("Shift fast move ×4 (GM only)", ClientSettings.Sprint, on => ClientSettings.Sprint = on);
+        // The key layout (docs/controls.md): today's (W/S) or the 2001 manual's (arrows, mouse buttons).
+        _dev.AddChoice("Keys", KeyBindings.Presets, System.Array.IndexOf(KeyBindings.Presets, KeyBindings.Preset),
+            i => KeyBindings.Preset = KeyBindings.Presets[i]);
         if (PacketLogging is var (getLog, setLog))
             _togglePacketLog = _dev.AddToggle("F4 packet log", getLog(), setLog);
         _dev.AddInfo($"{zoneObjects} fixtures · {_zoneTexturedModels} textured models · {_waterBodies} water\n" +
@@ -638,9 +645,28 @@ public partial class WorldView : Node3D
             return;   // typing: don't drive the camera or trigger P/Tab while the box has focus
         }
 
-        if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Right)
+        // Left-drag pans the chase camera round the character (retail); a left click without a drag still inspects.
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false } up && _panActive)
+        {
+            if (!_panMoved && !_lookActive && !ChatInputActive)
+                _pendingClick = up.Position;
+            _panActive = false;
+        }
+        else if (@event is InputEventMouseMotion pm && _panActive && !_lookActive)
+        {
+            _panMoved |= pm.Position.DistanceTo(_panFrom) > 4;
+            if (_panMoved && _chase)
+            {
+                const float panSens = 0.005f;
+                _camOrbit -= Mathf.Clamp(pm.Relative.X, -80, 80) * panSens;
+                _camPitch = Mathf.Clamp(_camPitch - Mathf.Clamp(pm.Relative.Y, -80, 80) * panSens, -0.87f, 0.87f);
+            }
+        }
+        else if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Right)
         {
             _lookActive = mb.Pressed;
+            if (mb.Pressed)
+                _camOrbit = 0;   // right-click aligns the camera behind the character again (retail)
             Input.MouseMode = mb.Pressed ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
             _freshCapture = mb.Pressed;   // swallow the first (often huge) motion delta after capture
         }
@@ -708,7 +734,11 @@ public partial class WorldView : Node3D
         {
             OpenTravel();
         }
-        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.V } && !ChatInputActive)
+        else if (KeyBindings.Pressed(@event, ControlAction.AutoRun) && !ChatInputActive && _chase)
+        {
+            _autoRun = !_autoRun;   // NumLock: run forward until it is pressed again, or forward or back
+        }
+        else if (KeyBindings.Pressed(@event, ControlAction.Sprint) && !ChatInputActive)
         {
             // V toggles sprint (retail's default key, darkageofcamelot.com "Control and Movement"). The
             // server does the rest: /sprint gives 1.3x speed while endurance lasts, drains it while moving
@@ -716,7 +746,7 @@ public partial class WorldView : Node3D
             if (_session is not null && _closedReason is null)
                 _ = SendTravel("/sprint");
         }
-        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.H } && !ChatInputActive)
+        else if (KeyBindings.Pressed(@event, ControlAction.AttackMode) && !ChatInputActive)
         {
             // H toggles attack mode: our binding, a key the install's RPG preset leaves free (F is retail's face
             // target; retail's attack key is unconfirmed, open question W34). The server answers with 0x74, and
@@ -759,9 +789,11 @@ public partial class WorldView : Node3D
     // Left-click on the world (not on a panel: panels stop their clicks) queues an inspect pick.
     public override void _UnhandledInput(InputEvent @event)
     {
+        // A left press on the world starts a camera pan or, released without a drag, an inspect pick (in _Input).
+        // In the classic layout the left button walks backward instead.
         if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb
-            && !_lookActive && !ChatInputActive)
-            _pendingClick = mb.Position;
+            && !_lookActive && !ChatInputActive && !KeyBindings.Moves(MouseButton.Left))
+            (_panActive, _panMoved, _panFrom) = (true, false, mb.Position);
     }
 
     // Switches between the chase rig and a free-fly debug camera by reparenting the one Camera3D:
@@ -854,7 +886,7 @@ public partial class WorldView : Node3D
             $"body {_body.Position.X:0.0},{_body.Position.Y:0.0},{_body.Position.Z:0.0}   " +
             $"ground {(_groundHit ? "ON" : "--")}   mode {(_chase ? "chase" : "free")}\n" +
             (_chase
-                ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Space jump, V sprint, wheel zoom   ·   H attack   ·   Tab free-fly, P shot"
+                ? "move: W/S walk, A/D or right-drag turn, Q/E strafe, Space jump, V sprint, NumLock auto-run, wheel zoom, left-drag pan   ·   H attack   ·   Tab free-fly, P shot"
                 : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot")
             + "\nF1 panels · F2 render mode · F3 view distance · left-click inspect (Esc clears)";
     }

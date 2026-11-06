@@ -47,20 +47,23 @@ public partial class WorldView
 
         // A/D turn (keys); mouse-look also turns in chase mode, feeding _bodyYaw from _Input.
         float turnKeys = 0f;
-        if (driving && Input.IsKeyPressed(Key.A)) turnKeys += 1f;
-        if (driving && Input.IsKeyPressed(Key.D)) turnKeys -= 1f;
+        if (driving && KeyBindings.Held(ControlAction.TurnLeft)) turnKeys += 1f;
+        if (driving && KeyBindings.Held(ControlAction.TurnRight)) turnKeys -= 1f;
         const float turnRate = 2.5f; // radians/s
         _bodyYaw += turnKeys * turnRate * (float)delta;
 
         float forward = 0f;
-        if (driving && Input.IsKeyPressed(Key.W)) forward += 1f;
-        if (driving && Input.IsKeyPressed(Key.S)) forward -= 1f;
+        bool forwardHeld = driving && KeyBindings.Held(ControlAction.Forward), backHeld = driving && KeyBindings.Held(ControlAction.Back);
+        if (forwardHeld || backHeld)
+            _autoRun = false;   // auto-run (NumLock) runs until forward or back is pressed
+        if (forwardHeld || (_autoRun && driving)) forward += 1f;
+        if (backHeld) forward -= 1f;
 
         // Q/E strafe left/right: sidestep without turning. Essential with the mouse-chase camera,
         // where you steer with the mouse and strafe to line up — forward + strafe is how you move.
         float strafe = 0f;
-        if (driving && Input.IsKeyPressed(Key.Q)) strafe -= 1f;
-        if (driving && Input.IsKeyPressed(Key.E)) strafe += 1f;
+        if (driving && KeyBindings.Held(ControlAction.StrafeLeft)) strafe -= 1f;
+        if (driving && KeyBindings.Held(ControlAction.StrafeRight)) strafe += 1f;
 
         _body.Rotation = new Vector3(0, _bodyYaw, 0);
 
@@ -86,13 +89,13 @@ public partial class WorldView
                 // GM may (the server snaps a player back and then kicks them). The sent 0xA9 speed stays
                 // the allowed run speed.
                 float sprint = ClientSettings.Sprint && Input.IsKeyPressed(Key.Shift) ? 4f : 1f;
-                float metresPerSec = _runUnitsPerSecond * RegionMetresPerUnit * sprint;
+                float metresPerSec = MoveSpeed(forward) * RegionMetresPerUnit * sprint;
                 _body.Position += move.Normalized() * metresPerSec * (float)delta;
             }
         }
 
         // Space jumps from the ground.
-        if (driving && !_airborne && _groundHit && Input.IsKeyPressed(Key.Space))
+        if (driving && !_airborne && _groundHit && KeyBindings.Held(ControlAction.Jump))
         {
             _verticalSpeed = JumpSpeed;
             _airborne = true;
@@ -129,7 +132,7 @@ public partial class WorldView
 
         if (_posLeft <= 0f || _landingSpeed > 0 || (changed && !_sendingChanges))
         {
-            SendMove(moving ? _runUnitsPerSecond : 0f);
+            SendMove(moving ? (forward < 0 ? -MoveSpeed(forward) : MoveSpeed(forward)) : 0f);
             _posLeft = changed ? MovingSendInterval : IdleSendInterval;
             _sendingChanges = changed;
         }
@@ -248,6 +251,13 @@ public partial class WorldView
     private const float MaxFallSearch = 600f; // how far below a floor is looked for
     private const float MinFloorNormal = 0.6f;   // a surface up to ~53 degrees from flat is stood on
 
+    // Region units per second for the way we're moving: running forward at the server's speed (0xB6); backing up
+    // or strafing without going forward at retail's 85 of a 191 run (measured by daoc-re, 2026-11-05: backward
+    // is sent as a negative speed), scaled with the server's speed.
+    private float MoveSpeed(float forward) => forward > 0 ? _runUnitsPerSecond : _runUnitsPerSecond * SlowUnits / 191f;
+
+    private const float SlowUnits = 85f;
+
     private void SendMove(float speed)
     {
         (float rx, float ry, float rz) = ToRegion(_body.Position);
@@ -310,7 +320,7 @@ public partial class WorldView
         // looking at the blue stripe). Only pitch varies (look up/down); the camera is rigidly
         // behind in chase mode and right-drag turns the body, not the camera. (Adding _bodyYaw here
         // double-counted the body's rotation and skewed the camera off to the side.)
-        _camPivot.Rotation = new Vector3(_camPitch, 0f, 0);
+        _camPivot.Rotation = new Vector3(_camPitch, _camOrbit, 0);
         // Lerp the arm's TARGET length toward the zoom distance; the SpringArm shortens from this
         // target on its own when it hits placed geometry. Floor the target at CamMin so even a wall
         // the arm catches can't collapse the camera into the pivot (the "inside the capsule" bug).

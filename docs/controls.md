@@ -12,6 +12,22 @@ RPG and FPS; darkageofcamelot.com's current page names RPG, FPS and "MMO Default
   Space jump, NumLock auto-run, Z dive, V sprint; mouse: left-drag pans the camera, right button looks
   where you run. That is the layout most players use today.
 
+## Retail's shipped presets (keyboard.dat, read by daoc-re 2026-11-06)
+
+The player's own bindings (user.dat) come first; keyboard.dat's preset only fills actions left unbound.
+
+| Action | RPG | MMO | FPS |
+|---|---|---|---|
+| Forward / back | W / S | W / S | E / D |
+| Turn left / right | A / D | Num4 / Num6 | Num4 / Num6 |
+| Strafe left / right | Q / E | A / D | S / F |
+| Jump / up | Space | Space | Space |
+| Down (dive) | Z | Q | Z |
+| Walk (toggle) | Scroll Lock | K + a modifier (likely Shift) | K + a modifier |
+
+Speeds (daoc-re's capture, 2026-11-05): run 191 units/s; backward, strafe and swim 85; backward is sent as a
+negative speed with no flag. Walking's speed is still to be captured.
+
 ## Today's layout (owner's reference, 2026-11-06)
 
 | Action | Key |
@@ -87,6 +103,9 @@ them), saved per character.
 
 ## Our client today
 
-W/S walk forward and back, A/D or right-drag turn, Q/E strafe, Space jump, V sprint (`/sprint`), mouse wheel
-zoom, H attack mode (retail: F6 or A by layout), Tab free-fly camera (ours), Enter or `/` to chat. No walk
+Presets RPG (default), MMO, FPS and classic (the 2001 layout), chosen in the dev overlay ("Keys") and saved.
+Backing up and strafing at 85 of 191 (scaled with the server's speed), backward sent negative; V sprint
+(`/sprint`); NumLock auto-run (forward or back stops it); left-drag pans the camera round the character, a click
+inspects, right-drag turns and re-aligns; mouse wheel zoom; `/setcamera` saves the camera's distance and tilt;
+H attack mode (retail: F6 or A by layout, W34); Tab free-fly camera (ours); Enter or `/` to chat. No walk
 toggle, auto-run, consider or targeting keys yet.

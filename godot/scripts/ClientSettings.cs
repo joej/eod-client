@@ -112,6 +112,34 @@ public static class ClientSettings
         set => Save("sprint", value);
     }
 
+    /// <summary>The key layout (KeyBindings.Presets): "rpg" (the default), "mmo", "fps" or "classic".</summary>
+    public static string Controls
+    {
+        get => Load().GetValue("controls", "preset", "rpg").AsString();
+        set => SaveIn("controls", "preset", value);
+    }
+
+    /// <summary>The chase camera's default distance (metres) and pitch (radians), as /setcamera saved them; null
+    /// until then.</summary>
+    public static (float Distance, float Pitch)? Camera
+    {
+        get
+        {
+            ConfigFile cfg = Load();
+            return cfg.HasSectionKey("controls", "camera_distance")
+                ? ((float)cfg.GetValue("controls", "camera_distance").AsDouble(), (float)cfg.GetValue("controls", "camera_pitch").AsDouble())
+                : null;
+        }
+        set
+        {
+            if (value is { } c)
+            {
+                SaveIn("controls", "camera_distance", c.Distance);
+                SaveIn("controls", "camera_pitch", c.Pitch);
+            }
+        }
+    }
+
     /// <summary>Puts the window in the saved mode (no-op without a display, e.g. headless checks).</summary>
     public static void ApplyWindowMode()
     {
@@ -165,6 +193,13 @@ public static class ClientSettings
         var size = new Vector2I(System.Math.Min(900, usable.Size.X), System.Math.Min(700, usable.Size.Y));
         DisplayServer.WindowSetSize(size);
         DisplayServer.WindowSetPosition(usable.Position + (usable.Size - size) / 2);
+    }
+
+    private static void SaveIn(string section, string key, Variant value)
+    {
+        ConfigFile cfg = Load();
+        cfg.SetValue(section, key, value);
+        cfg.Save(Path);
     }
 
     private static void Save(string key, Variant value)
