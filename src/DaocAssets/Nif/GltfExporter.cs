@@ -322,14 +322,14 @@ public static class GltfExporter
         if (!string.IsNullOrEmpty(m.TextureFile))
         {
             if (m.BaseColor is { } tint)
-                material.WithBaseColor(tint);
+                material.WithBaseColor(Vector4.Clamp(tint, Vector4.Zero, Vector4.One));
         }
         else
         {
             Vector4 colour = m.BaseColor ?? new Vector4(1f, 1f, 1f, 1f);
             if (IsDefaultWhite(colour))
                 colour = new Vector4(0.6f, 0.6f, 0.6f, 1f); // neutral stone-grey, never magenta
-            material.WithBaseColor(colour);
+            material.WithBaseColor(Vector4.Clamp(colour, Vector4.Zero, Vector4.One));
         }
 
         // Transparency and sidedness from the NIF's NiAlphaProperty/NiStencilProperty: DAoC's trees are

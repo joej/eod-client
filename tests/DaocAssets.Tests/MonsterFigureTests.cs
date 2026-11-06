@@ -194,4 +194,20 @@ public sealed class MonsterFigureTests
     [InlineData("Bodyguard", "", "")]
     public void PartNamesSplitIntoSlotAndVariant(string shape, string slot, string variant) =>
         Assert.Equal((slot, variant), MonsterFigure.SlotOf(shape));
+
+    [Fact]
+    public void AModelsEffectSetResolvesToItsEffectFilesAndAttachNodes()
+    {
+        // Rows as in the install: model 1923 "Catacombs Teleport NPC" has effect set 90 in column 40 ("Mon
+        // Effect"); set 90 is effect 88, which is teleporter_ground.nif on Bip01, drawn within 2500 units.
+        string monsters = "ID,name\n1923,Catacombs Teleport  NPC,399" + string.Concat(Enumerable.Repeat(",0", 37)) + ",90\n"
+            + "8,Plain,206" + string.Concat(Enumerable.Repeat(",0", 37)) + ",0\n";
+        var tables = MonsterTables.Parse(monsters, Monnifs, Skins).WithEffects(
+            "Effect,Desc\n90,teleporter_ground,88,0,0,0,0,0,,\n",
+            "Effect,Desc\n88,teleporter_ground,83,Bip01,2500,100,1,0,0,0,0,,\n",
+            "Effect,Desc\n83,teleporter_ground,teleporter_ground,1,0,2500\n");
+        Assert.Equal([new MonsterEffect("teleporter_ground.nif", "Bip01", 2500)], tables.Effects(1923));
+        Assert.Empty(tables.Effects(8));
+        Assert.Empty(tables.Effects(4242));
+    }
 }

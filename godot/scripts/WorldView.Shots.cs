@@ -74,6 +74,19 @@ public partial class WorldView
                 _ = SendAttack(true);
                 GetTree().CreateTimer(attackFor).Timeout += () => _ = SendAttack(false);
             };
+        // --command TEXT (repeatable) sends each slash command in turn, 2 s apart from 2 s after entering: e.g.
+        // a GM "/jump to X Y Z REGION" to set up a --campose/--shot check somewhere exact.
+        int delay = 2;
+        for (int ci = System.Array.IndexOf(args, "--command"); ci >= 0 && ci + 1 < args.Length;
+             ci = System.Array.IndexOf(args, "--command", ci + 2), delay += 2)
+        {
+            string command = args[ci + 1];
+            GetTree().CreateTimer(delay).Timeout += () =>
+            {
+                GD.Print($"[world] dev command: {command}");
+                _ = SendTravel(command);
+            };
+        }
         // --drop METRES lifts the character that far once the world is up, to check falling and landing.
         int drop = System.Array.IndexOf(args, "--drop");
         if (drop >= 0 && drop + 1 < args.Length && float.TryParse(args[drop + 1], System.Globalization.NumberStyles.Float,

@@ -118,6 +118,8 @@ internal static partial class Cli
             $"{clipCache.Count(c => c.Value is not null)} clips, {skins.Count} skins); {catacombs} whose own figure is a Catacombs one (skipped), " +
             $"{missing} without a figure, {failed} failed");
 
+        int effectsFailed = WriteEffects(tables, models, library);
+
         // Each model id's Catacombs version (how retail draws players): one figure per race and sex
         // (models/cata_fig<N>.glb), and the model's own default skins in models/cata_models.json.
         using var cata = new CataConverter(gamedata, tables, library, models);
@@ -132,7 +134,48 @@ internal static partial class Cli
         int cataFailed = cata.Failed;
         Console.WriteLine($"figures: {cataModels.Count} model ids on {cata.FigureCount} Catacombs figures, " +
             $"{cata.MissingParts} parts missing, {cataFailed} failed");
-        return failed == 0 && cataFailed == 0 ? 0 : 1;
+        return failed == 0 && cataFailed == 0 && effectsFailed == 0 ? 0 : 1;
+    }
+
+    // models/effects.csv: the effects the client attaches to a model (monsters.csv "Mon Effect": glows, auras,
+    // the teleporter's ground ring), one row per effect (model id, model scale, effect model, attach node,
+    // visible range), each effect NIF converted into the library as models/<name>.glb. Returns the failures.
+    private static int WriteEffects(DaocAssets.Figures.MonsterTables tables, string modelsDir, AssetLibrary library)
+    {
+        var table = new System.Text.StringBuilder("model,scale,effect,attach,range\n");
+        var converted = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        int models = 0, rows = 0, failed = 0, absent = 0, unsupported = 0;
+        foreach (int id in tables.ModelIds)
+        {
+            IReadOnlyList<DaocAssets.Figures.MonsterEffect> effects = tables.Effects(id);
+            if (effects.Count == 0) continue;
+            models++;
+            float scale = tables.Resolve(id)?.Scale ?? 1f;
+            foreach (DaocAssets.Figures.MonsterEffect e in effects)
+            {
+                if (!converted.TryGetValue(e.Nif, out string? stem))
+                {
+                    ModelResult r = library.GetModel(e.Nif, reconvert: true);
+                    stem = r.GlbPath is null ? null : Path.GetFileNameWithoutExtension(r.GlbPath);
+                    // Not shipped in this install, or particles only (no triangles: our reader draws none):
+                    // nothing to draw, not an error. Anything else is.
+                    switch (r.Origin)
+                    {
+                        case AssetOrigin.Missing: absent++; break;
+                        case AssetOrigin.Unsupported: unsupported++; break;
+                        case AssetOrigin.Failed: failed++; Console.Error.WriteLine($"  effect (model {id}): {r.Error}"); break;
+                    }
+                    converted[e.Nif] = stem;
+                }
+                if (stem is null) continue;
+                table.Append(FormattableString.Invariant($"{id},{scale},{stem},{e.Attach},{e.VisibleRange}\n"));
+                rows++;
+            }
+        }
+        File.WriteAllText(Path.Combine(modelsDir, "effects.csv"), table.ToString());
+        Console.WriteLine($"effects: {rows} on {models} model ids, {converted.Count(c => c.Value is not null)} effect models; " +
+            $"{absent} not in the install, {unsupported} not drawable (particles only), {failed} failed");
+        return failed;
     }
 
     // A server model id's Catacombs figure (monsters.csv "Cata Nif"): its race's figure, models/cata_fig<N>.glb

@@ -27,6 +27,10 @@ public sealed record FigureSpec(int ModelId, string Name, string Nif, int Versio
     public IReadOnlyDictionary<string, string> Clips { get; init; } = new Dictionary<string, string>();
 }
 
+/// <summary>An effect the client attaches to a model (monsters.csv "Mon Effect"): the effect's NIF, the figure
+/// node or bone it hangs on, and the distance (region units) within which it is drawn.</summary>
+public sealed record MonsterEffect(string Nif, string Attach, int VisibleRange);
+
 public sealed class MonsterTables
 {
     // monsters.csv slot columns, in file order (after ID, name, #).
@@ -42,6 +46,10 @@ public sealed class MonsterTables
     private readonly Dictionary<(int, int), string[]> _hairColours = [];
     private readonly Dictionary<int, string[]> _faceMap = [], _eyeMap = [], _skinMap = [], _tints = [];
     private readonly Dictionary<int, string[]> _canims = [];
+    private readonly Dictionary<int, string[]> _effectSets = [], _effects = [], _effectNifs = [];
+
+    // monsters.csv column 40 ("Mon Effect"): the model's effect set, 0 = none.
+    private const int EffectSetColumn = 40;
 
     // anims.csv columns of the clips the client view uses (ID, name, Walk, Back, Run, ..., Idle at 10,
     // ..., Sit Down and Sit Idle at 21-22: the quit timer sits the character down).
@@ -69,7 +77,36 @@ public sealed class MonsterTables
         return Parse(Text("monsters.csv"), Text("monnifs.csv"), Text("skins.csv"), Text("anims.csv"), Text("animnifs.csv"))
             .WithFig3(Text("fig3map.csv"), Text("fig3parts.csv"), Text("fig3haircolormap.csv"))
             .WithFig3Looks(Text("fig3facemap.csv"), Text("fig3eyecolormap.csv"), Text("fig3skincolormap.csv"), Text("fig3tints.csv"))
-            .WithCombatClips(Text("canims.csv"));
+            .WithCombatClips(Text("canims.csv"))
+            .WithEffects(Text("moneffectsets.csv"), Text("moneffects.csv"), Text("moneffectnifs.csv"));
+    }
+
+    /// <summary>Adds the effect tables: <c>moneffectsets.csv</c> (set -> up to six effect ids, columns 2-7),
+    /// <c>moneffects.csv</c> (effect -> NIF number, attach node, visible range; then rate, track angle,
+    /// auto-scale, rotate axis and amount, collide, which are not used yet) and <c>moneffectnifs.csv</c>
+    /// (NIF number -> file name without extension).</summary>
+    public MonsterTables WithEffects(string setsCsv, string effectsCsv, string nifsCsv)
+    {
+        foreach ((Dictionary<int, string[]> d, string csv) in new[] { (_effectSets, setsCsv), (_effects, effectsCsv), (_effectNifs, nifsCsv) })
+            foreach ((int id, string[] row) in ById(csv))
+                d.TryAdd(id, row.Select(x => x.Trim()).ToArray());
+        return this;
+    }
+
+    /// <summary>The effects the client attaches to server model id <paramref name="modelId"/> (none for most).
+    /// Needs <see cref="WithEffects"/>.</summary>
+    public IReadOnlyList<MonsterEffect> Effects(int modelId)
+    {
+        var list = new List<MonsterEffect>();
+        if (!_monsters.TryGetValue(modelId, out string[]? m) || m.Length <= EffectSetColumn
+            || !int.TryParse(m[EffectSetColumn], out int set) || set <= 0 || !_effectSets.TryGetValue(set, out string[]? s))
+            return list;
+        foreach (string e in s.Skip(2).Take(6))
+            if (int.TryParse(e, out int id) && id > 0 && _effects.TryGetValue(id, out string[]? fx) && fx.Length > 4
+                && int.TryParse(fx[2], out int nif) && _effectNifs.TryGetValue(nif, out string[]? file) && file.Length > 2
+                && file[2].Length > 0)
+                list.Add(new MonsterEffect(file[2] + ".nif", fx[3], int.TryParse(fx[4], out int range) ? range : 0));
+        return list;
     }
 
     /// <summary>Adds <c>canims.csv</c> (combat set id, the figure's animation set -> combat clip ids). Its combat

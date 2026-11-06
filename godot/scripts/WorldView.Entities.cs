@@ -71,10 +71,10 @@ public partial class WorldView
     private void OnNpcSpawned(NpcCreate npc)
     {
         Vector3 pos = ToGodot(npc.X, npc.Y, npc.Z);
-        if (npc.Untargetable && Figure(npc.ModelId) is null)
+        if (npc.Untargetable && Figure(npc.ModelId) is null && EffectsOf(npc.ModelId).Count == 0)
         {
-            // A marker or effect we have no figure for (retail draws a light or nothing): a capsule
-            // would stand where the real client shows no creature.
+            // A marker we have neither a figure nor an effect for: a capsule would stand where the real
+            // client shows no creature.
             OnObjectRemoved(npc.ObjectId);
             _hiddenNpcs.Add(npc.ObjectId);
             GD.Print($"[entity] {npc.ObjectId} \"{npc.Name}\": untargetable, no figure for model {npc.ModelId}: not drawn");
@@ -157,6 +157,17 @@ public partial class WorldView
             }
             node.AddChild(inst);
             anim = inst.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() as AnimationPlayer;
+            AttachEffects(inst, model);
+        }
+        else if (model != 0 && EffectsOf(model) is { Count: > 0 } effects)
+        {
+            // A model that is only an effect (OpenDAoC's teleporter marker, model 1923: an empty figure with
+            // the "teleporter_ground" ring): the effects alone, at the model's scale and the NPC's size.
+            figured = true;
+            float scale = effects[0].Scale * Mathf.Max(size, 1) / 50f;
+            var holder = new Node3D { Scale = new Vector3(scale, scale, scale), Rotation = new Vector3(0, Mathf.Pi, 0) };
+            node.AddChild(holder);
+            AttachEffects(holder, model);
         }
         else
         {
@@ -387,6 +398,66 @@ public partial class WorldView
     // catacombs.csv's fig3 per model id: the race's options file number.
     internal static Dictionary<int, int> ReadCataFigures(string path) =>
         ReadFigureTable(path).Values.Where(r => r.Fig3 is not null).ToDictionary(r => r.Id, r => r.Fig3!.Value);
+
+    // ----- Model effects (monsters.csv "Mon Effect": glows, auras, the teleporter's ground ring) -----
+
+    // models/effects.csv (model, scale, effect, attach, range), read once: the effects per model id.
+    private Dictionary<int, List<(string Effect, string Attach, float Scale)>>? _effectTable;
+
+    private IReadOnlyList<(string Effect, string Attach, float Scale)> EffectsOf(ushort model)
+    {
+        if (_effectTable is null)
+        {
+            _effectTable = new();
+            string path = (_libraryPath ?? "").PathJoin("models").PathJoin("effects.csv");
+            if (!string.IsNullOrEmpty(_libraryPath) && Godot.FileAccess.FileExists(path))
+                foreach (string line in Godot.FileAccess.GetFileAsString(path).Split('\n').Skip(1))
+                {
+                    string[] c = line.Trim().Split(',');
+                    if (c.Length >= 4 && int.TryParse(c[0], out int id)
+                        && float.TryParse(c[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float sc))
+                    {
+                        if (!_effectTable.TryGetValue(id, out var list))
+                            _effectTable[id] = list = new();
+                        list.Add((c[2], c[3], sc));
+                    }
+                }
+        }
+        return _effectTable.TryGetValue(model, out var found) ? found : [];
+    }
+
+    // Hangs the model's effects on the figure: on the bone they name (following its animation), else on a node
+    // of that name, else on the figure's root. An effect file that failed to load is skipped.
+    private void AttachEffects(Node3D figure, ushort model)
+    {
+        string lib = _libraryPath ?? "";
+        foreach ((string effect, string attach, _) in EffectsOf(model))
+        {
+            string file = effect + ".glb";
+            if (!_figureFiles.TryGetValue(file, out Node3D? template))
+            {
+                string path = lib.PathJoin("models").PathJoin(file);
+                template = Godot.FileAccess.FileExists(path)
+                    ? ModelTexturing.LoadGlb(path, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib) : null;
+                _figureFiles[file] = template;
+            }
+            if (template is null)
+                continue;
+            var fx = (Node3D)template.Duplicate();
+            fx.Name = "Effect_" + effect;
+            if (figure.FindChildren("*", "Skeleton3D", true, false).OfType<Skeleton3D>()
+                    .FirstOrDefault(s => s.FindBone(attach) >= 0) is { } skeleton)
+            {
+                var bone = new BoneAttachment3D { Name = "EffectOn_" + attach, BoneName = attach };
+                skeleton.AddChild(bone);
+                bone.AddChild(fx);
+            }
+            else if (figure.FindChild(attach, true, false) is Node3D node)
+                node.AddChild(fx);
+            else
+                figure.AddChild(fx);
+        }
+    }
 
     private static Dictionary<int, float> ReadFigureScales(string path) =>
         ReadFigureTable(path).ToDictionary(kv => kv.Key, kv => kv.Value.Scale);
