@@ -48,11 +48,14 @@ CLIENT  ?= $(shell . $(PRIV)/play.conf 2>/dev/null; echo "$$CLIENT")
 A          := src/DaocAssets
 COMMON_SRC := $(wildcard $(A)/Mpk/*.cs $(A)/Library/*.cs) $(A)/TextureResolver.cs $(A)/DaocAssets.csproj
 MODEL_SRC  := $(COMMON_SRC) $(wildcard $(A)/Nif/*.cs)
+# The command line tool's shared part (entry, option parsing); each output adds its commands' file.
+X          := tools/AssetExtract
+CLI_SRC    := $(X)/Program.cs $(X)/Options.cs $(X)/GlobalUsings.cs $(X)/AssetExtract.csproj
 # Zone files: the zone code (all of it but the world audit, which writes nothing here), the glTF
-# writer the terrain and water meshes go through, and the command line tool, which holds the glue.
+# writer the terrain and water meshes go through, and the zone and sky commands, which hold the glue.
 ZONE_SRC   := $(COMMON_SRC) $(filter-out $(A)/Zone/ZoneAudit.cs,$(wildcard $(A)/Zone/*.cs)) \
               $(A)/Nif/GltfExporter.cs $(A)/Nif/NifMesh.cs $(A)/Nif/NifReader.cs \
-              tools/AssetExtract/Program.cs tools/AssetExtract/AssetExtract.csproj
+              $(CLI_SRC) $(X)/Cli.Zone.cs $(X)/Cli.Sky.cs
 TOOL_SRC   := $(shell find $(A) tools/AssetExtract -name '*.cs' -not -path '*/obj/*' -not -path '*/bin/*') \
               $(A)/DaocAssets.csproj tools/AssetExtract/AssetExtract.csproj
 
@@ -161,7 +164,8 @@ $(foreach z,$(WANT),$(eval $(call ZONE_RULES,$(z),$(shell expr $(z) + 0))))
 FIGURES := $(LIB)/models/.figures.done
 .PHONY: figures
 figures: $(FIGURES)
-$(FIGURES): $(INDEX) $(MODEL_SRC) $(wildcard $(A)/Figures/*.cs) tools/AssetExtract/Program.cs | $(TOOL)
+$(FIGURES): $(INDEX) $(MODEL_SRC) $(wildcard $(A)/Figures/*.cs) \
+            $(CLI_SRC) $(X)/Cli.Figures.cs $(X)/CataConverter.cs | $(TOOL)
 	@mkdir -p $(@D)
 	$(MPK) figures --gamedata $(CLIENT)/gamedata.mpk --index $(INDEX) --library $(LIB)
 	@touch $@

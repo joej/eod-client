@@ -358,7 +358,8 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │                                  #   (exit 0 granted, 2 denied, 1 error; never hex-logs 0xA7)
 ├── tools/AssetExtract/            # ✓ `mpk` CLI: list/extract archives, convert NIF → glb, gather
 │                                  #   textures, `zone` (zone.csv) and `terrain` (terrain.glb)
-│                                  #   `audit` (NIF coverage report; see docs/nif-coverage.md)
+│                                  #   `audit` (NIF coverage report; see docs/nif-coverage.md).
+│                                  #   One file per subject (Cli.Zone, Cli.Figures, ...), shared Options
 ├── tools/Launcher/                # Windows launcher for pointing a real client at a server (built,
 │                                  #   not yet validated)
 ├── Makefile                       # asset conversion: `make zoneNNN` / `check-zoneNNN` / `clean-zoneNNN`,
@@ -759,12 +760,6 @@ from the owner's install, opened in Godot.
 `docs/protocol.md` is the outside-reader reference for what is verified (framing, login,
 character screen, world entry, keep-alive, logout). Update it when a layout is verified or
 changes; this file keeps working notes.
-
-## Code review in progress
-
-`docs/code-review-2026-11.md` tracks the November 2026 quality review: what landed, and what is
-next (only splitting `tools/AssetExtract/Program.cs` is left). Start there when picking the work up;
-delete it once nothing is open.
 
 ## Open questions
 
