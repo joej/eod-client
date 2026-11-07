@@ -361,6 +361,14 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   skin and layouts on the same framework (dark translucent panels, small labels, one accent colour, as
   the dev overlay), with more utility where the retail window is thin. Keep each window's retail
   layout and behaviour as the reference (players' muscle memory) and compare before changing it.
+  Skins the community already publishes for retail must load in our client unchanged, and our own skin
+  is written in the same format. Where the format can't express something we want, we extend it
+  (documented, and a retail skin without the extension still loads) rather than inventing a second format.
+- **UI review: Camelot Unchained's client**, before step (3): its fonts, window design, HUD and
+  interaction patterns, for observations our own skin can use. Its interface code is public
+  (`csegames/CSE-UI`: TypeScript/React UI rendered in HTML/CSS by Coherent, MPL-2.0 per folder; fonts carry
+  their own licences, e.g. a commercial icon font and a foundry EULA, so they are reference only).
+  Write the findings up next to the retail comparison; adopt ideas, not assets.
 - **Done when:** you can select a target, see its and your vitals, talk to an NPC, and stand on/bump
   into the world's solid geometry instead of passing through it.
 
