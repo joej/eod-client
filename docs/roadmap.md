@@ -327,6 +327,8 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   row and column were flat, leaving a step along every border). Retail loads only at region changes
   (owner, 2026-11-07; W46); no loading pause inside a region. Open: a walk across a border on the live
   server, single build steps of up to ~50 ms (big models), and a loading screen for region changes.
+  To do (owner, 2026-11-07): a dev-overlay switch that draws the zone borders (a glowing line or wall
+  along each zone rectangle of the region, labelled with the zone names) for debugging crossings.
 - **Zone jumps and teleports.** `zonejump.csv` (345 zones) and `[jumpNN]` travel points; the server's
   region-change and teleport packets; entering a dungeon or city (until M11, as a placeholder).
 - **Death, release and respawn**, which move the player to a bind point, often in another zone.
