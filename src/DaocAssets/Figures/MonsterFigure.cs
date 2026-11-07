@@ -51,10 +51,10 @@ public sealed class MonsterTables
     // monsters.csv column 40 ("Mon Effect"): the model's effect set, 0 = none.
     private const int EffectSetColumn = 40;
 
-    // anims.csv columns of the clips the client view uses (ID, name, Walk, Back, Run, ..., Idle at 10,
+    // anims.csv columns of the clips the client view uses (ID, name, Walk, Back, Run, ..., Idle at 10, Death at 11,
     // ..., Sit Down and Sit Idle at 21-22: the quit timer sits the character down).
     private static readonly (string Clip, int Column)[] ClipColumns = [("walk", 2), ("back", 3), ("run", 4), ("idle", 10),
-        ("sit_down", 21), ("sit_idle", 22), ("jump", 7), ("land", 8)];
+        ("death", 11), ("sit_down", 21), ("sit_idle", 22), ("jump", 7), ("land", 8)];
 
     // canims.csv (the combat set, same id as the animation set) columns of the combat idles, one per weapon
     // stance (objects.csv "Combat Stance"; the Godot client picks by it): C-Idle, C-Idle 2H, C-Idle Pole,

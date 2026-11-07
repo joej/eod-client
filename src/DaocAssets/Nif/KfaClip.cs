@@ -158,7 +158,23 @@ public sealed record KfaClip(float Duration, IReadOnlyList<KfaTrack> Tracks)
         }
         (float, Vector3)[] translations = Group(ref c, 3, v => new Vector3(v[0], v[1], v[2]));
         (float, float)[] scales = Group(ref c, 1, v => v[0]);
-        return new KfaTrack(bone, rotations, translations, scales);
+        return Finite(new KfaTrack(bone, rotations, translations, scales));
+    }
+
+    /// <summary>
+    /// The track without keys whose time or value is not a finite number. A few clips in the install carry
+    /// such keys (DR_NecroServant_Death.kfa, found when the Death clips were added) though the blocks decode to their boundaries;
+    /// glTF cannot hold them, and there is nothing to interpolate to, so the neighbouring keys stand in.
+    /// </summary>
+    public static KfaTrack Finite(KfaTrack t)
+    {
+        static bool Ok(float f) => float.IsFinite(f);
+        return t with
+        {
+            Rotations = [.. t.Rotations.Where(k => Ok(k.Time) && Ok(k.Value.X) && Ok(k.Value.Y) && Ok(k.Value.Z) && Ok(k.Value.W))],
+            Translations = [.. t.Translations.Where(k => Ok(k.Time) && Ok(k.Value.X) && Ok(k.Value.Y) && Ok(k.Value.Z))],
+            Scales = [.. t.Scales.Where(k => Ok(k.Time) && Ok(k.Value))],
+        };
     }
 
     // Euler (XYZ) rotation keys: each axis has its own key times; sampled at every time any axis has.

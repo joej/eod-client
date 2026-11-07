@@ -129,4 +129,17 @@ public sealed class KfaClipTests
         BitConverter.GetBytes(8u).CopyTo(result, nl + 1 + 4);
         return result;
     }
+
+    [Fact]
+    public void KeysThatAreNotFiniteNumbersAreDropped()
+    {
+        var track = new KfaTrack("Bip01",
+            [(0f, Quaternion.Identity), (0.5f, new Quaternion(float.NaN, 0, 0, 1)), (1f, Quaternion.Identity)],
+            [(0f, Vector3.Zero), (0.5f, new Vector3(1, float.PositiveInfinity, 0)), (float.NaN, Vector3.One), (1f, Vector3.One)],
+            [(0f, 1f), (1f, float.NaN)]);
+        KfaTrack finite = KfaClip.Finite(track);
+        Assert.Equal([0f, 1f], finite.Rotations.Select(k => k.Time));
+        Assert.Equal([0f, 1f], finite.Translations.Select(k => k.Time));
+        Assert.Equal([0f], finite.Scales.Select(k => k.Time));
+    }
 }

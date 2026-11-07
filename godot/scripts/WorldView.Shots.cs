@@ -137,6 +137,15 @@ public partial class WorldView
         if (drop >= 0 && drop + 1 < args.Length && float.TryParse(args[drop + 1], System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out float metres))
             _dropPending = metres;
+        // --drops N: lift it N times, each a second after landing (two big falls kill: OpenDAoC caps one at 99%).
+        int drops = System.Array.IndexOf(args, "--drops");
+        if (drops >= 0 && drops + 1 < args.Length && int.TryParse(args[drops + 1], out int n))
+            (_dropAgain, _dropsLeft) = (_dropPending, n - 1);
+        // --release SECONDS: after dying, release that long after (as the Release button).
+        int release = System.Array.IndexOf(args, "--release");
+        if (release >= 0 && release + 1 < args.Length && double.TryParse(args[release + 1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double after))
+            _devReleaseAfter = after;
         int s = System.Array.IndexOf(args, "--shot");
         if (s >= 0 && s + 1 < args.Length && double.TryParse(args[s + 1], System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out double at))

@@ -523,6 +523,44 @@ public class ClientSessionTests
     }
 
     [Fact]
+    public async Task WhileDeadEachPositionUpdateSaysSoAndReleaseIsACommand()
+    {
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code
+            or CommandRequest.Code ? [] : null)));
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await session.GetCharactersAsync(Realm.Albion);
+            await session.EnterWorldAsync(Realm.Albion, slot: 0);
+
+            session.HealthPercent = 40;
+            await session.MoveToAsync(561000f, 511700f, 2344f, heading: 2048, speed: 191f);   // alive, hurt
+            session.IsDead = true;
+            await session.MoveToAsync(561000f, 511700f, 2344f, heading: 2048, speed: 191f, verticalSpeed: -300f, landed: true, stateFlags: 0x08);
+            await session.ReleaseAsync();
+            session.IsDead = false;
+            session.HealthPercent = 100;
+            await session.MoveToAsync(561000f, 511700f, 2344f, heading: 2048);
+        }
+
+        await server.ClosedAsync();
+        Assert.Null(server.Error);
+        var sent = server.Received.Where(p => p.Code is PositionUpdate.Code or CommandRequest.Code).ToList();
+        Assert.Equal(new byte[] { PositionUpdate.Code, PositionUpdate.Code, CommandRequest.Code, PositionUpdate.Code },
+            sent.Select(p => p.Code).ToArray());
+        Assert.Equal(PositionUpdate.Payload(561000f, 511700f, 2344f, 1, objectId: 0, zoneId: 0, heading: 0x1000 | 2048, speed: 191f,
+            actionFlags: 0x80, health: 40), sent[0].Payload);
+        // Dead: the dead pose (0x14), standing, no speed, no fall, health 0, whatever the caller passed.
+        Assert.Equal(PositionUpdate.Payload(561000f, 511700f, 2344f, 1, objectId: 0, zoneId: 0, heading: 0x1000 | 2048,
+            stateFlags: 0x14, actionFlags: 0x80, health: 0), sent[1].Payload);
+        Assert.Equal(CommandRequest.Payload("&release"), sent[2].Payload);
+        Assert.Equal(PositionUpdate.Payload(561000f, 511700f, 2344f, 1, objectId: 0, zoneId: 0, heading: 0x1000 | 2048, actionFlags: 0x80),
+            sent[3].Payload);
+    }
+
+    [Fact]
     public async Task WalkingOverAZoneBorderReportsTheNewZoneAndAGapKeepsTheLast()
     {
         await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));

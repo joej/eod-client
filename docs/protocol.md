@@ -434,6 +434,29 @@ it: C→S 0xAF `00 "&whis keyword"`. Retail also puts the target in every 0xA9 (
 action flags 0x80, plus 0x30 while a target is in view. *Verified live 2026-11-07* with Master Visur at
 Prydwen Keep (eodtest2): target, examine, his destinations, and [towns] answered with the town list.
 
+## Death and release
+
+```
+S→C 0xAE PlayerDeath         u16 BE victim, u16 BE killer (0: none, e.g. a fall), 4 zero bytes
+S→C 0xF3 TimerWindow         u16 BE seconds, u8 title length, u8 1, title ("Release Timer", 900 s);
+                             close: 00 00 00 00
+S→C 0xAD CharacterStatus     health %, mana %, sitting (2), endurance %, concentration %, 0, then u16 BE
+                             max mana, max endurance, max concentration, max health, health, endurance,
+                             mana, concentration
+C→S 0xAF "&release"          (as any command: 00 + text + 00)
+S→C 0x89 PlayerRevive        u16 BE object id, 2 zero bytes
+```
+
+On death the server sends the kill messages (chat 0x16 "X was just killed!", 0x15 "You have died. Type
+/release …"), 0xF3, 0xAE and 0xAD with health 0. While dead the client sends each 0xA9 with state flags
+0x14 (sitting + swimming: OpenDAoC's DEAD, accepted only at 0 health), speed 0 and health 0, and doesn't
+move; retail also clears its target (0xB0 with 0). After "&release" the server counts down a few seconds,
+then closes the timer, says "Your surroundings suddenly change!", moves the player to the bind point (0x04,
+or 0xB1 + 0xB7 for another region) and sends 0x89 and an 0xAD at full health. OpenDAoC charges fall
+damage of at most 99% of maximum health per landing, so a second big fall kills. *Verified live
+2026-11-07* (eodtest2/Quitcheck at Prydwen Keep: two 140 m drops, died, released to the bind point,
+revived).
+
 ## Attack mode
 
 **C→S 0x74** (`PlayerAttackRequestHandler`): `u8 start` (1 attack, 0 stop), `u8 asked` (0 when the

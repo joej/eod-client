@@ -336,7 +336,7 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │   │                              #   0xFC/0xFE overview, 0xFF create/delete), WorldPackets
 │   │                              #   (0x9D, 0xD4, 0xE8, 0xBF, 0x20, 0xA9, 0xA3/0x29),
 │   │                              #   WorldEntityPackets (0xA1, 0xDA, 0x4B, 0xD9, 0xA2, 0xE1),
-│   │                              #   ChatPackets (0xAF in and out)
+│   │                              #   ChatPackets (0xAF in and out), VitalsPackets (0xAD, 0xAE, 0x89, 0xF3)
 │   ├── World/                     # ✓ Zones.cs + zones.tsv (embedded; OpenDAoC-Database, GPL)
 │   └── Session/
 │       ├── ClientSession.cs       # ✓ login → character screen → list/create/delete → world;

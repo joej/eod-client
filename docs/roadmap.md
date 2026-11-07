@@ -337,6 +337,11 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   overlay's "Jump points" switch (or `--jumps`) draws each doorway. Open: W47, a live walk through a gate,
   teleporter NPCs (needs click-to-target and interact, M9), retail's loading pictures.
 - **Death, release and respawn**, which move the player to a bind point, often in another zone.
+  *Built 2026-11-07:* the server's death (0xAE) drops the character into its Death clip and stops it moving;
+  every 0xA9 then says it is dead; a panel counts the release timer down (0xF3) with a Release button
+  (or type /release); the move to the bind point and the revive (0x89) bring it back. Other players fall
+  and get up too; 0xAD vitals show in the status line. Verified live as Quitcheck (killed by two falls).
+  Open: W48 (retail's quicker release), the dead screen's look, a release into another region.
 - **Swimming** in the water M7 draws.
 - **Gravity (started 2026-11-04):** the character stands on terrain and on model floors (streets,
   stairs, bridges, walls, roofs), walks up and down steps, falls under gravity off a ledge, jumps (Space),

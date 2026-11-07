@@ -597,7 +597,7 @@ public partial class WorldView
 
             // The clip follows how fast the figure is gliding (metres per second, smoothed): DAoC's
             // walk is about 2 m/s, its run about 4.8.
-            if (e.Player is not null && delta > 0)
+            if (e.Player is not null && delta > 0 && !e.Dead)
             {
                 Vector3 step = e.Node.Position - e.LastPosition;
                 step.Y = 0;

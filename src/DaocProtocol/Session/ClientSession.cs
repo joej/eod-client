@@ -93,6 +93,19 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     public ushort TargetId { get; private set; }
 
     /// <summary>
+    /// Set by the front end when the server says we died (0xAE with our id) and cleared when it revives us
+    /// (0x89). While set, every 0xA9 says so as retail 1.127's does: state 0x14 (the dead pose; OpenDAoC
+    /// accepts it only at 0 health), speed 0, health 0. The character can't move until revived.
+    /// </summary>
+    public bool IsDead { get; set; }
+
+    /// <summary>Our health percent from the last 0xAD, sent in each 0xA9 (the server skips it).</summary>
+    public byte HealthPercent { get; set; } = 100;
+
+    /// <summary>0xA9's state byte while dead: sitting and swimming together (OpenDAoC StateFlags.DEAD).</summary>
+    public const byte DeadStateFlags = 0x14;
+
+    /// <summary>
     /// The longest <see cref="KeepAliveAsync"/> lets pass without an 0xA9: it sends one when nothing
     /// else (<see cref="MoveToAsync"/>) has for this long. Retail 1.127 sends one every 2.08 s standing
     /// still; the server marks a player link-dead after 5 s without one.
@@ -419,11 +432,14 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         _lastPositionSent = Environment.TickCount64;
         // On the ground: not in a jump and not falling, or the update that lands.
         bool onGround = landed || (verticalSpeed == 0 && (stateFlags & 0x08) == 0);
+        if (IsDead)
+            (speed, verticalSpeed, stateFlags, landed, onGround) = (0, 0, DeadStateFlags, false, true);
         return connection.SendAsync(PositionUpdate.Code,
             PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: TargetId, world.Zone.Id,
                 PositionUpdate.Heading(p.Heading, onGround), speed,
                 verticalSpeed, stateFlags,
                 actionFlags: (byte)(PositionUpdate.ActionAlways | (TargetId != 0 ? PositionUpdate.TargetInView : 0)),
+                health: IsDead ? (byte)0 : HealthPercent,
                 landed: landed),
             cancellationToken);
     }
@@ -593,6 +609,15 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         Require(SessionState.InWorld);
         return connection.SendAsync(RegionChangeRequest.Code, RegionChangeRequest.Payload(zonePointId), cancellationToken);
     }
+
+    /// <summary>
+    /// After death: asks to be released to the bind point (retail sends "&amp;release"). The server answers
+    /// that it will release us in a few seconds, then moves us (0x04, or 0xB7 to another region) and revives
+    /// us (0x89), both arriving as world packets. <paramref name="to"/> is OpenDAoC's optional target:
+    /// "city", "house" or "bind".
+    /// </summary>
+    public Task ReleaseAsync(string? to = null, CancellationToken cancellationToken = default) =>
+        SendCommandAsync(to is null ? "/release" : $"/release {to}", cancellationToken);
 
     public Task SendCommandAsync(string command, CancellationToken cancellationToken = default)
     {

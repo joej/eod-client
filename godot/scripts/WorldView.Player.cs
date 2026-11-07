@@ -43,7 +43,7 @@ public partial class WorldView
         // body's input; it still ground-snaps and keeps sending its (unchanged) position below, so it
         // stays grounded and link-alive where you left it. Likewise freeze while the chat box has
         // focus, so typing "wade" doesn't walk the character.
-        bool driving = _chase && !ChatInputActive;
+        bool driving = _chase && !ChatInputActive && !_dead;   // the dead don't move until revived
 
         // A/D turn (keys); mouse-look also turns in chase mode, feeding _bodyYaw from _Input.
         float turnKeys = 0f;
@@ -110,7 +110,9 @@ public partial class WorldView
         _landLeft -= (float)delta;
         if (wasAirborne && !_airborne && !moving)
             PlayOnce("land", LandTime);
-        if (_airborne)
+        if (_dead)
+            PlayOnce("death");   // held on its last frame: lying down
+        else if (_airborne)
             PlayOnce("jump");
         else if (_quitting && !moving)
             Sit();
@@ -149,6 +151,15 @@ public partial class WorldView
     // collision hulls ("collidee" nodes, which our converter drops), retail's gravity and jump values.
     private void Ground(double delta)
     {
+        if (_dropsLeft > 0 && !_dead)
+        {
+            if (_airborne || !_groundHit || _dropPending > 0)
+                _dropAgainAt = -1;   // the clock starts on landing, once the landing has gone out
+            else if (_dropAgainAt < 0)
+                _dropAgainAt = _seconds + 1;
+            else if (_seconds >= _dropAgainAt)
+                (_dropPending, _dropsLeft, _dropAgainAt) = (_dropAgain, _dropsLeft - 1, -1);
+        }
         if (_dropPending > 0 && _groundHit)
         {
             _body.Position += new Vector3(0, _dropPending, 0);
@@ -238,6 +249,9 @@ public partial class WorldView
     }
 
     private float _dropPending;               // --drop: metres to lift the character after spawning
+    private float _dropAgain;                 // --drops: the height of each further lift
+    private int _dropsLeft;                   // --drops: lifts still to come
+    private double _dropAgainAt = -1;         // when the next one goes (a second after landing)
     private bool _airborne;
     private bool _jumping;                    // airborne from a jump: 0xA9 state flag 0x08 (others see it)
     private float _verticalSpeed;             // metres per second, up positive

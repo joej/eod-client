@@ -69,6 +69,18 @@ public sealed class NetworkBridge(Action<string>? log = null)
     /// </summary>
     public event Action<ServerPacket>? QuitArrived;
 
+    /// <summary>Our own vitals (0xAD): health, mana, endurance, concentration, and whether we sit.</summary>
+    public event Action<StatusUpdate>? StatusChanged;
+
+    /// <summary>A player died (0xAE): us or one in view.</summary>
+    public event Action<PlayerDied>? PlayerDied;
+
+    /// <summary>A player is alive again (0x89): released or resurrected.</summary>
+    public event Action<PlayerRevived>? PlayerRevived;
+
+    /// <summary>A countdown window opened or closed (0xF3; after death, the release timer).</summary>
+    public event Action<TimerWindow>? TimerChanged;
+
     /// <summary>The server answered a keep-alive (0x29). Kept so the overlay can count pings.</summary>
     public event Action? PingReplied;
 
@@ -138,6 +150,18 @@ public sealed class NetworkBridge(Action<string>? log = null)
                     break;
                 case DaocProtocol.Packets.RegionChanged.Code:
                     RegionChanged?.Invoke(DaocProtocol.Packets.RegionChanged.Parse(packet.Payload));
+                    break;
+                case StatusUpdate.Code:
+                    StatusChanged?.Invoke(StatusUpdate.Parse(packet.Payload));
+                    break;
+                case DaocProtocol.Packets.PlayerDied.Code:
+                    PlayerDied?.Invoke(DaocProtocol.Packets.PlayerDied.Parse(packet.Payload));
+                    break;
+                case DaocProtocol.Packets.PlayerRevived.Code:
+                    PlayerRevived?.Invoke(DaocProtocol.Packets.PlayerRevived.Parse(packet.Payload));
+                    break;
+                case TimerWindow.Code:
+                    TimerChanged?.Invoke(TimerWindow.Parse(packet.Payload));
                     break;
                 case PingRequest.ReplyCode:
                     PingReplied?.Invoke();
