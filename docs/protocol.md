@@ -416,8 +416,8 @@ C→S 0x90 PlayerRegionChangeRequest   u16 LE zone point id
 
 OpenDAoC looks the id up in its zonepoint table (for a player: their realm's or a realm-less row) and
 does not check that the player is near the doorway. The move then comes as any other (0x04 within the
-region, 0xB1 + 0xB7 to another). *Verified live 2026-11-07:* Camelot Hills' gate (zone point 6) into
-Camelot City and back. Which way a one-way doorway fires is open question W47.
+region, 0xB1 + 0xB7 to another). *Verified live 2026-11-07 (owner):* Camelot Hills' gate (zone point 6) into
+Camelot City. Which way a one-way doorway fires is open question W47.
 
 ## Target and interact
 
