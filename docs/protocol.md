@@ -352,7 +352,11 @@ sent untargetable. What retail 1.127 draws for it is open question W44.
 
 The zone id is the zone containing the position. The real client knows it from its map data; we
 look it up in OpenDAoC's zone table (`src/DaocProtocol/World/zones.tsv`, from OpenDAoC-Database,
-GPL): zone offsets and sizes × 8192, half-open rectangle, first match.
+GPL): zone offsets and sizes × 8192, half-open rectangle, first match. Walking over a zone border
+needs no packet from the server: the next 0xA9 simply names the new zone, and OpenDAoC answers the
+change with "You have entered …" and the zone's areas (`PlayerPositionUpdateHandler`). In a gap
+between zones (no rectangle contains the position) we keep reporting the last zone, which the
+server knows; an unknown zone id kicks the player.
 
 *Verified:* all 92 recorded 0xA9 packets rebuild byte for byte; the recorded position falls in the
 zone the recorded client reported.

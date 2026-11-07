@@ -132,8 +132,15 @@ public sealed class ZoneTerrain
     /// up in the exported file: measured on the glTF, since the axis maps make winding easy to get
     /// backwards (until 2026-11-03 every terrain triangle faced down and every normal was the
     /// exporter's default straight up, so the ground was lit as if facing away from the sun).
+    ///
+    /// The mesh's last row and column lie on the zone's south and east edges, one cell past the heightmap.
+    /// With <paramref name="neighbours"/> (the zones that border it there, at their region offsets) they take
+    /// the neighbour's first row or column, so the two zones' ground meets; without one they repeat the
+    /// last cell (flat), as at the edge of the world. Before 2026-11-07 they always repeated it, which
+    /// left a step along every zone border, showing the sky through it once both zones were drawn.
     /// </summary>
-    public IReadOnlyList<Nif.NifMesh> BuildTiledMesh(int offsetX, int offsetY, int tiles)
+    public IReadOnlyList<Nif.NifMesh> BuildTiledMesh(int offsetX, int offsetY, int tiles,
+        IReadOnlyList<TerrainNeighbour>? neighbours = null)
     {
         int n = _terrain.Width;                  // cells per side (square), e.g. 256
         if (tiles < 1 || n % tiles != 0)
@@ -158,7 +165,9 @@ public sealed class ZoneTerrain
                 int cx = cx0 + lx, cy = cy0 + ly;
                 int i = ly * side + lx;
                 // Pre-negate region Y (see summary): exporter's -Y then yields the client's +Y.
-                verts[i] = new System.Numerics.Vector3(offsetX + cx * step, -(offsetY + cy * step), HeightAtCell(cx, cy));
+                float px = offsetX + cx * step, py = offsetY + cy * step;
+                float z = cx >= n || cy >= n ? NeighbourHeight(neighbours, px, py) ?? HeightAtCell(cx, cy) : HeightAtCell(cx, cy);
+                verts[i] = new System.Numerics.Vector3(px, -py, z);
                 System.Numerics.Vector3 nrm = NormalAtCell(cx, cy);
                 normals[i] = nrm with { Y = -nrm.Y };
                 uvs[i] = new System.Numerics.Vector2(lx / (float)cellsPerTile, ly / (float)cellsPerTile);
@@ -189,6 +198,26 @@ public sealed class ZoneTerrain
             });
         }
         return meshes;
+    }
+
+    // The ground height at region point (px, py) from the neighbouring zone that contains it, at its nearest
+    // heightmap cell; null when no neighbour does.
+    private static float? NeighbourHeight(IReadOnlyList<TerrainNeighbour>? neighbours, float px, float py)
+    {
+        if (neighbours is null)
+            return null;
+        foreach (TerrainNeighbour nb in neighbours)
+        {
+            ZoneTerrain t = nb.Terrain;
+            // The far edges count too: a corner shared with the neighbour's own last row is drawn at its
+            // height there (its mesh repeats its last cell).
+            if (px < nb.X || py < nb.Y || px > nb.X + t.RegionWidth || py > nb.Y + t.RegionHeight)
+                continue;
+            int cx = Math.Clamp((int)MathF.Round((px - nb.X) / t.CellSize), 0, t.Cells - 1);
+            int cy = Math.Clamp((int)MathF.Round((py - nb.Y) / t.CellSize), 0, t.Cells - 1);
+            return t.HeightAtCell(cx, cy);
+        }
+        return null;
     }
 
     /// <summary>The tile names this terrain references (<c>texXX-YY.dds</c>), for a gather step.</summary>
@@ -280,3 +309,6 @@ public sealed class ZoneTerrain
         return mpk.Extract(entry);
     }
 }
+
+/// <summary>A zone bordering another one's south or east edge: its terrain and its region offset.</summary>
+public sealed record TerrainNeighbour(ZoneTerrain Terrain, int X, int Y);

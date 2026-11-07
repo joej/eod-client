@@ -77,10 +77,12 @@ internal static partial class Cli
     private static int TerrainCmd(string[] args)
     {
         // terrain <dat<NNN>.mpk> --offset X Y --out FILE.glb [--tiles N] [--index index.json --library LIBDIR]
+        //         [--edges DAT:X:Y,...]  the zones bordering its south and east edges (their archives and
+        //                                region offsets), so its last row and column meet their ground
         if (args.Length < 2)
             return Usage();
         string datMpk = args[1];
-        if (Options.Parse(args, 2, ["--out", "--index", "--library", "--tiles", "--size", "--offset"]) is not { } o)
+        if (Options.Parse(args, 2, ["--out", "--index", "--library", "--tiles", "--size", "--offset", "--edges"]) is not { } o)
             return Usage();
         int tiles = 8;  // the painted ground is an 8x8 grid of texRR-CC tiles (verified on the install).
         if (o["--tiles"] is { } tn && !int.TryParse(tn, out tiles))
@@ -102,7 +104,18 @@ internal static partial class Cli
         try
         {
             ZoneTerrain terrain = ZoneTerrain.Read(datMpk, o.ZoneSize.X, o.ZoneSize.Y);
-            var meshes = terrain.BuildTiledMesh(offX, offY, tiles);
+            var neighbours = new List<TerrainNeighbour>();
+            foreach (string edge in (o["--edges"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                string[] f = edge.Split(':');
+                if (f.Length != 3 || !int.TryParse(f[1], out int nx) || !int.TryParse(f[2], out int ny) || !File.Exists(f[0]))
+                {
+                    Console.Error.WriteLine($"terrain: --edges takes DAT:X:Y (an existing zone archive and its region offset): '{edge}'");
+                    return 2;
+                }
+                neighbours.Add(new TerrainNeighbour(ZoneTerrain.Read(f[0]), nx, ny));
+            }
+            var meshes = terrain.BuildTiledMesh(offX, offY, tiles, neighbours);
             var model = new NifModel { Version = new NifVersion(0, 0, 0, 0), Meshes = [.. meshes] };
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outPath))!);
             GltfExporter.SaveGlb(model, outPath);
@@ -110,7 +123,7 @@ internal static partial class Cli
             int verts = 0, tris = 0;
             foreach (NifMesh m in meshes) { verts += m.Vertices.Length; tris += m.Triangles.Length; }
             Console.WriteLine($"Terrain: {terrain.Cells}x{terrain.Cells} heightmap, {meshes.Count} tile(s), " +
-                $"{verts} verts, {tris} tris -> {Path.GetFullPath(outPath)}");
+                $"{verts} verts, {tris} tris, {neighbours.Count} bordering zone(s) -> {Path.GetFullPath(outPath)}");
 
             // Gather the ground tiles into the library so the client textures the terrain like any model.
             if (indexPath is not null && libDir is not null)

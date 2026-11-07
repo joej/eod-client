@@ -319,9 +319,14 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
 
 ### M8 — Move through the world
 *Walk out of one zone into the next; travel and die like a player.*
-- **Adjacent zones.** Load the neighbouring outdoor zones of the region and stream them as you move
-  (today one zone is loaded by command-line arguments). Cross zone boundaries without a loading
-  screen; the live position update already carries the zone, and `MoveToAsync` must follow it.
+- **Adjacent zones (streaming built 2026-11-07).** The zones of the region within view distance load
+  as you move (`WorldView.Streaming`): built a few milliseconds per frame on the main thread (a worker
+  thread was 20-40 times slower, waiting on the render thread), models shared between zones loaded once,
+  far zones dropped. `MoveToAsync` reports the zone you have walked into; a GM `/jump` within the region
+  streams too. The converter now joins each zone's terrain to its south and east neighbours' (the last
+  row and column were flat, leaving a step along every border). Retail loads only at region changes
+  (owner, 2026-11-07; W46); no loading pause inside a region. Open: a walk across a border on the live
+  server, single build steps of up to ~50 ms (big models), and a loading screen for region changes.
 - **Zone jumps and teleports.** `zonejump.csv` (345 zones) and `[jumpNN]` travel points; the server's
   region-change and teleport packets; entering a dungeon or city (until M11, as a placeholder).
 - **Death, release and respawn**, which move the player to a bind point, often in another zone.

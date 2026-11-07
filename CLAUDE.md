@@ -185,7 +185,8 @@ payloads with a port of the server's reader.
   in the same region (u32 BE x, y; u16 BE object id, z, heading, house), or 0xB1 + 0xB7 for another
   region, after which the client re-enters from 0xD4 (… 4E, E8, BF → 2D). 0xA9 is held back while
   the move is pending: the server would believe an old position. The Godot client loads assets by
-  the server's zone (`--zones private/zones`) and builds a new WorldView on every zone change;
+  the server's zone (`--zones private/zones`) and streams the region's neighbouring zones in as the
+  player moves (`WorldView.Streaming`, M8); a region change builds a new WorldView;
   `tools/play.sh --zone N` jumps to zone N's middle once the client enters the world (logins are
   profiles in the client, `LoginProfiles.cs`; `--autologin` stays for headless checks).
 - Leaving (verified live 2026-10-14; `ClientSession.QuitAsync`): send `&quit` as 0xAF

@@ -148,6 +148,7 @@ public partial class WorldView
             _camYaw = -Mathf.DegToRad(c[3]);
             _camPitch = Mathf.DegToRad(c[4]);
             _nextStatus = 0;   // the shot's status text is the pose's, not up to 0.25 s old
+            await WaitForZones();   // the zones around the pose, streamed in
             for (int k = 0; k < 4; k++)
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);

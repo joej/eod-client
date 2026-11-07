@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// WorldView: The zone around the player: terrain, placed objects, water, sky and view distance.
+// WorldView: One zone's static world — terrain, placed objects, water — plus the sky and view distance.
+// A zone is built into its own detached root (ZoneParts) without touching the view, in steps, so a
+// streamed zone is built a few milliseconds per frame and added when done (WorldView.Streaming).
 
 using DaocProtocol.Net;
 using DaocProtocol.Packets;
@@ -12,30 +14,71 @@ namespace EodClient;
 
 public partial class WorldView
 {
-    // Loads the zone terrain .glb if given. The exporter already baked region units → metres (× 0.025)
-    // into its vertices in absolute region-global position, so it drops in at the origin with NO extra
-    // scale (scale 1) — matching models, which are also metres. ToGodot converts the raw live/placement
-    // coords by the same 0.025, so the terrain and everything placed on it share one frame. Returns
-    // false (use the flat placeholder) when no terrain was given or it can't load.
-    private bool TryAddTerrain()
+    /// <summary>One zone's static world, under one root named zoneNNN.</summary>
+    private sealed class ZoneParts
     {
-        if (string.IsNullOrEmpty(_terrainPath) || !Godot.FileAccess.FileExists(_terrainPath))
-            return false;
+        public required ushort Id;
+        public required string Dir;           // the folder with zone.csv, sky.csv, water.* ("" for none)
+        public required Node3D Root;
+        public Node3D? Terrain, Objects, Water;
+        public int Placed, Distinct, TexturedModels, TexturedSurfaces, WaterBodies;
+        public double Seconds;                // how long the build took
+    }
+
+    // Builds a zone's terrain, objects and water at once into a new root that is not in the tree.
+    private static ZoneParts BuildZoneParts(ushort id, string? zoneCsv, string? terrainGlb, string? libraryPath, ModelCache models)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        ZoneParts parts = NewZoneParts(id, zoneCsv, terrainGlb);
+        foreach (bool _ in ZoneSteps(parts, zoneCsv, terrainGlb, libraryPath, models)) { }
+        parts.Seconds = watch.Elapsed.TotalSeconds;
+        return parts;
+    }
+
+    private static ZoneParts NewZoneParts(ushort id, string? zoneCsv, string? terrainGlb) => new()
+    {
+        Id = id, Dir = System.IO.Path.GetDirectoryName(zoneCsv ?? terrainGlb ?? "") ?? "", Root = new Node3D { Name = $"zone{id:D3}" },
+    };
+
+    // The build in small steps (each yield is a point where the caller may wait for the next frame). Built
+    // on the main thread: from a worker thread most mesh and collider calls wait for the render thread,
+    // which made a zone take 20-40 times as long (measured 2026-11-07: 18-40 s against 1-2 s). Touches no
+    // view state. Any file that is absent just leaves its part out.
+    private static System.Collections.Generic.IEnumerable<bool> ZoneSteps(ZoneParts parts, string? zoneCsv, string? terrainGlb, string? libraryPath, ModelCache models)
+    {
+        string lib = string.IsNullOrEmpty(libraryPath) ? parts.Dir : libraryPath;
+        foreach (bool step in TerrainSteps(parts, terrainGlb, lib)) yield return step;
+        foreach (bool step in ObjectSteps(parts, zoneCsv, lib, models)) yield return step;
+        foreach (bool step in WaterSteps(parts, lib)) yield return step;
+    }
+
+    // The zone terrain .glb. The exporter already baked region units → metres (× 0.025) into its vertices
+    // in absolute region-global position, so it drops in at the origin with NO extra scale — matching
+    // models, which are also metres. ToGodot converts the raw live/placement coords by the same 0.025, so
+    // the terrain and everything placed on it share one frame.
+    private static System.Collections.Generic.IEnumerable<bool> TerrainSteps(ZoneParts parts, string? terrainGlb, string libraryDir)
+    {
+        if (string.IsNullOrEmpty(terrainGlb) || !Godot.FileAccess.FileExists(terrainGlb))
+            yield break;
 
         // Untextured here: each ground tile is textured below.
-        if (ModelTexturing.LoadGlb(_terrainPath) is not Node3D terrain)
-            return false;
+        if (ModelTexturing.LoadGlb(terrainGlb) is not Node3D terrain)
+            yield break;
+        yield return true;
         // No scale: the .glb is already in metres (GltfExporter baked × 0.025). Scaling again here was
         // the double-scale that shrank the terrain to 1/40th and divorced it from the player position.
         terrain.Scale = Vector3.One;
 
         // Texture each ground tile (texRR-CC) from the library, like any model. A tile that doesn't
         // resolve keeps a plain green fallback so the ground is never a hole.
-        string libraryDir = string.IsNullOrEmpty(_libraryPath)
-            ? System.IO.Path.GetDirectoryName(_terrainPath) ?? ""
-            : _libraryPath;
-        int textured = ModelTexturing.Apply(terrain,
-            libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir);
+        // One tile per step: all 64 at once was the longest step of a zone build (61 ms).
+        int textured = 0;
+        foreach (MeshInstance3D tileMesh in FindMeshes(terrain).ToList())
+        {
+            textured += ModelTexturing.Apply(tileMesh,
+                libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir);
+            yield return true;
+        }
 
         var green = new StandardMaterial3D
         {
@@ -65,112 +108,122 @@ public partial class WorldView
             }
         }
         // Trimesh static collision on every terrain surface, so the ground raycast finds the real
-        // heightmap and the player walks on it (M4). Until 2026-11-03 the terrain .glb's triangles
-        // faced DOWN, so a plain trimesh collider only reported hits from below and the downward ground
-        // ray passed through it (ground --, player floating); BackfaceCollision = true made the ray hit
-        // either winding. The triangles face up now, and the flag stays so terrain converted before
-        // that still works. Build the shape explicitly (not MeshInstance3D.CreateTrimeshCollision) only
-        // so we can set that flag. Put every terrain body on its OWN collision layer so the ground ray can target
-        // terrain alone — otherwise a ray from high above hits a tall placed object (tree/keep) first
-        // and snaps the player onto its roof ("spawned very high in the air").
-        AddChild(terrain);
-        _terrain = terrain;
+        // heightmap and the player walks on it (M4). BackfaceCollision: the ray hits either winding (terrain
+        // converted before 2026-11-03 faced down). Every terrain body is on its OWN collision layer so the
+        // ground ray can target terrain alone — otherwise a ray from high above hits a tall placed object
+        // (tree/keep) first and snaps the player onto its roof ("spawned very high in the air").
+        terrain.Name = "Terrain";
+        parts.Root.AddChild(terrain);
+        parts.Terrain = terrain;
         int built = 0;
         foreach (MeshInstance3D mi in FindMeshes(terrain))
         {
             if (mi.Mesh is null)
                 continue;
             ConcavePolygonShape3D shape = mi.Mesh.CreateTrimeshShape();
-            shape.BackfaceCollision = true;   // hit from either side (see above)
-            var sb = new StaticBody3D { CollisionLayer = TerrainLayer, Transform = mi.GlobalTransform };
+            shape.BackfaceCollision = true;
+            // Not in the tree yet, so no GlobalTransform: the mesh's transform relative to the zone root.
+            var sb = new StaticBody3D { CollisionLayer = TerrainLayer, Transform = RelativeTransform(mi, parts.Root) };
             sb.SetMeta("terrain_mesh", mi);   // so an inspect pick can name the tile it hit
             sb.AddChild(new CollisionShape3D { Shape = shape });
-            AddChild(sb);
+            parts.Root.AddChild(sb);
             built++;
+            yield return true;
         }
-        GD.Print($"[world] terrain loaded ({textured} ground tile(s) textured, {built} collider(s))");
-        return true;
+        GD.Print($"[world] zone {parts.Id}: terrain ({textured} ground tile(s) textured, {built} collider(s))");
     }
 
-    // Places the zone's static objects from a zone.csv manifest (from `mpk zone`): each row is
-    // "glb,x,y,z,angle,scale" in region-global coordinates. Each distinct .glb is loaded and textured
-    // once, then instanced per placement. Returns how many objects were placed. No manifest -> 0.
-    private int BuildZone()
+    // A node's transform relative to an ancestor, from the local transforms (works outside the tree).
+    private static Transform3D RelativeTransform(Node3D node, Node ancestor)
     {
-        if (string.IsNullOrEmpty(_zonePath) || !Godot.FileAccess.FileExists(_zonePath))
-            return 0;
+        Transform3D t = node.Transform;
+        for (Node? p = node.GetParent(); p is not null && p != ancestor; p = p.GetParent())
+            if (p is Node3D p3)
+                t = p3.Transform * t;
+        return t;
+    }
 
-        // Models/textures come from the shared library (overrides/ win, then models/ + textures/);
-        // fall back to the manifest's own folder if no library was given.
-        string libraryDir = string.IsNullOrEmpty(_libraryPath)
-            ? System.IO.Path.GetDirectoryName(_zonePath) ?? ""
-            : _libraryPath;
-        var placements = DaocAssets.Zone.ZoneCheck.ReadManifest(Godot.FileAccess.GetFileAsString(_zonePath));
-        var loaded = new System.Collections.Generic.Dictionary<string, Node3D?>();
-        var zoneRoot = new Node3D { Name = "Zone" };
-        _zoneRoot = zoneRoot;
-        int placed = 0;
+    /// <summary>Zone models by .glb name, loaded and textured once for all the zones a view shows: a
+    /// neighbouring zone reuses the trees and buildings already loaded (null: the model didn't load). The
+    /// templates are never in the tree; the view frees them when it leaves (copies keep the meshes).</summary>
+    private sealed class ModelCache : System.Collections.Generic.Dictionary<string, Node3D?>
+    {
+        public void FreeAll()
+        {
+            foreach (Node3D? m in Values)
+                m?.Free();
+            Clear();
+        }
+    }
+
+    // The zone's static objects from a zone.csv manifest (from `mpk zone`): each row is
+    // "glb,x,y,z,angle,scale" in region-global coordinates. Each distinct .glb is loaded and textured
+    // once (for every zone of the view: <paramref name="loaded"/>), then instanced per placement.
+    private static System.Collections.Generic.IEnumerable<bool> ObjectSteps(ZoneParts parts, string? zoneCsv, string libraryDir, ModelCache loaded)
+    {
+        if (string.IsNullOrEmpty(zoneCsv) || !Godot.FileAccess.FileExists(zoneCsv))
+            yield break;
+
+        var placements = DaocAssets.Zone.ZoneCheck.ReadManifest(Godot.FileAccess.GetFileAsString(zoneCsv));
+        var zoneRoot = new Node3D { Name = "Objects" };
+        var used = new System.Collections.Generic.HashSet<string>();
 
         foreach ((string glb, float x, float y, float z, float angleDeg, float scale) in placements)
         {
-            Node3D? template = LoadZoneModel(glb, libraryDir, loaded);
+            bool fresh = !loaded.ContainsKey(glb);
+            Node3D? template = LoadZoneModel(parts, glb, libraryDir, loaded);
+            if (fresh)
+                yield return true;   // a model load is the biggest single step
             if (template is null)
                 continue;
+            used.Add(glb);
 
             var inst = (Node3D)template.Duplicate();
             inst.Position = ToGodot(x, y, z);
             // DAoC angle is degrees about the vertical axis; negate for Godot's handedness (as heading).
             inst.Rotation = new Vector3(0, -Mathf.DegToRad(angleDeg), 0);
-            // The model .glb is already in metres (GltfExporter bakes NIF units × 0.025). The only
-            // remaining factor is the per-fixture art scale from the manifest (a ratio, 100% -> 1.0);
-            // apply it directly. (Before GltfExporter baked in metres, this also divided by the region
-            // factor to shrink raw NIF units — that is now wrong and would scale the model twice.)
+            // The model .glb is already in metres; the manifest's scale is the per-fixture art ratio.
             inst.Scale = new Vector3(scale, scale, scale);
             // What the inspect readout reports for this placement (raw zone.csv values).
             inst.SetMeta("glb", glb);
             inst.SetMeta("placement", $"x {x:0} y {y:0} z {z:0}  angle {angleDeg:0}°  scale {scale:0.##}");
             zoneRoot.AddChild(inst);
-            // Trimesh collision per placed object, so the SpringArm chase camera pulls in off
-            // buildings/keep walls (not just terrain). Generated after AddChild so the static bodies
-            // sit in the live tree. ~1,500 static bodies for a full zone; revisit if load time bites.
+            // Trimesh collision per placed object: the chase camera pulls in off buildings and the
+            // character stands on floors. ~1,500 static bodies for a full zone.
             foreach (MeshInstance3D mi in FindMeshes(inst))
                 mi.CreateTrimeshCollision();
-            placed++;
+            parts.Placed++;
+            yield return true;
         }
 
-        if (placed > 0)
-            AddChild(zoneRoot);
-        int distinct = 0;
-        foreach (Node3D? m in loaded.Values) if (m is not null) distinct++;
-        GD.Print($"[world] zone: {placed} object(s), {distinct} distinct model(s), " +
-            $"{_zoneTexturedModels} textured ({_zoneTexturedSurfaces} surface(s))");
-        // The templates were only duplicated, never added to the tree, so nothing else frees them
-        // (the copies keep the shared meshes and materials alive).
-        foreach (Node3D? m in loaded.Values)
-            m?.Free();
-        return placed;
+        if (parts.Placed > 0)
+        {
+            parts.Root.AddChild(zoneRoot);
+            parts.Objects = zoneRoot;
+        }
+        else
+            zoneRoot.Free();
+        parts.Distinct = used.Count;
+        GD.Print($"[world] zone {parts.Id}: {parts.Placed} object(s), {parts.Distinct} distinct model(s), " +
+            $"{parts.TexturedModels} textured ({parts.TexturedSurfaces} surface(s))");
     }
 
-    // Loads the zone's rivers, lakes and swamps: water.glb (one waterNN mesh per body, already in
-    // region-global metres like the terrain) and water.csv (texture, flow, type per body), both written
-    // by `mpk water` beside zone.csv. Each surface gets the water shader with its texture and flow.
-    // Returns how many bodies were placed; none if the files aren't there.
-    private int BuildWater()
+    // The zone's rivers, lakes and swamps: water.glb (one waterNN mesh per body, already in region-global
+    // metres like the terrain) and water.csv (texture, flow, type per body), both written by `mpk water`
+    // beside zone.csv. Each surface gets the water shader with its texture and flow.
+    private static System.Collections.Generic.IEnumerable<bool> WaterSteps(ZoneParts parts, string libraryDir)
     {
-        if (string.IsNullOrEmpty(_zonePath))
-            return 0;
-        string dir = System.IO.Path.GetDirectoryName(_zonePath) ?? "";
-        string glb = dir.PathJoin("water.glb"), csv = dir.PathJoin("water.csv");
+        if (parts.Dir.Length == 0)
+            yield break;
+        string glb = parts.Dir.PathJoin("water.glb"), csv = parts.Dir.PathJoin("water.csv");
         if (!Godot.FileAccess.FileExists(glb) || !Godot.FileAccess.FileExists(csv))
-            return 0;
+            yield break;
 
         var rows = DaocAssets.Zone.ZoneWater.ReadCsv(Godot.FileAccess.GetFileAsString(csv));
-
         if (ModelTexturing.LoadGlb(glb) is not Node3D water)   // the water shader textures it below
-            return 0;
-        string lib = string.IsNullOrEmpty(_libraryPath) ? dir : _libraryPath;
+            yield break;
+        yield return true;
         var shader = GD.Load<Shader>("res://shaders/water.gdshader");
-        int bodies = 0;
         foreach (MeshInstance3D mi in FindMeshes(water))
         {
             // The node is named after the body (waterNN); the mesh instance may be it or its child.
@@ -178,32 +231,30 @@ public partial class WorldView
             if (!rows.TryGetValue(name, out DaocAssets.Zone.WaterRow? row))
                 continue;
             var mat = new ShaderMaterial { Shader = shader };
-            if (ModelTexturing.Load(row.Texture, lib.PathJoin("overrides"), lib.PathJoin("textures"), lib) is { } tex)
+            if (ModelTexturing.Load(row.Texture, libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir) is { } tex)
                 mat.SetShaderParameter("albedo_tex", tex);
             // DAoC's flow is about -50..50; as texture repeats per second, /1000 reads as a slow drift.
             mat.SetShaderParameter("flow", row.Flow / 1000f);
             mi.MaterialOverride = mat;
-            bodies++;
+            parts.WaterBodies++;
         }
         water.Name = "Water";
-        AddChild(water);
-        _waterRoot = water;
-        GD.Print($"[world] water: {bodies} bod{(bodies == 1 ? "y" : "ies")}");
-        return bodies;
+        parts.Root.AddChild(water);
+        parts.Water = water;
+        GD.Print($"[world] zone {parts.Id}: water {parts.WaterBodies} bod{(parts.WaterBodies == 1 ? "y" : "ies")}");
     }
 
-    // Applies the zone's sky from sky.csv (written by `mpk sky` beside zone.csv) for one weather condition
+    // Applies a zone's sky from sky.csv (written by `mpk sky` beside zone.csv) for one weather condition
     // and time of day: the sky shader's canopy and cloud gradients, cloud layers and sun disk; ambient and
     // sun light from the file; and depth fog in the file's distance-fog colour. Fog distances come from
     // SECTOR.DAT's [fog]: clip is the client's far plane (view distance) and amount the percentage of
     // that distance, measured back from it, that is fogged (Camelot Hills: 15% of 16000 units → fog
     // from 340 to 400 m); amount 0 turns fog off. Light energies are scaled by eye. Returns the sky's name,
-    // or null (plain colour background) when there is no sky.csv.
-    private string? ApplySky(string condition, string time)
+    // or null (the current sky stays) when the zone has no sky.csv.
+    private string? ApplySky(string dir, string condition, string time)
     {
-        if (string.IsNullOrEmpty(_zonePath))
+        if (string.IsNullOrEmpty(dir))
             return null;
-        string dir = System.IO.Path.GetDirectoryName(_zonePath) ?? "";
         string csv = dir.PathJoin("sky.csv");
         if (!Godot.FileAccess.FileExists(csv))
             return null;
@@ -268,8 +319,7 @@ public partial class WorldView
 
     // View distance: the zone's own (classic) times the player's setting. The camera's far plane and the
     // fog scale together, keeping the zone's fogged share, so a longer view still fades out the way the
-    // zone does. Zones without sky.csv keep a long fixed far plane and no fog. (Beyond the loaded zone
-    // there is nothing to see until neighbouring zones load, roadmap M8.)
+    // zone does. Zones without sky.csv keep a long fixed far plane and no fog.
     private void ApplyViewDistance(int setting)
     {
         if (_zoneClip <= 0)
@@ -290,10 +340,10 @@ public partial class WorldView
         .Select(x => float.TryParse(x, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float f) ? f : 0f)
         .ToArray();
 
-    // Loads a zone .glb once (cached). Resolves the library layout: an overrides/<glb> wins, else
-    // models/<glb>; a flat <lib>/<glb> is also accepted (manifest-folder fallback). Textures are
+    // Loads a zone .glb once (cached). Resolves the library layout: an overrides/<glb>
+    // wins, else models/<glb>; a flat <lib>/<glb> is also accepted (manifest-folder fallback). Textures are
     // applied from the same layers (overrides win over textures/). Null if it can't load.
-    private Node3D? LoadZoneModel(string glb, string libraryDir, System.Collections.Generic.Dictionary<string, Node3D?> cache)
+    private static Node3D? LoadZoneModel(ZoneParts parts, string glb, string libraryDir, System.Collections.Generic.Dictionary<string, Node3D?> cache)
     {
         if (cache.TryGetValue(glb, out Node3D? cached))
             return cached;
@@ -304,12 +354,11 @@ public partial class WorldView
             libraryDir.PathJoin(glb));
 
         Node3D? model = null;
-        // Texture search dirs, in priority order: overrides, textures, library root.
         if (path is not null
             && ModelTexturing.LoadGlb(path, out int t, libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir) is Node3D m)
         {
-            _zoneTexturedModels += t > 0 ? 1 : 0;
-            _zoneTexturedSurfaces += t;
+            parts.TexturedModels += t > 0 ? 1 : 0;
+            parts.TexturedSurfaces += t;
             model = m;
         }
         cache[glb] = model;

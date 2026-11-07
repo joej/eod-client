@@ -10,3 +10,4 @@ gatehouse     554560 525632 4912   0 -55   # A_PhouseGatein (was 50 m undergroun
 tile_corner   581632 491520 4580   0 -85   # ground tiles meeting at a corner, from above: tile order
 vista         574208 538432 6896   0 -25   # the zone around the keep: fog, sky, trees, overall placement
 underground   566400 529584 1570   0  20   # 15 m under the graveyard looking up: nothing should be down here
+border_south  570000 544000 6500 180 -18   # into Salisbury Plains over the zone border: the neighbour streams in (M8)

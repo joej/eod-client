@@ -119,9 +119,9 @@ $(ZONEDIR)/zone$(1)/models.mk: $$(zone$(1)_DAT) $(INDEX) $(ZONE_SRC) | $(TOOL)
 	@mkdir -p $$(@D)
 	@$(MPK) zonedeps $$(zone$(1)_DAT) --index $(INDEX) --var zone$(1)_MODELS > $$@.tmp && mv $$@.tmp $$@
 
-$(ZONEDIR)/zone$(1)/terrain.glb: $$(zone$(1)_DAT) $(INDEX) $(ZONE_SRC) | $(TOOL)
+$(ZONEDIR)/zone$(1)/terrain.glb: $$(zone$(1)_DAT) $$(zone$(1)_EDGEDAT) $(INDEX) $(ZONE_SRC) | $(TOOL)
 	@mkdir -p $$(@D)
-	$(MPK) terrain $$(zone$(1)_DAT) $$(zone$(1)_POS) --index $(INDEX) --library $(LIB) --out $$@
+	$(MPK) terrain $$(zone$(1)_DAT) $$(zone$(1)_POS) $$(zone$(1)_EDGES) --index $(INDEX) --library $(LIB) --out $$@
 
 $(ZONEDIR)/zone$(1)/zone.csv: $$(zone$(1)_DAT) $(INDEX) $(ZONE_SRC) $$(addprefix $(MADE)/,$$(zone$(1)_MODELS)) | $(TOOL)
 	@mkdir -p $$(@D)

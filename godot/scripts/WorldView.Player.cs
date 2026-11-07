@@ -161,7 +161,7 @@ public partial class WorldView
         if (floor is null)
         {
             // Nothing below: under the ground? Back onto the terrain above.
-            if (_terrain is not null && TerrainAbove(at) is float above)
+            if (AnyTerrain && TerrainAbove(at) is float above)
                 _body.Position = new Vector3(at.X, above, at.Z);
             _airborne = false;
             _verticalSpeed = 0;
@@ -292,7 +292,9 @@ public partial class WorldView
             return;
         }
         GD.Print($"[world] moved by the server to {moved.Zone.Name} (zone {moved.Zone.Id}) x {moved.Position.X:0} y {moved.Position.Y:0} z {moved.Position.Z:0}");
-        if (moved.Zone.Id != _world.Zone.Id)
+        // Another zone of the region: with streaming the zones there load around the new position; without
+        // it (explicit zone files) the owner builds a view of that zone.
+        if (moved.Zone.Id != _world.Zone.Id && !_streaming)
         {
             _draining = false;
             _note = $"   moving to {moved.Zone.Name}…";

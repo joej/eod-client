@@ -35,7 +35,6 @@ public partial class WorldView : Node3D
     private ClientSession? _session;   // null offline (--offline): no server, nothing sent
     private WorldPosition _world = null!;
     private Node3D _body = null!;        // the controlled character
-    private Node3D? _terrain;            // terrain root with trimesh collision, for ground raycasts
     private bool _chase = true;          // chase camera (default) vs free-fly debug camera
     private float _bodyYaw;              // the body's facing, radians (Godot sense)
     // Position sends follow retail 1.127: every 0.2 s while moving, turning or in the air, every
@@ -54,13 +53,8 @@ public partial class WorldView : Node3D
     private string? _zonePath;
     private string? _libraryPath;
     private string? _terrainPath;
-    private int _zoneTexturedModels;
-    private int _zoneTexturedSurfaces;
     private DevOverlay _dev = null!;
     private Button _button = null!;
-    // Layer roots the dev overlay toggles; the terrain is _terrain.
-    private Node3D? _zoneRoot;
-    private Node3D? _waterRoot;
     private Godot.Environment _environment = null!;
     private DirectionalLight3D _sun = null!;
     private string? _skyName;
@@ -69,10 +63,10 @@ public partial class WorldView : Node3D
     private float _zoneClip;
     private float _fogShare;
     private System.Action? _nextViewDistance;
-    private int _waterBodies;
     private readonly Node3D _entityRoot = new() { Name = "Entities" };
     private bool _fixturesOn = true;
     private bool _terrainOn = true;
+    private bool _waterOn = true;
     // Click-to-inspect: the click is queued from input and resolved in the physics frame (ray queries
     // are only reliable there). The hit mesh gets a translucent accent overlay until the next pick.
     private Vector2? _pendingClick;
@@ -158,8 +152,9 @@ public partial class WorldView : Node3D
     public event Action? BackToLoginPressed;
 
     /// <summary>
-    /// The server moved the player into another zone of this region (0x04): this view's terrain and
-    /// objects are the wrong ones, so the owner replaces it with a view of the new zone. The session
+    /// The server moved the player into another zone of this region (0x04) and this view doesn't stream
+    /// zones (explicit zone files): its terrain and objects are the wrong ones, so the owner replaces it
+    /// with a view of the new zone. A streaming view loads the zones there itself. The session
     /// already holds the new position. Draining has stopped.
     /// </summary>
     public event Action<WorldPosition>? Relocated;
@@ -313,14 +308,14 @@ public partial class WorldView : Node3D
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
         };
         AddChild(_sun);
-        _skyName = ApplySky("clear", "day");
 
-        // Ground: the zone's real terrain mesh if given (its vertices are absolute region coords, so
-        // it loads at the origin with the usual region→Godot scale), otherwise a flat placeholder.
-        // A capital city has no terrain (it is all models): no placeholder plane cutting through it.
-        bool modelsOnly = !string.IsNullOrEmpty(_zonePath) && Godot.FileAccess.FileExists(_zonePath)
-            && (string.IsNullOrEmpty(_terrainPath) || !Godot.FileAccess.FileExists(_terrainPath));
-        if (!TryAddTerrain() && !modelsOnly)
+        // The zone the view opens in: its terrain (vertices in absolute region coords, so it loads at the
+        // origin), objects and water; neighbours stream in after (WorldView.Streaming). Without terrain a
+        // flat placeholder, except in a capital city, which is all models: no plane cutting through it.
+        ZoneParts first = AddFirstZone();
+        _skyName = ApplySky(first.Dir, "clear", "day");
+        bool modelsOnly = first.Placed > 0;
+        if (first.Terrain is null && !modelsOnly)
             AddChild(new MeshInstance3D
             {
                 Mesh = new PlaneMesh { Size = new Vector2(1000, 1000) },
@@ -363,10 +358,6 @@ public partial class WorldView : Node3D
         }
         AddChild(body);
 
-        int zoneObjects = BuildZone();
-        _waterBodies = BuildWater();
-        if (zoneObjects > 0)
-            GD.Print($"[world] placed {zoneObjects} zone object(s)");
 
         // Chase rig: pivot at shoulder height on the body → SpringArm3D → camera. The arm pulls the
         // camera in off terrain/walls/scenery (mask below) so it never clips into the ground — the
@@ -464,15 +455,15 @@ public partial class WorldView : Node3D
         AddChild(overlay);
         _viewSetting = ViewOverride() ?? ClientSettings.ViewDistance;
         ApplyViewDistance(_viewSetting);
-        BuildDevToggles(zoneObjects);
+        BuildDevToggles(first);
         ApplyDevArgs();
     }
 
     // Layer switches for the dev overlay. Hidden fixtures/terrain are also left out of inspect picks.
-    private void BuildDevToggles(int zoneObjects)
+    private void BuildDevToggles(ZoneParts first)
     {
         _nextViewDistance = _dev.AddChoice("F3 view", [.. ClientSettings.ViewDistances.Select(v => v.Label)],
-            _viewSetting, i => { ClientSettings.ViewDistance = i; ApplyViewDistance(i); });
+            _viewSetting, i => { _viewSetting = i; ClientSettings.ViewDistance = i; ApplyViewDistance(i); });
         _dev.AddToggle("Sun shadows", ClientSettings.SunShadows, on =>
         {
             ClientSettings.SunShadows = on;
@@ -481,14 +472,18 @@ public partial class WorldView : Node3D
         _dev.AddToggle("Terrain", true, on =>
         {
             _terrainOn = on;
-            if (_terrain is not null) _terrain.Visible = on;
+            foreach (ZoneParts z in _zones.Values) if (z.Terrain is not null) z.Terrain.Visible = on;
         });
         _dev.AddToggle("Fixtures", true, on =>
         {
             _fixturesOn = on;
-            if (_zoneRoot is not null) _zoneRoot.Visible = on;
+            foreach (ZoneParts z in _zones.Values) if (z.Objects is not null) z.Objects.Visible = on;
         });
-        _dev.AddToggle("Water", true, on => { if (_waterRoot is not null) _waterRoot.Visible = on; });
+        _dev.AddToggle("Water", true, on =>
+        {
+            _waterOn = on;
+            foreach (ZoneParts z in _zones.Values) if (z.Water is not null) z.Water.Visible = on;
+        });
         _dev.AddToggle("Entities", true, on => _entityRoot.Visible = on);
         _dev.AddToggle("Own character", true, on => _body.Visible = on);
         _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);
@@ -496,8 +491,9 @@ public partial class WorldView : Node3D
         _dev.AddToggle("Shift fast move ×4 (GM only)", ClientSettings.Sprint, on => ClientSettings.Sprint = on);
         if (PacketLogging is var (getLog, setLog))
             _togglePacketLog = _dev.AddToggle("F4 packet log", getLog(), setLog);
-        _dev.AddInfo($"{zoneObjects} fixtures · {_zoneTexturedModels} textured models · {_waterBodies} water\n" +
-            $"{_zoneTexturedSurfaces} textured surfaces" + (_terrain is null ? " · flat ground" : ""));
+        _dev.AddInfo($"{first.Placed} fixtures · {first.TexturedModels} textured models · {first.WaterBodies} water\n" +
+            $"{first.TexturedSurfaces} textured surfaces" + (first.Terrain is null ? " · flat ground" : "")
+            + (_streaming ? " · neighbouring zones stream in" : ""));
     }
 
     // Loads the .glb at _modelPath as the character body: scaled to a human-ish height and seated on
@@ -779,8 +775,15 @@ public partial class WorldView : Node3D
     public override void _ExitTree()
     {
         ClientSettings.Changed -= OnSettingsChanged;
+        // A zone still being built isn't in the tree, so nothing else frees it.
+        if (_building is var (unfinished, _, _))
+        {
+            _building = null;
+            unfinished.Root.Free();
+        }
+        _zoneModels.FreeAll();
         // Figure templates live outside the tree (only their copies are added), so freeing this view
-        // doesn't reach them; a new view is built on every zone change.
+        // doesn't reach them; a new view is built on every region change.
         foreach (Node3D? template in _figureFiles.Values)
             template?.Free();
         _figureFiles.Clear();
@@ -853,6 +856,7 @@ public partial class WorldView : Node3D
         else
             UpdateDebugCamera(delta);
         _seconds += delta;
+        Stream(delta);
         // First what the session passed over while entering the world or moving us (the NPCs announced
         // then), then the connection's own queue.
         if (_draining && _session is not null)

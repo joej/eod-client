@@ -50,6 +50,40 @@ public sealed class TerrainTests
     }
 
     [Fact]
+    public void TheEastEdgeMeetsTheNeighbouringZone()
+    {
+        // Two 1x1-sector zones side by side: A (flat 80) at x 0, B (flat 160) at x 8192, its west edge on
+        // A's east edge. A's last column (x = 8192) takes B's heights; its last row, with no zone to the
+        // south, repeats A's own edge.
+        static string Zone(byte value)
+        {
+            byte[] sector = System.Text.Encoding.Latin1.GetBytes("[terrain]\nscalefactor=8\noffsetfactor=32\n");
+            string path = Path.Combine(Path.GetTempPath(), "daoc-terr-" + Guid.NewGuid().ToString("N") + ".mpk");
+            File.WriteAllBytes(path, MpkBuilder.Build(("terrain.pcx", FlatPcx(8, 8, value)), ("offset.pcx", FlatPcx(8, 8, 0)), ("SECTOR.DAT", sector)));
+            return path;
+        }
+        string a = Zone(10), b = Zone(20);
+        try
+        {
+            ZoneTerrain ta = ZoneTerrain.Read(a, sizeX: 1, sizeY: 1), tb = ZoneTerrain.Read(b, sizeX: 1, sizeY: 1);
+            var verts = ta.BuildTiledMesh(0, 0, 1, [new TerrainNeighbour(tb, 8192, 0)]).Single().Vertices;
+            Assert.All(verts.Where(v => v.X == 8192f), v => Assert.Equal(160f, v.Z));
+            Assert.All(verts.Where(v => v.X < 8192f), v => Assert.Equal(80f, v.Z));
+            Assert.Equal(9, verts.Count(v => v.X == 8192f));
+
+            // Without the neighbour the edge is flat, as before.
+            Assert.All(ta.BuildTiledMesh(0, 0, 1).Single().Vertices, v => Assert.Equal(80f, v.Z));
+            // A neighbour that doesn't touch the edge (a gap between zones) changes nothing.
+            Assert.All(ta.BuildTiledMesh(0, 0, 1, [new TerrainNeighbour(tb, 16384, 0)]).Single().Vertices, v => Assert.Equal(80f, v.Z));
+        }
+        finally
+        {
+            File.Delete(a);
+            File.Delete(b);
+        }
+    }
+
+    [Fact]
     public void RejectsNonPcx()
     {
         Assert.Throws<FormatException>(() => Pcx.Read(new byte[200])); // manufacturer byte != 0x0A
