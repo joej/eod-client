@@ -484,7 +484,7 @@ public partial class WorldView : Node3D
             _waterOn = on;
             foreach (ZoneParts z in _zones.Values) if (z.Water is not null) z.Water.Visible = on;
         });
-        _dev.AddToggle("Jump points", false, ShowJumpMarkers);
+        _flipJumpsToggle = _dev.AddToggle("Jump points", _jumpsVisible, ShowJumpMarkers);
         _dev.AddToggle("Entities", true, on => _entityRoot.Visible = on);
         _dev.AddToggle("Own character", true, on => _body.Visible = on);
         _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);

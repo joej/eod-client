@@ -14,7 +14,10 @@ public partial class WorldView
 {
     private Vector3? _lastJumpCheck;      // where the character was at the last check (Godot metres)
     private double _jumpQuietUntil;       // no second jump request until then (the server is moving us)
-    private bool _jumpsVisible;           // the dev overlay's "Jump points" switch
+    // The dev overlay's "Jump points" switch. Static: it stays as set when a region change builds a new view
+    // (it reset there, which read as the doorway showing from one side only).
+    private static bool _jumpsVisible;
+    private System.Action? _flipJumpsToggle;
 
     // A zone's doorways, and (hidden unless the dev switch is on) a glowing pane for each.
     private static System.Collections.Generic.IEnumerable<bool> JumpSteps(ZoneParts parts)
