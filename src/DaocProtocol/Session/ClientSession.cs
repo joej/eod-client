@@ -246,6 +246,11 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         return World;
     }
 
+    // The zone a walk has reached: the one containing the position, else (a gap between zones, the
+    // world's edge) the last one, which the server knows.
+    private static Zone ZoneOrLast(PositionAndObjectId p, Zone last) =>
+        last.Contains(p.X, p.Y) ? last : Zones.Find(p.RegionId, p.X, p.Y) ?? last;
+
     // Position updates must name a zone the server knows, or it kicks the player.
     private static Zone ZoneAt(PositionAndObjectId p) =>
         Zones.Find(p.RegionId, p.X, p.Y)
@@ -347,8 +352,9 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// server sees it at once (the keep-alive would otherwise hold it for up to 2 s).
     /// Call this from the input/physics loop while the player moves; the server trusts the X/Y/Z
     /// it is given, so updating them is the movement. <paramref name="heading"/> is 0–4095
-    /// (4096 = 360°). The zone must still contain the new position; crossing a zone boundary needs
-    /// a zone lookup the caller does not do yet (see roadmap M4), so this keeps the current zone.
+    /// (4096 = 360°). Walking over a zone border moves the session into the zone that now contains the
+    /// position (the server reads 0xA9's zone field for "You have entered …" and the zone's areas);
+    /// in a gap between zones it keeps the last one.
     /// </summary>
     /// <summary>
     /// The name of the forged state <paramref name="stateFlags"/> spells, or null. OpenDAoC reads two of
@@ -393,7 +399,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
 
             MoveSpeed = speed;
             PositionAndObjectId moved = world.Position with { X = x, Y = y, Z = z, Heading = heading };
-            World = world with { Position = moved };
+            World = new WorldPosition(moved, ZoneOrLast(moved, world.Zone));
             await SendPositionAsync(World, speed, cancellationToken, verticalSpeed, landed, stateFlags).ConfigureAwait(false);
         }
         finally

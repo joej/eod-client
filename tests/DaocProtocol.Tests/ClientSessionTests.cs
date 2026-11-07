@@ -488,6 +488,35 @@ public class ClientSessionTests
     }
 
     [Fact]
+    public async Task WalkingOverAZoneBorderReportsTheNewZoneAndAGapKeepsTheLast()
+    {
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await session.GetCharactersAsync(Realm.Albion);
+            await session.EnterWorldAsync(Realm.Albion, slot: 0);
+            Assert.Equal("Camelot Hills", session.World!.Zone.Name);
+
+            // Camelot Hills ends at y 67 × 8192 = 548864; Salisbury Plains (zone 1) starts there.
+            await session.MoveToAsync(570000f, 548863f, 2344f, heading: 0);
+            Assert.Equal("Camelot Hills", session.World.Zone.Name);
+            await session.MoveToAsync(570000f, 548864f, 2344f, heading: 0);
+            Assert.Equal("Salisbury Plains", session.World.Zone.Name);
+            // West of both, south of Black Mtns. South: no zone. The last one stays.
+            await session.MoveToAsync(548000f, 549000f, 2344f, heading: 0);
+            Assert.Equal("Salisbury Plains", session.World.Zone.Name);
+        }
+
+        Assert.Null(server.Error);
+        ushort[] zones = server.Received.Where(p => p.Code == PositionUpdate.Code)
+            .Select(p => (ushort)(p.Payload[24] << 8 | p.Payload[25])).ToArray();
+        Assert.Equal(new ushort[] { 0, 1, 1 }, zones);
+    }
+
+    [Fact]
     public async Task MoveToRejectsOutsideTheWorld()
     {
         await using var server = new FakeServer(Recording());
