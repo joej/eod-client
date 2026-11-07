@@ -11,3 +11,4 @@ tile_corner   581632 491520 4580   0 -85   # ground tiles meeting at a corner, f
 vista         574208 538432 6896   0 -25   # the zone around the keep: fog, sky, trees, overall placement
 underground   566400 529584 1570   0  20   # 15 m under the graveyard looking up: nothing should be down here
 border_south  570000 544000 6500 180 -18   # into Salisbury Plains over the zone border: the neighbour streams in (M8)
+camcity_gate  551990 512800 3250   0 -12   # the gate into Camelot City (zone point 6) from outside: a jump point (M8)

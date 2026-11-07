@@ -107,16 +107,55 @@ public partial class CharacterScreen
     {
         if (_session is null)
             return;
+        ShowLoading("Loading…");
         try
         {
             WorldPosition world = await _session.ChangeRegionAsync();
             GD.Print($"[world] region change: now in {world.Zone.Name} (zone {world.Zone.Id}, region {world.Position.RegionId})");
+            // Draw the screen with the place's name before the new zone is built (that takes a moment
+            // and holds the frame), then take it away once the new world is up.
+            ShowLoading($"Loading {world.Zone.Name}…");
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             ShowWorld(world);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
         catch (Exception e) when (e is IOException or TimeoutException or InvalidDataException or InvalidOperationException)
         {
+            HideLoading();
             await BackToLogin($"Region change failed: {e.Message}");
+            return;
         }
+        HideLoading();
+    }
+
+    // The screen shown while the server moves the character to another region (a city gate, a dungeon,
+    // a portal), as retail shows one there. Plain for now; retail's loading pictures are in the install.
+    private CanvasLayer? _loading;
+    private Label? _loadingText;
+
+    private void ShowLoading(string text)
+    {
+        if (_loading is null)
+        {
+            _loading = new CanvasLayer { Layer = 100 };
+            var shade = new ColorRect { Color = new Color(0.04f, 0.04f, 0.06f) };
+            shade.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+            _loadingText = new Label { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            _loadingText.AddThemeFontSizeOverride("font_size", 28);
+            _loadingText.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+            _loading.AddChild(shade);
+            _loading.AddChild(_loadingText);
+            GetTree().Root.AddChild(_loading);
+        }
+        _loadingText!.Text = text;
+    }
+
+    private void HideLoading()
+    {
+        _loading?.QueueFree();
+        _loading = null;
+        _loadingText = null;
     }
 
     /// <summary>

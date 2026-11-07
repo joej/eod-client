@@ -304,6 +304,7 @@ public partial class WorldView
         _world = moved;
         PositionAndObjectId p = moved.Position;
         _body.Position = ToGodot(p.X, p.Y, p.Z);
+        _lastJumpCheck = null;   // a move by the server, not a step through a doorway
         _bodyYaw = YawFromHeading(p.Heading);
         _body.Rotation = new Vector3(0, _bodyYaw, 0);
     }

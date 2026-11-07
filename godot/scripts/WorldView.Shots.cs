@@ -38,6 +38,9 @@ public partial class WorldView
     private void ApplyDevArgs()
     {
         string[] args = OS.GetCmdlineUserArgs();
+        // --jumps: show the jump points' doorways (the dev overlay's "Jump points" switch).
+        if (System.Array.IndexOf(args, "--jumps") >= 0)
+            ShowJumpMarkers(true);
         int i = System.Array.IndexOf(args, "--campose");
         if (i >= 0 && i + 5 < args.Length && Floats(string.Join(' ', args[(i + 1)..(i + 6)])) is { Length: 5 } c)
         {

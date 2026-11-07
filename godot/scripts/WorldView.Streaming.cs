@@ -49,6 +49,7 @@ public partial class WorldView
         if (parts.Terrain is not null) parts.Terrain.Visible = _terrainOn;
         if (parts.Objects is not null) parts.Objects.Visible = _fixturesOn;
         if (parts.Water is not null) parts.Water.Visible = _waterOn;
+        if (parts.JumpMarkers is not null) parts.JumpMarkers.Visible = _jumpsVisible;
         _zones[parts.Id] = parts;
         var watch = System.Diagnostics.Stopwatch.StartNew();
         AddChild(parts.Root);

@@ -34,6 +34,16 @@ public class WorldPacketTests
     }
 
     [Fact]
+    public void AJumpPointRequestCarriesTheZonePointAsTheServerReadsIt()
+    {
+        // OpenDAoC 1.126+ (PlayerRegionChangeRequestHandler): ReadShortLowEndian, then the zonepoint table.
+        // Zone point 6 is Camelot Hills' gate into Camelot City.
+        Assert.Equal(0x90, RegionChangeRequest.Code);
+        Assert.Equal(new byte[] { 0x06, 0x00 }, RegionChangeRequest.Payload(6));
+        Assert.Equal(new byte[] { 0x2A, 0x01 }, RegionChangeRequest.Payload(0x012A));
+    }
+
+    [Fact]
     public void RequestsMatchRecordedClient()
     {
         // Recorded order after the character list: 9D A3 10 D4 E8 BF (packets 8–13), slot 0 in Albion.

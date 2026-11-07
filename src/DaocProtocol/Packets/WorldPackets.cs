@@ -270,3 +270,18 @@ public static class CreateObjectRequest
 
     public static byte[] Payload(ushort objectId) => new PayloadWriter().U32LE(objectId).ToArray();
 }
+
+/// <summary>
+/// C->S 0x90 PlayerRegionChangeRequest: the player walked through a jump point (a city gate, a dungeon
+/// entrance; the zone archive's zonejump.csv) and the client names its zone point. OpenDAoC 1.126+
+/// (<c>PlayerRegionChangeRequestHandler</c>) reads the id as u16 little-endian, looks it up in its
+/// zonepoint table (for a player: of their realm or of none) and moves the player to its target: 0x04 in
+/// the same region, 0xB1 + 0xB7 for another. It does not check that the player is near the doorway.
+/// Retail's payload length is unconfirmed; we send the two bytes the server reads.
+/// </summary>
+public static class RegionChangeRequest
+{
+    public const byte Code = 0x90;
+
+    public static byte[] Payload(ushort zonePointId) => new PayloadWriter().U16LE(zonePointId).ToArray();
+}

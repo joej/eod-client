@@ -41,6 +41,12 @@ public sealed partial class ZoneAudit
                 [7] = "scale", [11] = "On Ground",
             },
             ["nifs.csv"] = new Dictionary<int, string> { [0] = "NIF #", [1] = "label", [2] = "model file" },
+            // ZoneJumps: the doorway line, its floor and top, and the server zone point it uses.
+            ["zonejump.csv"] = new Dictionary<int, string>
+            {
+                [1] = "name", [2] = "x1", [3] = "y1", [4] = "x2", [5] = "y2", [6] = "z1 (floor)", [7] = "z2 (top)",
+                [8] = "zone point id",
+            },
         };
 
     private sealed class FileStats

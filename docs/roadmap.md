@@ -332,6 +332,10 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   along each zone rectangle of the region, labelled with the zone names) for debugging crossings.
 - **Zone jumps and teleports.** `zonejump.csv` (345 zones) and `[jumpNN]` travel points; the server's
   region-change and teleport packets; entering a dungeon or city (until M11, as a placeholder).
+  *Built 2026-11-07:* each zone's doorways go to `jumps.csv` (235 in 91 zones); walking through one sends
+  its zone point (C→S 0x90) and the server moves us; a region change shows a loading screen. The dev
+  overlay's "Jump points" switch (or `--jumps`) draws each doorway. Open: W47, a live walk through a gate,
+  teleporter NPCs (needs click-to-target and interact, M9), retail's loading pictures.
 - **Death, release and respawn**, which move the player to a bind point, often in another zone.
 - **Swimming** in the water M7 draws.
 - **Gravity (started 2026-11-04):** the character stands on terrain and on model floors (streets,

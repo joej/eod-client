@@ -28,13 +28,22 @@ public static class ZoneExport
     {
         ZoneLayout layout;
         (float X, float Y, float Z)? landing = null;
+        List<ZoneJump> jumpPoints = [];
         using (MpkArchive dat = MpkArchive.Open(zoneDatMpk))
         {
             layout = ZoneLayout.Read(dat, offsetX, offsetY);
-            if (ZoneLayout.IsCity(dat) && dat.TryGetEntry("zonejump.csv", out MpkEntry jumps))
-                landing = CityLanding(Encoding.Latin1.GetString(dat.Extract(jumps)), offsetX, offsetY);
+            if (dat.TryGetEntry("zonejump.csv", out MpkEntry jumps))
+            {
+                string csv = Encoding.Latin1.GetString(dat.Extract(jumps));
+                jumpPoints = ZoneJumps.Parse(csv, offsetX, offsetY);
+                if (ZoneLayout.IsCity(dat))
+                    landing = CityLanding(csv, offsetX, offsetY);
+            }
         }
         Directory.CreateDirectory(outDir);
+        // The zone's doorways (city gates, dungeon entrances): the client sends their zone point on
+        // walking through one (C->S 0x90).
+        File.WriteAllText(Path.Combine(outDir, "jumps.csv"), ZoneJumps.ToCsv(jumpPoints));
         // Where play.sh --zone puts the character: a city's middle can be inside a wall or on a roof.
         string landingPath = Path.Combine(outDir, "landing.txt");
         if (landing is { } l)

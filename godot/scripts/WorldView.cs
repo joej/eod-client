@@ -484,6 +484,7 @@ public partial class WorldView : Node3D
             _waterOn = on;
             foreach (ZoneParts z in _zones.Values) if (z.Water is not null) z.Water.Visible = on;
         });
+        _dev.AddToggle("Jump points", false, ShowJumpMarkers);
         _dev.AddToggle("Entities", true, on => _entityRoot.Visible = on);
         _dev.AddToggle("Own character", true, on => _body.Visible = on);
         _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);
@@ -836,6 +837,8 @@ public partial class WorldView : Node3D
     public override void _PhysicsProcess(double delta)
     {
         UpdatePlayer(delta);
+        if (_chase)
+            CheckJumpPoints();
         if (_pendingClick is Vector2 click)
         {
             _pendingClick = null;

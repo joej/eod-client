@@ -556,6 +556,16 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         return connection.SendAsync(CreateObjectRequest.Code, CreateObjectRequest.Payload(objectId), cancellationToken);
     }
 
+    /// <summary>
+    /// Asks to use jump point <paramref name="zonePointId"/> (the player walked through its doorway): the
+    /// server moves the player, and its 0x04 or 0xB7 arrives like any other move (NetworkBridge).
+    /// </summary>
+    public Task UseJumpPointAsync(ushort zonePointId, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(RegionChangeRequest.Code, RegionChangeRequest.Payload(zonePointId), cancellationToken);
+    }
+
     public Task SendCommandAsync(string command, CancellationToken cancellationToken = default)
     {
         Require(SessionState.InWorld);

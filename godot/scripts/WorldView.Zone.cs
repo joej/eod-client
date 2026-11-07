@@ -20,7 +20,8 @@ public partial class WorldView
         public required ushort Id;
         public required string Dir;           // the folder with zone.csv, sky.csv, water.* ("" for none)
         public required Node3D Root;
-        public Node3D? Terrain, Objects, Water;
+        public Node3D? Terrain, Objects, Water, JumpMarkers;
+        public System.Collections.Generic.List<DaocAssets.Zone.ZoneJump> Jumps = [];
         public int Placed, Distinct, TexturedModels, TexturedSurfaces, WaterBodies;
         public double Seconds;                // how long the build took
     }
@@ -50,6 +51,7 @@ public partial class WorldView
         foreach (bool step in TerrainSteps(parts, terrainGlb, lib)) yield return step;
         foreach (bool step in ObjectSteps(parts, zoneCsv, lib, models)) yield return step;
         foreach (bool step in WaterSteps(parts, lib)) yield return step;
+        foreach (bool step in JumpSteps(parts)) yield return step;
     }
 
     // The zone terrain .glb. The exporter already baked region units → metres (× 0.025) into its vertices
