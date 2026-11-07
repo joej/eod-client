@@ -225,7 +225,7 @@ public class ClientSessionTests
         Assert.Null(server.Error);
         ClientPacket command = Assert.Single(server.Received, IsJump);
         Assert.Equal(CommandRequest.Payload("&jump to 560000 570000 1000 1"), command.Payload);
-        Assert.Equal(PositionUpdate.Payload(560001, 570000, 1000, sessionId: 1, objectId: 0, zoneId: 1, heading: 0x1000 | 2048),
+        Assert.Equal(PositionUpdate.Payload(560001, 570000, 1000, sessionId: 1, objectId: 0, zoneId: 1, heading: 0x1000 | 2048, actionFlags: 0x80),
             server.Received.Last(p => p.Code == PositionUpdate.Code).Payload);
     }
 
@@ -355,7 +355,7 @@ public class ClientSessionTests
         Assert.True(after.Take(firstUpdate).Count(p => p.Code == PingRequest.Code) >= 4);
         // ...and every 0xA9 after the command carries the new position, none the old one.
         Assert.All(after.Where(p => p.Code == PositionUpdate.Code),
-            u => Assert.Equal(PositionUpdate.Payload(560000, 570000, 1000, sessionId: 1, objectId: 0, zoneId: 1, heading: 0x1000 | 0), u.Payload));
+            u => Assert.Equal(PositionUpdate.Payload(560000, 570000, 1000, sessionId: 1, objectId: 0, zoneId: 1, heading: 0x1000 | 0, actionFlags: 0x80), u.Payload));
     }
 
     [Fact]
@@ -427,7 +427,7 @@ public class ClientSessionTests
         Assert.Null(server.Error);
         Assert.Equal(new byte[] { 0x9D, 0x10, 0xD4, 0xE8, 0xBF }, server.Received.Skip(5).Take(5).Select(p => p.Code));
 
-        byte[] expected = PositionUpdate.Payload(560871f, 511685f, 2344f, sessionId: 1, objectId: 0, zoneId: 0, heading: 0x1000 | 1512);
+        byte[] expected = PositionUpdate.Payload(560871f, 511685f, 2344f, sessionId: 1, objectId: 0, zoneId: 0, heading: 0x1000 | 1512, actionFlags: 0x80);
         List<ClientPacket> updates = server.Received.Where(p => p.Code == PositionUpdate.Code).ToList();
         Assert.InRange(updates.Count, 5, 20);
         Assert.All(updates, u => Assert.Equal(expected, u.Payload));
@@ -483,8 +483,43 @@ public class ClientSessionTests
         Assert.Null(server.Error);
         List<ClientPacket> updates = server.Received.Where(p => p.Code == PositionUpdate.Code).ToList();
         Assert.Single(updates); // no keep-alive ran; MoveToAsync sent exactly one 0xA9
-        byte[] expected = PositionUpdate.Payload(561000f, 511700f, 2344f, sessionId: 1, objectId: 0, zoneId: 0, heading: 0x1000 | 2048, speed: 191f);
+        byte[] expected = PositionUpdate.Payload(561000f, 511700f, 2344f, sessionId: 1, objectId: 0, zoneId: 0, heading: 0x1000 | 2048, speed: 191f, actionFlags: 0x80);
         Assert.Equal(expected, updates[0].Payload);
+    }
+
+    [Fact]
+    public async Task TheTargetGoesInEveryPositionUpdateAndInteractTargetsFirst()
+    {
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code
+            or TargetRequest.Code or InteractRequest.Code ? [] : null)));
+        PositionAndObjectId spawn = default!;
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await session.GetCharactersAsync(Realm.Albion);
+            await session.EnterWorldAsync(Realm.Albion, slot: 0);
+            spawn = session.World!.Position;
+
+            await session.InteractAsync(0x1234);          // not the target yet: 0xB0 first, then 0x7A
+            await session.MoveToAsync(561000f, 511700f, 2344f, heading: 2048);
+            await session.SetTargetAsync(0);              // cleared
+            await session.MoveToAsync(561001f, 511700f, 2344f, heading: 2048);
+        }
+
+        await server.ClosedAsync();
+        Assert.Null(server.Error);
+        var sent = server.Received.Where(p => p.Code is TargetRequest.Code or InteractRequest.Code or PositionUpdate.Code).ToList();
+        Assert.Equal(new byte[] { TargetRequest.Code, InteractRequest.Code, PositionUpdate.Code, TargetRequest.Code, PositionUpdate.Code },
+            sent.Select(p => p.Code).ToArray());
+        Assert.Equal(new byte[] { 0x12, 0x34, 0xE0, 0x00 }, sent[0].Payload);
+        Assert.Equal(new byte[] { 0, 0, 0, 0 }, sent[3].Payload);
+        // 0x7A: whole-unit x, y (BE) where the player stands, the session, the object.
+        Assert.Equal(InteractRequest.Payload(spawn.X, spawn.Y, 1, 0x1234), sent[1].Payload);
+        Assert.Equal(new byte[] { 0, 1, 0x12, 0x34 }, sent[1].Payload[8..]);
+        Assert.Equal(PositionUpdate.Payload(561000f, 511700f, 2344f, 1, objectId: 0x1234, zoneId: 0, heading: 0x1000 | 2048, actionFlags: 0xB0), sent[2].Payload);
+        Assert.Equal(PositionUpdate.Payload(561001f, 511700f, 2344f, 1, objectId: 0, zoneId: 0, heading: 0x1000 | 2048, actionFlags: 0x80), sent[4].Payload);
     }
 
     [Fact]
@@ -734,7 +769,7 @@ public class ClientSessionTests
 
             List<ClientPacket> moving = server.Received.Skip(start).Take(moved - start).ToList();
             List<ClientPacket> idle = server.Received.Skip(moved).ToList();
-            byte[] lastMove = PositionUpdate.Payload(p.X + 12, p.Y, p.Z, sessionId: 1, objectId: 0, session.World.Zone.Id, (ushort)(0x1000 | p.Heading), speed: 191);
+            byte[] lastMove = PositionUpdate.Payload(p.X + 12, p.Y, p.Z, sessionId: 1, objectId: 0, session.World.Zone.Id, (ushort)(0x1000 | p.Heading), speed: 191, actionFlags: 0x80);
             // While moving, at most the keep-alive's first send (at start) besides our 12.
             Assert.InRange(moving.Count(u => u.Code == PositionUpdate.Code), 12, 13);
             Assert.True(moving.Count(u => u.Code == PingRequest.Code) >= 4);

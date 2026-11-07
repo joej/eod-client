@@ -89,6 +89,9 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// </summary>
     public float MoveSpeed { get; set; }
 
+    /// <summary>The object the player has selected (0: none), as last sent in 0xB0; it goes in every 0xA9.</summary>
+    public ushort TargetId { get; private set; }
+
     /// <summary>
     /// The longest <see cref="KeepAliveAsync"/> lets pass without an 0xA9: it sends one when nothing
     /// else (<see cref="MoveToAsync"/>) has for this long. Retail 1.127 sends one every 2.08 s standing
@@ -417,9 +420,11 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         // On the ground: not in a jump and not falling, or the update that lands.
         bool onGround = landed || (verticalSpeed == 0 && (stateFlags & 0x08) == 0);
         return connection.SendAsync(PositionUpdate.Code,
-            PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: 0, world.Zone.Id,
+            PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: TargetId, world.Zone.Id,
                 PositionUpdate.Heading(p.Heading, onGround), speed,
-                verticalSpeed, stateFlags, landed: landed),
+                verticalSpeed, stateFlags,
+                actionFlags: (byte)(PositionUpdate.ActionAlways | (TargetId != 0 ? PositionUpdate.TargetInView : 0)),
+                landed: landed),
             cancellationToken);
     }
 
@@ -554,6 +559,29 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     {
         Require(SessionState.InWorld);
         return connection.SendAsync(CreateObjectRequest.Code, CreateObjectRequest.Payload(objectId), cancellationToken);
+    }
+
+    /// <summary>Selects <paramref name="objectId"/> (0 clears the target): C->S 0xB0. The server answers in chat.</summary>
+    public Task SetTargetAsync(ushort objectId, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        TargetId = objectId;
+        return connection.SendAsync(TargetRequest.Code, TargetRequest.Payload(objectId), cancellationToken);
+    }
+
+    /// <summary>
+    /// Interacts with <paramref name="objectId"/> (a right-click: talk to an NPC, open a merchant), targeting it
+    /// first when it isn't the target yet, as retail does. C->S 0xB0 then 0x7A from the player's position.
+    /// </summary>
+    public async Task InteractAsync(ushort objectId, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        if (World is not WorldPosition world)
+            return;
+        if (TargetId != objectId)
+            await SetTargetAsync(objectId, cancellationToken).ConfigureAwait(false);
+        await connection.SendAsync(InteractRequest.Code,
+            InteractRequest.Payload(world.Position.X, world.Position.Y, connection.SessionId, objectId), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -121,10 +121,11 @@ public static class PositionUpdate
     public const byte Code = 0xA9;
 
     /// <param name="sessionId">Read and skipped by the server.</param>
-    /// <param name="objectId">Read and skipped by the server (1.127+); the recorded client sends 0.</param>
+    /// <param name="objectId">The player's target (0: none; retail 1.127, daoc-re 2026-11-05). Read and skipped by
+    /// OpenDAoC (1.127+); the recorded client sends 0.</param>
     /// <param name="zoneId">Must be a zone the server knows, or the player is kicked to the character screen.</param>
     /// <param name="heading">0–4095, plus bit 0x1000 when on the ground (<see cref="Heading"/>).</param>
-    /// <param name="actionFlags">Bit 0x80 = torch; the recorded client sends 0x80.</param>
+    /// <param name="actionFlags">Retail 1.127 sends 0x80 always and 0xB0 while a target is in view (<see cref="TargetInView"/>).</param>
     /// <param name="verticalSpeed">Non-zero while falling or jumping (the server's FallSpeed).</param>
     /// <param name="health">Percent; the server skips it.</param>
     /// <param name="landed">Set on the one update that lands from a fall: the falling-damage field's bit 15.
@@ -135,6 +136,9 @@ public static class PositionUpdate
     /// word as sent and relays it to other clients.</summary>
     public static ushort Heading(ushort heading, bool onGround) =>
         (ushort)((heading & 0x0FFF) | (onGround ? 0x1000 : 0));
+
+    /// <summary>Action flags: set always by retail 1.127, and the bits it adds while a target is in view.</summary>
+    public const byte ActionAlways = 0x80, TargetInView = 0x30;
 
     public static byte[] Payload(float x, float y, float z, ushort sessionId, ushort objectId, ushort zoneId,
         ushort heading, float speed = 0, float verticalSpeed = 0, byte stateFlags = 0, byte actionFlags = 0, byte health = 100,
@@ -284,4 +288,32 @@ public static class RegionChangeRequest
     public const byte Code = 0x90;
 
     public static byte[] Payload(ushort zonePointId) => new PayloadWriter().U16LE(zonePointId).ToArray();
+}
+
+/// <summary>
+/// C->S 0xB0 PlayerTarget: the player selected <c>objectId</c> (u16 BE) with flags u16 BE; retail 1.127 sends
+/// <c>e0 00</c> (daoc-re 2026-11-05): 0x8000 examine, 0x4000 | 0x2000 in view (OpenDAoC
+/// <c>PlayerTargetHandler</c>). Clearing the target sends four zeros. The server answers with chat type
+/// 0x1E "You target [X]." and, examined, the target's description.
+/// </summary>
+public static class TargetRequest
+{
+    public const byte Code = 0xB0;
+
+    public static byte[] Payload(ushort objectId) =>
+        new PayloadWriter().U16BE(objectId).U16BE(objectId == 0 ? (ushort)0 : (ushort)0xE000).ToArray();
+}
+
+/// <summary>
+/// C->S 0x7A ObjectInteractRequest (a right-click on an object): the player's x and y as whole region
+/// units (u32 BE), the session id and the object id (u16 BE), as retail 1.127 sends it (daoc-re) and OpenDAoC's
+/// <c>ObjectInteractRequestHandler</c> reads it. The object then talks (an NPC's "says" text, chat type
+/// 0x12), opens its window (a merchant's 0x17) or does nothing. Retail targets an untargeted object first.
+/// </summary>
+public static class InteractRequest
+{
+    public const byte Code = 0x7A;
+
+    public static byte[] Payload(float x, float y, ushort sessionId, ushort objectId) =>
+        new PayloadWriter().U32BE((uint)x).U32BE((uint)y).U16BE(sessionId).U16BE(objectId).ToArray();
 }
