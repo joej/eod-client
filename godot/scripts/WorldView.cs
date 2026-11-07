@@ -143,6 +143,7 @@ public partial class WorldView : Node3D
         public bool InCombat;         // attack mode (the health byte's 0x80 in its 0xA9 / 0xBA): weapons drawn
         public string CombatIdle = "combat_idle";   // the clip for standing in attack mode, by the weapon in use
         public Node3D? QuestGlyph;    // the glyph over a quest giver's head (null: none)
+        public string Name = "";
     }
 
     /// <summary>Raised when the player presses Quit (connected).</summary>
@@ -378,7 +379,7 @@ public partial class WorldView : Node3D
             // height) up-and-back, so it won't jam against the ground directly under the player; the
             // body's own collider is excluded below, and CamMin floors the length so it can't collapse
             // into the pivot even against a wall or the keep floor at the Prydwen Keep spawn.
-            CollisionMask = uint.MaxValue,
+            CollisionMask = ~EntityLayer,   // not NPCs' pick shapes
         };
         _camPivot.AddChild(_camArm);
         foreach (Node n in _body.GetChildren())
@@ -452,6 +453,7 @@ public partial class WorldView : Node3D
         travel.Pressed += () => OpenTravel();
         _dev.AddToStatus(travel);
         BuildChatUi(overlay);
+        BuildNpcWindow(overlay);
         AddChild(overlay);
         _viewSetting = ViewOverride() ?? ClientSettings.ViewDistance;
         ApplyViewDistance(_viewSetting);
@@ -662,6 +664,12 @@ public partial class WorldView : Node3D
         }
         else if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Right)
         {
+            // A right click without a drag interacts with what is under the cursor (resolved in the physics
+            // frame); a drag is mouse-look. In the classic layout the right button walks instead.
+            if (mb.Pressed)
+                (_rightFrom, _rightMoved) = (mb.Position, 0);
+            else if (_lookActive && _rightMoved < 6 && !KeyBindings.Moves(MouseButton.Right))
+                _pendingInteract = _rightFrom;
             _lookActive = mb.Pressed;
             if (mb.Pressed)
                 _camOrbit = 0;   // right-click aligns the camera behind the character again (retail)
@@ -685,6 +693,7 @@ public partial class WorldView : Node3D
             _camDistance = Mathf.Clamp(_camDistance / pinch.Factor, CamMin, CamMax);
         else if (@event is InputEventMouseMotion mm && _lookActive)
         {
+            _rightMoved += mm.Relative.Length();
             if (_freshCapture)
             {
                 _freshCapture = false;   // drop the first post-capture delta (a large recenter spike)
@@ -761,7 +770,14 @@ public partial class WorldView : Node3D
         }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
         {
-            ClearInspect();
+            // Esc closes the NPC window, else drops the inspect selection and the target (retail: Esc clears it).
+            if (_npcWindow.Visible)
+                _npcWindow.Visible = false;
+            else
+            {
+                ClearInspect();
+                SetTarget(0);
+            }
         }
     }
 
@@ -836,13 +852,24 @@ public partial class WorldView : Node3D
     // horizontally off a downslope instead of following the ground (the symptom on real terrain).
     public override void _PhysicsProcess(double delta)
     {
+        WalkToTarget();
         UpdatePlayer(delta);
         if (_chase)
             CheckJumpPoints();
         if (_pendingClick is Vector2 click)
         {
             _pendingClick = null;
-            Inspect(click);
+            // A creature or player under the cursor is targeted; anything else is inspected (dev).
+            if (PickEntity(click) is ushort picked)
+                SetTarget(picked);
+            else
+                Inspect(click);
+        }
+        if (_pendingInteract is Vector2 at)
+        {
+            _pendingInteract = null;
+            if (PickEntity(at) is ushort other)
+                Interact(other);
         }
     }
 
@@ -888,7 +915,7 @@ public partial class WorldView : Node3D
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
             (AssetsNote.Length > 0 ? AssetsNote + "\n" : "") +
             $"{Engine.GetFramesPerSecond():0} fps   {_seconds:0} s in world   {_packets} packets ({_connection?.Pending ?? 0} queued)   {_pings} ping replies   {_entities.Count} entities ({_entities.Values.Count(e => e.Player is not null)} figures)   {_chatReceived} chat   " +
-            (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + "\n" +
+            (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + TargetLine + "\n" +
             $"W {(Input.IsKeyPressed(Key.W) ? 1 : 0)} S {(Input.IsKeyPressed(Key.S) ? 1 : 0)} " +
             $"A {(Input.IsKeyPressed(Key.A) ? 1 : 0)} D {(Input.IsKeyPressed(Key.D) ? 1 : 0)}   " +
             $"body {_body.Position.X:0.0},{_body.Position.Y:0.0},{_body.Position.Z:0.0}   " +

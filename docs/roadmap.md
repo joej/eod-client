@@ -349,6 +349,10 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
 *The HUD, the basics of "doing things," and a world you can't walk through.*
 - Parse health/mana/endurance, level/XP, and the stat/update packets into a HUD.
 - Target an entity; basic interact (talk to NPC, open a merchant/dialog) — read-only first.
+  *Started 2026-11-07 (for the teleporters):* a left click targets a creature or player (0xB0; a ring at its
+  feet, its name in the status line), a right click without dragging talks to it (0x7A), Esc clears; an
+  NPC's words open a window whose [keywords] whisper back. Checked live with Master Visur. Open: the
+  target window and its vitals, merchants (0x17), name labels.
 - **Fixture/interior collision** — deferred from the M7 walk-through, and intentionally **not** MVP
   ("looks like DAoC" ≠ "collides like DAoC"). Today the ground raycast follows only the terrain
   heightmap (a separate collision layer), so building geometry isn't solid: the player sinks into a

@@ -77,6 +77,26 @@ public partial class WorldView
                 _ = SendAttack(true);
                 GetTree().CreateTimer(attackFor).Timeout += () => _ = SendAttack(false);
             };
+        // --interact NAME: 3 s after entering, right-click the nearest creature of that name (targets it and talks),
+        // as a check of targeting and an NPC's window without a mouse.
+        // --keyword WORD: then click that [keyword] in the NPC's window.
+        int kw = System.Array.IndexOf(args, "--keyword");
+        if (kw >= 0 && kw + 1 < args.Length)
+            _devKeyword = args[kw + 1];
+        int ia = System.Array.IndexOf(args, "--interact");
+        if (ia >= 0 && ia + 1 < args.Length)
+        {
+            string name = args[ia + 1];
+            GetTree().CreateTimer(3.0).Timeout += () =>
+            {
+                ushort found = _entities.Where(kv => kv.Value.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(kv => kv.Value.Node.Position.DistanceTo(_body.Position)).Select(kv => kv.Key).FirstOrDefault();
+                GD.Print(found == 0 ? $"[target] --interact: no \"{name}\" in view"
+                    : $"[target] --interact: {name} (#{found}), {_entities[found].Node.Position.DistanceTo(_body.Position) / RegionMetresPerUnit:0} units away");
+                if (found != 0)
+                    (_walkTo, _walkUntil) = (found, _seconds + 30);
+            };
+        }
         // --command TEXT (repeatable) sends each slash command in turn, 2 s apart from 2 s after entering: e.g.
         // a GM "/jump to X Y Z REGION" to set up a --campose/--shot check somewhere exact.
         int delay = 2;

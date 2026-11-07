@@ -82,9 +82,11 @@ public enum ChatType : byte
 /// 0xAF Message (server → client): one line of chat or a system/combat message. Layout (1.127):
 /// <c>[1 byte: ChatType][optional "@@" or "##" prefix][text ...][0x00]</c>. The "@@" prefix is
 /// written only for <see cref="ChatType.Send"/> (tells, for the reply feature) and "##" for a
-/// pop-up window; both are stripped here so the text is what the player reads.
+/// pop-up window; both are stripped here so the text is what the player reads, and
+/// <see cref="Popup"/> keeps the second: an NPC's words to the player (<c>SayTo</c>, e.g. a teleporter's
+/// destinations in [brackets], which the player clicks to whisper back).
 /// </summary>
-public readonly record struct ChatMessage(ChatType Type, string Text)
+public readonly record struct ChatMessage(ChatType Type, string Text, bool Popup = false)
 {
     public const byte Code = 0xAF;
 
@@ -95,13 +97,11 @@ public readonly record struct ChatMessage(ChatType Type, string Text)
         string text = r.StringRestNulTerminated();
 
         // Strip the client-routing prefixes the server prepends for certain types.
-        if (text.StartsWith("@@", System.StringComparison.Ordinal) ||
-            text.StartsWith("##", System.StringComparison.Ordinal))
-        {
+        bool popup = text.StartsWith("##", System.StringComparison.Ordinal);
+        if (popup || text.StartsWith("@@", System.StringComparison.Ordinal))
             text = text[2..];
-        }
 
-        return new ChatMessage(type, text);
+        return new ChatMessage(type, text, popup);
     }
 
     /// <summary>

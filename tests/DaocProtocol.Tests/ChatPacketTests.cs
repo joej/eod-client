@@ -60,6 +60,21 @@ public class ChatPacketTests
     }
 
     [Fact]
+    public void AnNpcsWordsToThePlayerKeepThePopupMark()
+    {
+        // OpenDAoC 1.127 (PacketLib1127.SendRawMessage): an NPC's SayTo goes to the pop-up window, written
+        // as "##" before the text; a tell is "@@". Both are stripped; only the first is a pop-up.
+        byte[] said = [0x12, .. System.Text.Encoding.Latin1.GetBytes("##Master Visur says, \"Greetings. [Camelot City]\""), 0];
+        ChatMessage npc = ChatMessage.Parse(said);
+        Assert.True(npc.Popup);
+        Assert.Equal("Master Visur says, \"Greetings. [Camelot City]\"", npc.Text);
+
+        ChatMessage tell = ChatMessage.Parse([(byte)ChatType.Send, .. System.Text.Encoding.Latin1.GetBytes("@@Bob sends, \"hi\""), 0]);
+        Assert.False(tell.Popup);
+        Assert.Equal("Bob sends, \"hi\"", tell.Text);
+    }
+
+    [Fact]
     public void SocialInterfaceControlStringsAreNotChat()
     {
         // Type 0x64 carries structured UI strings like "I,1,0,0,..." / "TE,1,0,0" for the guild and

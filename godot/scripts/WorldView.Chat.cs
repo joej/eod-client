@@ -60,8 +60,15 @@ public partial class WorldView
     private void OnChatReceived(ChatMessage msg)
     {
         _chatReceived++;
+        GD.Print($"[chat {(byte)msg.Type:X2}{(msg.Popup ? " popup" : "")}] {msg.Text}");   // the log keeps what the player read
         if (msg.IsPlayerVisibleChat)
             AppendChat(msg.Text, ChatColor(msg.Type));
+        // An NPC's words to the player: its window, where [keywords] can be clicked.
+        if (msg.Popup)
+        {
+            ShowNpcWords(msg.Text);
+            GD.Print($"[npc] {msg.Text}");
+        }
     }
 
     /// <summary>Count of 0xAF Message packets seen, for the headless summary and overlay.</summary>

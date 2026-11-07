@@ -404,6 +404,36 @@ Salisbury Plains → Cursed Forest (region 200) by B1 B7, then our D4 → … 4E
 new region's NPCs arriving; Cursed Forest → Camelot Hills through the Godot client, which loaded each
 zone's converted assets by the zone the server reported.
 
+## Jump points
+
+A zone's doorways (city gates, dungeon entrances, portals) are lines in the client's own zone data
+(`zonejump.csv`: x1, y1, x2, y2 zone-local, floor and top, and a zone point id). The client notices
+when the player walks through one and names its zone point; the server moves the player:
+
+```
+C→S 0x90 PlayerRegionChangeRequest   u16 LE zone point id
+```
+
+OpenDAoC looks the id up in its zonepoint table (for a player: their realm's or a realm-less row) and
+does not check that the player is near the doorway. The move then comes as any other (0x04 within the
+region, 0xB1 + 0xB7 to another). *Verified live 2026-11-07:* Camelot Hills' gate (zone point 6) into
+Camelot City and back. Which way a one-way doorway fires is open question W47.
+
+## Target and interact
+
+```
+C→S 0xB0 PlayerTarget        u16 BE object id, u16 BE flags (retail: e0 00 = examine | in view); clear: 00 00 00 00
+C→S 0x7A ObjectInteract      u32 BE player x, u32 BE player y (whole units), u16 BE session, u16 BE object id
+```
+
+The server answers a target with chat type 0x1E "You target [X]." and "You examine X. It is friendly
+towards you." An interact (a right-click; retail targets first) needs the player within 192 units
+(OpenDAoC `INTERACT_DISTANCE`), else "X is too far away!". An NPC's words to the player come as chat
+type 0x12 with "##" before the text (the pop-up window); a [keyword] in them is answered by whispering
+it: C→S 0xAF `00 "&whis keyword"`. Retail also puts the target in every 0xA9 (offset 22) and sets
+action flags 0x80, plus 0x30 while a target is in view. *Verified live 2026-11-07* with Master Visur at
+Prydwen Keep (eodtest2): target, examine, his destinations, and [towns] answered with the town list.
+
 ## Attack mode
 
 **C→S 0x74** (`PlayerAttackRequestHandler`): `u8 start` (1 attack, 0 stop), `u8 asked` (0 when the

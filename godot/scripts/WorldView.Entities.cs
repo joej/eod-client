@@ -92,9 +92,13 @@ public partial class WorldView
         }
         // Shown again (a night spawn at nightfall): its position updates count once more.
         _hiddenNpcs.Remove(npc.ObjectId);
-        bool drawn = SpawnEntity(npc.ObjectId, pos, YawFromHeading(npc.HeadingOnly), RealmColor(npc.Flags >> 6), npc.ModelId, npc.Size);
+        bool drawn = SpawnEntity(npc.ObjectId, pos, YawFromHeading(npc.HeadingOnly), RealmColor(npc.Flags >> 6), npc.ModelId, npc.Size,
+            pickable: !npc.Untargetable);
         if (_entities.TryGetValue(npc.ObjectId, out Entity? spawned))
+        {
             SetQuestGlyph(spawned, npc.Quest);
+            spawned.Name = npc.Name;
+        }
         if (!drawn)
             GD.Print($"[entity] {npc.ObjectId} \"{npc.Name}\": no figure for model {npc.ModelId} (sent {npc.Model}): a capsule");
     }
@@ -105,7 +109,10 @@ public partial class WorldView
         Vector3 pos = ToGodot(p.X, p.Y, p.Z);
         // Drawn like your own character (its model id's Catacombs figure); without one, a capsule in a
         // brighter tint so other players read as players, not mobs.
-        if (!SpawnEntity(p.ObjectId, pos, YawFromHeading(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f), DaocProtocol.Packets.PlayerModel.Id(p.Model), look: p.Look))
+        bool drawn = SpawnEntity(p.ObjectId, pos, YawFromHeading(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f), DaocProtocol.Packets.PlayerModel.Id(p.Model), look: p.Look);
+        if (_entities.TryGetValue(p.ObjectId, out Entity? spawned))
+            spawned.Name = p.Name;
+        if (!drawn)
             GD.Print($"[entity] {p.ObjectId} \"{p.Name}\": no figure for model {DaocProtocol.Packets.PlayerModel.Id(p.Model)} (sent {p.Model}): a capsule");
     }
 
@@ -126,6 +133,7 @@ public partial class WorldView
         _hiddenNpcs.Remove(objectId);
         if (_entities.Remove(objectId, out Entity? e))
             e.Node.QueueFree();
+        ForgetTarget(objectId);
     }
 
     private static Color RealmColor(int realm) => realm switch
@@ -139,7 +147,7 @@ public partial class WorldView
     // look: a player (drawn with its Catacombs figure, dressed in its face and hair); null for an NPC.
     // Returns whether it is drawn as a figure (false: a capsule).
     private bool SpawnEntity(ushort objectId, Vector3 pos, float yaw, Color color, ushort model = 0, byte size = 50,
-        CharacterLook? look = null)
+        CharacterLook? look = null, bool pickable = true)
     {
         // Free any node we already have for this id before replacing it. This happens normally: an
         // entity first seen via a bare 0xA1 update spawns grey (OnObjectMoved), then its 0xDA/0x4B
@@ -193,6 +201,8 @@ public partial class WorldView
                 MaterialOverride = new StandardMaterial3D { AlbedoColor = color },
             });
         }
+        if (pickable)
+            AddPickShape(node, objectId, size);
         _entityRoot.AddChild(node);
         var entity = new Entity { Node = node, TargetPosition = pos, TargetYaw = yaw, Player = anim, LastPosition = pos,
             Figure = dressed, Model = model, Look = look ?? default };

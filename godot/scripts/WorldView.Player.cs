@@ -204,6 +204,7 @@ public partial class WorldView
         for (int tries = 0; tries < 12; tries++)
         {
             var ray = PhysicsRayQueryParameters3D.Create(from, to);
+            ray.CollisionMask = ~EntityLayer;   // NPCs' pick shapes aren't floors
             ray.Exclude = exclude;
             ray.HitBackFaces = true;
             Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
