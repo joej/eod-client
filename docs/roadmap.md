@@ -325,8 +325,9 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   far zones dropped. `MoveToAsync` reports the zone you have walked into; a GM `/jump` within the region
   streams too. The converter now joins each zone's terrain to its south and east neighbours' (the last
   row and column were flat, leaving a step along every border). Retail loads only at region changes
-  (owner, 2026-11-07; W46); no loading pause inside a region. Open: a walk across a border on the live
-  server, single build steps of up to ~50 ms (big models), and a loading screen for region changes.
+  (owner, 2026-11-07; W46); no loading pause inside a region. Walked live 2026-11-07 (Eodarms, Camelot
+  Hills ↔ Salisbury Plains, both ways): the server answered each crossing with "You have entered …" and
+  the ground met at the border. Open: single build steps of up to ~50 ms (big models), and a loading screen for region changes.
   To do (owner, 2026-11-07): a dev-overlay switch that draws the zone borders (a glowing line or wall
   along each zone rectangle of the region, labelled with the zone names) for debugging crossings.
 - **Zone jumps and teleports.** `zonejump.csv` (345 zones) and `[jumpNN]` travel points; the server's
