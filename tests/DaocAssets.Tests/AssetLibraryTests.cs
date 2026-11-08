@@ -167,6 +167,17 @@ public sealed class AssetLibraryTests : IDisposable
     }
 
     [Fact]
+    public void AManifestNamesAModelByItsPathUnderModels()
+    {
+        // zone.csv for a tutorial zone points at the tutorial's own copy of a same-name model.
+        Directory.CreateDirectory(_client);
+        var library = new AssetLibrary(AssetIndex.Build(_client), _lib);
+        Assert.Equal("tutorial/ochpier.glb", library.ManifestName(Path.Combine(_lib, "models", "tutorial", "ochpier.glb")));
+        Assert.Equal("elm1.glb", library.ManifestName(Path.Combine(_lib, "models", "elm1.glb")));
+        Assert.Equal("elm1.glb", library.ManifestName(Path.Combine(_lib, "overrides", "elm1.glb")));
+    }
+
+    [Fact]
     public void AScopedViewStoresAFileThatDiffersFromTheZoneOneInItsOwnFolder()
     {
         // wolf_black: the creature's skin (figures/) and a housing rug's texture (loose, the default) differ;

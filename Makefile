@@ -56,7 +56,8 @@ CLI_SRC    := $(X)/Program.cs $(X)/Options.cs $(X)/GlobalUsings.cs $(X)/AssetExt
 # writer the terrain and water meshes go through, and the zone and sky commands, which hold the glue.
 ZONE_SRC   := $(COMMON_SRC) $(filter-out $(A)/Zone/ZoneAudit.cs,$(wildcard $(A)/Zone/*.cs)) \
               $(A)/Nif/GltfExporter.cs $(A)/Nif/NifMesh.cs $(A)/Nif/NifReader.cs \
-              $(CLI_SRC) $(X)/Cli.Zone.cs $(X)/Cli.Sky.cs
+              $(CLI_SRC) $(X)/Cli.Zone.cs $(X)/Cli.Sky.cs \
+              $(wildcard $(CLIENT)/zones/trees/tree_clusters.mpk)
 TOOL_SRC   := $(shell find $(A) tools/AssetExtract -name '*.cs' -not -path '*/obj/*' -not -path '*/bin/*') \
               $(A)/DaocAssets.csproj tools/AssetExtract/AssetExtract.csproj
 

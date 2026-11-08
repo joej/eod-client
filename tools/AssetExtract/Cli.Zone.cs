@@ -16,7 +16,7 @@ internal static partial class Cli
         try
         {
             AssetIndex index = AssetIndex.Load(indexPath);
-            IReadOnlyList<string> names = ZoneExport.ModelNames(datMpk);
+            IReadOnlyList<string> names = ZoneExport.ModelNames(datMpk, TreeClusters.Load(index.Root));
             var have = names.Where(index.Contains).ToList();
             var bad = have.FirstOrDefault(n => n.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.')));
             if (bad is not null)
@@ -36,6 +36,15 @@ internal static partial class Cli
             return 1;
         }
     }
+
+    // The tutorial's zones (region 27, zones.dat `tutorial=1`) load from Tutorial/zones, with their models
+    // and textures from Tutorial/zones/nifs first: nine of those differ from the zones/Nifs file of the same
+    // name, so they convert into the library's "tutorial" scope (models/tutorial/, textures/tutorial/).
+    internal static readonly string[] TutorialFolders = ["Tutorial/zones/"];
+
+    internal static AssetLibrary ZoneLibrary(AssetLibrary library, string datMpk) =>
+        Path.GetFullPath(datMpk).Replace('\\', '/').Contains("/tutorial/zones/", StringComparison.OrdinalIgnoreCase)
+            ? library.Scoped("tutorial", TutorialFolders) : library;
 
     private static int ZoneCmd(string[] args)
     {
@@ -57,8 +66,10 @@ internal static partial class Cli
 
         try
         {
-            var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir);
-            ZoneExportReport r = ZoneExport.Export(library, datMpk, offX, offY, outDir, o.ZoneSize.X, o.ZoneSize.Y);
+            AssetIndex index = AssetIndex.Load(indexPath);
+            var library = ZoneLibrary(new AssetLibrary(index, libDir), datMpk);
+            ZoneExportReport r = ZoneExport.Export(library, datMpk, offX, offY, outDir, o.ZoneSize.X, o.ZoneSize.Y,
+                TreeClusters.Load(index.Root));
             Console.WriteLine($"Zone: {r.Fixtures} fixtures, {r.Models} distinct models -> " +
                 $"{r.Converted} in library, {r.MissingModel} not found; " +
                 $"{r.Placed} placements ({r.Grounded} stood on the terrain) written to {Path.GetFullPath(outDir)}/zone.csv " +

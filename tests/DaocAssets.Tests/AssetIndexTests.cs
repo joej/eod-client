@@ -75,6 +75,26 @@ public sealed class AssetIndexTests : IDisposable
     }
 
     [Fact]
+    public void NewtownsWinsOverZoneNifs()
+    {
+        // When Newtowns/zones/Nifs exists the client loads a zone object's model from it first, by the same
+        // file name (borderkeep1.npk differs from the zones/Nifs one); a name only in zones/Nifs stays there.
+        Directory.CreateDirectory(Path.Combine(_client, "zones", "Nifs"));
+        File.WriteAllBytes(Path.Combine(_client, "zones", "Nifs", "borderkeep1.npk"),
+            MpkBuilder.Build(("borderkeep1.nif", "old keep"u8.ToArray())));
+        File.WriteAllBytes(Path.Combine(_client, "zones", "Nifs", "elm1.npk"),
+            MpkBuilder.Build(("elm1.nif", "elm"u8.ToArray())));
+        Directory.CreateDirectory(Path.Combine(_client, "Newtowns", "zones", "Nifs"));
+        File.WriteAllBytes(Path.Combine(_client, "Newtowns", "zones", "Nifs", "borderkeep1.npk"),
+            MpkBuilder.Build(("borderkeep1.nif", "new keep"u8.ToArray())));
+
+        AssetIndex index = AssetIndex.Build(_client);
+
+        Assert.Equal("new keep"u8.ToArray(), index.Read("borderkeep1.nif"));
+        Assert.Equal("elm"u8.ToArray(), index.Read("elm1.nif"));
+    }
+
+    [Fact]
     public void AFigureItemOrEffectAsksForItsOwnFolderAndKeepsItThroughSaveAndLoad()
     {
         // The giant again, and a creature skin packed in figures/skins/*.mpk that a loose housing texture of

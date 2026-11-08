@@ -8,6 +8,22 @@ internal static partial class Cli
     // --library LIBDIR] (name and sky.mpk default to the client's choice via zones.dat): the zone's sky as DIR/sky.csv ("key,value"; colours "r g b a" in 0..1): every
     // weather condition and time of day from sky_<name>.dat (canopy and cloud gradients, ambient and sun
     // light, distance-fog colour), its cloud layers and sun, and SECTOR.DAT's [fog] clip and amount.
+    // The zones/ folder holding zones.mpk: this one, or the install's (two levels up from Tutorial/zones).
+    private static string InstallZonesDir(string zonesDir)
+    {
+        for (string? dir = zonesDir; dir is not null; dir = Path.GetDirectoryName(dir))
+        {
+            if (File.Exists(Path.Combine(dir, "zones.mpk")))
+                return dir;
+            string? sibling = Directory.Exists(dir) ? Directory.EnumerateDirectories(dir)
+                .FirstOrDefault(d => Path.GetFileName(d).Equals("zones", StringComparison.OrdinalIgnoreCase)
+                    && File.Exists(Path.Combine(d, "zones.mpk"))) : null;
+            if (sibling is not null)
+                return sibling;
+        }
+        return zonesDir;
+    }
+
     private static int SkyCmd(string[] args)
     {
         if (args.Length < 2)
@@ -18,7 +34,8 @@ internal static partial class Cli
         string? skyMpk = o["--skympk"], name = o["--name"], outDir = o["--out"], indexPath = o["--index"], libDir = o["--library"];
         // Default to the client's own choice: zones.dat beside the zone folders, keyed by the zone id
         // taken from the archive's folder (zones/zoneNNN/datNNN.mpk).
-        string zonesDir = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(datMpk))!)!;
+        // A tutorial zone (Tutorial/zones/zoneNNN) uses the install's zones/ for zones.mpk and the skies.
+        string zonesDir = InstallZonesDir(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(datMpk))!)!);
         skyMpk ??= Path.Combine(zonesDir, "sky", "sky.mpk");
         if (name is null)
         {

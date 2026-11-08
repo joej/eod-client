@@ -68,6 +68,15 @@ public sealed class AssetLibrary
         return mine is not null && theirs is not null && mine.AsSpan().SequenceEqual(theirs) ? shared : Path.Combine(shared, _scope);
     }
 
+    /// <summary>How a placement manifest names a converted model: its path under <c>models/</c> with '/'
+    /// ("elm1.glb", or "tutorial/ochpier.glb" for a scope's own copy); an override by its file name.</summary>
+    public string ManifestName(string glbPath)
+    {
+        string rel = Path.GetRelativePath(_models, glbPath);
+        return rel.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(rel)
+            ? Path.GetFileName(glbPath) : rel.Replace('\\', '/');
+    }
+
     public AssetLibrary(AssetIndex index, string libraryRoot)
     {
         _index = index;

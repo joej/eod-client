@@ -362,9 +362,15 @@ public partial class WorldView
             libraryDir.PathJoin("models").PathJoin(glb),
             libraryDir.PathJoin(glb));
 
+        // A scope's own copy ("tutorial/ochpier.glb": the tutorial's version of a same-name model) takes its
+        // textures from that scope's folder first (textures/tutorial/).
+        string scope = glb.Contains('/') ? glb[..glb.LastIndexOf('/')] : "";
+        string[] textureDirs = scope.Length > 0
+            ? [libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures").PathJoin(scope), libraryDir.PathJoin("textures"), libraryDir]
+            : [libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir];
         Node3D? model = null;
         if (path is not null
-            && ModelTexturing.LoadGlb(path, out int t, libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir) is Node3D m)
+            && ModelTexturing.LoadGlb(path, out int t, textureDirs) is Node3D m)
         {
             parts.TexturedModels += t > 0 ? 1 : 0;
             parts.TexturedSurfaces += t;

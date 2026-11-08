@@ -79,6 +79,9 @@ public sealed class AssetIndex
         // often lower-resolution copies in items/. Zone data is what the library converts, so the zone
         // NIF folder wins: zones/Nifs loose (0), zones/Nifs archives (1), other loose (2), other
         // archives (3). Within a rank the first seen wins. Measured 2026-11-02 (docs/world-coverage.md).
+        // Newtowns/zones/Nifs beats them all (-1): when that folder exists the client loads a zone object's
+        // model from it first, by the same file name (docs/sound.md, "Newtowns"; six of its seven models
+        // differ from the zones/Nifs ones).
         // Every other place stays on record for a lookup with a folder preference.
         void Offer(string key, AssetLocation loc, int r)
         {
@@ -91,14 +94,16 @@ public sealed class AssetIndex
             rank[key] = r;
         }
         string zoneNifs = Path.Combine(root, "zones", "Nifs") + Path.DirectorySeparatorChar;
+        string newtownsNifs = Path.Combine(root, "Newtowns", "zones", "Nifs") + Path.DirectorySeparatorChar;
         bool InZoneNifs(string path) => path.StartsWith(zoneNifs, StringComparison.OrdinalIgnoreCase);
+        bool InNewtowns(string path) => path.StartsWith(newtownsNifs, StringComparison.OrdinalIgnoreCase);
 
         foreach (string path in Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories))
         {
             if (!IsIndexed(path))
                 continue;
             string full = Path.GetFullPath(path);
-            Offer(Key(path), AssetLocation.Loose(full), InZoneNifs(full) ? 0 : 2);
+            Offer(Key(path), AssetLocation.Loose(full), InNewtowns(full) ? -1 : InZoneNifs(full) ? 0 : 2);
         }
 
         int archives = 0;
@@ -112,7 +117,7 @@ public sealed class AssetIndex
             {
                 using MpkArchive mpk = MpkArchive.Open(archive);
                 string abs = Path.GetFullPath(archive);
-                int r = InZoneNifs(abs) ? 1 : 3;
+                int r = InNewtowns(abs) ? -1 : InZoneNifs(abs) ? 1 : 3;
                 foreach (MpkEntry e in mpk.Entries)
                     if (IsIndexed(e.Name))
                         Offer(Key(e.Name), AssetLocation.InArchiveAt(abs, e.Name), r);

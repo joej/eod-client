@@ -25,8 +25,11 @@ trap 'rm -f "$outdoor"' EXIT
 grep -v '^#' "$tsv" | while IFS=$'\t' read -r zone region ox oy w h name; do
     [ -n "$zone" ] || continue
     n=$(printf %03d "$zone")
-    # Folder and archive names vary in case between installs (Zone000 vs zone001).
-    dat=$(find "$client/zones" -maxdepth 2 -ipath "*/zone$n/dat$n.mpk" | head -1)
+    # Folder and archive names vary in case between installs (Zone000 vs zone001). The tutorial's zones
+    # (region 27, zones.dat tutorial=1) load from Tutorial/zones, which the client prefers to the older
+    # copy of zone 27 in zones/; zones 28 and 29 exist only there.
+    dat=$(find "$client" -maxdepth 4 -ipath "$client/tutorial/zones/zone$n/dat$n.mpk" 2>/dev/null | head -1)
+    [ -n "$dat" ] || dat=$(find "$client/zones" -maxdepth 2 -ipath "*/zone$n/dat$n.mpk" | head -1)
     [ -n "$dat" ] || continue
     case "$dat" in *[[:space:]]*) echo "zones-mk.sh: '$dat' has a space (make can't take it)" >&2; exit 1 ;; esac
     members=$("$mpk" list "$dat" 2>/dev/null | tr '[:upper:]' '[:lower:]')

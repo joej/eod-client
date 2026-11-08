@@ -602,8 +602,15 @@ side is done); **map and minimap**; **group, guild, quest and trade windows**; *
 already sends 0x4E ControlledHorse at world entry); **housing** (`phousing/`: 410 NIFs); **RvR
 frontiers, keeps, doors and sieges** (`frontiers/`); **the tutorial** (`Tutorial/`: region 27, one zone per
 realm (27 Constantine's Sound, 28 Grenlock's Sound, 29 Lamfhota's Sound) with its own models, maps and
-recorded voice-over the server plays line by line; whether our server offers it is unchecked;
-`docs/sound.md`); **`Newtowns/`** (seven replacement models: border keeps, the Camelot wall, a
+recorded voice-over the server plays line by line, `docs/sound.md`; converted since 2026-11-08). Retail
+starts every new character there, in a small town with trainers, quests and guides, and nothing is lost by
+dying before level 10. Our server (read 2026-11-08) has the tutorial switched on and the code for it
+(releasing from it, everyone understanding each other there, an all-realms teleporter offering Holtham,
+Hafheim and Fintain, the tutorial towns, up to level 15), but not the content: no starting location in it,
+no teleporter placed, no quests, Constantine's Sound empty, Grenlock's Sound holding monsters of levels
+29-47 and Lamfhota's Sound a services hub of all three realms. A server script in `opendaoc-fork` (owner,
+2026-11-08: scripts change the server without touching its core) could send new characters there once we
+know what retail's tutorial holds; **`Newtowns/`** (seven replacement models: border keeps, the Camelot wall, a
 teleporter, a demon portal; when the folder exists the client loads zone models from it first, by the
 same name, so our converter should too; `docs/sound.md`);
 and **releasing for others** (setup instructions and

@@ -43,3 +43,9 @@ ruins_ocean_01.glb @ 273920 556544    | under the ground | Atlantis sea floor (u
 ruins_ocean_02.glb @ 268544 556032    | under the ground | Atlantis sea floor (unverified)
 ruins_ocean_07.glb @ 267776 553728    | under the ground | Atlantis sea floor, below every ground within 20 m (unverified)
 rock_formation_16.glb @ 331520 621824 | under the ground | Atlantis sea floor, below every ground within 20 m (unverified)
+
+# Tilted crystals (tutorial zones 28 and 29): small, placed at explicit heights, with a "3D Angle" tilt the
+# converter doesn't read yet (W18), so upright they sit in the ground; tilted they lean out of it.
+dellcryst05.glb     | under the ground | tilted crystal, 3D Angle not applied yet (W18; unverified)
+dellcryst05.glb     | sunk into the ground | tilted crystal, 3D Angle not applied yet (W18; unverified)
+dellcryst06.glb     | sunk into the ground | tilted crystal, 3D Angle not applied yet (W18; unverified)

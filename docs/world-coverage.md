@@ -88,6 +88,9 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 | `ui/` | 151 XML layouts, 502 DDS, fonts | M9 (UI direction), later |
 | `phousing/`, `frontiers/` | housing; RvR frontiers and keeps | further out |
 | `zones/trees/` | SpeedTree trees + `treemap.csv` (open question W5) | M13 |
+| `zones/trees/tree_clusters.mpk` | `tree_clusters.csv`: a model name that is no file (`Elm1CL5.nif`) → a tree and up to ten offsets; the client builds the group. Used by the tutorial zones and zone 335 | **read** (2026-11-08, `TreeClusters`: one tree per offset, each on the ground; W53) |
+| `Tutorial/` | the tutorial, region 27 (`zones.dat` `tutorial=1`): zones 27-29 with their own models, textures and `sounds.dat`; the client loads them from here (zone 27 also has an older copy in `zones/`) | **read** (2026-11-08): nine same-name files differ from `zones/Nifs`, so they convert into the library's `tutorial` scope |
+| `Newtowns/zones/Nifs` | seven replacement zone models (border keeps, the Camelot wall, a teleporter, a demon portal); when the folder exists the client loads a zone model from it first, by name (`docs/sound.md`) | **read** (2026-11-08): the index prefers it |
 
 ## Reader robustness
 

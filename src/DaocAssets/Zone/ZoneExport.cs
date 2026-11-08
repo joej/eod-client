@@ -24,14 +24,16 @@ public static class ZoneExport
     /// offset (from the zone table), in region units.
     /// </summary>
     public static ZoneExportReport Export(
-        AssetLibrary library, string zoneDatMpk, int offsetX, int offsetY, string outDir, int sizeX = 8, int sizeY = 8)
+        AssetLibrary library, string zoneDatMpk, int offsetX, int offsetY, string outDir, int sizeX = 8, int sizeY = 8,
+        TreeClusters? clusters = null)
     {
         ZoneLayout layout;
         (float X, float Y, float Z)? landing = null;
         List<ZoneJump> jumpPoints = [];
         using (MpkArchive dat = MpkArchive.Open(zoneDatMpk))
         {
-            layout = ZoneLayout.Read(dat, offsetX, offsetY);
+            // A tree cluster ("Elm1CL5.nif") is no file: its trees go in its place (TreeClusters).
+            layout = (clusters ?? TreeClusters.None).Expand(ZoneLayout.Read(dat, offsetX, offsetY));
             if (dat.TryGetEntry("zonejump.csv", out MpkEntry jumps))
             {
                 string csv = Encoding.Latin1.GetString(dat.Extract(jumps));
@@ -91,7 +93,7 @@ public static class ZoneExport
                 missingModel++;
                 continue;
             }
-            glbByNif[nif] = Path.GetFileName(r.GlbPath);
+            glbByNif[nif] = library.ManifestName(r.GlbPath);
             converted++;
         }
 
@@ -123,11 +125,11 @@ public static class ZoneExport
 
     /// <summary>The distinct models (bare NIF names, first spelling wins) the zone's fixtures place:
     /// what <see cref="Export"/> converts. The Makefile builds one library target per name.</summary>
-    public static IReadOnlyList<string> ModelNames(string zoneDatMpk)
+    public static IReadOnlyList<string> ModelNames(string zoneDatMpk, TreeClusters? clusters = null)
     {
         ZoneLayout layout;
         using (MpkArchive dat = MpkArchive.Open(zoneDatMpk))
-            layout = ZoneLayout.Read(dat, 0, 0);
+            layout = (clusters ?? TreeClusters.None).Expand(ZoneLayout.Read(dat, 0, 0));
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var names = new List<string>();
         foreach (string nif in layout.Models)
