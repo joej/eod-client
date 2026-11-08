@@ -390,6 +390,11 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   skin and layouts on the same framework (dark translucent panels, small labels, one accent colour, as
   the dev overlay), with more utility where the retail window is thin. Keep each window's retail
   layout and behaviour as the reference (players' muscle memory) and compare before changing it.
+  First windows for the loader (owner, 2026-11-07, with retail's screenshots): the pregame screens,
+  starting with realm selection (`pregame/realm_selection.xml`: a 1024 x 768 canvas and three realm buttons;
+  the lore text in `pregame/realmdesc.mpk`), then character selection, creation and customising. In the
+  world, retail's Game Options window is the reference for our settings (its Display Names switches are
+  in Settings → Game since 2026-11-07).
   Skins the community already publishes for retail must load in our client unchanged, and our own skin
   is written in the same format. Where the format can't express something we want, we extend it
   (documented, and a retail skin without the extension still loads) rather than inventing a second format.
