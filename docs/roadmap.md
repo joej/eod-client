@@ -351,6 +351,12 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   (or type /release); the move to the bind point and the revive (0x89) bring it back. Other players fall
   and get up too; 0xAD vitals show in the status line. Verified live as Quitcheck (killed by two falls).
   Open: W48 (retail's quicker release), the dead screen's look, a release into another region.
+  *Future improvement (owner, 2026-11-07, after Camelot Unchained's death dialog, which offers the local
+  keep or the home island):* release choices on the death panel. OpenDAoC already has more than the bind
+  point: `/release city` (the realm's capital), `/release house`, `/release bind`, and in the frontiers or a
+  battleground a release to the realm's portal keep. The panel can offer those as buttons with no server
+  change. A release to the *nearest* keep or town would be new: a release type added to OpenDAoC's
+  GamePlayer.Release (server-side work).
 - **Swimming** in the water M7 draws. *Built 2026-11-07:* the zones' water surfaces get colliders on their
   own layer; in water deeper than 1.4 m the character floats with its head out, without gravity or jump,
   plays its figure's swim clips (animnifs.csv "Swim Alt": tread, swim, swim backwards), moves at 60% of its
