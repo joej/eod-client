@@ -178,6 +178,23 @@ public sealed class AssetLibraryTests : IDisposable
     }
 
     [Fact]
+    public void AModelAlreadyConvertedComesBackUnderItsStoredSpelling()
+    {
+        // Zone A converted "beech_gnarl_dead.nif"; zone B names it "Beech_gnarl_dead.nif". On a
+        // case-insensitive disk the glb is found, and B's manifest must carry the stored name.
+        Directory.CreateDirectory(_client);
+        Directory.CreateDirectory(Path.Combine(_lib, "models"));
+        string stored = Path.Combine(_lib, "models", "beech_gnarl_dead.glb");
+        File.WriteAllText(stored, "glb");
+        var library = new AssetLibrary(AssetIndex.Build(_client), _lib);
+        ModelResult r = library.GetModel("Beech_gnarl_dead.nif");
+        if (File.Exists(Path.Combine(_lib, "models", "Beech_gnarl_dead.glb")) && r.GlbPath is not null)
+            Assert.Equal("beech_gnarl_dead.glb", library.ManifestName(r.GlbPath));   // case-insensitive disk
+        else
+            Assert.Equal(AssetOrigin.Missing, r.Origin);                              // case-sensitive: not the same file
+    }
+
+    [Fact]
     public void AScopedViewStoresAFileThatDiffersFromTheZoneOneInItsOwnFolder()
     {
         // wolf_black: the creature's skin (figures/) and a housing rug's texture (loose, the default) differ;

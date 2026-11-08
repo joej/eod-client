@@ -77,6 +77,23 @@ public sealed class AssetLibrary
             ? Path.GetFileName(glbPath) : rel.Replace('\\', '/');
     }
 
+    /// <summary>
+    /// The path as the file is actually named. On a case-insensitive filesystem a model converted for one
+    /// zone as "beech_gnarl_dead.glb" is found again for another zone's "Beech_gnarl_dead.nif"; the manifest
+    /// must carry the stored spelling, or the client can't open it on a case-sensitive one (Godot warns).
+    /// </summary>
+    private static string OnDiskName(string path)
+    {
+        string? dir = Path.GetDirectoryName(path);
+        if (dir is null)
+            return path;
+        string name = Path.GetFileName(path);
+        foreach (string f in Directory.EnumerateFiles(dir, name, new EnumerationOptions { MatchCasing = MatchCasing.CaseInsensitive }))
+            if (Path.GetFileName(f).Equals(name, StringComparison.OrdinalIgnoreCase))
+                return f;
+        return path;
+    }
+
     public AssetLibrary(AssetIndex index, string libraryRoot)
     {
         _index = index;
@@ -106,7 +123,7 @@ public sealed class AssetLibrary
         string models = Folder(_models, nifName, texture: false);
         string glbPath = Path.Combine(models, glbName);
         if (!reconvert && File.Exists(glbPath))
-            return new ModelResult(glbPath, AssetOrigin.Converted);
+            return new ModelResult(OnDiskName(glbPath), AssetOrigin.Converted);
 
         byte[]? nifBytes = _index.Read(nifName, _prefer);
         if (nifBytes is null)
