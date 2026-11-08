@@ -34,10 +34,10 @@ addresses, and the x4 view distance (classic is x1).
 | **Occlusion culling** | skip what walls hide: cities and dungeons | M11 |
 | **Threaded resource loading** | no hitch while a zone loads | M8 |
 | Material **detail layer** (own UV set, multiply) | DAoC's dark and detail maps: baked shading on buildings, the moss on Domnann's standing stones | W25 |
-| **LightmapGI / SDFGI / VoxelGI**, **SSAO** | computed lighting and contact shading: an optional "enhanced" look beside the classic dark maps | M12 |
-| **SSR / reflection probes**, normal-mapped water | Shrouded Isles and Reflective water | W24, M12 |
-| **GPU particles** | waterfall mist, spell effects, rain and snow (blocked under roofs by the `.nhd` cover grids) | M13 |
-| **FogVolume / volumetric fog** | SECTOR.DAT `[forest]` fog regions | M7d, M13 |
+| **LightmapGI / SDFGI / VoxelGI**, **SSAO** | computed lighting and contact shading: an optional "enhanced" look beside the classic dark maps | M13 |
+| **SSR / reflection probes**, normal-mapped water | Shrouded Isles and Reflective water | W24, M13 |
+| **GPU particles** | waterfall mist, spell effects, rain and snow (blocked under roofs by the `.nhd` cover grids) | M12 |
+| **FogVolume / volumetric fog** | SECTOR.DAT `[forest]` fog regions | M7d, M12 |
 | **Decals** | blob shadows, the ground-target spell ring (`stylemap/target.bmp`) | M10 |
 | **Skeleton3D + AnimationPlayer / AnimationTree** | skinned figures and their `.kfa` animations | M7b |
-| **AudioStreamPlayer3D** | positional sound and music | M13 |
+| **AudioStreamPlayer3D** | positional sound and music | M12 |

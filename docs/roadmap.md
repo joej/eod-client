@@ -7,7 +7,7 @@ control, see other players and NPCs, chat, and (further out) fight and use their
 This replaces the original "MVC" framing (render a capsule at a server-sent position), which is
 **done**. The milestones below are grouped into what we've accomplished (M0–M6), the milestone that
 reaches a client you can walk the DAoC world in (M7, the MVP), and the post-MVP milestones toward
-mostly playing (M8–M13), with honest notes on the two genuine walls.
+mostly playing (M8–M12), with honest notes on the two genuine walls.
 
 **How this list is kept honest (2026-11-01).** It was first built from where we stood: the protocol,
 one zone, and bugs we happened to see. That missed whole parts of the world (water, sky, dungeons,
@@ -26,7 +26,7 @@ one.
   Not a playable game — no combat, inventory, or skills — but the world and its inhabitants render as
   DAoC. The movement/entity/chat parts (M4–M6) are reachable over **TCP alone** (UDP is an
   optimization, not a prerequisite); the models part (M7) is the hardest asset work and completes it.
-- **Mostly playing (M8–M13).** Moving between zones, combat you can see and participate in, your
+- **Mostly playing (M8–M12).** Moving between zones, combat you can see and participate in, your
   character's vitals and inventory, targeting and basic interaction, dungeons and cities — enough that the game reads as the game, within the
   1.65 ruleset OpenDAoC serves.
 
@@ -290,12 +290,12 @@ archive describe more than terrain and objects, and we draw none of it yet:
   classic (the zone's own, the default), ×1.5, ×2, ×4, with the fog scaled to match; a long view
   outgrows the single loaded zone until M8 streams its neighbours. Still to do:
   canopy band elevations and the east/west rule (guessed; W10), `[forest]` fog regions (266 zones),
-  `[farground]`, `[rotate]`, moon and stars, and the clock (M13).
+  `[farground]`, `[rotate]`, moon and stars, and the clock (M12).
 - **Static lights.** `lights.csv` (304 zones): torches and lamps.
 - **Baked terrain shading.** `shadow.pcx` and `shademap.pcx` (98 and 86 zones).
 - Also listed, smaller or unknown yet: terrain holes (`[holes]`, probably cave entrances), snow maps (18
   zones), `textures.csv` + `patch` textures (possibly the "Atlantis terrain" option, W8), `[mongens]`
-  (unknown). Dynamic shadows and day/night are renderer and server matters (M13).
+  (unknown). Dynamic shadows and day/night are renderer and server matters (M12).
 
 **Scope of the MVP.** One outdoor zone at a time, looking and behaving like DAoC: Camelot Hills first,
 then any of the 98 heightmap zones. Walking across a zone boundary, dungeons and cities come after
@@ -315,7 +315,8 @@ then any of the 98 heightmap zones. Walking across a zone boundary, dungeons and
 ## The path to mostly playing (post-MVP)
 
 These come **after** the MVP (M4–M7). Order is the intended sequence, but each is independently
-valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
+valuable. M13 (asset quality tiers) comes last (owner, 2026-11-08): the classic game first, complete
+with its own sound, intro movie and pregame screens, then the better-looking versions.
 
 ### M8 — Move through the world ✅
 **Done** 2026-11-07 · shot 2026-11-07_23_swimming-the-river-below-prydwen
@@ -427,6 +428,26 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   Skins the community already publishes for retail must load in our client unchanged, and our own skin
   is written in the same format. Where the format can't express something we want, we extend it
   (documented, and a retail skin without the extension still loads) rather than inventing a second format.
+  *How retail loads a skin (daoc-re RE/59, 2026-11-08):*
+  - `ui/uimain.xml` is the root for every skin: 76 `<Include>`s, each resolved against the chosen skin's
+    folder. A file the skin lacks is taken from `ui/Atlantis/`, so a skin holds only what it changes.
+  - The player chooses "Atlantis Skin" or "Custom Skin" (`user.dat` `[interface] item1` = 0 or 8). A
+    custom skin is the folder `ui/custom/`, so only one is installed at a time; `ui/custom/maps/`
+    replaces the map pictures and `ui/custom/oldstyle/` the old bitmap window pieces. Every community
+    pack (UI-Chooser/BobsUI, MxN, Whatties, Tubben's, Ghost, Derida, Aurora) installs this way, by hand
+    or with its own tool.
+  - The format has three layers: resources (textures, icon sheets, bitmap and TrueType fonts),
+    templates (image cut-outs, three- and nine-slice frames, buttons, scroll bars, with `<Parent>`
+    inheritance; 34 top-level element types) and windows (`WindowTemplate`: size, frame, title,
+    resizing and about 25 control kinds).
+  - The contract between a skin and the game is **adapter names** (the values a control shows; retail's
+    XML uses 663, community skins bind more that the stock windows never show) and **event names** (what
+    a button does; 223). Twenty spare windows (`custom0_window`–`custom19_window`) are free for a skin's
+    own use.
+  - Ours: the same lookup order, so an installed `ui/custom/` and the user's retail files load
+    unchanged; several skins kept side by side and picked in Settings (folder or zip) instead of one
+    `custom/` folder; adapters and events implemented from our protocol state, the names cross-checked
+    with DAoC UI Forge's reference lists (`tokajer/daoc-ui-forge-core`, GPL-3.0: read, attributed).
 - **UI review: Camelot Unchained's client**, before step (3): its fonts, window design, HUD and
   interaction patterns, for observations our own skin can use. Its interface code is public
   (`csegames/CSE-UI`: TypeScript/React UI rendered in HTML/CSS by Coherent, MPL-2.0 per folder; fonts carry
@@ -454,9 +475,42 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
 - Portals and the dungeon visibility rules; dungeon water and lighting (`[dungeonfix]`).
 - **Done when:** you can enter a dungeon from its zone jump and walk it, rendered from its pieces.
 
-### M12 — Asset quality tiers and community reskin packs
+### M12 — Atmosphere: effects, sound and music
+*The world moves and makes noise, and the game opens as retail does.*
+- **Day and night**, and weather: lighting from `terrain/lights.csv` and the zones' light settings
+  (the `light/` folder is legacy and unused), and the server sends the time. Rain and snow stop under
+  roofs by each model's `.nhd` cover grid (`docs/world-coverage.md`).
+- **Spell and visual effects**: 1,575 effect NIFs, particles (unhandled in the NIF audit), UV-scrolling
+  and keyframe animation; doors and windmills.
+- **Sound and music** (on the roadmap at the owner's request, 2026-11-08). The install's own files, played
+  as the client plays them; nothing converted ships, as with models. What there is:
+  - `sounds/`: 2,703 `.wav` and 49 music `.mp3`, named by 12 tables (`cc_*.csv`). Their names carry
+    the kind: `s_` one sound, `g_` a group picked at random (`cc_groups.csv`, 1,037), `q_` a sequence
+    with delays (`cc_queues.csv`), `l_` a loop (`cc_loops.csv`), `mp3_` music (`cc_mp3s.csv`,
+    `cc_music.csv`). Per thing: `cc_creatures.csv` (attack, three pain levels, death, evade, body hit,
+    per creature), `cc_weapons.csv` (activate, swing, hit by weight, parried, blocked), `cc_doors.csv`,
+    `cc_spells.csv`, `cc_interface.csv` (clicks), `CC_events.csv` (level up per realm, money,
+    experience, friends); `cc_sounds.csv` (4,439 rows) is the master list.
+  - `gamedata.mpk animsound.csv`: a sound on an animation frame (footsteps, a horse's startle).
+  - Each zone's `sounds.dat` (389 zones): sound regions with ambient loops and music; `zones.dat`
+    names each zone's entry music.
+  - `Tutorial/sounds`: the tutorial's voice-over and music.
+  - Which game event plays which entry (a hit, a parry, a spell's phases, entering a region) is
+    what the tables don't say: daoc-re maps the events to the tables, then we play them from the
+    protocol events we already raise. Godot plays wav and mp3 natively (`AudioStreamPlayer3D` for
+    positional sound), so no conversion is needed. Order: interface clicks and footsteps, zone
+    ambience and music, combat (with M10), spells.
+- **The intro movie and the company logo** (`movie/intro_movie.bik`, 5 min, 555 x 416, 30 fps;
+  `ealogo.bik`), shown at start as retail does, skippable. Bink, which Godot can't play: converted
+  once to Ogg Theora (Godot's video format) by ffmpeg, which reads Bink. Homebrew's ffmpeg has no
+  Theora encoder (checked 2026-11-08), so the converter needs an ffmpeg built with libtheora, or
+  another route.
+- **Done when:** a day passes visibly in Camelot Hills, a spell shows its effect, the zone has its
+  ambient sound and music, a fight sounds like one, and the intro plays at start.
+
+### M13 — Asset quality tiers and community reskin packs
 *Classic by default; progressively better by choice — and others can contribute whole new looks.*
-Post-MVP, parallel to M8–M11 (not blocking them), building on the models M7 brings. The asset library
+After the classic game is complete (M8–M12), building on the models M7 brings. The asset library
 was built for this from the start
 (convert-once flat library + an `overrides/` layer that wins at load time; see
 `docs/project` asset-library notes): "enhanced" is just a better-named-the-same asset layered over the
@@ -540,24 +594,15 @@ Enabling work (do the small part before override content piles up):
   renders from the zone masks, and the pack format + guide let someone outside the project publish a
   reskin that drops in without code changes.
 
-### M13 — Atmosphere: effects, sound and music
-*The world moves and makes noise.*
-- **Day and night**, and weather: lighting from `terrain/lights.csv` and the zones' light settings
-  (the `light/` folder is legacy and unused), and the server sends the time. Rain and snow stop under
-  roofs by each model's `.nhd` cover grid (`docs/world-coverage.md`).
-- **Spell and visual effects**: 1,575 effect NIFs, particles (unhandled in the NIF audit), UV-scrolling
-  and keyframe animation; doors and windmills.
-- **Sound and music**: `sounds/` (2,703 `.wav`, 49 music `.mp3`, 12 CSVs) and each zone's `sounds.dat`
-  (389 zones).
-- **Done when:** a day passes visibly in Camelot Hills, a spell shows its effect, and the zone has its
-  ambient sound and music.
-
 ### Further out (unscheduled)
 Tracked so they're planned, not stumbled into: **character creation in the Godot UI** (the protocol
 side is done); **map and minimap**; **group, guild, quest and trade windows**; **mounts** (the server
 already sends 0x4E ControlledHorse at world entry); **housing** (`phousing/`: 410 NIFs); **RvR
-frontiers, keeps, doors and sieges** (`frontiers/`); **UI skins** (the retail UI is 151 XML layouts +
-DDS art in `ui/`; see the UI direction under M9); and **releasing for others** (setup instructions and
+frontiers, keeps, doors and sieges** (`frontiers/`); **the tutorial** (`Tutorial/`: region 27, one zone per
+realm (27 Constantine's Sound, 28 Grenlock's Sound, 29 Lamfhota's Sound) with its own models, maps and
+recorded voice-over; whether our server offers it is unchecked); **`Newtowns/`** (seven alternative
+pieces: border keeps, the Camelot wall, a teleporter, a demon portal; what selects them is open);
+and **releasing for others** (setup instructions and
 a guide to converting your own install; Gate 4 in CLAUDE.md is still open).
 
 ---

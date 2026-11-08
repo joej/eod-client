@@ -235,7 +235,7 @@ internal static class Gamebryo1010
                 break;
             }
             // Particle systems (NiParticleSystemController era): read to their end so the rest of the
-            // file decodes; the converter draws no particles yet (roadmap M13).
+            // file decodes; the converter draws no particles yet (roadmap M12).
             case "NiParticles":
             case "NiParticleMeshes":
             {
