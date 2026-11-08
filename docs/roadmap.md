@@ -495,8 +495,10 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
   - Each zone's `sounds.dat` (389 zones): sound regions with ambient loops and music; `zones.dat`
     names each zone's entry music.
   - `Tutorial/sounds`: the tutorial's voice-over and music.
-  - Which game event plays which entry (a hit, a parry, a spell's phases, entering a region) is
-    what the tables don't say: daoc-re maps the events to the tables, then we play them from the
+  - Which game event plays which entry is mapped in `docs/sound.md` (daoc-re, 2026-11-08): the row from
+    the model's sound set (`monsters.csv`, `objects.csv`, `spells.csv`), the column from the packet
+    (0xBC's result, 0x72/0x1B's spell phases, 0xEF area music, 0x99 doors, 0xC9/0xD3 server sounds),
+    animation sounds as an animation starts; not yet confirmed by ear (W52). We play them from the
     protocol events we already raise. Godot plays wav and mp3 natively (`AudioStreamPlayer3D` for
     positional sound), so no conversion is needed. Order: interface clicks and footsteps, zone
     ambience and music, combat (with M10), spells.
@@ -600,8 +602,10 @@ side is done); **map and minimap**; **group, guild, quest and trade windows**; *
 already sends 0x4E ControlledHorse at world entry); **housing** (`phousing/`: 410 NIFs); **RvR
 frontiers, keeps, doors and sieges** (`frontiers/`); **the tutorial** (`Tutorial/`: region 27, one zone per
 realm (27 Constantine's Sound, 28 Grenlock's Sound, 29 Lamfhota's Sound) with its own models, maps and
-recorded voice-over; whether our server offers it is unchecked); **`Newtowns/`** (seven alternative
-pieces: border keeps, the Camelot wall, a teleporter, a demon portal; what selects them is open);
+recorded voice-over the server plays line by line; whether our server offers it is unchecked;
+`docs/sound.md`); **`Newtowns/`** (seven replacement models: border keeps, the Camelot wall, a
+teleporter, a demon portal; when the folder exists the client loads zone models from it first, by the
+same name, so our converter should too; `docs/sound.md`);
 and **releasing for others** (setup instructions and
 a guide to converting your own install; Gate 4 in CLAUDE.md is still open).
 
