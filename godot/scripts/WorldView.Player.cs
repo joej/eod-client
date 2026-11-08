@@ -55,7 +55,10 @@ public partial class WorldView
         float forward = 0f;
         bool forwardHeld = driving && KeyBindings.Held(ControlAction.Forward), backHeld = driving && KeyBindings.Held(ControlAction.Back);
         if (forwardHeld || backHeld)
+        {
             _autoRun = false;   // auto-run (NumLock) runs until forward or back is pressed
+            (_walkPoint, _walkTo) = (null, 0);   // and a run to a map point or an NPC stops
+        }
         if (forwardHeld || (_autoRun && driving)) forward += 1f;
         if (backHeld) forward -= 1f;
 

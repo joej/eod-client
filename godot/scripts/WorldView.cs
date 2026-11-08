@@ -462,6 +462,7 @@ public partial class WorldView : Node3D
         BuildChatUi(overlay);
         BuildNpcWindow(overlay);
         BuildDeathPanel(overlay);
+        BuildMapWindow(overlay);
         NameSelf();
         AddChild(overlay);
         _viewSetting = ViewOverride() ?? ClientSettings.ViewDistance;
@@ -769,6 +770,10 @@ public partial class WorldView : Node3D
             if (_session is not null && _closedReason is null)
                 _ = SendTravel("/sprint");
         }
+        else if (KeyBindings.Pressed(@event, ControlAction.Map) && !ChatInputActive)
+        {
+            ToggleMap();
+        }
         else if (KeyBindings.Pressed(@event, ControlAction.AttackMode) && !ChatInputActive)
         {
             // H toggles attack mode: our binding, a key the install's RPG preset leaves free (F is retail's face
@@ -786,8 +791,10 @@ public partial class WorldView : Node3D
         }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
         {
-            // Esc closes the NPC window, else drops the inspect selection and the target (retail: Esc clears it).
-            if (_npcWindow.Visible)
+            // Esc closes the map or the NPC window, else drops the inspect selection and the target (retail: Esc clears it).
+            if (_mapWindow.Visible)
+                _mapWindow.Visible = false;
+            else if (_npcWindow.Visible)
                 _npcWindow.Visible = false;
             else
             {
@@ -916,6 +923,7 @@ public partial class WorldView : Node3D
         InterpolateEntities(delta);
         UpdateDeathPanel();
         UpdateBorderLabels();
+        UpdateMap();
 
         if (_closedReason is null && _connection is not null && _connection.Completion.IsCompleted)
         {
@@ -944,6 +952,6 @@ public partial class WorldView : Node3D
                   $"{Keys(ControlAction.StrafeLeft)}/{Keys(ControlAction.StrafeRight)} strafe, {Keys(ControlAction.Jump)} jump, {Keys(ControlAction.Sprint)} sprint, " +
                   $"{Keys(ControlAction.AutoRun)} auto-run, wheel zoom, left-drag pan   ·   {Keys(ControlAction.AttackMode)} attack   ·   Tab free-fly, P shot"
                 : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot")
-            + "\nF1 panels · F2 render mode · F3 view distance · left-click inspect (Esc clears)";
+            + $"\nF1 panels · F2 render mode · F3 view distance · left-click inspect (Esc clears) · {Keys(ControlAction.Map)} map";
     }
 }

@@ -383,6 +383,12 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   *Names (2026-11-07):* each creature and player shows its name and, under it, the NPC's trade or the
   player's guild in angle brackets (<Hastener>, <Teleporter>, <Weapon Merchant>); monsters in their con
   colour. Dev switch "Names". Open: W50 (retail's exact look).
+- **Map window (M; owner's request 2026-11-07, built the same day):** retail's own map pictures from the
+  user's install (`make maps`: `ui/maps`, the zone maps z<NNN>.dds and region maps r<NNN>.dds, placed by
+  `regions.dat`): the zone you are in, or the region, with an arrow where you stand and face, and the zone's
+  description. A click on either map runs you there (auto-run in a straight line, as a player); a movement
+  key stops it. Checked live (Quitcheck at Prydwen Keep). Open: retail's map key and window layout
+  (`ui/atlantis/map_window.xml`), the area insets (`areas.dat`, z<NNN>_<NN>.dds), group and target marks.
 - **Fixture/interior collision** — deferred from the M7 walk-through, and intentionally **not** MVP
   ("looks like DAoC" ≠ "collides like DAoC"). Today the ground raycast follows only the terrain
   heightmap (a separate collision layer), so building geometry isn't solid: the player sinks into a

@@ -146,6 +146,12 @@ public partial class WorldView
         if (walk >= 0 && walk + 2 < args.Length && float.TryParse(args[walk + 1], System.Globalization.CultureInfo.InvariantCulture, out float wx)
             && float.TryParse(args[walk + 2], System.Globalization.CultureInfo.InvariantCulture, out float wy))
             (_walkPoint, _walkUntil, _shotOnArrival) = (ToGodot(wx, wy, 0), _seconds + 300, args.Contains("--shot-on-arrival"));
+        // --map: open the map window; --map-region: on the region map.
+        if (args.Contains("--map") || args.Contains("--map-region"))
+        {
+            _mapRegion = args.Contains("--map-region");
+            ToggleMap();
+        }
         // --borders: tick the "Zone borders" switch.
         if (args.Contains("--borders") && !_bordersVisible)
             _flipBordersToggle?.Invoke();

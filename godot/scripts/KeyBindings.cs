@@ -12,7 +12,7 @@ namespace EodClient;
 
 public enum ControlAction
 {
-    Forward, Back, TurnLeft, TurnRight, StrafeLeft, StrafeRight, Jump, Sprint, AutoRun, AttackMode,
+    Forward, Back, TurnLeft, TurnRight, StrafeLeft, StrafeRight, Jump, Sprint, AutoRun, AttackMode, Map,
 }
 
 public static class KeyBindings
@@ -32,6 +32,8 @@ public static class KeyBindings
         [ControlAction.Jump] = K(jump), [ControlAction.Sprint] = K(Key.V), [ControlAction.AutoRun] = K(Key.Numlock),
         // Retail's attack key is open (W34); H is ours (F6, the 2001 default, opens our travel window).
         [ControlAction.AttackMode] = K(Key.H),
+        // The map window: M, free in every preset (retail's map key is unconfirmed).
+        [ControlAction.Map] = K(Key.M),
     };
 
     private static readonly Dictionary<string, Dictionary<ControlAction, (Key[] Keys, MouseButton[] Buttons)>> Tables = new()
@@ -72,7 +74,7 @@ public static class KeyBindings
         ControlAction.TurnLeft => "Turn left", ControlAction.TurnRight => "Turn right",
         ControlAction.StrafeLeft => "Strafe left", ControlAction.StrafeRight => "Strafe right",
         ControlAction.Jump => "Jump", ControlAction.Sprint => "Sprint", ControlAction.AutoRun => "Auto-run",
-        ControlAction.AttackMode => "Attack mode", _ => a.ToString(),
+        ControlAction.AttackMode => "Attack mode", ControlAction.Map => "Map", _ => a.ToString(),
     };
 
     /// <summary>The keys that trigger <paramref name="action"/>: the player's own, else the preset's.</summary>
