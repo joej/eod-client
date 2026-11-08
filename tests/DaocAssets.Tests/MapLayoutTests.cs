@@ -26,6 +26,19 @@ public sealed class MapLayoutTests
         [region010]
         zone_count=1
         zone0_number=26
+
+        [region011]
+        zone_count=1
+        zone_width=256
+        zone_height=256
+        ; Camelot
+        zone0_number=026
+        zone0_left=0
+        zone0_top=0
+        zone0_offsetx=21900
+        zone0_offsety=13350
+        zone0_width=11200
+        zone0_height=11200
         """;
 
     [Fact]
@@ -39,6 +52,21 @@ public sealed class MapLayoutTests
         // The file's defaults: 50 x 50 at 0, 0.
         Assert.Equal((50, 50), (maps[1].ZoneWidth, maps[1].ZoneHeight));
         Assert.Equal(new MapZone(26, 0, 0, ""), Assert.Single(maps[1].Zones));
+    }
+
+    [Fact]
+    public void ACityMapCoversOnlyItsPartOfTheZone()
+    {
+        // Camelot City (zone 26, corner 8192, 8192): the owner at the tunnel from Camelot Hills, x 31899 y 31382,
+        // shows by the map's "Camelot Hills" exit (bottom left), not mid-map as a whole-zone map would put it.
+        MapZone city = MapLayout.Find(MapLayout.Parse(Dat), 11, 26)!;
+        (float across, float down) = city.Fraction(31899 - 8192, 31382 - 8192, 65536, 65536);
+        Assert.Equal((41, 224), ((int)(across * 256), (int)(down * 256)));   // 41.3, 224.9
+        (float x, float y) = city.Local(across, down, 65536, 65536);
+        Assert.Equal(31899f - 8192, x, 0.01f);
+        Assert.Equal(31382f - 8192, y, 0.01f);
+        // Without the keys, the whole zone.
+        Assert.Equal((0.5f, 0.25f), MapLayout.Parse(Dat)[0].Zones[0].Fraction(32768, 16384, 65536, 65536));
     }
 
     [Fact]

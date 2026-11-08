@@ -277,7 +277,8 @@ public partial class WorldView
     // or strafing without going forward at retail's 85 of a 191 run (measured by daoc-re, 2026-11-05: backward
     // is sent as a negative speed), scaled with the server's speed.
     private float MoveSpeed(float forward) =>
-        (forward > 0 ? _runUnitsPerSecond : _runUnitsPerSecond * SlowUnits / 191f) * (_swimming ? SwimFactor : 1f);
+        _swimming ? SwimUnitsPerSecond * (forward > 0 ? 1f : 0.85f)
+        : (forward > 0 ? _runUnitsPerSecond : _runUnitsPerSecond * SlowUnits / 191f) * (_wading ? 0.5f : 1f);
 
     private const float SlowUnits = 85f;
 
@@ -356,19 +357,29 @@ public partial class WorldView
     }
 
     // ----- Swimming (M8) -----
-    // In water deeper than SwimDepth the character floats with its head out (FloatDepth under the surface): no
-    // gravity, no jump, swim clips (the figure's "Swim Alt" clips), state flag 0x04 in each 0xA9 (others see the
-    // swim), and a dive into deep water lands without a landing report, so no fall damage. The surfaces are the
-    // zone's water bodies (water.glb, on WaterLayer). Retail's depth, float height and swim speed are unknown (W51).
-    private bool _swimming;
-    private const float SwimDepth = 1.4f;     // water this deep over the floor (metres) is swum
-    private const float FloatDepth = 1.25f;   // the feet this far under the surface while swimming
-    private const float SwimFactor = 0.6f;    // swim speed as a share of the run (W51)
+    // Retail's rules (daoc-re RE/58, static from 1.130; 40 units a metre, z is the feet): the character swims once
+    // its feet are 0.9 m under the surface, and floats with them 1.0 m under (on ground between the two it swims
+    // standing). Feet under the surface but not swimming is wading, at half the land speed. Swimming: no gravity,
+    // no jump, the figure's "Swim Alt" clips, state flag 0x04 in each 0xA9; a fall into deep water takes no
+    // landing (no fall damage). Swim speed: 85 units/s x (100 + w)/100 x the max speed %, w = 0xB6's water-speed
+    // byte (realm ability Mastery of Water would add to it; capped at 100); backwards or sideways x 0.85.
+    // Not yet: diving (W51). The surfaces are the zone's water bodies (water.glb, on WaterLayer).
+    private bool _swimming, _wading;
+    private ushort _speedPercent = 100;
+    private byte _waterSpeed;
+    private const float SwimStart = 0.9f;     // feet this far under the surface: swimming
+    private const float FloatDepth = 1.0f;    // and floating with them this far under
+
+    private float SwimUnitsPerSecond => 85f * (100 + Mathf.Min(100, (int)_waterSpeed)) / 100f * _speedPercent / 100f;
 
     private bool Swim(Vector3 at, float floor, float dt)
     {
         float? surface = WaterSurface(at);
-        bool deep = surface is float s && s - floor > SwimDepth && at.Y <= s - FloatDepth + 0.05f;
+        bool deep = surface is float s && floor <= s - SwimStart && at.Y <= s - SwimStart + 0.02f;
+        bool wading = !deep && surface is float w && at.Y < w - 0.05f && floor < w;
+        if (wading && !_wading)
+            AppendChat("Wading: you move more slowly.", new Color(0.6f, 0.8f, 1f));
+        _wading = wading;
         if (!deep)
         {
             if (_swimming)
@@ -377,9 +388,9 @@ public partial class WorldView
             return false;
         }
         if (!_swimming)
-            GD.Print($"[world] swimming (water {surface!.Value - floor:0.0} m deep)");
+            GD.Print($"[world] swimming (water {surface!.Value - floor:0.0} m deep, {SwimUnitsPerSecond:0} units/s)");
         _swimming = true;
-        float y = surface!.Value - FloatDepth;
+        float y = Mathf.Max(floor, surface!.Value - FloatDepth);
         // Falling in: the water takes it, no landing (and no fall damage).
         (_airborne, _jumping, _verticalSpeed, _landingSpeed) = (false, false, 0, 0);
         _body.Position = new Vector3(at.X, Mathf.MoveToward(at.Y, y, 3f * dt + 0.02f), at.Z);

@@ -359,8 +359,10 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   GamePlayer.Release (server-side work).
 - **Swimming** in the water M7 draws. *Built 2026-11-07:* the zones' water surfaces get colliders on their
   own layer; in water deeper than 1.4 m the character floats with its head out, without gravity or jump,
-  plays its figure's swim clips (animnifs.csv "Swim Alt": tread, swim, swim backwards), moves at 60% of its
-  run, and sends state flag 0x04 in each 0xA9; a dive into deep water takes no landing (no fall damage).
+  plays its figure's swim clips (animnifs.csv "Swim Alt": tread, swim, swim backwards), and sends state flag
+  0x04 in each 0xA9; a dive into deep water takes no landing (no fall damage). Retail's numbers (daoc-re
+  RE/58, applied the same day): swims with the feet 0.9 m under, floats them 1.0 m under, 85 units/s scaled by
+  0xB6's water speed, wading at half speed.
   Verified live 2026-11-07 (Quitcheck ran from Prydwen Keep into the river, swam, and climbed out). Open:
   W51 (retail's swim depth, float height and speed), underwater view, other players' and NPCs' swim clips.
 - **Gravity (started 2026-11-04):** the character stands on terrain and on model floors (streets,
@@ -387,8 +389,12 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   user's install (`make maps`: `ui/maps`, the zone maps z<NNN>.dds and region maps r<NNN>.dds, placed by
   `regions.dat`): the zone you are in, or the region, with an arrow where you stand and face, and the zone's
   description. A click on either map runs you there (auto-run in a straight line, as a player); a movement
-  key stops it. Checked live (Quitcheck at Prydwen Keep). Open: retail's map key and window layout
-  (`ui/atlantis/map_window.xml`), the area insets (`areas.dat`, z<NNN>_<NN>.dds), group and target marks.
+  key stops it. Checked live (Quitcheck at Prydwen Keep). A city's or dungeon's picture covers only part of
+  its zone: `regions.dat` gives that part per zone (`zoneN_offsetx/offsety/width/height`, world units; 299
+  zones), which the owner's Camelot City shots showed we had missed (fixed 2026-11-07). Retail's window (daoc-re
+  RE/57): M in every preset (Shift+M the realm war map), 270 x 498, zone and area combos, "Zone Description"
+  and "Follow Location" switches, a purple arrow from `ui/isles/map_icons.tga`. Open: the area maps
+  (`areas.dat`, z<NNN>_<NN>.dds, chosen by position and height), group and quest marks, retail's look.
 - **Fixture/interior collision** — deferred from the M7 walk-through, and intentionally **not** MVP
   ("looks like DAoC" ≠ "collides like DAoC"). Today the ground raycast follows only the terrain
   heightmap (a separate collision layer), so building geometry isn't solid: the player sinks into a

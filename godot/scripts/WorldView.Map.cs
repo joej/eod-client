@@ -140,20 +140,25 @@ public partial class WorldView
         _mapMarks.QueueRedraw();
     }
 
-    // A region point on the shown picture (window pixels), or null when it is off this picture.
+    // A region point on the shown picture (window pixels), or null when it is off this picture. A zone's picture
+    // covers the part regions.dat gives (offset and size; the whole zone when it gives none).
     private Vector2? MapPixel(float x, float y)
     {
         float scale = MapSize / 256f;
+        IReadOnlyList<RegionMap> maps = _regionMaps ?? [];
         if (!_mapRegion)
         {
             Zone z = _world.Zone;
-            return new Vector2((x - z.X) / z.Width, (y - z.Y) / z.Height) * MapSize;
+            MapZone entry = MapLayout.Find(maps, _world.Position.RegionId, z.Id) ?? new MapZone(z.Id, 0, 0, "");
+            (float across, float down) = entry.Fraction(x - z.X, y - z.Y, z.Width, z.Height);
+            return new Vector2(across, down) * MapSize;
         }
         if (Zones.Find(_world.Position.RegionId, x, y) is not Zone zone
-            || _regionMaps?.FirstOrDefault(m => m.Region == _world.Position.RegionId) is not RegionMap map
-            || MapLayout.OnRegionMap(map, zone.Id, (x - zone.X) / zone.Width, (y - zone.Y) / zone.Height) is not var (px, py))
+            || maps.FirstOrDefault(m => m.Region == _world.Position.RegionId) is not RegionMap map
+            || map.Zones.FirstOrDefault(mz => mz.Zone == zone.Id) is not MapZone onMap)
             return null;
-        return new Vector2(px, py) * scale;
+        (float a, float d) = onMap.Fraction(x - zone.X, y - zone.Y, zone.Width, zone.Height);
+        return new Vector2(onMap.Left + a * map.ZoneWidth, onMap.Top + d * map.ZoneHeight) * scale;
     }
 
     // A click on the map: the region point under it, then run there.
@@ -162,18 +167,24 @@ public partial class WorldView
         if (e is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
             return;
         (float X, float Y)? target = null;
+        IReadOnlyList<RegionMap> maps = _regionMaps ?? [];
         if (!_mapRegion)
         {
             Zone z = _world.Zone;
-            target = (z.X + click.Position.X / MapSize * z.Width, z.Y + click.Position.Y / MapSize * z.Height);
+            MapZone entry = MapLayout.Find(maps, _world.Position.RegionId, z.Id) ?? new MapZone(z.Id, 0, 0, "");
+            (float lx, float ly) = entry.Local(click.Position.X / MapSize, click.Position.Y / MapSize, z.Width, z.Height);
+            target = (z.X + lx, z.Y + ly);
         }
-        else if (_regionMaps?.FirstOrDefault(m => m.Region == _world.Position.RegionId) is RegionMap map)
+        else if (maps.FirstOrDefault(m => m.Region == _world.Position.RegionId) is RegionMap map)
         {
             Vector2 p = click.Position * (256f / MapSize);
             foreach (MapZone mz in map.Zones)
                 if (p.X >= mz.Left && p.X < mz.Left + map.ZoneWidth && p.Y >= mz.Top && p.Y < mz.Top + map.ZoneHeight
                     && Zones.All.FirstOrDefault(z => z.Id == mz.Zone) is Zone zone)
-                    target = (zone.X + (p.X - mz.Left) / map.ZoneWidth * zone.Width, zone.Y + (p.Y - mz.Top) / map.ZoneHeight * zone.Height);
+                {
+                    (float lx, float ly) = mz.Local((p.X - mz.Left) / map.ZoneWidth, (p.Y - mz.Top) / map.ZoneHeight, zone.Width, zone.Height);
+                    target = (zone.X + lx, zone.Y + ly);
+                }
         }
         _mapPicture.AcceptEvent();
         if (target is not var (tx, ty) || _dead || !_chase)

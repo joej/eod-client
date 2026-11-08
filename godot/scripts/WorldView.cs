@@ -418,6 +418,7 @@ public partial class WorldView : Node3D
         _bridge.MaxSpeedChanged += speed =>
         {
             _runUnitsPerSecond = speed.UnitsPerSecond;
+            (_speedPercent, _waterSpeed) = (speed.Percent, speed.WaterSpeed);
             GD.Print($"[world] max speed {speed.Percent}% ({speed.UnitsPerSecond:0} units/s)");
         };
         _bridge.ObjectRemoved += OnObjectRemoved;

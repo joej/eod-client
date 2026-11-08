@@ -27,7 +27,9 @@ public partial class CharacterScreen
         _world.QuitPressed += () => GetTree().Quit();
         GetTree().Root.CallDeferred(Node.MethodName.AddChild, _world);
         Visible = false;
-        ClientSettings.ApplyWindowMode();
+        // After _Ready: resizing the window from inside it fails ("Parent node is busy setting up children") and
+        // stalled offline start-up once a window mode was saved.
+        Callable.From(ClientSettings.ApplyWindowMode).CallDeferred();
     }
 
     private static int? Option(string[] args, string name)
