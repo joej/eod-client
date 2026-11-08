@@ -27,7 +27,7 @@ public partial class SettingsDialog : AcceptDialog
     /// <summary>Opens the window over <paramref name="parent"/>'s scene (one at a time).</summary>
     public static void Open(Node parent) => Open(parent, 0);
 
-    /// <summary>Opens the window on tab <paramref name="tab"/> (0 Display, 1 Keyboard).</summary>
+    /// <summary>Opens the window on tab <paramref name="tab"/> (0 Display, 1 Keyboard, 2 Game).</summary>
     public static void Open(Node parent, int tab)
     {
         foreach (Node n in parent.GetTree().Root.GetChildren())
@@ -57,6 +57,7 @@ public partial class SettingsDialog : AcceptDialog
         column.AddThemeConstantOverride("separation", 14);
         tabs.AddChild(column);
         tabs.AddChild(new KeyboardPanel());
+        tabs.AddChild(GamePanel());
         var grid = new GridContainer { Columns = 2 };
         grid.AddThemeConstantOverride("h_separation", 12);
         grid.AddThemeConstantOverride("v_separation", 10);
@@ -137,5 +138,53 @@ public partial class SettingsDialog : AcceptDialog
             Text = "Window mode and size are for the game world; this login screen stays a small window.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(420, 0),
         });
+    }
+
+    // Game: retail's Game Options "Names" choice and its "Display Names" switches, in its two columns.
+    private static Control GamePanel()
+    {
+        var column = new VBoxContainer { Name = "Game" };
+        column.AddThemeConstantOverride("separation", 10);
+        var namesRow = new HBoxContainer();
+        namesRow.AddChild(new Label { Text = "Names", CustomMinimumSize = new Vector2(160, 0) });
+        var colour = new OptionButton { CustomMinimumSize = new Vector2(160, 0) };
+        colour.AddItem("Colored");
+        colour.AddItem("White");
+        colour.Select(ClientSettings.ColouredNames ? 0 : 1);
+        colour.ItemSelected += index =>
+        {
+            ClientSettings.ColouredNames = index == 0;
+            ClientSettings.NotifyChanged(display: false);
+        };
+        namesRow.AddChild(colour);
+        column.AddChild(namesRow);
+
+        column.AddChild(new Label { Text = "Display Names" });
+        var grid = new GridContainer { Columns = 2 };
+        grid.AddThemeConstantOverride("h_separation", 30);
+        (string Label, ClientSettings.NameKinds Kind)[] order =
+        [
+            ("Monsters/NPCs", ClientSettings.NameKinds.Monsters), ("Groupmates", ClientSettings.NameKinds.Groupmates),
+            ("Gravestones", ClientSettings.NameKinds.Gravestones), ("Guildmates", ClientSettings.NameKinds.Guildmates),
+            ("Players", ClientSettings.NameKinds.Players), ("Enemy Players", ClientSettings.NameKinds.Enemies),
+            ("Your Name", ClientSettings.NameKinds.Self),
+        ];
+        foreach ((string label, ClientSettings.NameKinds kind) in order)
+        {
+            var box = new CheckBox { Text = label, ButtonPressed = ClientSettings.ShowNames.HasFlag(kind), FocusMode = Control.FocusModeEnum.None };
+            box.Toggled += on =>
+            {
+                ClientSettings.ShowNames = on ? ClientSettings.ShowNames | kind : ClientSettings.ShowNames & ~kind;
+                ClientSettings.NotifyChanged(display: false);
+            };
+            grid.AddChild(box);
+        }
+        column.AddChild(grid);
+        column.AddChild(new Label
+        {
+            Text = "As retail's Game Options. Groupmates and guildmates count as players until groups and guilds are shown.",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(420, 0), Modulate = new Color(1, 1, 1, 0.7f),
+        });
+        return column;
     }
 }

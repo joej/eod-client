@@ -6,7 +6,7 @@
 // merchant, a teleporter and a plain townsperson read apart at a glance. Colours: a monster by how it cons to
 // you (ConColors: grey up to purple); your realm's NPCs and players pale; another realm's in its realm colour.
 // The NPC's "hide name" flag hides it. Shown within NameRange metres; the dev overlay's "Names" switch turns
-// them off. Retail (daoc-re, 2026-11-07): "[prefix ]name[ lastname]", then "<guild>"; Minion Pro Bold 20 with
+// them all off; Settings → Game has retail's "Names: Colored/White" and Display Names switches (ClientSettings). Retail (daoc-re, 2026-11-07): "[prefix ]name[ lastname]", then "<guild>"; Minion Pro Bold 20 with
 // an outline layer (ui/fonts/MinionPro-Bold.ttf, which `mpk loading` copies into the library); no plate on
 // yourself by default. Its palette colours, range and occlusion are still open (W50).
 
@@ -33,15 +33,16 @@ public partial class WorldView
         int level = npc.Level & 0x7F;   // 0x80: a statue
         Color color = realm == 0 ? ConColour(ConColors.Of(PlayerLevel, level))
             : realm == (int)PlayerRealm || PlayerRealm == Realm.None ? Friendly : RealmNameColour(realm);
-        AddNameplate(e, npc.Name, npc.GuildName, color);
+        e.Nameplate = Nameplate(e.Node, HeadHeight(e), npc.Name, npc.GuildName, color, ClientSettings.NameKinds.Monsters);
     }
 
     private void NamePlayer(Entity e, PlayerCreate p)
     {
         int realm = (p.Flags >> 2) & 0x03;
         string name = string.Join(' ', new[] { p.Prefix, p.Name, p.LastName }.Where(s => s.Length > 0));
-        Color color = realm == (int)PlayerRealm || realm == 0 || PlayerRealm == Realm.None ? FriendlyPlayer : RealmNameColour(realm);
-        AddNameplate(e, name, p.GuildName, color);
+        bool enemy = realm != 0 && PlayerRealm != Realm.None && realm != (int)PlayerRealm;
+        e.Nameplate = Nameplate(e.Node, HeadHeight(e), name, p.GuildName, enemy ? RealmNameColour(realm) : FriendlyPlayer,
+            enemy ? ClientSettings.NameKinds.Enemies : ClientSettings.NameKinds.Players);
     }
 
     private static readonly Color Friendly = new(0.92f, 0.90f, 0.82f);
@@ -84,15 +85,25 @@ public partial class WorldView
         return _nameFont;
     }
 
-    private void AddNameplate(Entity e, string name, string role, Color color)
+    /// <summary>The entered character's name ("Your Name", off by default as in retail).</summary>
+    public string PlayerName { get; set; } = "";
+    private Label3D? _ownNameplate;
+
+    private void NameSelf()
     {
-        e.Nameplate?.QueueFree();
+        if (PlayerName.Length > 0)
+            _ownNameplate = Nameplate(_body, HeadHeight(_body), PlayerName, "", FriendlyPlayer, ClientSettings.NameKinds.Self);
+    }
+
+    // A plate over a head: the name, the role or guild in angle brackets under it. It keeps its kind (which
+    // Display Names switch governs it) and its colour (for "Names: White" and back) as metadata.
+    private Label3D Nameplate(Node3D owner, Vector3 head, string name, string role, Color color, ClientSettings.NameKinds kind)
+    {
         var label = new Label3D
         {
             Text = role.Length > 0 ? $"{name}\n<{role}>" : name,
-            Modulate = color,
-            OutlineModulate = new Color(0, 0, 0, 0.85f),
             Font = NameFont(),
+            OutlineModulate = new Color(0, 0, 0, 0.85f),
             OutlineSize = 8,
             FontSize = 32,
             // The same size on screen near or far (about 18 px a line at 900 px high), as a HUD label.
@@ -101,21 +112,38 @@ public partial class WorldView
             Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
             VerticalAlignment = VerticalAlignment.Bottom,
             // Above the head, under a quest glyph (0.9 m up).
-            Position = HeadHeight(e) + new Vector3(0, 0.3f, 0),
+            Position = head + new Vector3(0, 0.3f, 0),
             VisibilityRangeEnd = NameRange,
-            Visible = _namesVisible,
             // Over the figure's own hair and helmet, still hidden by walls in front.
             RenderPriority = 1,
         };
-        e.Node.AddChild(label);
-        e.Nameplate = label;
+        label.SetMeta("kind", (int)kind);
+        label.SetMeta("colour", color);
+        StyleNameplate(label);
+        owner.AddChild(label);
+        return label;
+    }
+
+    private static void StyleNameplate(Label3D label)
+    {
+        var kind = (ClientSettings.NameKinds)label.GetMeta("kind").AsInt32();
+        label.Visible = _namesVisible && ClientSettings.ShowNames.HasFlag(kind);
+        label.Modulate = ClientSettings.ColouredNames ? label.GetMeta("colour").AsColor() : Colors.White;
+    }
+
+    // After a settings change: each plate's visibility and colour again.
+    private void RestyleNames()
+    {
+        foreach (Entity e in _entities.Values)
+            if (e.Nameplate is not null && IsInstanceValid(e.Nameplate))
+                StyleNameplate(e.Nameplate);
+        if (_ownNameplate is not null)
+            StyleNameplate(_ownNameplate);
     }
 
     private void ShowNames(bool on)
     {
         _namesVisible = on;
-        foreach (Entity e in _entities.Values)
-            if (e.Nameplate is not null)
-                e.Nameplate.Visible = on;
+        RestyleNames();
     }
 }

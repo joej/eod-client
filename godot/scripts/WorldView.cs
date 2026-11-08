@@ -459,6 +459,7 @@ public partial class WorldView : Node3D
         BuildChatUi(overlay);
         BuildNpcWindow(overlay);
         BuildDeathPanel(overlay);
+        NameSelf();
         AddChild(overlay);
         _viewSetting = ViewOverride() ?? ClientSettings.ViewDistance;
         ApplyViewDistance(_viewSetting);
@@ -794,6 +795,7 @@ public partial class WorldView : Node3D
     private void OnSettingsChanged(bool display)
     {
         _camera.Fov = ClientSettings.FieldOfView;
+        RestyleNames();
         if (display)
             ClientSettings.ApplyWindowMode();
     }

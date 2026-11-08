@@ -97,6 +97,28 @@ public static class ClientSettings
 
     public static void NotifyChanged(bool display) => Changed?.Invoke(display);
 
+    /// <summary>Whose names show over heads: retail's Game Options "Display Names" switches (and /shownames,
+    /// /hidenames). Group and guild members count as players until the client tracks groups and guilds.</summary>
+    [System.Flags]
+    public enum NameKinds
+    {
+        None = 0, Monsters = 1, Gravestones = 2, Players = 4, Self = 8, Groupmates = 16, Guildmates = 32, Enemies = 64,
+        Default = Monsters | Gravestones | Players | Groupmates | Guildmates | Enemies,   // retail: all but your own
+    }
+
+    public static NameKinds ShowNames
+    {
+        get => (NameKinds)Load().GetValue("game", "show_names", (int)NameKinds.Default).AsInt32();
+        set => SaveIn("game", "show_names", (int)value);
+    }
+
+    /// <summary>Retail's "Names: Colored": names in con and realm colours; off, all white.</summary>
+    public static bool ColouredNames
+    {
+        get => Load().GetValue("game", "coloured_names", true).AsBool();
+        set => SaveIn("game", "coloured_names", value);
+    }
+
     /// <summary>The sun casts real shadows (buildings, trees). Ours: the original drew fixed ones.</summary>
     public static bool SunShadows
     {

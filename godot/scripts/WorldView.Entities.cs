@@ -562,12 +562,14 @@ public partial class WorldView
     }
 
     // Where an entity's head is, in its own node's space: the figure's helmet or head bone at spawn, else 2 m up.
-    private static Vector3 HeadHeight(Entity e)
+    private static Vector3 HeadHeight(Entity e) => HeadHeight(e.Node);
+
+    private static Vector3 HeadHeight(Node3D root)
     {
-        foreach (Skeleton3D sk in e.Node.FindChildren("*", "Skeleton3D", true, false).OfType<Skeleton3D>())
+        foreach (Skeleton3D sk in root.FindChildren("*", "Skeleton3D", true, false).OfType<Skeleton3D>())
             foreach (string name in new[] { "Bip01 Helmet", "Bip01 Head" })
                 if (sk.FindBone(name) is int bone and >= 0)
-                    return (e.Node.GlobalTransform.AffineInverse() * sk.GlobalTransform * sk.GetBoneGlobalPose(bone)).Origin;
+                    return (root.GlobalTransform.AffineInverse() * sk.GlobalTransform * sk.GetBoneGlobalPose(bone)).Origin;
         return new Vector3(0, 2f, 0);
     }
 
