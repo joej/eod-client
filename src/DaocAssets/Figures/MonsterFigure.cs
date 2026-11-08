@@ -56,6 +56,10 @@ public sealed class MonsterTables
     private static readonly (string Clip, int Column)[] ClipColumns = [("walk", 2), ("back", 3), ("run", 4), ("idle", 10),
         ("death", 11), ("sit_down", 21), ("sit_idle", 22), ("jump", 7), ("land", 8)];
 
+    // The swimming clips: the Swim Alt of the idle, run and walk-backward clips.
+    private static readonly (string Clip, int Column)[] SwimColumns = [("swim_idle", 10), ("swim", 4), ("swim_back", 3)];
+    private const int SwimAltColumn = 14;
+
     // canims.csv (the combat set, same id as the animation set) columns of the combat idles, one per weapon
     // stance (objects.csv "Combat Stance"; the Godot client picks by it): C-Idle, C-Idle 2H, C-Idle Pole,
     // C-Idle Bow, C-Idle Staff, Xbow Idle, H2H Cidle, Scy C-Idle.
@@ -224,7 +228,16 @@ public sealed class MonsterTables
                     clips[clip] = kfa[2].Trim();
         }
         if (_anims.TryGetValue(set, out string[]? a))
+        {
             Add(a, ClipColumns);
+            // In water: each base clip's "Swim Alt" (animnifs.csv column 14), e.g. the human idle 329 -> 1739
+            // "Underwater Swim Idle", run 381 -> 1847 "Atlantis Swim", backward 332 -> 1854 "Swim backwards".
+            foreach ((string clip, int col) in SwimColumns)
+                if (col < a.Length && int.TryParse(a[col], out int baseId) && _animnifs.TryGetValue(baseId, out string[]? b)
+                    && b.Length > SwimAltColumn && int.TryParse(b[SwimAltColumn], out int swimId) && swimId > 0
+                    && _animnifs.TryGetValue(swimId, out string[]? kfa) && kfa.Length > 2 && kfa[2].Trim().Length > 0)
+                    clips[clip] = kfa[2].Trim();
+        }
         if (combat && _canims.TryGetValue(set, out string[]? c))
             Add(c, CombatColumns);
         return clips;

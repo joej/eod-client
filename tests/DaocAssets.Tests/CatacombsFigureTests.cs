@@ -99,6 +99,25 @@ public sealed class CatacombsFigureTests
     }
 
     [Fact]
+    public void ACatacombsFigureCarriesTheSwimAltsOfItsIdleRunAndBackward()
+    {
+        // anims.csv set 233: Back (3) 2676, Run (4) 2536, Idle (10) 2535; animnifs.csv column 14 ("Swim Alt") of
+        // each names its clip in water (the install's own numbers).
+        var anims = Enumerable.Repeat("", 11).ToArray();
+        (anims[0], anims[1], anims[3], anims[4], anims[10]) = ("233", "Cata Briton Male", "2676", "2536", "2535");
+        static string Row(string id, string name, string file, string swim) =>
+            string.Join(',', new[] { id, name, file, "18", "15", "15", "loop", "0", "0", "0", "0", "0", "0", "0", swim });
+        MonsterTables tables = Tables("x,,0\nID,name,Walk\n" + string.Join(',', anims),
+            "id\nID,name,file\n" + string.Join('\n',
+                Row("2535", "Idle", "Cat_I_HM.kfa", "2742"), Row("2536", "Run", "Cat_R_HM.kfa", "2620"),
+                Row("2676", "Walk Backwards", "Cat_WB_HM.kfa", "2744"), Row("2742", "Swim idle", "Cat_SWi_H.kfa", ""),
+                Row("2620", "Swim", "Cat_SW_H.kfa", ""), Row("2744", "Swim back", "Cat_SWB_H.kfa", "")));
+        IReadOnlyDictionary<string, string> clips = tables.ResolveCatacombs(32)!.Clips;
+        Assert.Equal(("Cat_SWi_H.kfa", "Cat_SW_H.kfa", "Cat_SWB_H.kfa"), (clips["swim_idle"], clips["swim"], clips["swim_back"]));
+        Assert.Equal("Cat_R_HM.kfa", clips["run"]);
+    }
+
+    [Fact]
     public void EveryHairStyleOfTheRaceIsListedAndAnEmptyOneIsBald()
     {
         CataSpec spec = Tables().ResolveCatacombs(32)!;

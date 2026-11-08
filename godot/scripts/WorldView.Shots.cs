@@ -141,6 +141,14 @@ public partial class WorldView
         int drops = System.Array.IndexOf(args, "--drops");
         if (drops >= 0 && drops + 1 < args.Length && int.TryParse(args[drops + 1], out int n))
             (_dropAgain, _dropsLeft) = (_dropPending, n - 1);
+        // --walkto X Y: run to that region point (auto-run, as the player would); --shot-on-arrival saves a shot there.
+        int walk = System.Array.IndexOf(args, "--walkto");
+        if (walk >= 0 && walk + 2 < args.Length && float.TryParse(args[walk + 1], System.Globalization.CultureInfo.InvariantCulture, out float wx)
+            && float.TryParse(args[walk + 2], System.Globalization.CultureInfo.InvariantCulture, out float wy))
+            (_walkPoint, _walkUntil, _shotOnArrival) = (ToGodot(wx, wy, 0), _seconds + 300, args.Contains("--shot-on-arrival"));
+        // --borders: tick the "Zone borders" switch.
+        if (args.Contains("--borders") && !_bordersVisible)
+            _flipBordersToggle?.Invoke();
         // --release SECONDS: after dying, release that long after (as the Release button).
         int release = System.Array.IndexOf(args, "--release");
         if (release >= 0 && release + 1 < args.Length && double.TryParse(args[release + 1], System.Globalization.NumberStyles.Float,

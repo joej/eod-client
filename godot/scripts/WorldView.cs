@@ -110,6 +110,9 @@ public partial class WorldView : Node3D
     private bool _freshCapture;           // true right after mouse capture, to drop the first delta
     private bool _groundHit;              // did the last ground raycast find terrain? (debug overlay)
     private const uint TerrainLayer = 1 << 1;  // collision layer 2: terrain only, for the ground ray
+    private const uint WaterLayer = 1 << 3;    // collision layer 4: water surfaces, for the swim check only
+    // Layers nothing stands on, sees through or is stopped by: NPCs' pick shapes and water surfaces.
+    private const uint NotSolid = EntityLayer | WaterLayer;
     // Free-fly debug camera speed in Godot units/second (hold Shift to move faster).
     private int _packets;
     private int _pings;
@@ -382,7 +385,7 @@ public partial class WorldView : Node3D
             // height) up-and-back, so it won't jam against the ground directly under the player; the
             // body's own collider is excluded below, and CamMin floors the length so it can't collapse
             // into the pivot even against a wall or the keep floor at the Prydwen Keep spawn.
-            CollisionMask = ~EntityLayer,   // not NPCs' pick shapes
+            CollisionMask = ~NotSolid,   // not NPCs' pick shapes or water
         };
         _camPivot.AddChild(_camArm);
         foreach (Node n in _body.GetChildren())
@@ -496,6 +499,9 @@ public partial class WorldView : Node3D
             foreach (ZoneParts z in _zones.Values) if (z.Water is not null) z.Water.Visible = on;
         });
         _flipJumpsToggle = _dev.AddToggle("Jump points", _jumpsVisible, ShowJumpMarkers);
+        _flipBordersToggle = _dev.AddToggle("Zone borders", _bordersVisible, ShowZoneBorders);
+        if (_bordersVisible)
+            ShowZoneBorders(true);   // on before a region change: draw this region's at once
         _dev.AddToggle("Entities", true, on => _entityRoot.Visible = on);
         _dev.AddToggle("Own character", true, on => _body.Visible = on);
         _dev.AddToggle("Names", _namesVisible, ShowNames);
@@ -909,6 +915,7 @@ public partial class WorldView : Node3D
         _packets = _bridge.PacketCount;
         InterpolateEntities(delta);
         UpdateDeathPanel();
+        UpdateBorderLabels();
 
         if (_closedReason is null && _connection is not null && _connection.Completion.IsCompleted)
         {

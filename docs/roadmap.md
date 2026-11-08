@@ -317,7 +317,9 @@ then any of the 98 heightmap zones. Walking across a zone boundary, dungeons and
 These come **after** the MVP (M4–M7). Order is the intended sequence, but each is independently
 valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
 
-### M8 — Move through the world
+### M8 — Move through the world ✅
+**Done** 2026-11-07 · shot 2026-11-07_23_swimming-the-river-below-prydwen
+(earlier steps: 2026-11-07_24_died-and-release-timer, 2026-11-07_25_region-loading-screen)
 *Walk out of one zone into the next; travel and die like a player.*
 - **Adjacent zones (streaming built 2026-11-07).** The zones of the region within view distance load
   as you move (`WorldView.Streaming`): built a few milliseconds per frame on the main thread (a worker
@@ -327,15 +329,17 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   row and column were flat, leaving a step along every border). Retail loads only at region changes
   (owner, 2026-11-07; W46); no loading pause inside a region. Walked live 2026-11-07 (Eodarms, Camelot
   Hills ↔ Salisbury Plains, both ways): the server answered each crossing with "You have entered …" and
-  the ground met at the border. Open: single build steps of up to ~50 ms (big models), and a loading screen for region changes.
-  To do (owner, 2026-11-07): a dev-overlay switch that draws the zone borders (a glowing line or wall
-  along each zone rectangle of the region, labelled with the zone names) for debugging crossings.
+  the ground met at the border. Open: single build steps of up to ~50 ms (big models).
+  *Zone borders (owner's request, built 2026-11-07):* the dev overlay's "Zone borders" switch (or `--borders`)
+  draws a wall and a line along each zone rectangle of the region, with each zone's name and number on its
+  side, following you along the edge.
 - **Zone jumps and teleports.** `zonejump.csv` (345 zones) and `[jumpNN]` travel points; the server's
   region-change and teleport packets; entering a dungeon or city (until M11, as a placeholder).
   *Built 2026-11-07:* each zone's doorways go to `jumps.csv` (235 in 91 zones); walking through one sends
   its zone point (C→S 0x90) and the server moves us; a region change shows a loading screen. The dev
   overlay's "Jump points" switch (or `--jumps`) draws each doorway. Open: W47, a live walk through a gate,
-  teleporter NPCs (needs click-to-target and interact, M9), retail's loading pictures.
+  teleporter NPCs (needs click-to-target and interact, M9), retail's loading pictures. A gate walk was
+  confirmed live by the owner (2026-11-07, into Camelot City) and teleporters by Quitcheck through Master Visur.
   *Loading screen (2026-11-07):* `make loading` (`mpk loading`) takes the region loading pictures, tips,
   bar and tip font from the user's install; a region change shows one of the destination's pictures with
   a random tip and a bar that fills while the zones around the arrival point build (faster behind the
@@ -347,13 +351,20 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   (or type /release); the move to the bind point and the revive (0x89) bring it back. Other players fall
   and get up too; 0xAD vitals show in the status line. Verified live as Quitcheck (killed by two falls).
   Open: W48 (retail's quicker release), the dead screen's look, a release into another region.
-- **Swimming** in the water M7 draws.
+- **Swimming** in the water M7 draws. *Built 2026-11-07:* the zones' water surfaces get colliders on their
+  own layer; in water deeper than 1.4 m the character floats with its head out, without gravity or jump,
+  plays its figure's swim clips (animnifs.csv "Swim Alt": tread, swim, swim backwards), moves at 60% of its
+  run, and sends state flag 0x04 in each 0xA9; a dive into deep water takes no landing (no fall damage).
+  Verified live 2026-11-07 (Quitcheck ran from Prydwen Keep into the river, swam, and climbed out). Open:
+  W51 (retail's swim depth, float height and speed), underwater view, other players' and NPCs' swim clips.
 - **Gravity (started 2026-11-04):** the character stands on terrain and on model floors (streets,
   stairs, bridges, walls, roofs), walks up and down steps, falls under gravity off a ledge, jumps (Space),
   and reports landings so the server charges fall damage. Retail's gravity, jump and step values and its
   collision hulls are W32; walls don't stop the character yet (M9 "solid world").
 - **Done when:** you can walk from Camelot Hills into Salisbury Plains and back, use a zone jump, and
-  die, release and come back at your bind point.
+  die, release and come back at your bind point. *All verified live 2026-11-07:* the walk both ways and the
+  Camelot City gate (owner, Eodarms), death by falls and release to the bind point (Quitcheck), plus
+  swimming and the region loading screen.
 
 ### M9 — Vitals, targeting, interaction — and solid world
 *The HUD, the basics of "doing things," and a world you can't walk through.*

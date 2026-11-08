@@ -25,11 +25,29 @@ public partial class WorldView
     // --interact: the creature to walk up to and talk to (dev; 0 none), and when to give up.
     private ushort _walkTo;
     private double _walkUntil;
+    private Vector3? _walkPoint;     // --walkto X Y (dev): run there (region units), then stop
+    private bool _shotOnArrival;     // --shot-on-arrival: a screenshot 3 s after --walkto arrives
 
     // Runs the character (auto-run, so the server sees ordinary running) toward _walkTo, then talks to it once
     // within the server's reach (OpenDAoC INTERACT_DISTANCE 192 units).
     private void WalkToTarget()
     {
+        if (_walkPoint is Vector3 point)
+        {
+            Vector3 to = point - _body.Position;
+            to.Y = 0;
+            if (to.Length() < 2f || _seconds > _walkUntil)
+            {
+                GD.Print($"[world] --walkto: {(to.Length() < 2f ? "arrived" : "gave up")} at {ToRegion(_body.Position)}");
+                (_walkPoint, _autoRun) = (null, false);
+                if (_shotOnArrival)
+                    _shotAt = _seconds + 3;
+                return;
+            }
+            _bodyYaw = Mathf.Atan2(-to.X, -to.Z);
+            _autoRun = true;
+            return;
+        }
         if (_walkTo == 0)
             return;
         if (!_entities.TryGetValue(_walkTo, out Entity? e) || _seconds > _walkUntil)
@@ -80,7 +98,7 @@ public partial class WorldView
         ushort id = (ushort)collider.GetMeta("entity").AsInt32();
         // Something solid in front (a wall) hides it.
         var wall = PhysicsRayQueryParameters3D.Create(from, hit["position"].AsVector3());
-        wall.CollisionMask = ~EntityLayer;
+        wall.CollisionMask = ~NotSolid;
         return GetWorld3D().DirectSpaceState.IntersectRay(wall).Count > 0 ? null : id;
     }
 

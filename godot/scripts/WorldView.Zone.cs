@@ -239,6 +239,13 @@ public partial class WorldView
             mat.SetShaderParameter("flow", row.Flow / 1000f);
             mi.MaterialOverride = mat;
             parts.WaterBodies++;
+            // Its surface, for the swim check (WaterLayer only: nothing stands on it).
+            if (mi.Mesh is not null)
+            {
+                var body = new StaticBody3D { CollisionLayer = WaterLayer, CollisionMask = 0, Transform = RelativeTransform(mi, water) };
+                body.AddChild(new CollisionShape3D { Shape = mi.Mesh.CreateTrimeshShape() });
+                water.AddChild(body);
+            }
         }
         water.Name = "Water";
         parts.Root.AddChild(water);

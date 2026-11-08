@@ -112,6 +112,8 @@ public partial class WorldView
             PlayOnce("land", LandTime);
         if (_dead)
             PlayOnce("death");   // held on its last frame: lying down
+        else if (_swimming)
+            PlayBodyClip(!moving ? "swim_idle" : forward < 0 ? "swim_back" : "swim");
         else if (_airborne)
             PlayOnce("jump");
         else if (_quitting && !moving)
@@ -147,7 +149,7 @@ public partial class WorldView
     // and Space jumps. The landing is reported to the server with the impact speed, which charges fall
     // damage (0xA9). With no floor below (under the terrain after a bad position, or off the models) the
     // character is put back on the terrain above it, or keeps its height.
-    // Not yet: walls and obstacles (nothing stops the character sideways), swimming, the client's own
+    // Not yet: walls and obstacles (nothing stops the character sideways), the client's own
     // collision hulls ("collidee" nodes, which our converter drops), retail's gravity and jump values.
     private void Ground(double delta)
     {
@@ -169,6 +171,8 @@ public partial class WorldView
         Vector3 at = _body.Position;
         float dt = (float)delta;
         float? floor = FloorBelow(at);
+        if (floor is not null && Swim(at, floor.Value, dt))
+            return;
         if (floor is null)
         {
             // Nothing below: under the ground? Back onto the terrain above.
@@ -215,7 +219,7 @@ public partial class WorldView
         for (int tries = 0; tries < 12; tries++)
         {
             var ray = PhysicsRayQueryParameters3D.Create(from, to);
-            ray.CollisionMask = ~EntityLayer;   // NPCs' pick shapes aren't floors
+            ray.CollisionMask = ~NotSolid;   // NPCs' pick shapes and water aren't floors
             ray.Exclude = exclude;
             ray.HitBackFaces = true;
             Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
@@ -269,7 +273,8 @@ public partial class WorldView
     // Region units per second for the way we're moving: running forward at the server's speed (0xB6); backing up
     // or strafing without going forward at retail's 85 of a 191 run (measured by daoc-re, 2026-11-05: backward
     // is sent as a negative speed), scaled with the server's speed.
-    private float MoveSpeed(float forward) => forward > 0 ? _runUnitsPerSecond : _runUnitsPerSecond * SlowUnits / 191f;
+    private float MoveSpeed(float forward) =>
+        (forward > 0 ? _runUnitsPerSecond : _runUnitsPerSecond * SlowUnits / 191f) * (_swimming ? SwimFactor : 1f);
 
     private const float SlowUnits = 85f;
 
@@ -286,7 +291,8 @@ public partial class WorldView
         float vertical = (landed ? -_landingSpeed : _airborne ? _verticalSpeed : 0f) / RegionMetresPerUnit;
         _landingSpeed = 0;
         if (_session is not null)
-            _ = _session.MoveToAsync(rx, ry, rz, heading, speed, vertical, landed, stateFlags: _jumping ? (byte)0x08 : (byte)0);
+            _ = _session.MoveToAsync(rx, ry, rz, heading, speed, vertical, landed,
+                stateFlags: _swimming ? (byte)0x04 : _jumping ? (byte)0x08 : (byte)0);
     }
 
     // The server moved us within the region (0x04). Take the position over at once — the next 0xA9
@@ -344,5 +350,47 @@ public partial class WorldView
         // the arm catches can't collapse the camera into the pivot (the "inside the capsule" bug).
         float target = Mathf.Max(CamMin, _camDistance);
         _camArm.SpringLength = Mathf.Lerp(_camArm.SpringLength, target, Mathf.Min(1f, (float)delta * 10f));
+    }
+
+    // ----- Swimming (M8) -----
+    // In water deeper than SwimDepth the character floats with its head out (FloatDepth under the surface): no
+    // gravity, no jump, swim clips (the figure's "Swim Alt" clips), state flag 0x04 in each 0xA9 (others see the
+    // swim), and a dive into deep water lands without a landing report, so no fall damage. The surfaces are the
+    // zone's water bodies (water.glb, on WaterLayer). Retail's depth, float height and swim speed are unknown (W51).
+    private bool _swimming;
+    private const float SwimDepth = 1.4f;     // water this deep over the floor (metres) is swum
+    private const float FloatDepth = 1.25f;   // the feet this far under the surface while swimming
+    private const float SwimFactor = 0.6f;    // swim speed as a share of the run (W51)
+
+    private bool Swim(Vector3 at, float floor, float dt)
+    {
+        float? surface = WaterSurface(at);
+        bool deep = surface is float s && s - floor > SwimDepth && at.Y <= s - FloatDepth + 0.05f;
+        if (!deep)
+        {
+            if (_swimming)
+                GD.Print("[world] out of the water");
+            _swimming = false;
+            return false;
+        }
+        if (!_swimming)
+            GD.Print($"[world] swimming (water {surface!.Value - floor:0.0} m deep)");
+        _swimming = true;
+        float y = surface!.Value - FloatDepth;
+        // Falling in: the water takes it, no landing (and no fall damage).
+        (_airborne, _jumping, _verticalSpeed, _landingSpeed) = (false, false, 0, 0);
+        _body.Position = new Vector3(at.X, Mathf.MoveToward(at.Y, y, 3f * dt + 0.02f), at.Z);
+        _groundHit = false;   // no jumping off the water
+        return true;
+    }
+
+    // The water surface straight above or below the feet, if any.
+    private float? WaterSurface(Vector3 at)
+    {
+        var ray = PhysicsRayQueryParameters3D.Create(at + new Vector3(0, 6f, 0), at - new Vector3(0, 30f, 0));
+        ray.CollisionMask = WaterLayer;
+        ray.HitBackFaces = true;
+        Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
+        return hit.Count == 0 ? null : hit["position"].AsVector3().Y;
     }
 }

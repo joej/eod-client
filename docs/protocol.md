@@ -434,6 +434,15 @@ it: C→S 0xAF `00 "&whis keyword"`. Retail also puts the target in every 0xA9 (
 action flags 0x80, plus 0x30 while a target is in view. *Verified live 2026-11-07* with Master Visur at
 Prydwen Keep (eodtest2): target, examine, his destinations, and [towns] answered with the town list.
 
+## Swimming
+
+The client sends 0xA9 with state flag 0x04 while it swims; other clients see it in the relayed position.
+OpenDAoC 2026.09.36 stores the flags for 1.127 clients and doesn't otherwise act on them: its swimming
+property, which skips fall damage, is set only by the pre-1.124 handler. So a client that falls into deep
+water must not set the landing bit, or the server charges the fall. 0xB6's third byte is the player's
+water speed bonus. *Verified live 2026-11-07* (eodtest2: swam in the Camelot Hills river, no complaint from
+the server).
+
 ## Death and release
 
 ```

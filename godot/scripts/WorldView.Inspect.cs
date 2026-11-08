@@ -33,7 +33,7 @@ public partial class WorldView
         Vector3 towardSun = _sun.GlobalTransform.Basis.Z.Normalized();   // a DirectionalLight3D shines along -Z
         var ray = PhysicsRayQueryParameters3D.Create(point + towardSun * 0.05f, point + towardSun * 400f);
         ray.HitBackFaces = true;
-        ray.CollisionMask = ~EntityLayer;
+        ray.CollisionMask = ~NotSolid;
         Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
         if (hit.Count == 0 || hit["collider"].AsGodotObject() is not Node collider)
             return "shadow  none (in sunlight)";
@@ -53,7 +53,7 @@ public partial class WorldView
         var ray = PhysicsRayQueryParameters3D.Create(from, from + _camera.ProjectRayNormal(screen) * 4000f);
         ray.HitBackFaces = true;
         uint mask = 0;
-        if (_fixturesOn) mask |= ~TerrainLayer & ~EntityLayer;
+        if (_fixturesOn) mask |= ~TerrainLayer & ~NotSolid;
         if (_terrainOn) mask |= TerrainLayer;
         ray.CollisionMask = mask;
         Godot.Collections.Dictionary hit = mask == 0
