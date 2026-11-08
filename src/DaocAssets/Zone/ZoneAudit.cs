@@ -16,7 +16,7 @@ public sealed partial class ZoneAudit
     /// <summary>Files the converter reads today (normalised names; see <see cref="Pattern"/>).</summary>
     public static readonly IReadOnlySet<string> UsedFiles = new HashSet<string>
     {
-        "nifs.csv", "fixtures.csv", "terrain.pcx", "offset.pcx", "sector.dat",
+        "nifs.csv", "fixtures.csv", "terrain.pcx", "offset.pcx", "sector.dat", "bound.csv",
     };
 
     /// <summary>SECTOR.DAT keys the converter reads today, as "section.key" (normalised). Keep in step

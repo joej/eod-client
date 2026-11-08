@@ -125,7 +125,7 @@ $(ZONEDIR)/zone$(1)/terrain.glb: $$(zone$(1)_DAT) $$(zone$(1)_EDGEDAT) $(INDEX) 
 	@mkdir -p $$(@D)
 	$(MPK) terrain $$(zone$(1)_DAT) $$(zone$(1)_POS) $$(zone$(1)_EDGES) --index $(INDEX) --library $(LIB) --out $$@
 
-$(ZONEDIR)/zone$(1)/zone.csv: $$(zone$(1)_DAT) $(INDEX) $(ZONE_SRC) $$(addprefix $(MADE)/,$$(zone$(1)_MODELS)) | $(TOOL)
+$(ZONEDIR)/zone$(1)/zone.csv: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(ZONE_SRC) $$(addprefix $(MADE)/,$$(zone$(1)_MODELS)) | $(TOOL)
 	@mkdir -p $$(@D)
 	$(MPK) zone $$(zone$(1)_DAT) $$(zone$(1)_POS) --index $(INDEX) --library $(LIB) --out $$(@D)
 

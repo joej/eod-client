@@ -66,7 +66,7 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 | Snow | `snowmap.tga` | 18 | later |
 | Per-patch terrain textures | `textures.csv`, `patch#-#.dds`, `lod#-#.dds` (96 zones), possibly the "Atlantis terrain" option (open question W8) | 96 | M7d / W8 |
 | Zone jumps | `zonejump.csv`, `[jumpNN]` travel points | 345, 45 | M8 |
-| Zone bounds | `bound.csv`, `borders.csv`, `adjacency.csv` | 98, 9, 4 | M8 |
+| Zone bounds | `bound.csv` (used since 2026-11-08: the invisible edge walls, see `ZoneBounds`), `borders.csv`, `adjacency.csv` | 98, 9, 4 | M8 |
 | Ambient sound | `sounds.dat` beside each zone's archives | 389 | M12 |
 | Unknown | `[mongens]` (number ranges), `[dungeonfix]` (lighting flags), `[start]` | 97, 129, 370 | to identify |
 

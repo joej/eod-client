@@ -15,6 +15,41 @@ namespace DaocAssets.Zone;
 /// <summary>Writes a zone placement manifest, populating the shared asset library with its objects.</summary>
 public static class ZoneExport
 {
+    /// <summary>The csvNNN.mpk beside a zone's datNNN.mpk (any case), or null.</summary>
+    public static string? CsvArchive(string zoneDatMpk)
+    {
+        string? dir = Path.GetDirectoryName(Path.GetFullPath(zoneDatMpk));
+        string name = Path.GetFileName(zoneDatMpk);
+        if (dir is null || name.Length < 4 || !name.StartsWith("dat", StringComparison.OrdinalIgnoreCase))
+            return null;
+        string want = "csv" + name[3..];
+        return Directory.EnumerateFiles(dir).FirstOrDefault(f => Path.GetFileName(f).Equals(want, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>A zone's edge walls: bound.csv from its csv archive, as the client reads it, else from the
+    /// dat archive (the two differ in 35 zones of the owner's install; two ship an empty csv archive).</summary>
+    public static List<BoundSegment> ReadBounds(string zoneDatMpk, int offsetX, int offsetY)
+    {
+        foreach (string? archive in new[] { CsvArchive(zoneDatMpk), zoneDatMpk })
+        {
+            // An empty csv archive (zone 9's is 0 bytes) counts as none.
+            if (archive is null || new FileInfo(archive).Length == 0)
+                continue;
+            MpkArchive mpk;
+            try { mpk = MpkArchive.Open(archive); }
+            catch (MpkFormatException) when (archive != zoneDatMpk)
+            {
+                // csv212.mpk holds fixtures.csv twice, which our reader refuses: its dat archive's walls
+                // then (which copy the client reads there is open question W54).
+                continue;
+            }
+            using (mpk)
+                if (mpk.TryGetEntry("bound.csv", out MpkEntry e))
+                    return ZoneBounds.Parse(Encoding.Latin1.GetString(mpk.Extract(e)), offsetX, offsetY);
+        }
+        return [];
+    }
+
     /// <summary>
     /// Reads the zone's fixtures/nifs CSVs from <paramref name="zoneDatMpk"/>, ensures each referenced
     /// model is in the <paramref name="library"/> (converting it once, override-aware), and writes
@@ -43,6 +78,8 @@ public static class ZoneExport
             }
         }
         Directory.CreateDirectory(outDir);
+        // The zone's edge walls (ZoneBounds): what stops the player walking off the map.
+        File.WriteAllText(Path.Combine(outDir, "bounds.csv"), ZoneBounds.ToCsv(ReadBounds(zoneDatMpk, offsetX, offsetY)));
         // The zone's doorways (city gates, dungeon entrances): the client sends their zone point on
         // walking through one (C->S 0x90).
         File.WriteAllText(Path.Combine(outDir, "jumps.csv"), ZoneJumps.ToCsv(jumpPoints));

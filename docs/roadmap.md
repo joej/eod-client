@@ -334,6 +334,12 @@ with its own sound, intro movie and pregame screens, then the better-looking ver
   *Zone borders (owner's request, built 2026-11-07):* the dev overlay's "Zone borders" switch (or `--borders`)
   draws a wall and a line along each zone rectangle of the region, with each zone's name and number on its
   side, following you along the edge.
+  *Edge walls (built 2026-11-08):* nothing in the client or the server checks that a position lies in a
+  zone; what keeps a player on the map is each zone's `bound.csv`, invisible walls along its coasts and
+  edges (read from the zone's csv archive as the client does, else its dat archive). The converter writes
+  them to `bounds.csv` (walls in 82 of 93 zones); the character slides along a wall it runs into at any
+  height, and stops at a corner. Checked offline: swimming west in Lamfhota's Sound holds at the zone's
+  wall, 1,089 units inside its edge. Open: W54.
 - **Zone jumps and teleports.** `zonejump.csv` (345 zones) and `[jumpNN]` travel points; the server's
   region-change and teleport packets; entering a dungeon or city (until M11, as a placeholder).
   *Built 2026-11-07:* each zone's doorways go to `jumps.csv` (235 in 91 zones); walking through one sends

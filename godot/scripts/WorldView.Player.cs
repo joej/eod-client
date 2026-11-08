@@ -93,7 +93,8 @@ public partial class WorldView
                 // the allowed run speed.
                 float sprint = ClientSettings.Sprint && Input.IsKeyPressed(Key.Shift) ? 4f : 1f;
                 float metresPerSec = MoveSpeed(forward) * RegionMetresPerUnit * sprint;
-                _body.Position += move.Normalized() * metresPerSec * (float)delta;
+                // The zone's edge walls (WorldView.Bounds) slide or stop the step, as retail's do.
+                _body.Position = BoundedStep(_body.Position, _body.Position + move.Normalized() * metresPerSec * (float)delta);
             }
         }
 

@@ -10,6 +10,7 @@
 #   zone208_NAME := Cursed Forest
 #   zone208_KIND := outdoor | city | dungeon | skycity | other
 #   zone208_DAT := /path/to/zones/zone208/dat208.mpk
+#   zone208_CSV := /path/to/zones/zone208/csv208.mpk   (empty without one)
 #   zone208_POS := --offset 450560 483328 --size 8 8
 #   zone208_EDGES := --edges DAT:X:Y,...   outdoor zones of the region bordering its south or east edge
 #   zone208_EDGEDAT := DAT ...              (their archives, so the terrain is redone when one changes)
@@ -42,6 +43,9 @@ grep -v '^#' "$tsv" | while IFS=$'\t' read -r zone region ox oy w h name; do
     echo "zone${n}_KIND := $kind"
     echo "zone${n}_NAME := $name"
     echo "zone${n}_DAT := $dat"
+    # The csv archive beside it holds the zone's edge walls (bound.csv), which the client reads from there.
+    csv=$(find "$(dirname "$dat")" -maxdepth 1 -iname "csv$n.mpk" | head -1)
+    echo "zone${n}_CSV := $csv"
     echo "zone${n}_POS := --offset $((ox * 8192)) $((oy * 8192)) --size $w $h"
 done
 # Each outdoor zone's neighbours on its east and south edges (same region, touching the edge, corners
