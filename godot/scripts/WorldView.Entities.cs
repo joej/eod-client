@@ -98,6 +98,7 @@ public partial class WorldView
         {
             SetQuestGlyph(spawned, npc.Quest);
             spawned.Name = npc.Name;
+            NameNpc(spawned, npc);
         }
         if (!drawn)
             GD.Print($"[entity] {npc.ObjectId} \"{npc.Name}\": no figure for model {npc.ModelId} (sent {npc.Model}): a capsule");
@@ -111,7 +112,10 @@ public partial class WorldView
         // brighter tint so other players read as players, not mobs.
         bool drawn = SpawnEntity(p.ObjectId, pos, YawFromHeading(p.HeadingOnly), new Color(0.95f, 0.85f, 0.3f), DaocProtocol.Packets.PlayerModel.Id(p.Model), look: p.Look);
         if (_entities.TryGetValue(p.ObjectId, out Entity? spawned))
+        {
             spawned.Name = p.Name;
+            NamePlayer(spawned, p);
+        }
         if (!drawn)
             GD.Print($"[entity] {p.ObjectId} \"{p.Name}\": no figure for model {DaocProtocol.Packets.PlayerModel.Id(p.Model)} (sent {p.Model}): a capsule");
     }

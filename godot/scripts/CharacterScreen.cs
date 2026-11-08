@@ -54,6 +54,8 @@ public partial class CharacterScreen : Control
     private readonly List<CharacterSummary> _listed = [];
     private WorldView? _world;
     private ushort _playerModel;   // the entered character's model id, for its figure
+    private byte _playerLevel = 1;  // its level and realm: names con by them
+    private Realm _playerRealm;
     private CharacterLook _playerLook;   // ... and its face and hair
     private IReadOnlyList<WornItem> _playerWorn = [];   // ... and its armour (the server sends ours only here)
     private bool _playerHoodUp;

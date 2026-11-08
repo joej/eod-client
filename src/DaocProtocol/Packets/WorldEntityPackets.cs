@@ -157,6 +157,13 @@ public sealed record PlayerCreate(
 
     public ushort HeadingOnly => (ushort)(Heading & 0x0FFF);
 
+    /// <summary>The strings after the name (PacketLib1124.SendPlayerCreate): guild, last name, prefix (a realm
+    /// rank title such as "Sir"), and title (1.74+). Empty when not sent.</summary>
+    public string GuildName { get; init; } = "";
+    public string LastName { get; init; } = "";
+    public string Prefix { get; init; } = "";
+    public string Title { get; init; } = "";
+
     public static PlayerCreate Parse(ReadOnlySpan<byte> payload)
     {
         var r = new PayloadReader(payload);
@@ -172,9 +179,13 @@ public sealed record PlayerCreate(
         byte faceType = r.U8(), hairStyle = r.U8();
         r.Skip(3);              // "new in 1.74" + 2 unknown
         string name = r.StringU8();
+        // Older writers stop after the name; read what is there.
+        string Next(ref PayloadReader reader) => reader.Remaining > 0 ? reader.StringU8() : "";
+        string guild = Next(ref r), lastName = Next(ref r), prefix = Next(ref r), title = Next(ref r);
         return new PlayerCreate(x, y, z, sessionId, objectId, heading, model, level, flags, name)
         {
             Look = new CharacterLook(eyeSize, lipSize, eyeColor, hairColor, faceType, hairStyle, mood),
+            GuildName = guild, LastName = lastName, Prefix = prefix, Title = title,
         };
     }
 }

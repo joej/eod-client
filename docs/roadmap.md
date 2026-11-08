@@ -362,7 +362,10 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   *Started 2026-11-07 (for the teleporters):* a left click targets a creature or player (0xB0; a ring at its
   feet, its name in the status line), a right click without dragging talks to it (0x7A), Esc clears; an
   NPC's words open a window whose [keywords] whisper back. Checked live with Master Visur. Open: the
-  target window and its vitals, merchants (0x17), name labels.
+  target window and its vitals, merchants (0x17).
+  *Names (2026-11-07):* each creature and player shows its name and, under it, the NPC's trade or the
+  player's guild in angle brackets (<Hastener>, <Teleporter>, <Weapon Merchant>); monsters in their con
+  colour. Dev switch "Names". Open: W50 (retail's exact look).
 - **Fixture/interior collision** — deferred from the M7 walk-through, and intentionally **not** MVP
   ("looks like DAoC" ≠ "collides like DAoC"). Today the ground raycast follows only the terrain
   heightmap (a separate collision layer), so building geometry isn't solid: the player sinks into a

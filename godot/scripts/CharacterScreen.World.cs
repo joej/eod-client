@@ -25,6 +25,7 @@ public partial class CharacterScreen
             WorldPosition world = await _session.EnterWorldAsync(_listedRealm, slot);
             CharacterSummary? entered = _listed.FirstOrDefault(c => c.Slot == slot);
             _playerModel = entered is null ? (ushort)0 : PlayerModel.Id(entered.Model);
+            (_playerLevel, _playerRealm) = (entered?.Level ?? 1, _listedRealm);
             _playerLook = entered?.Look ?? default;
             _playerWorn = entered?.Worn ?? [];
             _playerHoodUp = entered?.HoodUp ?? false;
@@ -193,7 +194,7 @@ public partial class CharacterScreen
         }
         var view = new WorldView
         {
-            AssetsNote = note, PlayerModel = _playerModel, PlayerLook = _playerLook,
+            AssetsNote = note, PlayerModel = _playerModel, PlayerLook = _playerLook, PlayerLevel = _playerLevel, PlayerRealm = _playerRealm,
             PlayerWorn = _playerWorn, PlayerHoodUp = _playerHoodUp, PlayerActiveWeapons = _playerActiveWeapons, ZonesDir = ZonesDir(),
             PacketLogging = (() => _packetLog.Enabled, on => _logPackets.ButtonPressed = on),
         };

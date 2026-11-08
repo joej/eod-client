@@ -169,6 +169,19 @@ public class CharacterPacketTests
     }
 
     [Fact]
+    public void PlayerCreateEndsWithGuildLastNamePrefixAndTitle()
+    {
+        static PayloadWriter Pascal(PayloadWriter w, string s) => w.U8((byte)s.Length).Bytes(System.Text.Encoding.ASCII.GetBytes(s));
+        PayloadWriter w = new PayloadWriter()
+            .F32LE(1f).F32LE(2f).F32LE(3f).U16BE(7).U16BE(0x1234).U16BE(1024).U16BE(32).U8(20).U8(0x04)
+            .Zeros(7).Zeros(3);
+        foreach (string text in new[] { "Plooker", "Knights of Old", "Smith", "Sir", "the Bold" })
+            w = Pascal(w, text);
+        PlayerCreate p = PlayerCreate.Parse(w.ToArray());
+        Assert.Equal(("Plooker", "Knights of Old", "Smith", "Sir", "the Bold"), (p.Name, p.GuildName, p.LastName, p.Prefix, p.Title));
+    }
+
+    [Fact]
     public void EmptyAccountGetsHeaderOnly()
     {
         // PacketLib1126.SendCharacterOverview with no characters: four zero u32s, no slots.

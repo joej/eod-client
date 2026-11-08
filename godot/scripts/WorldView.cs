@@ -145,6 +145,7 @@ public partial class WorldView : Node3D
         public Node3D? QuestGlyph;    // the glyph over a quest giver's head (null: none)
         public string Name = "";
         public bool Dead;             // died (0xAE) and not yet revived: lies in its Death clip
+        public Label3D? Nameplate;    // its name (and role or guild) over its head
     }
 
     /// <summary>Raised when the player presses Quit (connected).</summary>
@@ -496,6 +497,7 @@ public partial class WorldView : Node3D
         _flipJumpsToggle = _dev.AddToggle("Jump points", _jumpsVisible, ShowJumpMarkers);
         _dev.AddToggle("Entities", true, on => _entityRoot.Visible = on);
         _dev.AddToggle("Own character", true, on => _body.Visible = on);
+        _dev.AddToggle("Names", _namesVisible, ShowNames);
         _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);
         // Off by default: the server's speed check exempts GMs only, and kicks a player who sprints.
         _dev.AddToggle("Shift fast move ×4 (GM only)", ClientSettings.Sprint, on => ClientSettings.Sprint = on);
