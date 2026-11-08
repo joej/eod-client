@@ -19,7 +19,11 @@ public partial class WorldView
     private PanelContainer _mapWindow = null!;
     private TextureRect _mapPicture = null!;
     private MapMarks _mapMarks = null!;
-    private Label _mapTitle = null!, _mapDesc = null!;
+    private Label _mapTitle = null!, _mapDesc = null!, _mapWhere = null!;
+
+    // DAoC headings: 0 south, 1024 west, 2048 north, 3072 east (4096 a full turn).
+    private static string Compass(ushort heading) =>
+        new[] { "S", "SW", "W", "NW", "N", "NE", "E", "SE" }[(int)Mathf.PosMod(Mathf.Round(heading / 512f), 8)];
     private Button _mapSwitch = null!;
     private bool _mapRegion;                    // showing the region map (else the zone's)
     private IReadOnlyList<RegionMap>? _regionMaps;
@@ -68,6 +72,8 @@ public partial class WorldView
             Modulate = new Color(1, 1, 1, 0.75f), MaxLinesVisible = 4,
         };
         box.AddChild(_mapDesc);
+        _mapWhere = new Label { Modulate = new Color(1, 1, 1, 0.75f) };
+        box.AddChild(_mapWhere);
         box.AddChild(new Label
         {
             Text = "Click the map to run there; a movement key stops.", Modulate = new Color(0.55f, 0.85f, 1f, 0.8f),
@@ -125,6 +131,10 @@ public partial class WorldView
             RefreshMap();
         (float x, float y, _) = ToRegion(_body.Position);
         _mapMarks.Player = MapPixel(x, y);
+        // Where the arrow is, in numbers, for checking it against the picture.
+        ushort heading = HeadingFromYaw(_bodyYaw);
+        string pixel = _mapMarks.Player is Vector2 px ? $"   map {px.X * 256f / MapSize:0},{px.Y * 256f / MapSize:0} of 256" : "";
+        _mapWhere.Text = $"x {x:0} y {y:0}   heading {heading} ({Compass(heading)}){pixel}";
         _mapMarks.Facing = _bodyYaw;
         _mapMarks.Goal = _walkPoint is Vector3 goal ? MapPixel(ToRegion(goal).Item1, ToRegion(goal).Item2) : null;
         _mapMarks.QueueRedraw();
