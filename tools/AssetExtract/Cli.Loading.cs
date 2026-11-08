@@ -29,6 +29,9 @@ internal static partial class Cli
             if (FindInstallFile(client, archive.Key) is not string path)
             {
                 missingArchives++;
+                string used = string.Join(", ", regions.Where(r => r.Pictures.Any(p => p.Archive.Equals(archive.Key, StringComparison.OrdinalIgnoreCase)))
+                    .Select(r => $"{r.Region} {r.Name}"));
+                Console.Error.WriteLine($"loading: {archive.Key} not in the install (used by region {used}: the plain screen there)");
                 continue;
             }
             using MpkArchive mpk = MpkArchive.Open(path);
