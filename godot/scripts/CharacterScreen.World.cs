@@ -90,7 +90,7 @@ public partial class CharacterScreen
         _world.QuitPressed += () => Fire(LeaveWorld);
         _world.BackToLoginPressed += () => Fire(() => BackToLogin("Disconnected."));
         _world.Relocated += moved => CallDeferred(MethodName.ShowWorldDeferred, moved.Zone.Id);
-        _world.RegionChanging += () => Fire(FollowRegionChange);
+        _world.RegionChanging += region => Fire(() => FollowRegionChange(region));
         _world.QuitArrived += reply => Fire(() => FinishQuit(reply));
         old?.QueueFree();
         GetTree().Root.AddChild(_world);
@@ -103,21 +103,45 @@ public partial class CharacterScreen
             ShowWorld(world);
     }
 
-    private async Task FollowRegionChange()
+    private async Task FollowRegionChange(ushort region)
     {
         if (_session is null)
             return;
-        ShowLoading("Loading…");
+        ShowLoading(region, 0.05);
         try
         {
             WorldPosition world = await _session.ChangeRegionAsync();
             GD.Print($"[world] region change: now in {world.Zone.Name} (zone {world.Zone.Id}, region {world.Position.RegionId})");
-            // Draw the screen with the place's name before the new zone is built (that takes a moment
-            // and holds the frame), then take it away once the new world is up.
-            ShowLoading($"Loading {world.Zone.Name}…");
+            // Draw the screen before the new zone is built (that takes a moment and holds the frame).
+            if (world.Position.RegionId != region)
+                _loading?.SetRegion(world.Position.RegionId);
+            _loading?.SetProgress(0.3);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            if (OS.GetCmdlineUserArgs().Contains("--loading-shot") && LibraryDir() is string lib)
+            {
+                // Dev: the loading screen as drawn, next to the other progress shots.
+                string dir = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(lib.TrimEnd('/'))!, "progress");
+                System.IO.Directory.CreateDirectory(dir);
+                string path = System.IO.Path.Combine(dir, $"shot_{Time.GetDatetimeStringFromSystem().Replace(":", "-").Replace("T", "_")}_loading.png");
+                GD.Print($"[loading] screenshot -> {path} ({GetViewport().GetTexture().GetImage().SavePng(path)})");
+            }
             ShowWorld(world);
+            // Keep the screen up while the zones around the arrival point build (faster behind it), as retail
+            // shows the bar until the place is ready; at most 30 s.
+            WorldView view = _world!;
+            view.BehindLoadingScreen = true;
+            ulong until = Time.GetTicksMsec() + 30_000;
+            // A few frames first: the new view decides which zones it wants in its own frame loop.
+            for (int frames = 0; IsInstanceValid(view) && (frames < 3 || !view.ZonesReady) && Time.GetTicksMsec() < until; frames++)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                if (IsInstanceValid(view))
+                    _loading?.SetProgress(0.3 + 0.7 * view.ZoneLoadProgress);
+            }
+            if (IsInstanceValid(view))
+                view.BehindLoadingScreen = false;
+            _loading?.SetProgress(1);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
         catch (Exception e) when (e is IOException or TimeoutException or InvalidDataException or InvalidOperationException)
@@ -129,33 +153,23 @@ public partial class CharacterScreen
         HideLoading();
     }
 
-    // The screen shown while the server moves the character to another region (a city gate, a dungeon,
-    // a portal), as retail shows one there. Plain for now; retail's loading pictures are in the install.
-    private CanvasLayer? _loading;
-    private Label? _loadingText;
+    // The loading screen shown while the server moves the character to another region (LoadingScreen).
+    private LoadingScreen? _loading;
 
-    private void ShowLoading(string text)
+    private void ShowLoading(ushort region, double progress)
     {
         if (_loading is null)
         {
-            _loading = new CanvasLayer { Layer = 100 };
-            var shade = new ColorRect { Color = new Color(0.04f, 0.04f, 0.06f) };
-            shade.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-            _loadingText = new Label { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            _loadingText.AddThemeFontSizeOverride("font_size", 28);
-            _loadingText.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-            _loading.AddChild(shade);
-            _loading.AddChild(_loadingText);
+            _loading = LoadingScreen.Create(LibraryDir(), region);
             GetTree().Root.AddChild(_loading);
         }
-        _loadingText!.Text = text;
+        _loading.SetProgress(progress);
     }
 
     private void HideLoading()
     {
         _loading?.QueueFree();
         _loading = null;
-        _loadingText = null;
     }
 
     /// <summary>

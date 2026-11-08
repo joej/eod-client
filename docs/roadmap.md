@@ -336,6 +336,11 @@ valuable; M12 (asset quality tiers) runs in parallel rather than in sequence.
   its zone point (C→S 0x90) and the server moves us; a region change shows a loading screen. The dev
   overlay's "Jump points" switch (or `--jumps`) draws each doorway. Open: W47, a live walk through a gate,
   teleporter NPCs (needs click-to-target and interact, M9), retail's loading pictures.
+  *Loading screen (2026-11-07):* `make loading` (`mpk loading`) takes the region loading pictures, tips,
+  bar and tip font from the user's install; a region change shows one of the destination's pictures with
+  a random tip and a bar that fills while the zones around the arrival point build (faster behind the
+  screen). Checked live: Quitcheck teleported Camelot City → Prydwen Keep through Master Visur. Open: W49
+  (retail's exact layout), the first-login splash (`pregame/splash.mpk`).
 - **Death, release and respawn**, which move the player to a bind point, often in another zone.
   *Built 2026-11-07:* the server's death (0xAE) drops the character into its Death clip and stops it moving;
   every 0xA9 then says it is dead; a panel counts the release timer down (0xF3) with a Release button

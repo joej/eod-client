@@ -99,6 +99,11 @@ public partial class CharacterScreen
         if (ok && _world is not null)
         {
             await ToSignal(GetTree().CreateTimer(staySeconds.Value), SceneTreeTimer.SignalName.Timeout);
+            if (_world is null || !IsInstanceValid(_world))
+            {
+                GD.PrintErr($"in world {staySeconds.Value} s: no world view (a region change failed?)");
+                return;
+            }
             ok = _world.ClosedReason is null;
             GD.Print($"in world {staySeconds.Value} s: {_world.Packets} packets, {_world.Pings} ping replies, " +
                      $"{_world.Entities} live entities, {_world.ChatMessages} chat/system messages, " +

@@ -79,7 +79,7 @@ public partial class WorldView
             };
         // --interact NAME: 3 s after entering, right-click the nearest creature of that name (targets it and talks),
         // as a check of targeting and an NPC's window without a mouse.
-        // --keyword WORD: then click that [keyword] in the NPC's window.
+        // --keyword WORD: then click that [keyword] in the NPC's window ("A|B": A, then B in the answer).
         int kw = System.Array.IndexOf(args, "--keyword");
         if (kw >= 0 && kw + 1 < args.Length)
             _devKeyword = args[kw + 1];

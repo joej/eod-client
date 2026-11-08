@@ -359,7 +359,7 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │                                  #   (exit 0 granted, 2 denied, 1 error; never hex-logs 0xA7)
 ├── tools/AssetExtract/            # ✓ `mpk` CLI: list/extract archives, convert NIF → glb, gather
 │                                  #   textures, `zone` (zone.csv) and `terrain` (terrain.glb)
-│                                  #   `audit` (NIF coverage report; see docs/nif-coverage.md).
+│                                  #   `audit` (NIF coverage report; see docs/nif-coverage.md), `loading` (region loading screens).
 │                                  #   One file per subject (Cli.Zone, Cli.Figures, ...), shared Options
 ├── tools/Launcher/                # Windows launcher for pointing a real client at a server (built,
 │                                  #   not yet validated)

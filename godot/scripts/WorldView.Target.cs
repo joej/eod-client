@@ -166,12 +166,15 @@ public partial class WorldView
         _npcText.Clear();
         AddLinkedText(_npcText, text);
         _npcWindow.Visible = true;
-        // --keyword WORD (dev): click that keyword once it is offered.
-        if (_devKeyword is string word && text.Contains($"[{word}]", System.StringComparison.OrdinalIgnoreCase))
+        // --keyword WORD (dev): click that keyword once it is offered; "A|B" clicks A, then B when it shows.
+        string? word = _devKeyword?.Split('|')[0];
+        if (word is not null && text.Contains($"[{word}]", System.StringComparison.OrdinalIgnoreCase))
         {
-            _devKeyword = null;
+            int bar = _devKeyword!.IndexOf('|');
+            _devKeyword = bar < 0 ? null : _devKeyword[(bar + 1)..];
             GD.Print($"[target] --keyword: {word}");
-            Whisper(word);
+            // A pause first: the server refuses a second line said within a second or so ("Slow down!").
+            GetTree().CreateTimer(1.5).Timeout += () => Whisper(word);
         }
     }
 

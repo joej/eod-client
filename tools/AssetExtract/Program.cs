@@ -6,7 +6,7 @@
 // release (see CLAUDE.md, "Game client and assets").
 //
 // One file per subject: Cli.Archive (list, extract, index), Cli.Nif (nifinfo, convert, textures,
-// model), Cli.Zone (zonedeps, zone, terrain, water, zonecheck), Cli.Sky, Cli.Figures (figure,
+// model), Cli.Zone (zonedeps, zone, terrain, water, zonecheck), Cli.Sky, Cli.Loading, Cli.Figures (figure,
 // figures, cata; CataConverter), Cli.Audit (audit, worldaudit). Options parses every command's options.
 
 return Cli.Run(args);
@@ -46,6 +46,9 @@ internal static partial class Cli
 
         if (command == "sky")
             return SkyCmd(args);
+
+        if (command == "loading")
+            return LoadingCmd(args);
 
         if (command == "model")
             return ModelCmd(args);
@@ -114,6 +117,7 @@ internal static partial class Cli
               mpk zonecheck <dat<NNN>.mpk> --zone DIR --library LIBDIR --offset X Y [--size W H] [--known FILE] [--out FILE.md]
               mpk water    <dat<NNN>.mpk> --offset X Y --out DIR [--size W H] [--index index.json --library LIBDIR]
               mpk sky      <dat<NNN>.mpk> --out DIR [--name albion] [--skympk <zones/sky/sky.mpk>] [--index index.json --library LIBDIR]
+              mpk loading  <client-dir> --out DIR   (region loading screens: pictures, tips, bar, font)
 
             With no member, extract writes every member. Default --out is the current directory.
             convert writes a glTF binary next to the .nif unless --out is given.

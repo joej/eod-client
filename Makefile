@@ -11,6 +11,7 @@
 #   make clean-zone208      delete zone 208's converted files (its models stay in the shared library)
 #   make zones              every outdoor zone and capital city, plus private/zones/summary.md
 #                           and the figures (make figures: every model id, classic and Catacombs)
+#                           and the region loading screens (make loading)
 #   make check-zones        ... and fail if any zone check has errors
 #   make clean-library      delete every converted model and texture (they are redone on demand)
 #   make clean              delete everything this Makefile made
@@ -170,9 +171,17 @@ $(FIGURES): $(INDEX) $(MODEL_SRC) $(wildcard $(A)/Figures/*.cs) \
 	$(MPK) figures --gamedata $(CLIENT)/gamedata.mpk --index $(INDEX) --library $(LIB)
 	@touch $@
 
+# --- loading screens: the pictures, tips, bar and font the client shows while it loads a region ----------
+LOADING := $(LIB)/loading/loading.csv
+.PHONY: loading
+loading: $(LOADING)
+$(LOADING): $(CLIENT)/gamedata.mpk $(A)/Zone/LoadingScreens.cs $(A)/Zone/IniFile.cs $(CLI_SRC) $(X)/Cli.Loading.cs | $(TOOL)
+	@mkdir -p $(@D)
+	$(MPK) loading $(CLIENT) --out $(@D)
+
 # --- every zone ----------------------------------------------------------------------------------------
 .PHONY: zones check-zones
-zones: $(foreach z,$(ZONES) $(CITIES),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES)
+zones: $(foreach z,$(ZONES) $(CITIES),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(LOADING)
 
 $(ZONEDIR)/summary.md: $(foreach z,$(ZONES) $(CITIES),$(ZONEDIR)/zone$(z)/zonecheck.md)
 	@{ echo "# Zone check, every converted zone (outdoor and cities)"; echo; \

@@ -164,8 +164,9 @@ public partial class WorldView : Node3D
     /// <summary>
     /// The server moved the player to another region (0xB7). Draining has stopped; the owner runs
     /// ClientSession.ChangeRegionAsync (which must see the packets that follow) and builds a new view.
+    /// The argument is the destination region (for its loading screen).
     /// </summary>
-    public event Action? RegionChanging;
+    public event Action<ushort>? RegionChanging;
 
     /// <summary>The player's own model id (the character list's model; monsters.csv row, e.g. 32 =
     /// Briton male): the body is drawn as that figure when one was converted. 0 = none.</summary>
@@ -428,11 +429,11 @@ public partial class WorldView : Node3D
             _note = "   quit: back to the character screen…";
             QuitArrived?.Invoke(reply);
         };
-        _bridge.RegionChanged += _ =>
+        _bridge.RegionChanged += change =>
         {
             _draining = false;   // what follows is the re-entry's, not ours
             _note = "   changing region…";
-            RegionChanging?.Invoke();
+            RegionChanging?.Invoke(change.RegionId);
         };
 
         var overlay = new CanvasLayer();

@@ -20,6 +20,22 @@ public partial class WorldView
     private (ZoneParts Parts, System.Collections.Generic.IEnumerator<bool> Steps, System.Diagnostics.Stopwatch Spent)? _building;
     // Milliseconds of building per frame: a frame at 60 fps is about 16.
     private const double BuildBudgetMs = 5;
+    private const double LoadingBudgetMs = 40;   // behind a loading screen nobody sees the frame rate
+
+    /// <summary>Set while a loading screen covers the view: zones build in bigger slices, one after another.</summary>
+    public bool BehindLoadingScreen { get; set; }
+
+    /// <summary>How far the zones around the player are built (0 to 1), and whether all of them are.</summary>
+    public double ZoneLoadProgress
+    {
+        get
+        {
+            int pending = _wanted + (Building ? 1 : 0);
+            return _zones.Count + pending == 0 ? 1 : (double)_zones.Count / (_zones.Count + pending);
+        }
+    }
+
+    public bool ZonesReady => _wanted == 0 && !Building;
     private double _nextStreamCheck;
     private ushort _skyZone;          // the zone whose sky and fog are shown
 
@@ -90,7 +106,7 @@ public partial class WorldView
         if (!_streaming)
             return;
         _nextStreamCheck -= delta;
-        if (_nextStreamCheck > 0 && !force)
+        if (_nextStreamCheck > 0 && !force && !(BehindLoadingScreen && !Building))
             return;
         _nextStreamCheck = 0.5;
 
@@ -141,7 +157,7 @@ public partial class WorldView
                 double now = frame.Elapsed.TotalMilliseconds;
                 _worstStepMs = System.Math.Max(_worstStepMs, now - before);
                 before = now;
-                if (now >= BuildBudgetMs)
+                if (now >= (BehindLoadingScreen ? LoadingBudgetMs : BuildBudgetMs))
                     break;
             }
         }
