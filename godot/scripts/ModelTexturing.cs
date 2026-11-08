@@ -228,7 +228,8 @@ public static class ModelTexturing
                 var img = new Image();
                 Error err = ext switch
                 {
-                    ".dds" => img.LoadDdsFromBuffer(bytes),
+                    // A partial mipmap chain is cut to its top level, which Godot loads (DdsMipmaps).
+                    ".dds" => img.LoadDdsFromBuffer(DaocAssets.DdsMipmaps.TopLevelIfPartial(bytes)),
                     ".tga" => img.LoadTgaFromBuffer(bytes),
                     ".bmp" => img.LoadBmpFromBuffer(bytes),
                     _ => img.LoadPngFromBuffer(bytes),

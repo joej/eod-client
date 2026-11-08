@@ -327,6 +327,8 @@ public partial class WorldView
             return;
         }
         _world = moved;
+        // The camera goes with the character: a free camera left behind would look as if nothing moved.
+        SetChase(true);
         PositionAndObjectId p = moved.Position;
         _body.Position = ToGodot(p.X, p.Y, p.Z);
         _lastJumpCheck = null;   // a move by the server, not a step through a doorway

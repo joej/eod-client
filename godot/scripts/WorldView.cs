@@ -850,6 +850,7 @@ public partial class WorldView : Node3D
         if (chase == _chase)
             return;
         _chase = chase;
+        GD.Print($"[world] camera {(chase ? "follows the character" : "flies free (Tab)")}");
         Transform3D worldXform = _camera.GlobalTransform;
         _camera.GetParent().RemoveChild(_camera);
         if (chase)

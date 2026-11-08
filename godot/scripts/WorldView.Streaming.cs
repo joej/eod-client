@@ -85,8 +85,13 @@ public partial class WorldView
         return first;
     }
 
-    // Where streaming centres: the character, or the free-fly camera while it flies (dev and shots).
-    private Vector3 StreamCentre => _chase ? _body.Position : _camera.GlobalPosition;
+    // Metres from a zone to the nearer of the character and, while the free camera flies, the camera: zones
+    // stream in around both, so a move by the server isn't lost on a camera left behind (2026-11-08: jumps in
+    // the tutorial loaded nothing, perhaps for that reason).
+    private float StreamDistance(Zone zone) =>
+        _chase ? DistanceTo(zone, _body.Position) : Mathf.Min(DistanceTo(zone, _body.Position), DistanceTo(zone, _camera.GlobalPosition));
+
+    private ushort _streamHere;
 
     // Metres from a point (Godot X/Z) to a zone's rectangle; 0 inside.
     private static float DistanceTo(Zone zone, Vector3 at)
@@ -110,16 +115,21 @@ public partial class WorldView
             return;
         _nextStreamCheck = 0.5;
 
-        Vector3 at = StreamCentre;
+        Vector3 at = _body.Position;
         float view = _zoneClip > 0 ? _zoneClip * ClientSettings.ViewDistances[_viewSetting].Multiple : StreamDefaultView;
         ushort region = _world.Position.RegionId;
         (float rx, float ry, _) = ToRegion(at);
         ushort here = Zones.Find(region, rx, ry)?.Id ?? _world.Zone.Id;
+        if (here != _streamHere)
+        {
+            _streamHere = here;
+            GD.Print($"[stream] character in zone {here} (camera {(_chase ? "following" : "free")})");
+        }
         int wanted = 0;
         // Nearest first, so the zone the player is walking into comes before one further off.
-        foreach (Zone zone in Zones.All.Where(z => z.RegionId == region).OrderBy(z => DistanceTo(z, at)))
+        foreach (Zone zone in Zones.All.Where(z => z.RegionId == region).OrderBy(StreamDistance))
         {
-            float d = DistanceTo(zone, at);
+            float d = StreamDistance(zone);
             bool loaded = _zones.ContainsKey(zone.Id) || _building?.Parts.Id == zone.Id;
             if (!loaded && d <= view + StreamAhead && ConvertedZoneDir(zone.Id) is string dir)
             {
