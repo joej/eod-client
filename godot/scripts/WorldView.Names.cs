@@ -6,7 +6,9 @@
 // merchant, a teleporter and a plain townsperson read apart at a glance. Colours: a monster by how it cons to
 // you (ConColors: grey up to purple); your realm's NPCs and players pale; another realm's in its realm colour.
 // The NPC's "hide name" flag hides it. Shown within NameRange metres; the dev overlay's "Names" switch turns
-// them off. Retail's exact look (format, colours, range, font) is open question W50.
+// them off. Retail (daoc-re, 2026-11-07): "[prefix ]name[ lastname]", then "<guild>"; Minion Pro Bold 20 with
+// an outline layer (ui/fonts/MinionPro-Bold.ttf, which `mpk loading` copies into the library); no plate on
+// yourself by default. Its palette colours, range and occlusion are still open (W50).
 
 using DaocProtocol.Packets;
 using DaocProtocol.World;
@@ -65,6 +67,23 @@ public partial class WorldView
         _ => new Color(0.8f, 0.4f, 1f),   // purple
     };
 
+    private static Font? _nameFont;
+    private static bool _nameFontTried;
+
+    // The install's Minion Pro Bold (converted to <library>/loading), else Godot's default.
+    private Font? NameFont()
+    {
+        if (!_nameFontTried && _libraryPath is string lib)
+        {
+            _nameFontTried = true;
+            string path = System.IO.Path.Combine(lib, "loading", "minionpro-bold.ttf");
+            var font = new FontFile();
+            if (System.IO.File.Exists(path) && font.LoadDynamicFont(path) == Error.Ok)
+                _nameFont = font;
+        }
+        return _nameFont;
+    }
+
     private void AddNameplate(Entity e, string name, string role, Color color)
     {
         e.Nameplate?.QueueFree();
@@ -73,6 +92,7 @@ public partial class WorldView
             Text = role.Length > 0 ? $"{name}\n<{role}>" : name,
             Modulate = color,
             OutlineModulate = new Color(0, 0, 0, 0.85f),
+            Font = NameFont(),
             OutlineSize = 8,
             FontSize = 32,
             // The same size on screen near or far (about 18 px a line at 900 px high), as a HUD label.

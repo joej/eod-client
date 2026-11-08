@@ -9,7 +9,8 @@ internal static partial class Cli
     // loading <client-dir> --out DIR: DIR/loading.csv (region, instance, widestyle, name, picture stems), each
     // picture as DIR/<archive stem>_<member>.<ext> (the 1024 x 256 banners in data/loading/*.mpk), and the
     // rest of the screen as the install has it: tips.txt (data/loading/tips.dat), loadbar1.tga and
-    // loadbar2.tga (empty and filled bar) and the tip font (ui/fonts/MinionPro-Regular.ttf).
+    // loadbar2.tga (empty and filled bar), the tip font (ui/fonts/MinionPro-Regular.ttf), and MinionPro-Bold.ttf
+    // for the names over heads (WorldView.Names reads it from here).
     private static int LoadingCmd(string[] args)
     {
         string client = args[1];
@@ -51,7 +52,8 @@ internal static partial class Cli
 
         int copied = 0;
         foreach ((string from, string to) in new[] { ("data/loading/tips.dat", "tips.txt"), ("data/loadbar1.tga", "loadbar1.tga"),
-                     ("data/loadbar2.tga", "loadbar2.tga"), ("ui/fonts/minionpro-regular.ttf", "minionpro-regular.ttf") })
+                     ("data/loadbar2.tga", "loadbar2.tga"), ("ui/fonts/minionpro-regular.ttf", "minionpro-regular.ttf"),
+                     ("ui/fonts/minionpro-bold.ttf", "minionpro-bold.ttf") })
             if (FindInstallFile(client, from) is string file)
             {
                 File.Copy(file, Path.Combine(outDir, to), overwrite: true);
@@ -61,7 +63,7 @@ internal static partial class Cli
                 Console.Error.WriteLine($"loading: {from} not in the install");
 
         Console.WriteLine($"loading: {regions.Count} regions, {present.Count} pictures ({missingPictures} missing, " +
-            $"{missingArchives} archives not in the install), {copied}/4 screen files");
+            $"{missingArchives} archives not in the install), {copied}/5 screen files");
         return 0;
     }
 
