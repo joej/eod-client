@@ -469,6 +469,7 @@ public partial class WorldView : Node3D
         BuildDeathPanel(overlay);
         BuildMapWindow(overlay);
         BuildHud(overlay);
+        BuildQuickbars(overlay);
         NameSelf();
         AddChild(overlay);
         _viewSetting = ViewOverride() ?? ClientSettings.ViewDistance;
@@ -667,6 +668,14 @@ public partial class WorldView : Node3D
                 _chatInput.ReleaseFocus();
             return;   // typing: don't drive the camera or trigger P/Tab while the box has focus
         }
+        if (QuickbarKey(@event))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // A click on a game window (quickbar, summary, target) is the window's, not the world's: no mouse-look.
+        if (@event is InputEventMouseButton { Pressed: true } over && OverHud(over.Position) && !_lookActive)
+            return;
 
         // Left-drag pans the chase camera round the character (retail); a left click without a drag still inspects.
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false } up && _panActive)
@@ -908,6 +917,7 @@ public partial class WorldView : Node3D
     public override void _Process(double delta)
     {
         UpdateHud();
+        UpdateQuickbars();
         _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)
         {

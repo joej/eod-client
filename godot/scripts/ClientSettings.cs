@@ -181,6 +181,27 @@ public static class ClientSettings
 
     public static void SaveWindowPosition(string window, Vector2 position) => SaveIn("windows", window, position);
 
+    /// <summary>What a character's quickbar slot holds ("bar.page.slot", 1-based), or "": see WorldView.Quickbar.</summary>
+    public static string QuickbarSlot(string character, string key) =>
+        Load().GetValue($"quickbar {character}", key, "").AsString();
+
+    public static void SaveQuickbarSlot(string character, string key, string entry)
+    {
+        ConfigFile cfg = Load();
+        if (entry.Length > 0)
+            cfg.SetValue($"quickbar {character}", key, entry);
+        else if (cfg.HasSectionKey($"quickbar {character}", key))
+            cfg.EraseSectionKey($"quickbar {character}", key);
+        cfg.Save(Path);
+    }
+
+    /// <summary>The page a character's quickbar shows (0-based).</summary>
+    public static int QuickbarPage(string character, int bar) =>
+        Load().GetValue($"quickbar {character}", $"page{bar + 1}", 0).AsInt32();
+
+    public static void SaveQuickbarPage(string character, int bar, int page) =>
+        SaveIn($"quickbar {character}", $"page{bar + 1}", page);
+
     /// <summary>The player's own key bindings (section "keys": action name = key codes, comma-separated; empty =
     /// no key). Actions not listed use the preset's keys.</summary>
     public static Dictionary<ControlAction, Key[]> LoadKeys()

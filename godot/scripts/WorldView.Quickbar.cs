@@ -1,0 +1,427 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// WorldView: the quickbars (roadmap M9; docs/ui-windows.md). Retail's quickbars are built into the client (no XML
+// layout); its default.ini places bar 1 centred low (329, 644 at 1024 x 768) and bar 2 just below (686), about
+// 366 x 42 skin pixels each: ten icon slots and a handle with the bar's number and page. Ours: the same size and
+// places, two bars of ten pages of ten slots.
+//
+// A slot holds a skill, ability, style or spell (by name: the server's list order changes), an item slot, or a
+// command. Left click or keys 1–0 (bar 1) use it: a skill by 0xBB, a list spell by 0x7D, an item slot by 0x71, a
+// command as typed. A darkened slot counts down a cooldown (0xD6). Right click: choose what goes there, from your
+// skills and spell lines (until the spell and style windows exist). Drag a slot onto another to swap them. Kept
+// per character in the client's settings. Retail keeps them in the character's ini file, in a format not read yet.
+
+using System.Collections.Generic;
+using System.Linq;
+using DaocAssets.Ui;
+using DaocProtocol.Packets;
+using Godot;
+
+namespace EodClient;
+
+public partial class WorldView
+{
+    private const int BarSlots = 10, BarPages = 10, Bars = 2;
+    private readonly List<Quickbar> _bars = [];
+    private Dictionary<int, string>? _iconSheets;               // first icon number → sheet file (library/icons)
+    private IconTable? _iconTable;                               // the server's number → picture (gamedata tables)
+    private readonly Dictionary<string, Texture2D?> _sheetTextures = [];
+
+    private void BuildQuickbars(CanvasLayer overlay)
+    {
+        float s = UiScale;
+        for (int b = 0; b < Bars; b++)
+        {
+            int bar = b;
+            // Retail's default.ini at 1024 x 768: bar 1 at y 644, bar 2 at 686, i.e. 124 and 82 skin pixels above the bottom.
+            float fromBottom = b == 0 ? 124 : 82;
+            var window = new HudWindow($"quickbar{b + 1}", new Vector2(366, 40), s, screen => new Vector2(screen.X / 2 - 183, screen.Y - fromBottom))
+            {
+                DragAnywhere = true,
+            };
+            var qb = new Quickbar(this, bar, window, s);
+            _bars.Add(qb);
+            overlay.AddChild(window);
+        }
+    }
+
+    private void UpdateQuickbars()
+    {
+        long now = System.Environment.TickCount64;
+        foreach (Quickbar qb in _bars)
+            qb.Refresh(now);
+    }
+
+    // Keys 1–0 use bar 1's slots (retail's default; Shift and the other bars' keys aren't bound yet).
+    private bool QuickbarKey(InputEvent e)
+    {
+        if (e is not InputEventKey { Pressed: true, Echo: false } k || k.ShiftPressed || k.CtrlPressed || k.AltPressed || k.MetaPressed)
+            return false;
+        int slot = k.Keycode switch
+        {
+            >= Key.Key1 and <= Key.Key9 => (int)(k.Keycode - Key.Key1),
+            Key.Key0 => 9,
+            _ => -1,
+        };
+        if (slot < 0 || _bars.Count == 0)
+            return false;
+        _bars[0].Use(slot);
+        return true;
+    }
+
+    // Whether a screen point is over one of the game windows (so the world doesn't also take the click).
+    private bool OverHud(Vector2 at) =>
+        _bars.Any(b => b.Window.Visible && b.Window.GetGlobalRect().HasPoint(at))
+        || (_summary?.Visible == true && _summary.GetGlobalRect().HasPoint(at))
+        || (_targetWindow?.Visible == true && _targetWindow.GetGlobalRect().HasPoint(at));
+
+    // ----- what a slot holds -----
+
+    // "skill:<name>" (a skill, ability, style or spell, found by name), "slot:<n>" (an inventory slot),
+    // "cmd:<text>" (a command or a line to say).
+    private void UseQuickbarEntry(string entry)
+    {
+        if (_session is null || entry.Length == 0)
+            return;
+        string[] kv = entry.Split(':', 2);
+        switch (kv[0])
+        {
+            case "skill":
+                UseSkillByName(kv[1]);
+                break;
+            case "slot" when byte.TryParse(kv[1], out byte slot):
+                _ = _session.UseSlotAsync(slot);
+                break;
+            case "cmd":
+                _ = kv[1].StartsWith('/') ? _session.SendCommandAsync(kv[1]) : _session.SayAsync(kv[1]);
+                break;
+        }
+    }
+
+    // The server's number for a slot's entry, and which table it is looked up in; null without one.
+    private (IconKind, int)? EntryIcon(string entry)
+    {
+        if (!entry.StartsWith("skill:"))
+            return null;
+        string name = entry[6..];
+        if (_bridge.Skills.Skills.FirstOrDefault(s => s.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)) is SkillEntry e)
+            return (KindOf(e.Page), e.Icon);
+        foreach (SpellLinePage line in _bridge.Skills.SpellLines)
+            if (line.Entries.FirstOrDefault(l => l.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)) is LineEntry le)
+                return (le.Kind switch { LineEntryKind.Spell => IconKind.Spell, LineEntryKind.Style => IconKind.Style, _ => IconKind.Icon }, le.Icon);
+        return null;
+    }
+
+    private static IconKind KindOf(SkillPage page) => page switch
+    {
+        SkillPage.Spell or SkillPage.Song or SkillPage.AbilitySpell => IconKind.Spell,
+        SkillPage.Style => IconKind.Style,
+        _ => IconKind.Icon,
+    };
+
+    // The entry's picture and its border frame (null: none), through gamedata's tables (IconTable).
+    private (Texture2D? Icon, Texture2D? Border) EntryPicture(string entry)
+    {
+        if (EntryIcon(entry) is not var (kind, number))
+            return (null, null);
+        _iconTable ??= LoadIconTable();
+        if (_iconTable.Resolve(kind, number) is not var (picture, border))
+            return (null, null);
+        return (IconTexture(picture), border >= 0 ? Cell("brdr_0.bmp", border % 10 * 32, border / 10 * 32) : null);
+    }
+
+    private IconTable LoadIconTable()
+    {
+        string dir = (_libraryPath ?? "").PathJoin("icons");
+        string Read(string f) => Godot.FileAccess.FileExists(dir.PathJoin(f)) ? Godot.FileAccess.GetFileAsString(dir.PathJoin(f)) : "";
+        return IconTable.Parse(Read("icons.csv"), Read("spells.csv"), Read("styles.csv"));
+    }
+
+    private Texture2D? IconTexture(int icon)
+    {
+        if (icon < 0)
+            return null;
+        _iconSheets ??= LoadIconSheets();
+        return IconSheets.Locate(_iconSheets, icon) is var (sheet, x, y) ? Cell(sheet, x, y) : null;
+    }
+
+    // A 32 x 32 cell of a sheet in library/icons.
+    private Texture2D? Cell(string sheet, int x, int y)
+    {
+        if (!_sheetTextures.TryGetValue(sheet, out Texture2D? tex))
+        {
+            tex = null;
+            string path = (_libraryPath ?? "").PathJoin("icons").PathJoin(sheet);
+            if (Godot.FileAccess.FileExists(path))
+            {
+                var img = new Image();
+                if (img.LoadBmpFromBuffer(Godot.FileAccess.GetFileAsBytes(path)) == Error.Ok)
+                {
+                    // The border frames are drawn on black: black is see-through, so the icon shows inside.
+                    if (sheet == "brdr_0.bmp")
+                    {
+                        img.Convert(Image.Format.Rgba8);
+                        for (int py = 0; py < img.GetHeight(); py++)
+                            for (int px = 0; px < img.GetWidth(); px++)
+                                if (img.GetPixel(px, py) is { R: < 0.04f, G: < 0.04f, B: < 0.04f })
+                                    img.SetPixel(px, py, Colors.Transparent);
+                    }
+                    tex = ImageTexture.CreateFromImage(img);
+                }
+            }
+            _sheetTextures[sheet] = tex;
+        }
+        return tex is null ? null : new AtlasTexture { Atlas = tex, Region = new Rect2(x, y, IconSheets.IconSize, IconSheets.IconSize) };
+    }
+
+    private Dictionary<int, string> LoadIconSheets()
+    {
+        string dir = (_libraryPath ?? "").PathJoin("icons");
+        return DirAccess.DirExistsAbsolute(dir) ? IconSheets.Index(DirAccess.GetFilesAt(dir)) : [];
+    }
+
+    // The menu of what can go in a slot: the skill list by page, then each spell line; and Clear.
+    private void FillChoices(PopupMenu menu, System.Action<string> chosen)
+    {
+        menu.Clear();
+        foreach (Node child in menu.GetChildren())
+            child.QueueFree();
+        var entries = new List<string>();
+        void Sub(string title, IEnumerable<(string Name, int Icon)> items)
+        {
+            var list = items.ToList();
+            if (list.Count == 0)
+                return;
+            var sub = new PopupMenu { Name = $"sub{entries.Count}" };
+            foreach ((string name, int _) in list)
+            {
+                sub.AddItem(name, entries.Count);
+                if (EntryPicture("skill:" + name).Icon is Texture2D t)
+                    sub.SetItemIcon(sub.ItemCount - 1, t);
+                sub.SetItemIconMaxWidth(sub.ItemCount - 1, 24);
+                entries.Add("skill:" + name);
+            }
+            sub.IdPressed += id => chosen(entries[(int)id]);
+            menu.AddChild(sub);
+            menu.AddSubmenuNodeItem(title, sub);
+        }
+        IReadOnlyList<SkillEntry> skills = _bridge.Skills.Skills;
+        foreach (var page in skills.Where(s => s.Page != SkillPage.Specialization).GroupBy(s => s.Page))
+            Sub(page.Key switch
+            {
+                SkillPage.Ability => "Abilities", SkillPage.Style => "Styles", SkillPage.Spell => "Spells",
+                SkillPage.Song => "Songs", SkillPage.RealmAbility => "Realm abilities", _ => page.Key.ToString(),
+            }, page.Select(s => (s.Name, (int)s.Icon)));
+        foreach (SpellLinePage line in _bridge.Skills.SpellLines)
+            Sub(line.LineName, line.Entries.Select(e => (e.Name, (int)e.Icon)));
+        menu.AddSeparator();
+        menu.AddItem("Clear", 9999);
+        menu.IdPressed += id =>
+        {
+            if (id == 9999)
+                chosen("");
+        };
+    }
+
+    // ----- one bar -----
+
+    private sealed class Quickbar
+    {
+        public readonly HudWindow Window;
+        private readonly WorldView _view;
+        private readonly int _bar;
+        private readonly QuickSlot[] _slots = new QuickSlot[BarSlots];
+        private readonly Label _page;
+        private int _pageIndex;
+
+        public Quickbar(WorldView view, int bar, HudWindow window, float scale)
+        {
+            (_view, _bar, Window) = (view, bar, window);
+            _pageIndex = Mathf.Clamp(ClientSettings.QuickbarPage(view.PlayerName, bar), 0, BarPages - 1);
+            // The handle: the bar's number, and its page between up and down arrows (the mouse wheel turns it too).
+            window.Label(new Vector2(1, 1), new Vector2(24, 11), 8, centred: true).Text = $"Bar {bar + 1}";
+            window.Arrow("▲", new Vector2(1, 12), new Vector2(24, 9), () => Turn(-1));
+            _page = window.Label(new Vector2(1, 20), new Vector2(24, 10), 9, centred: true);
+            window.Arrow("▼", new Vector2(1, 29), new Vector2(24, 9), () => Turn(+1));
+            window.Wheel = by => Turn(by);
+            for (int i = 0; i < BarSlots; i++)
+            {
+                int slot = i;
+                var q = new QuickSlot(scale, bar == 0 ? (i == 9 ? "0" : (i + 1).ToString()) : "")
+                {
+                    Position = new Vector2(26 + i * 34, 3) * scale,
+                    Use = () => Use(slot),
+                    Choose = () => Choose(slot),
+                    Key = (bar, slot),
+                };
+                q.Swapped += other => Swap(slot, other);
+                _slots[i] = q;
+                window.AddChild(q);
+            }
+            ShowPage();
+        }
+
+        private string KeyOf(int slot) => $"{_bar + 1}.{_pageIndex + 1}.{slot + 1}";
+
+        private string Entry(int slot) => ClientSettings.QuickbarSlot(_view.PlayerName, KeyOf(slot));
+
+        public void Use(int slot) => _view.UseQuickbarEntry(Entry(slot));
+
+        private void Turn(int by)
+        {
+            _pageIndex = (_pageIndex + by + BarPages) % BarPages;
+            ClientSettings.SaveQuickbarPage(_view.PlayerName, _bar, _pageIndex);
+            ShowPage();
+        }
+
+        private void ShowPage()
+        {
+            _page.Text = (_pageIndex + 1).ToString();
+            for (int i = 0; i < BarSlots; i++)
+            {
+                string entry = Entry(i);
+                _slots[i].Show(entry, _view.EntryPicture(entry));
+            }
+        }
+
+        private void Choose(int slot)
+        {
+            var menu = new PopupMenu();
+            _view.FillChoices(menu, entry =>
+            {
+                ClientSettings.SaveQuickbarSlot(_view.PlayerName, KeyOf(slot), entry);
+                ShowPage();
+            });
+            Window.AddChild(menu);
+            menu.PopupHide += () => menu.QueueFree();
+            menu.Popup(new Rect2I((Vector2I)Window.GetScreenPosition() + (Vector2I)_slots[slot].Position, Vector2I.Zero));
+        }
+
+        // A slot of this bar dropped on slot `to` (same bar or another): swap the two.
+        private void Swap(int to, (int Bar, int Slot) from)
+        {
+            Quickbar other = _view._bars[from.Bar];
+            string a = Entry(to), b = other.Entry(from.Slot);
+            ClientSettings.SaveQuickbarSlot(_view.PlayerName, KeyOf(to), b);
+            ClientSettings.SaveQuickbarSlot(_view.PlayerName, other.KeyOf(from.Slot), a);
+            ShowPage();
+            if (other != this)
+                other.ShowPage();
+        }
+
+        // Icons appear once the skill list arrives; cooldowns count down.
+        public void Refresh(long now)
+        {
+            for (int i = 0; i < BarSlots; i++)
+            {
+                string entry = Entry(i);
+                if (_slots[i].Entry != entry || (_slots[i].Icon is null && entry.Length > 0))
+                    _slots[i].Show(entry, _view.EntryPicture(entry));
+                double wait = entry.StartsWith("skill:") ? _view._bridge.Skills.CooldownLeft(entry[6..], now) : 0;
+                _slots[i].Cooldown(wait);
+            }
+        }
+    }
+
+    // One slot: a 32 x 32 icon in a frame, the key's number, a dark cooldown veil with the seconds left.
+    private sealed partial class QuickSlot : Panel
+    {
+        public System.Action? Use, Choose;
+        public event System.Action<(int, int)>? Swapped;
+        public (int Bar, int Slot) Key;
+        public string Entry { get; private set; } = "";
+        public Texture2D? Icon { get; private set; }
+        private readonly TextureRect _icon, _border;
+        private readonly Label _name, _wait;
+        private readonly ColorRect _veil;
+
+        public QuickSlot(float scale, string key)
+        {
+            Size = new Vector2(32, 32) * scale;
+            MouseFilter = MouseFilterEnum.Stop;
+            AddThemeStyleboxOverride("panel", new StyleBoxFlat
+            {
+                BgColor = new Color(0, 0, 0, 0.5f), BorderColor = new Color(0.55f, 0.85f, 1f, 0.3f),
+                BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
+            });
+            _icon = new TextureRect
+            {
+                Size = Size, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale,
+                MouseFilter = MouseFilterEnum.Ignore,
+            };
+            AddChild(_icon);
+            _border = new TextureRect
+            {
+                Size = Size, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale,
+                MouseFilter = MouseFilterEnum.Ignore,
+            };
+            AddChild(_border);
+            // Without an icon (a command, or one the sheets lack): its name, small.
+            _name = Text(new Vector2(1, 8), new Vector2(30, 18), 7, HorizontalAlignment.Center, scale);
+            _name.AutowrapMode = TextServer.AutowrapMode.Arbitrary;
+            _veil = new ColorRect { Size = Size, Color = new Color(0, 0, 0, 0.6f), Visible = false, MouseFilter = MouseFilterEnum.Ignore };
+            AddChild(_veil);
+            _wait = Text(new Vector2(0, 9), new Vector2(32, 14), 10, HorizontalAlignment.Center, scale);
+            Label k = Text(new Vector2(2, 0), new Vector2(12, 10), 8, HorizontalAlignment.Left, scale);
+            k.Text = key;
+            k.AddThemeColorOverride("font_outline_color", Colors.Black);
+            k.AddThemeConstantOverride("outline_size", Mathf.RoundToInt(2 * scale));
+        }
+
+        private Label Text(Vector2 at, Vector2 size, int font, HorizontalAlignment align, float scale)
+        {
+            var l = new Label
+            {
+                Position = at * scale, Size = size * scale, HorizontalAlignment = align, VerticalAlignment = VerticalAlignment.Center,
+                MouseFilter = MouseFilterEnum.Ignore, ClipText = true,
+            };
+            l.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(font * scale));
+            AddChild(l);
+            return l;
+        }
+
+        public void Show(string entry, (Texture2D? Icon, Texture2D? Border) picture)
+        {
+            Texture2D? icon = picture.Icon;
+            (Entry, Icon) = (entry, icon);
+            _icon.Texture = icon;
+            _border.Texture = picture.Border;
+            _name.Text = icon is null && entry.Length > 0 ? entry[(entry.IndexOf(':') + 1)..] : "";
+            TooltipText = entry.Length > 0 ? entry[(entry.IndexOf(':') + 1)..] : "Right-click to choose what goes here";
+        }
+
+        public void Cooldown(double seconds)
+        {
+            _veil.Visible = seconds > 0;
+            _wait.Text = seconds > 0 ? (seconds >= 60 ? $"{seconds / 60:0}m" : $"{System.Math.Ceiling(seconds):0}") : "";
+        }
+
+        public override void _GuiInput(InputEvent e)
+        {
+            if (e is InputEventMouseButton { Pressed: false } mb)
+            {
+                if (mb.ButtonIndex == MouseButton.Left)
+                    Use?.Invoke();
+                else if (mb.ButtonIndex == MouseButton.Right)
+                    Choose?.Invoke();
+                AcceptEvent();
+            }
+        }
+
+        public override Variant _GetDragData(Vector2 atPosition)
+        {
+            if (Entry.Length == 0)
+                return default;
+            SetDragPreview(new TextureRect { Texture = Icon, Size = Size, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, Modulate = new Color(1, 1, 1, 0.7f) });
+            return new Vector2I(Key.Bar, Key.Slot);
+        }
+
+        public override bool _CanDropData(Vector2 atPosition, Variant data) => data.VariantType == Variant.Type.Vector2I;
+
+        public override void _DropData(Vector2 atPosition, Variant data)
+        {
+            Vector2I from = data.AsVector2I();
+            Swapped?.Invoke((from.X, from.Y));
+        }
+    }
+}

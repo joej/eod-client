@@ -189,9 +189,18 @@ $(MAPS): $(CLIENT)/ui/maps/regions.dat $(A)/Zone/MapLayout.cs $(A)/Zone/IniFile.
 	$(MPK) maps $(CLIENT) --out $(@D)
 	@touch $@
 
+# --- icons: the spell, style, item and skill icon sheets (icons/*.bmp), for the quickbars --------------------
+ICONS := $(LIB)/icons/.icons.done
+.PHONY: icons
+icons: $(ICONS)
+$(ICONS): $(wildcard $(CLIENT)/icons/*.bmp $(CLIENT)/Icons/*.bmp) $(CLIENT)/gamedata.mpk $(A)/Ui/IconSheets.cs $(A)/Ui/IconTable.cs $(CLI_SRC) $(X)/Cli.Icons.cs | $(TOOL)
+	@mkdir -p $(@D)
+	$(MPK) icons $(CLIENT) --out $(@D)
+	@touch $@
+
 # --- every zone ----------------------------------------------------------------------------------------
 .PHONY: zones check-zones
-zones: $(foreach z,$(ZONES) $(CITIES),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(LOADING) $(MAPS)
+zones: $(foreach z,$(ZONES) $(CITIES),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(LOADING) $(MAPS) $(ICONS)
 
 $(ZONEDIR)/summary.md: $(foreach z,$(ZONES) $(CITIES),$(ZONEDIR)/zone$(z)/zonecheck.md)
 	@{ echo "# Zone check, every converted zone (outdoor and cities)"; echo; \

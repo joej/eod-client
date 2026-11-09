@@ -49,7 +49,8 @@ public partial class WorldView
     {
         float s = UiScale;
         // Defaults (until dragged) follow the window's size: the summary on the left edge below the dev panels,
-        // the target window centred low, where retail's default.ini puts FloatTarget (71% down).
+        // the target window centred low, where retail's default.ini puts FloatTarget (y 547 at 1024 x 768: 221 skin
+        // pixels above the bottom, clear of the quickbars).
         _summary = new HudWindow("summary", new Vector2(160, 90), s, screen => new Vector2(0, screen.Y * 0.42f));
         _summaryTitle = _summary.Label(new Vector2(11, 2), new Vector2(138, 14), 11, centred: true);
         _summaryLevel = _summary.Label(new Vector2(8, 16), new Vector2(144, 12), 9);
@@ -61,7 +62,7 @@ public partial class WorldView
         overlay.AddChild(_summary);
 
         _targetWindow = new HudWindow("target", new Vector2(150, 70), s,
-            screen => new Vector2(screen.X / 2 - 75, screen.Y * 0.71f));
+            screen => new Vector2(screen.X / 2 - 75, screen.Y - 221));
         _floatTargetName = _targetWindow.Label(new Vector2(15, 2), new Vector2(120, 13), 11, centred: true);
         _floatTargetBar = _targetWindow.Bar(new Vector2(28, 17), 115, new Color(0.85f, 0.15f, 0.12f), new Vector2(1, 14));
         _targetWindow.Button("FACE", new Vector2(4, 30), 44, FaceTarget);
@@ -150,6 +151,8 @@ public partial class WorldView
         private readonly float _scale;
         private readonly System.Func<Vector2, Vector2> _defaultAt;   // screen size → top-left, in skin pixels
         private bool _placed;                                        // dragged now, or remembered: stays put
+        public bool DragAnywhere;                                    // dragged by any free spot, not just the top edge
+        public System.Action<int>? Wheel;                            // the mouse wheel over it: -1 up, +1 down
         private Vector2? _dragFrom;
 
         public HudWindow(string key, Vector2 skinSize, float scale, System.Func<Vector2, Vector2> defaultAt)
@@ -201,14 +204,14 @@ public partial class WorldView
             return bar;
         }
 
-        public void Button(string text, Vector2 at, float width, System.Action pressed)
+        public void Button(string text, Vector2 at, float width, System.Action pressed, float height = 17)
         {
             var b = new Button
             {
-                Text = text, Position = at * _scale, Size = new Vector2(width, 17) * _scale,
+                Text = text, Position = at * _scale, Size = new Vector2(width, height) * _scale,
                 FocusMode = FocusModeEnum.None, ClipText = true,
             };
-            b.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(8 * _scale));
+            b.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(System.Math.Min(8, height - 2) * _scale));
             // Retail's buttons are 17 skin pixels high: no padding, or Godot's default grows them out of the frame.
             foreach ((string state, float shade) in new[] { ("normal", 0.16f), ("hover", 0.24f), ("pressed", 0.10f) })
                 b.AddThemeStyleboxOverride(state, new StyleBoxFlat
@@ -222,11 +225,39 @@ public partial class WorldView
             AddChild(b);
         }
 
+        // A small clickable glyph (a page arrow): a label, not a button, so it fits a few skin pixels.
+        public void Arrow(string glyph, Vector2 at, Vector2 size, System.Action pressed)
+        {
+            var l = new Label
+            {
+                Text = glyph, Position = at * _scale, Size = size * _scale, MouseFilter = MouseFilterEnum.Stop,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                MouseDefaultCursorShape = CursorShape.PointingHand,
+            };
+            l.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(7 * _scale));
+            l.AddThemeColorOverride("font_color", new Color(0.6f, 0.85f, 1f));
+            l.GuiInput += e =>
+            {
+                if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
+                {
+                    pressed();
+                    l.AcceptEvent();
+                }
+            };
+            AddChild(l);
+        }
+
         public override void _GuiInput(InputEvent e)
         {
+            if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } wheel && Wheel is not null)
+            {
+                Wheel(wheel.ButtonIndex == MouseButton.WheelUp ? -1 : 1);
+                AcceptEvent();
+                return;
+            }
             if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } mb)
             {
-                if (mb.Pressed && mb.Position.Y < 14 * _scale)
+                if (mb.Pressed && (DragAnywhere || mb.Position.Y < 14 * _scale))
                     _dragFrom = mb.Position;
                 else if (!mb.Pressed && _dragFrom is not null)
                 {
