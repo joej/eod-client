@@ -83,6 +83,22 @@ public partial class WorldView
         int kw = System.Array.IndexOf(args, "--keyword");
         if (kw >= 0 && kw + 1 < args.Length)
             _devKeyword = args[kw + 1];
+        // --target NAME|nearest: select that creature (the nearest of that name, or the nearest of any) 4 s in, as a
+        // click would: to check the target windows.
+        int ta = System.Array.IndexOf(args, "--target");
+        if (ta >= 0 && ta + 1 < args.Length)
+        {
+            string name = args[ta + 1];
+            GetTree().CreateTimer(4.0).Timeout += () =>
+            {
+                ushort found = _entities.Where(kv => kv.Value.Name.Length > 0 && (name == "nearest"
+                        || kv.Value.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)))
+                    .OrderBy(kv => kv.Value.Node.Position.DistanceTo(_body.Position)).Select(kv => kv.Key).FirstOrDefault();
+                GD.Print(found == 0 ? $"[target] --target: no \"{name}\" in view" : $"[target] --target: {_entities[found].Name} (#{found})");
+                if (found != 0)
+                    SetTarget(found);
+            };
+        }
         int ia = System.Array.IndexOf(args, "--interact");
         if (ia >= 0 && ia + 1 < args.Length)
         {
