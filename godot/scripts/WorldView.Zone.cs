@@ -196,11 +196,17 @@ public partial class WorldView
             // character stands on floors. ~1,500 static bodies for a full zone.
             foreach (MeshInstance3D mi in FindMeshes(inst))
             {
-                // A collision volume (the converter's "eodcollide_" nodes) is never drawn. Until the character
-                // collides with them (roadmap M9, solid world) they are simply left out.
+                // A collision volume (the converter's "eodcollide_" nodes): never drawn; a body on the wall layer,
+                // which only the character's movement meets (WorldView.Walls).
                 if (mi.Name.ToString().StartsWith(DaocAssets.Nif.GltfExporter.CollisionPrefix, System.StringComparison.Ordinal))
                 {
-                    mi.Visible = false;
+                    mi.Visible = _showWalls;
+                    if (_showWalls)
+                        mi.MaterialOverride = WallLook;
+                    mi.CreateTrimeshCollision();
+                    foreach (Node c in mi.GetChildren())
+                        if (c is StaticBody3D wall)
+                            (wall.CollisionLayer, wall.CollisionMask) = (WallLayer, 0);
                     continue;
                 }
                 mi.CreateTrimeshCollision();

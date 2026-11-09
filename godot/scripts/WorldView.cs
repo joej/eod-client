@@ -112,7 +112,10 @@ public partial class WorldView : Node3D
     private const uint TerrainLayer = 1 << 1;  // collision layer 2: terrain only, for the ground ray
     private const uint WaterLayer = 1 << 3;    // collision layer 4: water surfaces, for the swim check only
     // Layers nothing stands on, sees through or is stopped by: NPCs' pick shapes and water surfaces.
-    private const uint NotSolid = EntityLayer | WaterLayer;
+    private const uint WallLayer = 1 << 4;     // collision layer 5: the models' collision volumes (eodcollide_), for walking into
+    // Not a floor, nothing the camera pulls in off, nothing that hides a pick: creatures' pick shapes, water, and the
+    // invisible collision volumes (only the character's movement meets those: WorldView.Walls).
+    private const uint NotSolid = EntityLayer | WaterLayer | WallLayer;
     // Free-fly debug camera speed in Godot units/second (hold Shift to move faster).
     private int _packets;
     private int _pings;

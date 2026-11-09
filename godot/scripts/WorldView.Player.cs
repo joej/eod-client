@@ -94,7 +94,8 @@ public partial class WorldView
                 float sprint = ClientSettings.Sprint && Input.IsKeyPressed(Key.Shift) ? 4f : 1f;
                 float metresPerSec = MoveSpeed(forward) * RegionMetresPerUnit * sprint;
                 // The zone's edge walls (WorldView.Bounds) slide or stop the step, as retail's do.
-                _body.Position = BoundedStep(_body.Position, _body.Position + move.Normalized() * metresPerSec * (float)delta);
+                Vector3 step = WallStep(_body.Position, _body.Position + move.Normalized() * metresPerSec * (float)delta);
+                _body.Position = BoundedStep(_body.Position, step);
             }
         }
 
