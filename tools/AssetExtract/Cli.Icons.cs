@@ -24,9 +24,11 @@ internal static partial class Cli
         Directory.CreateDirectory(outDir);
         foreach (string sheet in sheets.Values)
             File.Copy(Path.Combine(source, sheet), Path.Combine(outDir, sheet.ToLowerInvariant()), overwrite: true);
-        // The border frames laid over some icons (icons.csv borderId).
-        if (Directory.EnumerateFiles(source).FirstOrDefault(f => Path.GetFileName(f).Equals("brdr_0.bmp", StringComparison.OrdinalIgnoreCase)) is string border)
-            File.Copy(border, Path.Combine(outDir, "brdr_0.bmp"), overwrite: true);
+        // The border frames laid over some icons (icons.csv borderId) and the style marks over those (wgsm_0: 13 cells
+        // of 10 x 10, daoc-re RE/68).
+        foreach (string extra in new[] { "brdr_0.bmp", "wgsm_0.bmp" })
+            if (Directory.EnumerateFiles(source).FirstOrDefault(f => Path.GetFileName(f).Equals(extra, StringComparison.OrdinalIgnoreCase)) is string file)
+                File.Copy(file, Path.Combine(outDir, extra), overwrite: true);
         // From the server's number to a picture: icons.csv, spells.csv, styles.csv (DaocAssets.Ui.IconTable).
         if (FindInstallFile(client, "gamedata.mpk") is not string gamedata)
         {

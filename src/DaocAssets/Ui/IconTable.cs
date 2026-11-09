@@ -4,13 +4,16 @@
 // install's gamedata.mpk tables (column meanings: daoc-re RE/54):
 //
 //   icons.csv   ID → baseIconId (a cell of the icon sheets, IconSheets), borderId (a frame of brdr_0.bmp, -1 none),
-//               then eight arrow overlays and a "spell" column (not used here).
+//               then seven style marks (up left, up, up right, right, down right, down, left: a 10 x 10 cell of
+//               wgsm_0.bmp, -1 none) and a "spell" mark (not drawn yet: its cells, 100 and up, are in wglg_100).
 //   spells.csv  ID (the number the server sends for a spell) → Icon (an icons.csv ID).
 //   styles.csv  ID (the number the server sends for a style) → Icon (an icons.csv ID).
 //
 // Abilities and realm abilities send an icons.csv ID directly. Checked 2026-11-09: Sprint 409 → base 1602 (the
 // skills sheet), Amethyst Shield spell 1 → 1000 → base 91, Recenter style 110 → 654 → base 555 (a combat
-// sheet). Retail draws the style arrows (up left, …) too; not yet.
+// sheet). Retail draws the base, then the border over it, then the marks over both, each at its place on the 32 x 32
+// icon (daoc-re RE/68): a 3 x 3 grid of 10-pixel cells with the centre free. The marks say how a style opens (from
+// the side, behind, in front; after a block, parry or evade; a step of a chain) and what it does to threat.
 
 using System.Globalization;
 
@@ -19,12 +22,21 @@ namespace DaocAssets.Ui;
 /// <summary>Which table the server's number for an entry is looked up in.</summary>
 public enum IconKind { Icon, Spell, Style }
 
+/// <summary>A style mark: a cell of wgsm_0.bmp (10 x 10) and where it goes on the 32 x 32 icon.</summary>
+public readonly record struct IconMark(int Cell, int X, int Y);
+
+/// <summary>What the client draws for an entry: a base icon, a border frame (-1 none) and the style marks.</summary>
+public sealed record IconPicture(int Base, int Border, IReadOnlyList<IconMark> Marks);
+
 public sealed class IconTable
 {
-    private readonly Dictionary<int, (int Base, int Border)> _icons;
+    private readonly Dictionary<int, IconPicture> _icons;
     private readonly Dictionary<int, int> _spells, _styles;
 
-    private IconTable(Dictionary<int, (int, int)> icons, Dictionary<int, int> spells, Dictionary<int, int> styles) =>
+    // Where each mark column (icons.csv columns 4–10) is drawn: up left, up, up right, right, down right, down, left.
+    private static readonly (int X, int Y)[] MarkPlaces = [(0, 0), (11, 0), (22, 0), (22, 11), (22, 22), (11, 22), (0, 11)];
+
+    private IconTable(Dictionary<int, IconPicture> icons, Dictionary<int, int> spells, Dictionary<int, int> styles) =>
         (_icons, _spells, _styles) = (icons, spells, styles);
 
     public static IconTable Empty { get; } = new([], [], []);
@@ -34,15 +46,21 @@ public sealed class IconTable
     /// <summary>Reads the three tables' text (header rows and ';' comment rows are skipped).</summary>
     public static IconTable Parse(string iconsCsv, string spellsCsv, string stylesCsv)
     {
-        var icons = new Dictionary<int, (int, int)>();
+        var icons = new Dictionary<int, IconPicture>();
         foreach (string[] c in Rows(iconsCsv))
             if (c.Length > 3 && Int(c[0]) is int id && Int(c[2]) is int b)
-                icons.TryAdd(id, (b, Int(c[3]) ?? -1));
+            {
+                var marks = new List<IconMark>();
+                for (int m = 0; m < MarkPlaces.Length && 4 + m < c.Length; m++)
+                    if (Int(c[4 + m]) is int cell and >= 0 and < 100)
+                        marks.Add(new IconMark(cell, MarkPlaces[m].X, MarkPlaces[m].Y));
+                icons.TryAdd(id, new IconPicture(b, Int(c[3]) ?? -1, marks));
+            }
         return new IconTable(icons, Pairs(spellsCsv), Pairs(stylesCsv));
     }
 
-    /// <summary>The base picture (an icon-sheet number) and border frame (-1 none) for the server's number, or null.</summary>
-    public (int Base, int Border)? Resolve(IconKind kind, int number)
+    /// <summary>The picture (an icon-sheet number, a border frame, style marks) for the server's number, or null.</summary>
+    public IconPicture? Resolve(IconKind kind, int number)
     {
         int? icon = kind switch
         {

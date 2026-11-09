@@ -7,7 +7,7 @@
 //
 // A slot holds a skill, ability, style or spell (by name: the server's list order changes), an item slot, or a
 // command. Left click or keys 1–0 (bar 1) use it: a skill by 0xBB, a list spell by 0x7D, an item slot by 0x71, a
-// command as typed. A darkened slot counts down a cooldown (0xD6). Right click: choose what goes there, from your
+// command as typed; Alt+1–0 bar 2, Ctrl+1–0 bar 3, Shift+ turns a bar's page. A darkened slot counts down a cooldown (0xD6). Right click: choose what goes there, from your
 // skills and spell lines (until the spell and style windows exist). Drag a slot onto another to swap them. Kept
 // per character in the client's settings. Retail keeps them in the character's ini file, in a format not read yet.
 
@@ -58,10 +58,11 @@ public partial class WorldView
             qb.Refresh(now);
     }
 
-    // Keys 1–0 use bar 1's slots (retail's default; Shift and the other bars' keys aren't bound yet).
+    // The number keys, built in as retail's (daoc-re RE/68; not in its key presets): 1–0 use bar 1's slot, Alt+ bar 2's,
+    // Ctrl+ bar 3's; with Shift added, the same keys turn that bar to page N (0 = page 10).
     private bool QuickbarKey(InputEvent e)
     {
-        if (e is not InputEventKey { Pressed: true, Echo: false } k || k.ShiftPressed || k.CtrlPressed || k.AltPressed || k.MetaPressed)
+        if (e is not InputEventKey { Pressed: true, Echo: false } k || k.MetaPressed || (k.AltPressed && k.CtrlPressed))
             return false;
         int slot = k.Keycode switch
         {
@@ -69,9 +70,13 @@ public partial class WorldView
             Key.Key0 => 9,
             _ => -1,
         };
-        if (slot < 0 || _bars.Count == 0)
+        int bar = k.AltPressed ? 1 : k.CtrlPressed ? 2 : 0;
+        if (slot < 0 || bar >= _bars.Count)
             return false;
-        _bars[0].Use(slot);
+        if (k.ShiftPressed)
+            _bars[bar].TurnTo(slot);
+        else
+            _bars[bar].Use(slot);
         return true;
     }
 
@@ -125,15 +130,26 @@ public partial class WorldView
         _ => IconKind.Icon,
     };
 
-    // The entry's picture and its border frame (null: none), through gamedata's tables (IconTable).
-    private (Texture2D? Icon, Texture2D? Border) EntryPicture(string entry)
+    /// <summary>What a slot draws: the icon, its border frame, and the style marks over both (each a 10 x 10
+    /// texture and its place on the 32 x 32 icon).</summary>
+    private sealed record SlotPicture(Texture2D? Icon, Texture2D? Border, IReadOnlyList<(Texture2D Mark, Vector2 At)> Marks)
+    {
+        public static readonly SlotPicture None = new(null, null, []);
+    }
+
+    // The entry's picture through gamedata's tables (IconTable).
+    private SlotPicture EntryPicture(string entry)
     {
         if (EntryIcon(entry) is not var (kind, number))
-            return (null, null);
+            return SlotPicture.None;
         _iconTable ??= LoadIconTable();
-        if (_iconTable.Resolve(kind, number) is not var (picture, border))
-            return (null, null);
-        return (IconTexture(picture), border >= 0 ? Cell("brdr_0.bmp", border % 10 * 32, border / 10 * 32) : null);
+        if (_iconTable.Resolve(kind, number) is not IconPicture p)
+            return SlotPicture.None;
+        var marks = new List<(Texture2D, Vector2)>();
+        foreach (IconMark m in p.Marks)
+            if (Cell("wgsm_0.bmp", m.Cell * 10, 0, 10) is Texture2D t)
+                marks.Add((t, new Vector2(m.X, m.Y)));
+        return new SlotPicture(IconTexture(p.Base), p.Border >= 0 ? Cell("brdr_0.bmp", p.Border % 10 * 32, p.Border / 10 * 32) : null, marks);
     }
 
     private IconTable LoadIconTable()
@@ -151,8 +167,8 @@ public partial class WorldView
         return IconSheets.Locate(_iconSheets, icon) is var (sheet, x, y) ? Cell(sheet, x, y) : null;
     }
 
-    // A 32 x 32 cell of a sheet in library/icons.
-    private Texture2D? Cell(string sheet, int x, int y)
+    // A cell (32 x 32 unless given) of a sheet in library/icons.
+    private Texture2D? Cell(string sheet, int x, int y, int size = IconSheets.IconSize)
     {
         if (!_sheetTextures.TryGetValue(sheet, out Texture2D? tex))
         {
@@ -164,7 +180,7 @@ public partial class WorldView
                 if (img.LoadBmpFromBuffer(Godot.FileAccess.GetFileAsBytes(path)) == Error.Ok)
                 {
                     // The border frames are drawn on black: black is see-through, so the icon shows inside.
-                    if (sheet == "brdr_0.bmp")
+                    if (sheet is "brdr_0.bmp" or "wgsm_0.bmp")
                     {
                         img.Convert(Image.Format.Rgba8);
                         for (int py = 0; py < img.GetHeight(); py++)
@@ -177,7 +193,7 @@ public partial class WorldView
             }
             _sheetTextures[sheet] = tex;
         }
-        return tex is null ? null : new AtlasTexture { Atlas = tex, Region = new Rect2(x, y, IconSheets.IconSize, IconSheets.IconSize) };
+        return tex is null ? null : new AtlasTexture { Atlas = tex, Region = new Rect2(x, y, size, size) };
     }
 
     private Dictionary<int, string> LoadIconSheets()
@@ -253,7 +269,8 @@ public partial class WorldView
             for (int i = 0; i < BarSlots; i++)
             {
                 int slot = i;
-                var q = new QuickSlot(scale, bar == 0 ? (i == 9 ? "0" : (i + 1).ToString()) : "")
+                string digit = i == 9 ? "0" : (i + 1).ToString();
+                var q = new QuickSlot(scale, bar switch { 0 => digit, 1 => "A" + digit, _ => "C" + digit })
                 {
                     Position = new Vector2(26 + i * 34, 3) * scale,
                     Use = () => Use(slot),
@@ -273,6 +290,13 @@ public partial class WorldView
         private string Entry(int slot) => ClientSettings.QuickbarSlot(_view.PlayerName, KeyOf(slot));
 
         public void Use(int slot) => _view.UseQuickbarEntry(Entry(slot));
+
+        public void TurnTo(int page)
+        {
+            _pageIndex = page;
+            ClientSettings.SaveQuickbarPage(_view.PlayerName, _bar, _pageIndex);
+            ShowPage();
+        }
 
         private void Turn(int by)
         {
@@ -347,11 +371,14 @@ public partial class WorldView
         public string Entry { get; private set; } = "";
         public Texture2D? Icon { get; private set; }
         private readonly TextureRect _icon, _border;
+        private readonly Control _marks;
+        private readonly float _scale;
         private readonly Label _name, _wait;
         private readonly ColorRect _veil;
 
         public QuickSlot(float scale, string key)
         {
+            _scale = scale;
             Size = new Vector2(32, 32) * scale;
             MouseFilter = MouseFilterEnum.Stop;
             AddThemeStyleboxOverride("panel", new StyleBoxFlat
@@ -371,13 +398,16 @@ public partial class WorldView
                 MouseFilter = MouseFilterEnum.Ignore,
             };
             AddChild(_border);
+            _marks = new Control { Size = Size, MouseFilter = MouseFilterEnum.Ignore };
+            AddChild(_marks);
             // Without an icon (a command, or one the sheets lack): its name, small.
             _name = Text(new Vector2(1, 8), new Vector2(30, 18), 7, HorizontalAlignment.Center, scale);
             _name.AutowrapMode = TextServer.AutowrapMode.Arbitrary;
             _veil = new ColorRect { Size = Size, Color = new Color(0, 0, 0, 0.6f), Visible = false, MouseFilter = MouseFilterEnum.Ignore };
             AddChild(_veil);
             _wait = Text(new Vector2(0, 9), new Vector2(32, 14), 10, HorizontalAlignment.Center, scale);
-            Label k = Text(new Vector2(2, 0), new Vector2(12, 10), 8, HorizontalAlignment.Left, scale);
+            // The key, bottom left: the one corner the style marks never use (their grid has no down-left place).
+            Label k = Text(new Vector2(1, 22), new Vector2(14, 10), 8, HorizontalAlignment.Left, scale);
             k.Text = key;
             k.AddThemeColorOverride("font_outline_color", Colors.Black);
             k.AddThemeConstantOverride("outline_size", Mathf.RoundToInt(2 * scale));
@@ -395,12 +425,21 @@ public partial class WorldView
             return l;
         }
 
-        public void Show(string entry, (Texture2D? Icon, Texture2D? Border) picture)
+        public void Show(string entry, SlotPicture picture)
         {
             Texture2D? icon = picture.Icon;
             (Entry, Icon) = (entry, icon);
             _icon.Texture = icon;
             _border.Texture = picture.Border;
+            foreach (Node m in _marks.GetChildren())
+                m.QueueFree();
+            foreach ((Texture2D mark, Vector2 at) in picture.Marks)
+                _marks.AddChild(new TextureRect
+                {
+                    Texture = mark, Position = at * _scale, Size = new Vector2(10, 10) * _scale,
+                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale,
+                    MouseFilter = MouseFilterEnum.Ignore,
+                });
             _name.Text = icon is null && entry.Length > 0 ? entry[(entry.IndexOf(':') + 1)..] : "";
             TooltipText = entry.Length > 0 ? entry[(entry.IndexOf(':') + 1)..] : "Right-click to choose what goes here";
         }

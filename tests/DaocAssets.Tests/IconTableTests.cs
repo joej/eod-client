@@ -26,10 +26,24 @@ public sealed class IconTableTests
     public void EachKindGoesThroughItsTable()
     {
         IconTable t = IconTable.Parse(Icons, Spells, Styles);
-        Assert.Equal((1602, -1), t.Resolve(IconKind.Icon, 409));     // an ability: an icons.csv id itself
-        Assert.Equal((555, -1), t.Resolve(IconKind.Style, 110));     // a style: styles.csv first
-        Assert.Equal((91, -1), t.Resolve(IconKind.Spell, 1));        // a spell: spells.csv first
-        Assert.Equal((91, 0), t.Resolve(IconKind.Spell, 5));         // with a border frame
+        Assert.Equal((1602, -1), Picture(t.Resolve(IconKind.Icon, 409)));     // an ability: an icons.csv id itself
+        Assert.Equal((555, -1), Picture(t.Resolve(IconKind.Style, 110)));     // a style: styles.csv first
+        Assert.Equal((91, -1), Picture(t.Resolve(IconKind.Spell, 1)));        // a spell: spells.csv first
+        Assert.Equal((91, 0), Picture(t.Resolve(IconKind.Spell, 5)));         // with a border frame
+    }
+
+    private static (int, int) Picture(IconPicture? p) => (p!.Base, p.Border);
+
+    [Fact]
+    public void AStylesMarksGoToTheirPlaces()
+    {
+        // Cross Slash: up left 0 (an opener with a requirement), right 5 and left 4 (from the side).
+        const string icons = "322,,0,1,2,3,4,5,6,7,8,9\r\nID,Name,baseIconId,borderId,up left,up,up right,right,down right,down,left,spell\r\n" +
+                             "601,Cross Slash,502,-1,0,-1,-1,5,-1,-1,4,-1\r\n";
+        IconPicture p = IconTable.Parse(icons, "", "")!.Resolve(IconKind.Icon, 601)!;
+        Assert.Equal([new IconMark(0, 0, 0), new IconMark(5, 22, 11), new IconMark(4, 0, 11)], p.Marks);
+        // The "spell" column (114 here) isn't a mark of wgsm_0.
+        Assert.Empty(IconTable.Parse(Icons, Spells, Styles).Resolve(IconKind.Spell, 1)!.Marks);
     }
 
     [Fact]
