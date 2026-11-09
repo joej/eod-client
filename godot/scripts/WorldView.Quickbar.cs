@@ -3,7 +3,7 @@
 // WorldView: the quickbars (roadmap M9; docs/ui-windows.md). Retail's quickbars are built into the client (no XML
 // layout); its default.ini places bar 1 centred low (329, 644 at 1024 x 768) and bar 2 just below (686), about
 // 366 x 42 skin pixels each: ten icon slots and a handle with the bar's number and page. Ours: the same size and
-// places, two bars of ten pages of ten slots.
+// places, three bars of ten pages of ten slots (bar 3 at the left edge, as retail's default).
 //
 // A slot holds a skill, ability, style or spell (by name: the server's list order changes), an item slot, or a
 // command. Left click or keys 1–0 (bar 1) use it: a skill by 0xBB, a list spell by 0x7D, an item slot by 0x71, a
@@ -21,7 +21,7 @@ namespace EodClient;
 
 public partial class WorldView
 {
-    private const int BarSlots = 10, BarPages = 10, Bars = 2;
+    private const int BarSlots = 10, BarPages = 10, Bars = 3;
     private readonly List<Quickbar> _bars = [];
     private Dictionary<int, string>? _iconSheets;               // first icon number → sheet file (library/icons)
     private IconTable? _iconTable;                               // the server's number → picture (gamedata tables)
@@ -33,9 +33,15 @@ public partial class WorldView
         for (int b = 0; b < Bars; b++)
         {
             int bar = b;
-            // Retail's default.ini at 1024 x 768: bar 1 at y 644, bar 2 at 686, i.e. 124 and 82 skin pixels above the bottom.
-            float fromBottom = b == 0 ? 124 : 82;
-            var window = new HudWindow($"quickbar{b + 1}", new Vector2(366, 40), s, screen => new Vector2(screen.X / 2 - 183, screen.Y - fromBottom))
+            // Retail's default.ini at 1024 x 768: bar 1 at (329, 644) and bar 2 at (328, 686), centred, 124 and 82 skin
+            // pixels above the bottom; bar 3 at (0, 492): the left edge, 276 above the bottom.
+            System.Func<Vector2, Vector2> at = b switch
+            {
+                0 => screen => new Vector2(screen.X / 2 - 183, screen.Y - 124),
+                1 => screen => new Vector2(screen.X / 2 - 183, screen.Y - 82),
+                _ => screen => new Vector2(0, screen.Y - 276),
+            };
+            var window = new HudWindow($"quickbar{b + 1}", new Vector2(366, 40), s, at)
             {
                 DragAnywhere = true,
             };
@@ -255,6 +261,7 @@ public partial class WorldView
                     Key = (bar, slot),
                 };
                 q.Swapped += other => Swap(slot, other);
+                q.Dropped += entry => Set(slot, entry);
                 _slots[i] = q;
                 window.AddChild(q);
             }
@@ -297,6 +304,13 @@ public partial class WorldView
             menu.Popup(new Rect2I((Vector2I)Window.GetScreenPosition() + (Vector2I)_slots[slot].Position, Vector2I.Zero));
         }
 
+        // Something dragged in from elsewhere (a spell or style window): it goes in that slot.
+        private void Set(int slot, string entry)
+        {
+            ClientSettings.SaveQuickbarSlot(_view.PlayerName, KeyOf(slot), entry);
+            ShowPage();
+        }
+
         // A slot of this bar dropped on slot `to` (same bar or another): swap the two.
         private void Swap(int to, (int Bar, int Slot) from)
         {
@@ -328,6 +342,7 @@ public partial class WorldView
     {
         public System.Action? Use, Choose;
         public event System.Action<(int, int)>? Swapped;
+        public event System.Action<string>? Dropped;   // a "skill:<name>" (or other entry) dragged from another window
         public (int Bar, int Slot) Key;
         public string Entry { get; private set; } = "";
         public Texture2D? Icon { get; private set; }
@@ -416,10 +431,19 @@ public partial class WorldView
             return new Vector2I(Key.Bar, Key.Slot);
         }
 
-        public override bool _CanDropData(Vector2 atPosition, Variant data) => data.VariantType == Variant.Type.Vector2I;
+        // Another slot (its bar and slot), or an entry from another window: what the spell and style windows will
+        // drag in, as retail's do.
+        public override bool _CanDropData(Vector2 atPosition, Variant data) =>
+            data.VariantType == Variant.Type.Vector2I
+            || (data.VariantType == Variant.Type.String && data.AsString() is string s && (s.StartsWith("skill:") || s.StartsWith("cmd:") || s.StartsWith("slot:")));
 
         public override void _DropData(Vector2 atPosition, Variant data)
         {
+            if (data.VariantType == Variant.Type.String)
+            {
+                Dropped?.Invoke(data.AsString());
+                return;
+            }
             Vector2I from = data.AsVector2I();
             Swapped?.Invoke((from.X, from.Y));
         }

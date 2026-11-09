@@ -48,10 +48,11 @@ public partial class WorldView
     private void BuildHud(CanvasLayer overlay)
     {
         float s = UiScale;
-        // Defaults (until dragged) follow the window's size: the summary on the left edge below the dev panels,
+        // Defaults (until dragged) follow the window's size: the summary on the left edge below the dev panels and above
+        // quickbar 3,
         // the target window centred low, where retail's default.ini puts FloatTarget (y 547 at 1024 x 768: 221 skin
         // pixels above the bottom, clear of the quickbars).
-        _summary = new HudWindow("summary", new Vector2(160, 90), s, screen => new Vector2(0, screen.Y * 0.42f));
+        _summary = new HudWindow("summary", new Vector2(160, 90), s, screen => new Vector2(0, screen.Y * 0.29f));
         _summaryTitle = _summary.Label(new Vector2(11, 2), new Vector2(138, 14), 11, centred: true);
         _summaryLevel = _summary.Label(new Vector2(8, 16), new Vector2(144, 12), 9);
         _hpBar = _summary.Bar(new Vector2(26, 31), 125, new Color(0.85f, 0.15f, 0.12f), new Vector2(3, 28));
