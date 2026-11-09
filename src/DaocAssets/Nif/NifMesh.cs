@@ -28,6 +28,10 @@ public sealed record NifMesh
     /// are the placeholder-coloured proxies that otherwise z-fight the real textured walls.</summary>
     public bool Helper { get; init; }
 
+    /// <summary>True when this shape sits under a collision node ("collidee…", "collider…", "collision…"): the
+    /// player can't walk through it. Usually also <see cref="Helper"/> (never drawn); a textured one is both.</summary>
+    public bool Collision { get; init; }
+
     /// <summary>Transparency from the shape's (or an ancestor's) <c>NiAlphaProperty</c>.</summary>
     public SurfaceAlpha Alpha { get; init; }
 

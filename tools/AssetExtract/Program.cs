@@ -56,6 +56,9 @@ internal static partial class Cli
         if (command == "icons")
             return IconsCmd(args);
 
+        if (command == "collision")
+            return CollisionCmd(args);
+
         if (command == "model")
             return ModelCmd(args);
 
@@ -126,6 +129,7 @@ internal static partial class Cli
               mpk loading  <client-dir> --out DIR   (region loading screens: pictures, tips, bar, font)
               mpk maps     <client-dir> --out DIR   (zone and region map pictures, regions.dat, areas.dat)
               mpk icons    <client-dir> --out DIR   (spell, style, item and skill icon sheets, for the quickbars)
+              mpk collision <zones-dir> --index INDEX [--out REPORT.md]   (collision volumes in the zones' models)
 
             With no member, extract writes every member. Default --out is the current directory.
             convert writes a glTF binary next to the .nif unless --out is given.

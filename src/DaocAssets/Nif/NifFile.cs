@@ -242,7 +242,7 @@ public static partial class NifFile
                 if (geom is not null)
                     meshes.Add(WithSurface(BakeTransform(geom, b.Local, $"mesh{i}",
                         ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b)), blocks, b, -1, -1)
-                        with { Helper = IsHelperNodeName(b.Name) || IsHidden(b.Flags) });
+                        with { Helper = IsHelperNodeName(b.Name) || IsHidden(b.Flags), Collision = IsCollisionName(b.Name) });
             }
         }
 
@@ -308,7 +308,7 @@ public static partial class NifFile
     // its own of the same type.
     private static void Walk4x(ReadOnlySpan<byte> bytes, Block[] blocks, int index, Xform world,
         HashSet<int> seen, List<NifMesh> meshes, bool helper = false, int alpha = -1, int stencil = -1,
-        bool numberedHelper = false, int vertexColor = -1, Skeleton4x? skeleton = null, int parentJoint = -1)
+        bool numberedHelper = false, int vertexColor = -1, Skeleton4x? skeleton = null, int parentJoint = -1, bool collision = false)
     {
         if (index < 0 || index >= blocks.Length || !seen.Add(index))
             return;
@@ -319,6 +319,7 @@ public static partial class NifFile
             joint = skeleton.Add(index, b.Name, parentJoint, ToMatrix(b.Local));
         bool underHelper = helper || IsHelperNodeName(b.Name) || IsHidden(b.Flags);
         bool underNumbered = numberedHelper || IsNumberedHelperName(b.Name);
+        bool underCollision = collision || IsCollisionName(b.Name);
         if (b.Type is "NiNode" or "NiLODNode" or "NiBillboardNode")
         {
             // A billboard node is walked like a plain node: it keeps its stored orientation instead of
@@ -334,7 +335,7 @@ public static partial class NifFile
             int nodeVertexColor = FindProperty(blocks, b.Props, "NiVertexColorProperty", vertexColor);
             foreach (int child in children)
                 Walk4x(bytes, blocks, child, w, seen, meshes, underHelper, nodeAlpha, nodeStencil, underNumbered,
-                    nodeVertexColor, skeleton, joint);
+                    nodeVertexColor, skeleton, joint, collision: underCollision);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
         {
@@ -350,7 +351,7 @@ public static partial class NifFile
                     skeleton.Rigid.Add((meshes.Count, parentJoint, ToMatrix(world)));
                 meshes.Add(WithSurface(BakeTransform(geom, skinned ? Xform.Identity : w, $"mesh{index}",
                     texture, ShapeMaterialColor(blocks, b)), blocks, b, alpha, stencil, vertexColor)
-                    with { Helper = underHelper || (underNumbered && texture is null) });
+                    with { Helper = underHelper || (underNumbered && texture is null), Collision = underCollision });
             }
         }
     }
@@ -381,6 +382,17 @@ public static partial class NifFile
             || name.Contains("footprint", StringComparison.OrdinalIgnoreCase)
             || name.StartsWith("collider", StringComparison.OrdinalIgnoreCase)
             // "collisionswitch" is not one: it holds a model's visible parts too (avpier's pier).
+            || (name.StartsWith("collision", StringComparison.OrdinalIgnoreCase)
+                && !name.Equals("collisionswitch", StringComparison.OrdinalIgnoreCase)));
+
+    // Collision volumes: what the character can't walk through. Under a node named "collidee" (also numbered or
+    // suffixed: "collidee016", "collideeH"), "collider …", or "collision …" ("collision tower", "collision wall";
+    // not "collisionswitch", which holds a model's visible parts too). A visible, textured shape there (Prydwen's
+    // "collision tower" stone) is both drawn and solid.
+    internal static bool IsCollisionName(string name) =>
+        !string.IsNullOrEmpty(name)
+        && (name.StartsWith("collidee", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("collider", StringComparison.OrdinalIgnoreCase)
             || (name.StartsWith("collision", StringComparison.OrdinalIgnoreCase)
                 && !name.Equals("collisionswitch", StringComparison.OrdinalIgnoreCase)));
 

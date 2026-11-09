@@ -185,7 +185,7 @@ public static partial class NifFile
         private readonly HashSet<int> _seen = [];
 
         public void Walk(int index, int parentJoint, Matrix4x4 parentWorld, bool helper, int alpha, int stencil,
-            bool numberedHelper = false, int vertexColor = -1)
+            bool numberedHelper = false, int vertexColor = -1, bool collision = false)
         {
             if (index < 0 || index >= blocks.Length || !_seen.Add(index))
                 return;
@@ -194,6 +194,7 @@ public static partial class NifFile
             Matrix4x4 world = local * parentWorld;
             bool underHelper = helper || IsHelperNodeName(b.Name) || IsHidden(b.Flags);
             bool underNumbered = numberedHelper || IsNumberedHelperName(b.Name);
+            bool underCollision = collision || IsCollisionName(b.Name);
             if (b.Type is "NiNode" or "NiBillboardNode" or "NiLODNode")
             {
                 int joint = Joints.Count;
@@ -204,7 +205,7 @@ public static partial class NifFile
                 int nodeStencil = Find(b.Props, "NiStencilProperty", stencil);
                 int nodeVertexColor = Find(b.Props, "NiVertexColorProperty", vertexColor);
                 foreach (int child in b.Type == "NiLODNode" ? NearLevel(b) : b.Children)
-                    Walk(child, joint, world, underHelper, nodeAlpha, nodeStencil, underNumbered, nodeVertexColor);
+                    Walk(child, joint, world, underHelper, nodeAlpha, nodeStencil, underNumbered, nodeVertexColor, underCollision);
                 if (parentJoint < 0)
                     BindSkins();
             }
@@ -213,7 +214,7 @@ public static partial class NifFile
                 NifMesh? mesh = Shape(index, b, world, alpha, stencil, vertexColor);
                 if (mesh is null)
                     return;
-                Meshes.Add(mesh with { Helper = underHelper || (underNumbered && mesh.TextureFile is null) });
+                Meshes.Add(mesh with { Helper = underHelper || (underNumbered && mesh.TextureFile is null), Collision = underCollision });
             }
         }
 
