@@ -466,6 +466,29 @@ damage of at most 99% of maximum health per landing, so a second big fall kills.
 2026-11-07* (eodtest2/Quitcheck at Prydwen Keep: two 140 m drops, died, released to the bind point,
 revived).
 
+## The character's points, money and identity
+
+```
+S→C 0x91 CharacterPoints     u32 BE realm points, u16 BE level progress ‰, u16 BE spec points,
+                             u32 BE bounty points, u16 BE realm spec points, u16 BE champion progress ‰,
+                             then u64 LITTLE-endian: experience, experience for the next level,
+                             champion experience, its next level (OpenDAoC: 0, 0). 48 bytes.
+S→C 0xFA MoneyUpdate         u8 copper, u8 silver, u16 BE gold, u16 BE mithril, u16 BE platinum
+                             (100 c = 1 s, 100 s = 1 g, 1000 g = 1 p, 1000 p = 1 m)
+S→C 0x16 VariousUpdate, 3    head 03 0F 00 00, then fifteen pairs of a byte and a u8-length string:
+                             level + name; max health high byte + class; max health low byte + profession;
+                             0 + level title; realm level + realm title; realm spec points + base class;
+                             house number high byte + guild; house low byte + last name; master level + 1
+                             + race; 0 + guild rank; 0 + crafting skill; 0 + crafting title; 0 + master
+                             level title; 0 + custom title; champion level + 1 (0 if none) + champion title
+```
+
+Realm level 40 is rank 5L0 (rank = level / 10 + 1, the remainder after the L). OpenDAoC writes "None" for a
+string the client should hide. 0x16's other subcodes carry the skill, spell and other lists (1, 2, 5, 8 at
+world entry), not yet decoded. *Checked against the RustDAoC 1.127e capture (a level 50 Paladin: every field
+decodes and rebuilds byte for byte) and live 2026-11-09 (eodtest2/Quitcheck at world entry: one 0x16/3,
+one 0xFA, three 0x91, XP 0 of 50 at level 1).*
+
 ## Attack mode
 
 **C→S 0x74** (`PlayerAttackRequestHandler`): `u8 start` (1 attack, 0 stop), `u8 asked` (0 when the

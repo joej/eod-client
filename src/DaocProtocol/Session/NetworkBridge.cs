@@ -72,6 +72,15 @@ public sealed class NetworkBridge(Action<string>? log = null)
     /// <summary>Our own vitals (0xAD): health, mana, endurance, concentration, and whether we sit.</summary>
     public event Action<StatusUpdate>? StatusChanged;
 
+    /// <summary>Our XP, realm and bounty points, specialisation points (0x91).</summary>
+    public event Action<PointsUpdate>? PointsChanged;
+
+    /// <summary>Our money (0xFA).</summary>
+    public event Action<MoneyUpdate>? MoneyChanged;
+
+    /// <summary>Who we are: level, class, race, guild, titles, realm rank (0x16 subcode 3).</summary>
+    public event Action<PlayerInfo>? PlayerInfoChanged;
+
     /// <summary>A player died (0xAE): us or one in view.</summary>
     public event Action<PlayerDied>? PlayerDied;
 
@@ -153,6 +162,16 @@ public sealed class NetworkBridge(Action<string>? log = null)
                     break;
                 case StatusUpdate.Code:
                     StatusChanged?.Invoke(StatusUpdate.Parse(packet.Payload));
+                    break;
+                case PointsUpdate.Code:
+                    PointsChanged?.Invoke(PointsUpdate.Parse(packet.Payload));
+                    break;
+                case MoneyUpdate.Code:
+                    MoneyChanged?.Invoke(MoneyUpdate.Parse(packet.Payload));
+                    break;
+                // 0x16 carries several lists by subcode; only the player info is read yet, the rest count as unhandled.
+                case PlayerInfo.Code when PlayerInfo.Matches(packet.Payload):
+                    PlayerInfoChanged?.Invoke(PlayerInfo.Parse(packet.Payload));
                     break;
                 case DaocProtocol.Packets.PlayerDied.Code:
                     PlayerDied?.Invoke(DaocProtocol.Packets.PlayerDied.Parse(packet.Payload));

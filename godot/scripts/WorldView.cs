@@ -425,6 +425,7 @@ public partial class WorldView : Node3D
         _bridge.ObjectSpawned += OnWorldObject;
         _bridge.ChatReceived += OnChatReceived;
         SubscribeDeath();
+        SubscribeCharacter();
         _bridge.PingReplied += () => _pings++;
         _bridge.Jumped += OnJumped;
         _bridge.QuitArrived += reply =>
@@ -944,7 +945,7 @@ public partial class WorldView : Node3D
             $"{_world.Zone.Name} (zone {_world.Zone.Id}, region {p.RegionId})   x {p.X:0} y {p.Y:0} z {p.Z:0}   heading {p.Heading & 0x0FFF}\n" +
             (AssetsNote.Length > 0 ? AssetsNote + "\n" : "") +
             $"{Engine.GetFramesPerSecond():0} fps   {_seconds:0} s in world   {_packets} packets ({_connection?.Pending ?? 0} queued)   {_pings} ping replies   {_entities.Count} entities ({_entities.Values.Count(e => e.Player is not null)} figures)   {_chatReceived} chat   " +
-            (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + TargetLine + VitalsLine + "\n" +
+            (_closedReason is null ? "connected" : $"DISCONNECTED: {_closedReason}") + _note + TargetLine + VitalsLine + CharacterLine + "\n" +
             $"W {(Input.IsKeyPressed(Key.W) ? 1 : 0)} S {(Input.IsKeyPressed(Key.S) ? 1 : 0)} " +
             $"A {(Input.IsKeyPressed(Key.A) ? 1 : 0)} D {(Input.IsKeyPressed(Key.D) ? 1 : 0)}   " +
             $"body {_body.Position.X:0.0},{_body.Position.Y:0.0},{_body.Position.Z:0.0}   " +

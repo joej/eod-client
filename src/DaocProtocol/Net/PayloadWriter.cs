@@ -62,6 +62,22 @@ public sealed class PayloadWriter
 
     public PayloadWriter Zeros(int count) => Bytes(new byte[count]);
 
+    public PayloadWriter U64LE(ulong value)
+    {
+        Span<byte> b = stackalloc byte[8];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt64LittleEndian(b, value);
+        return Bytes(b);
+    }
+
+    /// <summary>A u8 byte count then the Latin-1 bytes, no terminator (the server's WritePascalString).</summary>
+    public PayloadWriter StringU8(string value)
+    {
+        byte[] text = Encoding.Latin1.GetBytes(value);
+        if (text.Length > byte.MaxValue)
+            throw new ArgumentException("A u8-length string holds at most 255 bytes.", nameof(value));
+        return U8((byte)text.Length).Bytes(text);
+    }
+
     /// <summary>
     /// A u32 little-endian length counting a terminating zero, the Latin-1 bytes, then the zero
     /// (what the server reads with ReadIntPascalStringLowEndian). An empty string is written as

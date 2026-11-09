@@ -29,6 +29,8 @@ public ref struct PayloadReader(ReadOnlySpan<byte> payload)
 
     public float F32LE() => BinaryPrimitives.ReadSingleLittleEndian(Take(4));
 
+    public ulong U64LE() => BinaryPrimitives.ReadUInt64LittleEndian(Take(8));
+
     public void Skip(int count) => Take(count);
 
     /// <summary>The next <paramref name="count"/> bytes as they are (e.g. a fixed-width field).</summary>
