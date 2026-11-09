@@ -17,13 +17,37 @@ using DaocAssets.Nif;
 namespace DaocAssets.Zone;
 
 /// <summary>One body of water from a zone's SECTOR.DAT.</summary>
+/// <summary>A water body's kind, as the client reads its type.</summary>
+public enum WaterKind { None, River, Lake, Ocean, Swamp, DeepOcean, Lava }
+
 public sealed record WaterBody
 {
     /// <summary>The section number (river00 → 0).</summary>
     public required int Index { get; init; }
     public required string Name { get; init; }
-    /// <summary>RIVER, LAKE or SWAMP (empty if the section doesn't say).</summary>
+    /// <summary>The section's type as written: RIVER, LAKE, SWAMP, OCEAN, DEEPOCEAN, LAVA (empty if it doesn't say).</summary>
     public required string Type { get; init; }
+
+    /// <summary>The kind, as the client reads <see cref="Type"/>: by its first letter, except that "l" with "v" third is lava.</summary>
+    public WaterKind Kind => Classify(Type);
+
+    /// <summary>
+    /// The client's reading of a [riverNN] type (daoc-re RE/69): r river, l lake, o ocean, s swamp, d deep ocean; "l" with
+    /// "v" as its third letter is lava, which must not be taken for a lake. Anything else: none.
+    /// </summary>
+    public static WaterKind Classify(string type)
+    {
+        if (string.IsNullOrEmpty(type))
+            return WaterKind.None;
+        char a = char.ToLowerInvariant(type[0]);
+        if (a == 'l' && type.Length > 2 && char.ToLowerInvariant(type[2]) == 'v')
+            return WaterKind.Lava;
+        return a switch
+        {
+            'r' => WaterKind.River, 'l' => WaterKind.Lake, 'o' => WaterKind.Ocean, 's' => WaterKind.Swamp, 'd' => WaterKind.DeepOcean,
+            _ => WaterKind.None,
+        };
+    }
     /// <summary>Surface height, region z units.</summary>
     public required float Height { get; init; }
     /// <summary>Base texture stem ("watery"), without extension.</summary>
@@ -169,7 +193,7 @@ public static class ZoneWater
             if (c.Length < 8 || c[0] == "mesh")
                 continue;
             float flow = float.TryParse(c[^2], NumberStyles.Float, CultureInfo.InvariantCulture, out float f) ? f : 0f;
-            rows[c[0]] = new WaterRow(c[0], c[^4], flow);
+            rows[c[0]] = new WaterRow(c[0], c[^4], flow, c[^6]);
         }
         return rows;
     }
@@ -207,6 +231,6 @@ public static class ZoneWater
     private static string Csv(string s) => s.Contains(',') ? $"\"{s.Replace("\"", "\"\"")}\"" : s;
 }
 
-/// <summary>What the client reads from one water.csv row: the body's mesh, texture and flow
-/// (texture repeats per second ×1000, about -50..50).</summary>
-public sealed record WaterRow(string Mesh, string Texture, float Flow);
+/// <summary>What the client reads from one water.csv row: the body's mesh, texture, flow (texture repeats per
+/// second ×1000, about -50..50) and type (as written; <see cref="WaterBody.Classify"/>).</summary>
+public sealed record WaterRow(string Mesh, string Texture, float Flow, string Type = "");

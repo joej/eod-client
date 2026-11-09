@@ -59,3 +59,27 @@ public sealed class ZoneTiltTests
         Assert.Equal((1, 0f), (p[1].Collide, p[1].Tilt));
     }
 }
+
+/// <summary>Water types as the client reads them (daoc-re RE/69): by the first letter, lava being "l" with "v" third.</summary>
+public sealed class WaterKindTests
+{
+    [Theory]
+    [InlineData("RIVER", WaterKind.River)]
+    [InlineData("LAKE", WaterKind.Lake)]
+    [InlineData("LAVA", WaterKind.Lava)]
+    [InlineData("lava", WaterKind.Lava)]
+    [InlineData("OCEAN", WaterKind.Ocean)]
+    [InlineData("SWAMP", WaterKind.Swamp)]
+    [InlineData("DEEPOCEAN", WaterKind.DeepOcean)]
+    [InlineData("", WaterKind.None)]
+    public void ATypeIsReadByItsLetters(string type, WaterKind kind) => Assert.Equal(kind, WaterBody.Classify(type));
+
+    [Fact]
+    public void TheClientsRowCarriesTheType()
+    {
+        string csv = WaterBodyCsvHeader + "\nwater3,\"Fire, Lake\",LAVA,1200,lava,,10,0\n";
+        Assert.Equal(WaterKind.Lava, WaterBody.Classify(ZoneWater.ReadCsv(csv)["water3"].Type));
+    }
+
+    private const string WaterBodyCsvHeader = ZoneWater.CsvHeader;
+}

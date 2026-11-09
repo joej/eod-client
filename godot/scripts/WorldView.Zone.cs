@@ -270,8 +270,9 @@ public partial class WorldView
             mat.SetShaderParameter("flow", row.Flow / 1000f);
             mi.MaterialOverride = mat;
             parts.WaterBodies++;
-            // Its surface, for the swim check (WaterLayer only: nothing stands on it).
-            if (mi.Mesh is not null)
+            // Its surface, for the swim check (WaterLayer only: nothing stands on it). Not lava: retail tells it apart
+            // from a lake (WaterBody.Kind), and nobody swims in it; what it does to a player is open (W17).
+            if (mi.Mesh is not null && DaocAssets.Zone.WaterBody.Classify(row.Type) != DaocAssets.Zone.WaterKind.Lava)
             {
                 var body = new StaticBody3D { CollisionLayer = WaterLayer, CollisionMask = 0, Transform = RelativeTransform(mi, water) };
                 body.AddChild(new CollisionShape3D { Shape = mi.Mesh.CreateTrimeshShape() });
