@@ -117,11 +117,11 @@ $(MADE)/%: $(INDEX) $(MODEL_SRC) | $(TOOL)
 # --- zones ------------------------------------------------------------------------------------------
 # $(1) = three-digit zone number. zone<N>_DAT/_POS come from zones.mk, zone<N>_MODELS from models.mk.
 define ZONE_RULES
-$(ZONEDIR)/zone$(1)/models.mk: $$(zone$(1)_DAT) $(INDEX) $(ZONE_SRC) | $(TOOL)
+$(ZONEDIR)/zone$(1)/models.mk: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(ZONE_SRC) | $(TOOL)
 	@mkdir -p $$(@D)
 	@$(MPK) zonedeps $$(zone$(1)_DAT) --index $(INDEX) --var zone$(1)_MODELS > $$@.tmp && mv $$@.tmp $$@
 
-$(ZONEDIR)/zone$(1)/terrain.glb: $$(zone$(1)_DAT) $$(zone$(1)_EDGEDAT) $(INDEX) $(ZONE_SRC) | $(TOOL)
+$(ZONEDIR)/zone$(1)/terrain.glb: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $$(zone$(1)_EDGEDAT) $(INDEX) $(ZONE_SRC) | $(TOOL)
 	@mkdir -p $$(@D)
 	$(MPK) terrain $$(zone$(1)_DAT) $$(zone$(1)_POS) $$(zone$(1)_EDGES) --index $(INDEX) --library $(LIB) --out $$@
 
@@ -129,12 +129,12 @@ $(ZONEDIR)/zone$(1)/zone.csv: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(ZONE_
 	@mkdir -p $$(@D)
 	$(MPK) zone $$(zone$(1)_DAT) $$(zone$(1)_POS) --index $(INDEX) --library $(LIB) --out $$(@D)
 
-$(ZONEDIR)/zone$(1)/water.done: $$(zone$(1)_DAT) $(INDEX) $(ZONE_SRC) | $(TOOL)
+$(ZONEDIR)/zone$(1)/water.done: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(ZONE_SRC) | $(TOOL)
 	@mkdir -p $$(@D)
 	$(MPK) water $$(zone$(1)_DAT) $$(zone$(1)_POS) --index $(INDEX) --library $(LIB) --out $$(@D)
 	@touch $$@
 
-$(ZONEDIR)/zone$(1)/sky.csv: $$(zone$(1)_DAT) $(INDEX) $(ZONE_SRC) | $(TOOL)
+$(ZONEDIR)/zone$(1)/sky.csv: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(ZONE_SRC) | $(TOOL)
 	@mkdir -p $$(@D)
 	$(MPK) sky $$(zone$(1)_DAT) --index $(INDEX) --library $(LIB) --out $$(@D)
 

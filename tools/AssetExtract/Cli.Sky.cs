@@ -66,11 +66,9 @@ internal static partial class Cli
             sky = SkyDefinition.Parse(System.Text.Encoding.Latin1.GetString(skies.Extract(e)));
         }
         IniFile sector;
-        using (MpkArchive dat = MpkArchive.Open(datMpk))
-        {
-            MpkEntry? e = dat.Entries.FirstOrDefault(x => x.Name.Equals("SECTOR.DAT", StringComparison.OrdinalIgnoreCase));
-            sector = IniFile.Parse(e is null ? "" : System.Text.Encoding.Latin1.GetString(dat.Extract(e)));
-        }
+        // SECTOR.DAT as the client reads it: the csv archive's copy first (DaocAssets.Zone.ZoneArchive).
+        using (var zone = DaocAssets.Zone.ZoneArchive.Open(datMpk))
+            sector = IniFile.Parse(zone.Text("SECTOR.DAT") ?? "");
 
         static string C(System.Numerics.Vector4 c) => FormattableString.Invariant($"{c.X:0.###} {c.Y:0.###} {c.Z:0.###} {c.W:0.###}");
         static string C3(System.Numerics.Vector3 c) => FormattableString.Invariant($"{c.X:0.###} {c.Y:0.###} {c.Z:0.###} 1");

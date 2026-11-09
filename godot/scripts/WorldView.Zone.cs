@@ -172,8 +172,10 @@ public partial class WorldView
         var zoneRoot = new Node3D { Name = "Objects" };
         var used = new System.Collections.Generic.HashSet<string>();
 
-        foreach ((string glb, float x, float y, float z, float angleDeg, float scale) in placements)
+        foreach (DaocAssets.Zone.ZonePlacement placement in placements)
         {
+            (string glb, float x, float y, float z, float angleDeg, float scale) =
+                (placement.Glb, placement.X, placement.Y, placement.Z, placement.AngleDeg, placement.Scale);
             bool fresh = !loaded.ContainsKey(glb);
             Node3D? template = LoadZoneModel(parts, glb, libraryDir, loaded);
             if (fresh)
@@ -184,18 +186,30 @@ public partial class WorldView
 
             var inst = (Node3D)template.Duplicate();
             inst.Position = ToGodot(x, y, z);
-            // DAoC angle is degrees about the vertical axis; negate for Godot's handedness (as heading).
-            inst.Rotation = new Vector3(0, -Mathf.DegToRad(angleDeg), 0);
+            // DAoC angle is degrees about the vertical axis, negated for Godot's handedness (as heading); a tilted
+            // placement turns about its own axis instead (ZonePlacement.Rotation: fixtures.csv's 3D Angle and Axis).
+            System.Numerics.Quaternion turn = placement.Rotation;
+            inst.Quaternion = new Quaternion(turn.X, turn.Y, turn.Z, turn.W);
             // The model .glb is already in metres; the manifest's scale is the per-fixture art ratio.
             inst.Scale = new Vector3(scale, scale, scale);
             // What the inspect readout reports for this placement (raw zone.csv values).
             inst.SetMeta("glb", glb);
-            inst.SetMeta("placement", $"x {x:0} y {y:0} z {z:0}  angle {angleDeg:0}°  scale {scale:0.##}");
+            inst.SetMeta("placement", $"x {x:0} y {y:0} z {z:0}  angle {angleDeg:0}°  scale {scale:0.##}" +
+                (placement.Tilt != 0 ? $"  tilt {Mathf.RadToDeg(placement.Tilt):0}° about ({placement.AxisX:0.##}, {placement.AxisY:0.##}, {placement.AxisZ:0.##})" : "") +
+                (placement.Collide == 0 ? "  not solid" : ""));
             zoneRoot.AddChild(inst);
             // Trimesh collision per placed object: the chase camera pulls in off buildings and the
             // character stands on floors. ~1,500 static bodies for a full zone.
             foreach (MeshInstance3D mi in FindMeshes(inst))
             {
+                // Not solid (fixtures.csv's Collide 0: trees, campfire logs): no walls and nothing to stand on, as retail
+                // makes an object solid only when the column is set (daoc-re RE/69).
+                if (placement.Collide == 0)
+                {
+                    if (mi.Name.ToString().StartsWith(DaocAssets.Nif.GltfExporter.CollisionPrefix, System.StringComparison.Ordinal))
+                        mi.Visible = false;
+                    continue;
+                }
                 // A collision volume (the converter's "eodcollide_" nodes): never drawn; a body on the wall layer,
                 // which only the character's movement meets (WorldView.Walls).
                 if (mi.Name.ToString().StartsWith(DaocAssets.Nif.GltfExporter.CollisionPrefix, System.StringComparison.Ordinal))

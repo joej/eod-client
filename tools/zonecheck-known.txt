@@ -46,6 +46,12 @@ rock_formation_16.glb @ 331520 621824 | under the ground | Atlantis sea floor, b
 
 # Tilted crystals (tutorial zones 28 and 29): small, placed at explicit heights, with a "3D Angle" tilt the
 # converter doesn't read yet (W18), so upright they sit in the ground; tilted they lean out of it.
-dellcryst05.glb     | under the ground | tilted crystal, 3D Angle not applied yet (W18; unverified)
-dellcryst05.glb     | sunk into the ground | tilted crystal, 3D Angle not applied yet (W18; unverified)
-dellcryst06.glb     | sunk into the ground | tilted crystal, 3D Angle not applied yet (W18; unverified)
+dellcryst05.glb     | under the ground | crystal set into the ground as stored: zone 28's carry no tilt (3D Angle applied since 2026-11-09; unverified)
+dellcryst05.glb     | sunk into the ground | crystal set into the ground (tilt applied; unverified)
+dellcryst06.glb     | sunk into the ground | crystal set into the ground (tilt applied; unverified)
+
+# The csv archive's fixtures.csv (what retail reads, since 2026-11-09) stores these lower than the dat copy did, or
+# without On Ground: Lyonesse's stone10 at Z 0-11 (dat copy: On Ground), a Mesothalassa rock formation. Probably as
+# buried in retail; open question W56.
+stone10.glb           | under the ground | csv copy: not On Ground, stored Z near 0 (Lyonesse; W56, unverified)
+rock_formation6.glb   | under the ground | csv copy's position, Atlantis sea floor (Mesothalassa; W56, unverified)

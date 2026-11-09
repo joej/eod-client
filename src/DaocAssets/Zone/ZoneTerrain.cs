@@ -60,10 +60,11 @@ public sealed class ZoneTerrain
     /// </summary>
     public static ZoneTerrain Read(string zoneDatMpk, int sizeX = 8, int sizeY = 8)
     {
-        using MpkArchive dat = MpkArchive.Open(zoneDatMpk);
-        Pcx terrain = Pcx.Read(ReadMember(dat, "terrain.pcx"));
-        Pcx offset = Pcx.Read(ReadMember(dat, "offset.pcx"));
-        string sector = System.Text.Encoding.Latin1.GetString(ReadMember(dat, "SECTOR.DAT"));
+        using ZoneArchive zone = ZoneArchive.Open(zoneDatMpk);
+        Pcx terrain = Pcx.Read(ReadMember(zone.Dat, "terrain.pcx"));
+        Pcx offset = Pcx.Read(ReadMember(zone.Dat, "offset.pcx"));
+        // SECTOR.DAT as the client reads it (the csv archive's copy first; ZoneArchive).
+        string sector = zone.Text("SECTOR.DAT") ?? throw new MpkFormatException("Zone archive has no member 'SECTOR.DAT'.");
 
         (int scale, int off) = ParseFactors(sector);
         return new ZoneTerrain(terrain, offset, scale, off, sizeX, sizeY);

@@ -38,7 +38,8 @@ public sealed partial class ZoneAudit
             ["fixtures.csv"] = new Dictionary<int, string>
             {
                 [1] = "model (NIF #)", [3] = "x", [4] = "y", [5] = "z (unless On Ground)", [6] = "angle",
-                [7] = "scale", [11] = "On Ground",
+                [7] = "scale", [8] = "Collide (0: not solid)", [11] = "On Ground", [15] = "3D Angle", [16] = "3D Axis X",
+                [17] = "3D Axis Y", [18] = "3D Axis Z",
             },
             ["nifs.csv"] = new Dictionary<int, string> { [0] = "NIF #", [1] = "label", [2] = "model file" },
             // ZoneJumps: the doorway line, its floor and top, and the server zone point it uses.

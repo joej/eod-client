@@ -171,14 +171,14 @@ internal static partial class Cli
             return Usage();
         if (!File.Exists(datMpk)) { Console.Error.WriteLine($"No such zone archive: {datMpk}"); return 1; }
 
-        using MpkArchive dat = MpkArchive.Open(datMpk);
-        MpkEntry? sectorEntry = dat.Entries.FirstOrDefault(e => e.Name.Equals("SECTOR.DAT", StringComparison.OrdinalIgnoreCase));
-        if (sectorEntry is null)
+        // SECTOR.DAT as the client reads it: the csv archive's copy first (its water types and rivers differ in 43 zones).
+        using DaocAssets.Zone.ZoneArchive zone = DaocAssets.Zone.ZoneArchive.Open(datMpk);
+        if (zone.Text("SECTOR.DAT") is not string sectorText)
         {
             Console.Error.WriteLine("water: no SECTOR.DAT in this archive.");
             return 1;
         }
-        var bodies = ZoneWater.Parse(System.Text.Encoding.Latin1.GetString(dat.Extract(sectorEntry)), o.ZoneSize.X);
+        var bodies = ZoneWater.Parse(sectorText, o.ZoneSize.X);
         Directory.CreateDirectory(outDir);
         File.WriteAllLines(Path.Combine(outDir, "water.csv"),
             [ZoneWater.CsvHeader, .. bodies.Select(ZoneWater.CsvRow)]);

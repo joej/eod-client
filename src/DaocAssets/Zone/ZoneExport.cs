@@ -30,24 +30,8 @@ public static class ZoneExport
     /// dat archive (the two differ in 35 zones of the owner's install; two ship an empty csv archive).</summary>
     public static List<BoundSegment> ReadBounds(string zoneDatMpk, int offsetX, int offsetY)
     {
-        foreach (string? archive in new[] { CsvArchive(zoneDatMpk), zoneDatMpk })
-        {
-            // An empty csv archive (zone 9's is 0 bytes) counts as none.
-            if (archive is null || new FileInfo(archive).Length == 0)
-                continue;
-            MpkArchive mpk;
-            try { mpk = MpkArchive.Open(archive); }
-            catch (MpkFormatException) when (archive != zoneDatMpk)
-            {
-                // csv212.mpk holds fixtures.csv twice, which our reader refuses: its dat archive's walls
-                // then (which copy the client reads there is open question W54).
-                continue;
-            }
-            using (mpk)
-                if (mpk.TryGetEntry("bound.csv", out MpkEntry e))
-                    return ZoneBounds.Parse(Encoding.Latin1.GetString(mpk.Extract(e)), offsetX, offsetY);
-        }
-        return [];
+        using ZoneArchive zone = ZoneArchive.Open(zoneDatMpk);
+        return zone.Text("bound.csv") is string csv ? ZoneBounds.Parse(csv, offsetX, offsetY) : [];
     }
 
     /// <summary>
@@ -65,15 +49,15 @@ public static class ZoneExport
         ZoneLayout layout;
         (float X, float Y, float Z)? landing = null;
         List<ZoneJump> jumpPoints = [];
-        using (MpkArchive dat = MpkArchive.Open(zoneDatMpk))
+        // The zone's files as the client reads them: its csv archive first, then its dat archive (ZoneArchive).
+        using (ZoneArchive zone = ZoneArchive.Open(zoneDatMpk))
         {
             // A tree cluster ("Elm1CL5.nif") is no file: its trees go in its place (TreeClusters).
-            layout = (clusters ?? TreeClusters.None).Expand(ZoneLayout.Read(dat, offsetX, offsetY));
-            if (dat.TryGetEntry("zonejump.csv", out MpkEntry jumps))
+            layout = (clusters ?? TreeClusters.None).Expand(ZoneLayout.Read(zone, offsetX, offsetY));
+            if (zone.Text("zonejump.csv") is string csv)
             {
-                string csv = Encoding.Latin1.GetString(dat.Extract(jumps));
                 jumpPoints = ZoneJumps.Parse(csv, offsetX, offsetY);
-                if (ZoneLayout.IsCity(dat))
+                if (ZoneLayout.IsCity(zone.Dat))
                     landing = CityLanding(csv, offsetX, offsetY);
             }
         }
@@ -134,10 +118,10 @@ public static class ZoneExport
             converted++;
         }
 
-        // Manifest: one line per placement, "glb,x,y,z,angleDeg,scale". Only fixtures whose model
-        // converted are written (so the client never references a missing .glb).
+        // Manifest: one line per placement, "glb,x,y,z,angleDeg,scale,collide,tilt,axisX,axisY,axisZ" (ZoneCheck.ReadManifest).
+        // Only fixtures whose model converted are written (so the client never references a missing .glb).
         var sb = new StringBuilder();
-        sb.Append("glb,x,y,z,angle,scale\n");
+        sb.Append("glb,x,y,z,angle,scale,collide,tilt,axisx,axisy,axisz\n");
         int placed = 0;
         foreach (ZoneFixture f in layout.Fixtures)
         {
@@ -148,7 +132,10 @@ public static class ZoneExport
               .Append(f.Y.ToString("0.###", CultureInfo.InvariantCulture)).Append(',')
               .Append(Z(f).ToString("0.###", CultureInfo.InvariantCulture)).Append(',')
               .Append(f.AngleDeg.ToString(CultureInfo.InvariantCulture)).Append(',')
-              .Append(f.Scale.ToString("0.###", CultureInfo.InvariantCulture)).Append('\n');
+              .Append(f.Scale.ToString("0.###", CultureInfo.InvariantCulture)).Append(',')
+              .Append(f.Collide.ToString(CultureInfo.InvariantCulture)).Append(',')
+              .Append(string.Create(CultureInfo.InvariantCulture, $"{f.Tilt:0.######},{f.AxisX:0.######},{f.AxisY:0.######},{f.AxisZ:0.######}"))
+              .Append('\n');
             placed++;
         }
         File.WriteAllText(Path.Combine(outDir, "zone.csv"), sb.ToString());
@@ -165,8 +152,8 @@ public static class ZoneExport
     public static IReadOnlyList<string> ModelNames(string zoneDatMpk, TreeClusters? clusters = null)
     {
         ZoneLayout layout;
-        using (MpkArchive dat = MpkArchive.Open(zoneDatMpk))
-            layout = (clusters ?? TreeClusters.None).Expand(ZoneLayout.Read(dat, 0, 0));
+        using (ZoneArchive zone = ZoneArchive.Open(zoneDatMpk))
+            layout = (clusters ?? TreeClusters.None).Expand(ZoneLayout.Read(zone, 0, 0));
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var names = new List<string>();
         foreach (string nif in layout.Models)

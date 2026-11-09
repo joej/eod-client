@@ -18,7 +18,28 @@ using System.Text;
 namespace DaocAssets.Zone;
 
 /// <summary>One zone.csv row: model and placement as the client reads them.</summary>
-public readonly record struct ZonePlacement(string Glb, float X, float Y, float Z, float AngleDeg, float Scale);
+public readonly record struct ZonePlacement(string Glb, float X, float Y, float Z, float AngleDeg, float Scale,
+    int Collide = 1, float Tilt = 0, float AxisX = 0, float AxisY = 0, float AxisZ = 0)
+{
+    /// <summary>
+    /// How the placement turns the model, in the model's own (glTF / Godot: Y up, metres) frame: about the vertical by
+    /// −AngleDeg, or, for a tilted placement, by Tilt about its axis carried into that frame (zone (x, y, z) → (x, z, y)).
+    /// For a vertical axis the two agree (Tilt = −A), which is what fixes the sign.
+    /// </summary>
+    public Quaternion Rotation
+    {
+        get
+        {
+            if (Tilt == 0 || (AxisX == 0 && AxisY == 0 && AxisZ == 0))
+                return Quaternion.CreateFromAxisAngle(Vector3.UnitY, -AngleDeg * MathF.PI / 180f);
+            // The axis is in the zone's frame. Whether it is the world's or the model's own (whose Y is the world's -Y)
+            // only changes the sign of its Y, which is near 0 in 619 of the install's 644 tilted rows: the zone check
+            // came out the same both ways (2026-11-09). The world's is taken.
+            var axis = Vector3.Normalize(new Vector3(AxisX, AxisZ, AxisY));
+            return Quaternion.CreateFromAxisAngle(axis, Tilt);
+        }
+    }
+}
 
 /// <summary>A model's bounds in its glb (metres, glTF axes: Y up), as the client draws it.</summary>
 /// <param name="Sample">Up to a few thousand of the model's vertices (metres, as drawn), for pieces too
@@ -95,7 +116,12 @@ public static class ZoneCheck
             string[] c = raw.Trim().Split(',');
             if (c.Length < 6 || c[0] == "glb") continue;
             if (F(c[1], out float x) && F(c[2], out float y) && F(c[3], out float z) && F(c[4], out float a) && F(c[5], out float s))
-                list.Add(new ZonePlacement(c[0], x, y, z, a, s));
+            {
+                int collide = c.Length > 6 && int.TryParse(c[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out int cv) ? cv : 1;
+                float t = 0, ax = 0, ay = 0, az = 0;
+                if (c.Length > 10 && F(c[7], out t) && F(c[8], out ax) && F(c[9], out ay) && F(c[10], out az)) { }
+                list.Add(new ZonePlacement(c[0], x, y, z, a, s, collide, t, ax, ay, az));
+            }
         }
         return list;
 
@@ -139,13 +165,13 @@ public static class ZoneCheck
 
             // The model's box placed as the client places it: region offsets of its 8 corners.
             var corners = new List<Vector3>(8);
-            float th = -p.AngleDeg * MathF.PI / 180f, cos = MathF.Cos(th), sin = MathF.Sin(th);
+            Quaternion turn = p.Rotation;
             foreach (float mx in new[] { b.Min.X, b.Max.X })
             foreach (float my in new[] { b.Min.Y, b.Max.Y })
             foreach (float mz in new[] { b.Min.Z, b.Max.Z })
             {
-                float gx = (mx * cos + mz * sin) * p.Scale, gz = (-mx * sin + mz * cos) * p.Scale, gy = my * p.Scale;
-                corners.Add(new Vector3(gx, gz, gy) * UnitsPerMetre);   // region (dX, dY, dZ)
+                Vector3 g = Vector3.Transform(new Vector3(mx, my, mz), turn) * p.Scale;
+                corners.Add(new Vector3(g.X, g.Z, g.Y) * UnitsPerMetre);   // region (dX, dY, dZ)
             }
             float bottom = p.Z + corners.Min(c => c.Z), top = p.Z + corners.Max(c => c.Z);
 
