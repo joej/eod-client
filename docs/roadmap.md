@@ -454,6 +454,22 @@ with its own sound, intro movie and pregame screens, then the better-looking ver
     unchanged; several skins kept side by side and picked in Settings (folder or zip) instead of one
     `custom/` folder; adapters and events implemented from our protocol state, the names cross-checked
     with DAoC UI Forge's reference lists (`tokajer/daoc-ui-forge-core`, GPL-3.0: read, attributed).
+- **Which windows, and what each needs (`docs/ui-windows.md`, 2026-11-09).** Every retail window with the
+  server packets behind it, how far we are, and its milestone. Two findings shape the plan: most windows
+  wait on a packet we don't decode yet (0x91 XP, 0x16 skills/spells, 0x02 inventory, 0xFB stats, 0xFA money,
+  0x7F effect icons), so each window's data comes first; and the core windows (inventory and paper doll,
+  character sheet, spell and style sheets, quickbars) are built into the retail client, not XML, so we lay
+  them out ourselves on retail's art. M9's windows: summary (your vitals and the target's), floating
+  target, compass, menu bar, command and interface-elements windows, chat tabs and filters, quickbars.
+  The doc also has the chat test list (M6 tested only /say).
+- **Screen and UI scale (owner, 2026-11-09).** Today every panel and font is drawn at one screen pixel per
+  pixel with fixed sizes, so the UI is cramped in a small window and tiny on a large or high-density screen
+  (the 3D view is unaffected). Plan, in three layers: (1) one UI scale for the whole 2D layer, set
+  automatically from the screen's resolution and density, with a slider in Settings; (2) skin windows
+  placed in the skin's own units and scaled, so a retail or community skin looks the same at any
+  resolution; (3) less clutter: each window's position, size, visibility and transparency saved
+  (retail's chat windows already have window and font transparency), a compact HUD, and a key that hides
+  every window. How retail fits its UI to the resolution is asked of daoc-re, to start from its behaviour.
 - **UI review: Camelot Unchained's client**, before step (3): its fonts, window design, HUD and
   interaction patterns, for observations our own skin can use. Its interface code is public
   (`csegames/CSE-UI`: TypeScript/React UI rendered in HTML/CSS by Coherent, MPL-2.0 per folder; fonts carry
