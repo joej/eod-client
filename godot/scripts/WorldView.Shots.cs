@@ -223,8 +223,10 @@ public partial class WorldView
             GD.Print(err == Error.Ok ? $"[shots] {name} -> {path}" : $"[shots] {name} failed: {err}");
         }
         GD.Print($"[shots] {poses.Count} shot(s) done");
+        // Quit on the next frame, not from inside this async task: quitting mid-continuation aborted Godot on
+        // macOS while it shut down (SIGABRT in a mutex during NSApplication terminate, 2026-11-09).
         if (_session is null)
-            GetTree().Quit();
+            GetTree().CallDeferred(SceneTree.MethodName.Quit, 0);
         else
             QuitPressed?.Invoke();
     }
