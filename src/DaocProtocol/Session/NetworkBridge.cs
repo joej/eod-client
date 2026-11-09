@@ -93,6 +93,9 @@ public sealed class NetworkBridge(Action<string>? log = null)
     /// <summary>The crafting skills (0x16 subcode 8).</summary>
     public event Action<CraftingSkills>? CraftingSkillsChanged;
 
+    /// <summary>A cooldown started or ended (0xD6); <see cref="SkillBook.CooldownLeft"/> has the times.</summary>
+    public event Action<DisableSkills>? CooldownsChanged;
+
     /// <summary>The skills and spell lines as last sent in full.</summary>
     public SkillBook Skills { get; } = new();
 
@@ -209,6 +212,13 @@ public sealed class NetworkBridge(Action<string>? log = null)
                 case PointsUpdate.Code:
                     PointsChanged?.Invoke(PointsUpdate.Parse(packet.Payload));
                     break;
+                case DisableSkills.Code:
+                {
+                    DisableSkills d = DisableSkills.Parse(packet.Payload);
+                    Skills.Apply(d, Environment.TickCount64);
+                    CooldownsChanged?.Invoke(d);
+                    break;
+                }
                 case MoneyUpdate.Code:
                     MoneyChanged?.Invoke(MoneyUpdate.Parse(packet.Payload));
                     break;

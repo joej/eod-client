@@ -637,6 +637,29 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     }
 
     /// <summary>
+    /// Uses a skill or list spell (C→S 0xBB or 0x7D, as <see cref="SkillBook.Find"/> gives it) from the
+    /// current position. The server answers in chat and, for a cast, with its animation and a cooldown (0xD6).
+    /// </summary>
+    public Task UseAsync(UseTarget use, CancellationToken cancellationToken = default) =>
+        SendUseAsync(use.Code, use.First, use.Second, cancellationToken);
+
+    /// <summary>Uses quickbar or inventory slot <paramref name="slot"/> (C→S 0x71; retail's type byte is 0).</summary>
+    public Task UseSlotAsync(byte slot, byte type = 0, CancellationToken cancellationToken = default) =>
+        SendUseAsync(UseRequest.SlotCode, slot, type, cancellationToken);
+
+    private Task SendUseAsync(byte code, byte first, byte second, CancellationToken cancellationToken)
+    {
+        Require(SessionState.InWorld);
+        if (World is not WorldPosition world)
+            return Task.CompletedTask;
+        PositionAndObjectId p = world.Position;
+        // OpenDAoC reads "target in view" from the flag word; retail sent 0 without a target (C12).
+        ushort flags = TargetId != 0 ? UseRequest.TargetInView : (ushort)0;
+        return connection.SendAsync(code, UseRequest.Payload(p.X, p.Y, p.Z, MoveSpeed, p.Heading, flags, first, second),
+            cancellationToken);
+    }
+
+    /// <summary>
     /// Ask to enter or leave attack mode (0x74). The server answers with its own 0x74 AttackMode, which
     /// arrives with the other unprompted packets: that, not this request, says whether weapons are drawn
     /// (it refuses, e.g., melee with a bow readied, and ends attack mode itself).

@@ -107,7 +107,10 @@ public partial class WorldView
             GetTree().CreateTimer(delay).Timeout += () =>
             {
                 GD.Print($"[world] dev command: {command}");
-                _ = SendTravel(command);
+                if (command.StartsWith("/useskill ", System.StringComparison.OrdinalIgnoreCase))
+                    UseSkillByName(command["/useskill ".Length..].Trim());   // the client's own command
+                else
+                    _ = SendTravel(command);
             };
         }
         // --npc MODEL[:STATE][,MODEL...] spawns Albion NPCs with those models 5 m apart in front of the character, through the

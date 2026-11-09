@@ -114,6 +114,13 @@ public partial class WorldView
             }
             return;
         }
+        // /useskill <name>: use a skill or list spell by name (C→S 0xBB or 0x7D), until the quickbars exist. The
+        // client's own command: the server has none by that name.
+        if (command.Equals("/useskill", System.StringComparison.OrdinalIgnoreCase))
+        {
+            UseSkillByName(line.Split(' ', 2) is [_, string name] ? name.Trim() : "");
+            return;
+        }
         try
         {
             if (line.StartsWith('/'))

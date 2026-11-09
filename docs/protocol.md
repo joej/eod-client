@@ -510,6 +510,28 @@ one 0xFA, three 0x91, XP 0 of 50 at level 1; the skill list twice: 3 specialisat
 no spell lines, 14 crafting skills). A list caster's spell lines are so far checked only against bytes built
 in OpenDAoC's layout.*
 
+## Using skills and spells
+
+```
+C→S 0xBB UseSkill   x, y, z, speed (f32 LE), u16 BE heading (no on-ground bit), u16 BE flags,
+                    u8 index, u8 type, 2 zero bytes. Type 0: a specialisation, index into the whole
+                    usable-skill list; otherwise the index counts from the first entry that isn't a
+                    specialisation (we send the entry's page as the type; the server only tests > 0).
+C→S 0x7D UseSpell   the same, with u8 spell level, u8 spell-line number (list casters' lines, 0x16/2);
+                    the server picks the line's first entry of that level.
+C→S 0x71 UseSlot    the same, with u8 slot, u8 type (retail: 0).
+S→C 0xD6 Disable    u16 BE seconds, u8 count, u8 kind. Kind 1 (skills): count × (u16 BE index from the
+                    first non-specialisation, u16 BE seconds). Kind 2 (list spells, one packet per
+                    duration): count × (u8 line, u8 entry index). 0 seconds: usable again.
+```
+
+Flags as OpenDAoC reads them: 0x4000 strafing, 0x2000 or 0x8000 a target in view, 0x1000 a ground target in
+view. Retail 1.127's UseSlot is 24 bytes (the two trailing zeros included) with flags 0 when it has no target;
+what it sets with a target is open (C12). We send 0x2000 whenever a target is selected. *Verified live
+2026-11-09 (eodtest2/Spellcheck, a level 20 Wizard): 0x7D cast Cobalt Shield (Enhanced) ("You begin casting
+…", "A crystal shield covers you"), 0xBB used Sprint (index 0, type 1: "You prepare to sprint!"); at world
+entry the server sends 0xD6 with 0 seconds for every skill and list spell, both kinds.*
+
 ## Attack mode
 
 **C→S 0x74** (`PlayerAttackRequestHandler`): `u8 start` (1 attack, 0 stop), `u8 asked` (0 when the
