@@ -14,6 +14,7 @@ public partial class WorldView
     private PlayerInfo? _info;
     private PointsUpdate? _points;
     private MoneyUpdate? _money;
+    private WeaponStats? _weapon;   // weapon damage, weapon skill, armour factor (the character sheet's combat page)
 
     private void SubscribeCharacter()
     {
@@ -34,6 +35,13 @@ public partial class WorldView
             _money = m;
             GD.Print($"[world] money: {Money(m)}");
         };
+        // The skill and spell lists (for the quickbars and the spell and style sheets): kept in _bridge.Skills.
+        _bridge.SkillsChanged += list => GD.Print($"[world] skills: {list.Count} (" +
+            string.Join(", ", list.GroupBy(s => s.Page).Select(g => $"{g.Count()} {g.Key}")) + ")");
+        _bridge.SpellLinesChanged += lines => GD.Print($"[world] spell lines: {lines.Count}" +
+            (lines.Count == 0 ? "" : " (" + string.Join(", ", lines.Select(l => $"{l.LineName} {l.Entries.Count}")) + ")"));
+        _bridge.WeaponStatsChanged += w => _weapon = w;
+        _bridge.CraftingSkillsChanged += c => GD.Print($"[world] crafting skills: {c.Skills.Count}");
     }
 
     // "Lilillyn  L50 Paladin  RR 5L0  XP 9.1%  20g 0s 0c"

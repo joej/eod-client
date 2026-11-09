@@ -68,7 +68,7 @@ public class CharacterInfoPacketTests
     }
 
     [Fact]
-    public void TheBridgeRaisesEachAndLeavesOther0x16ListsUnhandled()
+    public void TheBridgeRaisesEach()
     {
         var bridge = new NetworkBridge(_ => { });
         PointsUpdate? points = null; MoneyUpdate? money = null; PlayerInfo? info = null;
@@ -80,7 +80,7 @@ public class CharacterInfoPacketTests
         Assert.Equal(513_500u, points?.RealmPoints);
         Assert.Equal((ushort)20, money?.Gold);
         Assert.Equal("Lilillyn", info?.Name);
-        // The skill and spell lists (subcodes 1, 2, 5, 8) aren't read yet.
-        Assert.True(bridge.UnhandledCounts.GetValueOrDefault(PlayerInfo.Code) > 0);
+        // Every 0x16 the capture holds (subcodes 1, 2, 3, 5, 8) is read.
+        Assert.Equal(0, bridge.UnhandledCounts.GetValueOrDefault(PlayerInfo.Code));
     }
 }

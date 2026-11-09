@@ -59,7 +59,7 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 |---|---|---|---|---|
 | `summary`, `new_summary_window` | Your health, power, endurance; the target's name and health; level, realm rank, XP bar | 0xAD vitals; 0x91 XP/points; 0x16 player info; target from our own selection | All decoded (0x91, 0x16/3 since 2026-11-09) and shown in the status line; no window yet | M9 |
 | `float_target_window` | The target's name and health; assist, face, follow, stick, attack, invite | The target's health % rides in 0xA1/0xA9 updates; 0xF6 ChangeTarget | Target selection and ring shown; its health — | M9 |
-| Quickbars (built-in) | Spells, styles, abilities, items and macros on keys 1–0, several bars | 0x16 skills (sub 1) and spell lines (sub 2) to fill them; 0xD6 cooldowns; using one sends C→S use-skill/spell | — (needs the skill/spell lists first) | M9/M10 |
+| Quickbars (built-in) | Spells, styles, abilities, items and macros on keys 1–0, several bars | 0x16 skills (sub 1) and spell lines (sub 2) to fill them; 0xD6 cooldowns; using one sends C→S use-skill/spell | Skill and spell lists decoded (2026-11-09); cooldowns (0xD6), the use requests and the bars — | M9/M10 |
 | `chat_window` (+ `context_window`, `chatrename`, `chat_config_window`, `channel_window`) | Several chat windows (tabs), each with its own filter of message types and default channel, font size and **window/font transparency** | 0xAF messages (type byte) | One log, all types, coloured per type; slash commands sent. No tabs, filters or transparency | M9 |
 | `compass` | Heading, on a bar | None (our own heading) | — | M9 |
 | `menu_bar_window` | Buttons for the main windows; money; XP bar; frame rate and lag meters | 0xFA money; 0x91 XP | Money and XP decoded (2026-11-09); no window | M9 |
@@ -152,9 +152,8 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 ## What this means for the order of work
 
 - **The data layer is the bigger gap, not the windows.** We decode 0xAD (vitals), 0xAF (chat), 0xF3
-  (timer), 0xAE/0x89 (death), 0x91 (XP and points), 0xFA (money), 0x16/3 (who the character is) and the
-  world's entity packets. Nearly every other window waits on a packet we don't parse yet: 0x16's skill and
-  spell lists, 0x02 (inventory), 0xFB (stats), 0x7F (effect icons), 0x17 (merchant), 0xD8 (delve). Each is a small, testable piece in
+  (timer), 0xAE/0x89 (death), 0x91 (XP and points), 0xFA (money), 0x16 (who the character is, its skill, spell and crafting lists, weapon stats) and the
+  world's entity packets. Nearly every other window waits on a packet we don't parse yet: 0x02 (inventory), 0xFB (stats), 0x7F (effect icons), 0x17 (merchant), 0xD8 (delve). Each is a small, testable piece in
   `DaocProtocol`, verifiable against OpenDAoC's writer and a live session, and worth doing before its window.
 - **M9's own windows:** the summary (vitals + target), the floating target window, the compass, the menu
   bar, the command and interface-elements windows, chat tabs and filters, and the quickbars (once the

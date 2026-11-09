@@ -484,10 +484,31 @@ S→C 0x16 VariousUpdate, 3    head 03 0F 00 00, then fifteen pairs of a byte an
 ```
 
 Realm level 40 is rank 5L0 (rank = level / 10 + 1, the remainder after the L). OpenDAoC writes "None" for a
-string the client should hide. 0x16's other subcodes carry the skill, spell and other lists (1, 2, 5, 8 at
-world entry), not yet decoded. *Checked against the RustDAoC 1.127e capture (a level 50 Paladin: every field
+string the client should hide.
+
+The other 0x16 subcodes at world entry (all four head bytes: subcode, entry count, subtype, a fourth):
+
+```
+0x16, 1  usable skills, paged    head 01, count, subtype (99: more pages follow, 3: last), first index;
+                                 each: u8 level, u16 BE id, u8 page (0 spec, 1 ability, 2 style, 3 spell,
+                                 4 song, 5 ability-spell, 6 realm ability), u16 BE special, u8 bonus,
+                                 u16 BE icon, u8-length name. A page starting at index 0 restarts the list.
+0x16, 2  list-caster spell lines head 02, entries + 1, 2, line number; the line (u16 LE 0, u16 BE id, u16 BE 0,
+                                 name), then each entry: u16 LITTLE-endian level word (low byte the level,
+                                 high byte 1 an ability, 2 a style, 0 a spell), u16 BE id, u16 BE icon, name.
+                                 Footer: 02 00 63 00 (subtype 99) ends the lines.
+0x16, 5  weapon and armour       05 06 00 00, then weapon damage × 100, weapon skill and armour factor, each
+                                 as high byte, 0, low byte, 0 (1.126+)
+0x16, 8  crafting skills         08, count, 03, 00; each: u16 BE points, u8 icon, u32 BE 1, name
+```
+
+"Special" is a spell's specialisation (its index in this list; 0xFF a song, 0xFE none) or a style's opening
+requirement; "bonus" a specialisation's added levels or a style's specialisation. The server sends the
+skill list again whenever a skill changes. *Checked against the RustDAoC 1.127e capture (a level 50 Paladin: every field
 decodes and rebuilds byte for byte) and live 2026-11-09 (eodtest2/Quitcheck at world entry: one 0x16/3,
-one 0xFA, three 0x91, XP 0 of 50 at level 1).*
+one 0xFA, three 0x91, XP 0 of 50 at level 1; the skill list twice: 3 specialisations and 7 abilities,
+no spell lines, 14 crafting skills). A list caster's spell lines are so far checked only against bytes built
+in OpenDAoC's layout.*
 
 ## Attack mode
 

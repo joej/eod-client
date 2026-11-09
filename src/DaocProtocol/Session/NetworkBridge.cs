@@ -81,6 +81,21 @@ public sealed class NetworkBridge(Action<string>? log = null)
     /// <summary>Who we are: level, class, race, guild, titles, realm rank (0x16 subcode 3).</summary>
     public event Action<PlayerInfo>? PlayerInfoChanged;
 
+    /// <summary>The usable-skill list arrived in full (0x16 subcode 1, all pages): <see cref="Skills"/>.</summary>
+    public event Action<IReadOnlyList<SkillEntry>>? SkillsChanged;
+
+    /// <summary>A list caster's spell lines arrived in full (0x16 subcode 2, through the footer).</summary>
+    public event Action<IReadOnlyList<SpellLinePage>>? SpellLinesChanged;
+
+    /// <summary>Weapon damage, weapon skill and armour factor (0x16 subcode 5).</summary>
+    public event Action<WeaponStats>? WeaponStatsChanged;
+
+    /// <summary>The crafting skills (0x16 subcode 8).</summary>
+    public event Action<CraftingSkills>? CraftingSkillsChanged;
+
+    /// <summary>The skills and spell lines as last sent in full.</summary>
+    public SkillBook Skills { get; } = new();
+
     /// <summary>A player died (0xAE): us or one in view.</summary>
     public event Action<PlayerDied>? PlayerDied;
 
@@ -100,6 +115,34 @@ public sealed class NetworkBridge(Action<string>? log = null)
     public IReadOnlyDictionary<byte, int> UnhandledCounts => _unhandled;
 
     private readonly Dictionary<byte, int> _unhandled = new();
+
+    // 0x16 carries several lists, by its first byte. Subcodes not read yet count as unhandled.
+    private void VariousUpdate(ServerPacket packet)
+    {
+        switch (packet.Payload.Length > 0 ? packet.Payload[0] : -1)
+        {
+            case SkillListPage.Subcode:
+                if (Skills.Add(SkillListPage.Parse(packet.Payload)))
+                    SkillsChanged?.Invoke(Skills.Skills);
+                break;
+            case SpellLinePage.Subcode:
+                if (Skills.Add(SpellLinePage.Parse(packet.Payload)))
+                    SpellLinesChanged?.Invoke(Skills.SpellLines);
+                break;
+            case PlayerInfo.Subcode:
+                PlayerInfoChanged?.Invoke(PlayerInfo.Parse(packet.Payload));
+                break;
+            case WeaponStats.Subcode:
+                WeaponStatsChanged?.Invoke(WeaponStats.Parse(packet.Payload));
+                break;
+            case CraftingSkills.Subcode:
+                CraftingSkillsChanged?.Invoke(CraftingSkills.Parse(packet.Payload));
+                break;
+            default:
+                _unhandled[packet.Code] = _unhandled.GetValueOrDefault(packet.Code) + 1;
+                break;
+        }
+    }
 
     /// <summary>
     /// Parse one packet and raise its event. A malformed payload is swallowed with a log line
@@ -169,9 +212,8 @@ public sealed class NetworkBridge(Action<string>? log = null)
                 case MoneyUpdate.Code:
                     MoneyChanged?.Invoke(MoneyUpdate.Parse(packet.Payload));
                     break;
-                // 0x16 carries several lists by subcode; only the player info is read yet, the rest count as unhandled.
-                case PlayerInfo.Code when PlayerInfo.Matches(packet.Payload):
-                    PlayerInfoChanged?.Invoke(PlayerInfo.Parse(packet.Payload));
+                case PlayerInfo.Code:
+                    VariousUpdate(packet);
                     break;
                 case DaocProtocol.Packets.PlayerDied.Code:
                     PlayerDied?.Invoke(DaocProtocol.Packets.PlayerDied.Parse(packet.Payload));
