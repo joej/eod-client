@@ -86,6 +86,7 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 | `effects/` | 1,575 effect NIFs, 573 DDS | M12 |
 | `sounds/` | 2,703 `.wav`, 49 music `.mp3`, 12 CSVs | M12 |
 | `ui/` | 151 XML layouts, 502 DDS, fonts | M9 (UI direction), later |
+| `icons/` | 15 icon sheets (`spl_*`, `cbt_*`, `itm_*`, `skl_*`: 320 × 320, 100 icons of 32 × 32), `brdr_0.bmp` (border frames), cursors; `icons/classic/` the old set (`user.dat` `ClassicIcons`). The server's number for a skill, style or spell reaches a sheet cell through `gamedata.mpk` `icons.csv`, `spells.csv`, `styles.csv` | **read** (2026-11-09, `mpk icons`, `IconSheets`, `IconTable`: the quickbars). Not yet: the style arrows (icons.csv's eight arrow columns), cursors, the classic set |
 | `phousing/`, `frontiers/` | housing; RvR frontiers and keeps | further out |
 | `zones/trees/` | SpeedTree trees + `treemap.csv` (open question W5) | M13 |
 | `zones/trees/tree_clusters.mpk` | `tree_clusters.csv`: a model name that is no file (`Elm1CL5.nif`) → a tree and up to ten offsets; the client builds the group. Used by the tutorial zones and zone 335 | **read** (2026-11-08, `TreeClusters`: one tree per offset, each on the ground; W53) |
