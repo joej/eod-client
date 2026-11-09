@@ -440,7 +440,8 @@ with its own sound, intro movie and pregame screens, then the better-looking ver
   - The player chooses "Atlantis Skin" or "Custom Skin" (`user.dat` `[interface] item1` = 0 or 8). A
     custom skin is the folder `ui/custom/`, so only one is installed at a time; `ui/custom/maps/`
     replaces the map pictures and `ui/custom/oldstyle/` the old bitmap window pieces. Every community
-    pack (UI-Chooser/BobsUI, MxN, Whatties, Tubben's, Ghost, Derida, Aurora) installs this way, by hand
+    pack (UI-Chooser/BobsUI, MxN, Whatties, Tubben's, Ghost, Derida, Aurora; also cfmike's flat dark UI,
+    https://ui.cfmike.com/, on the owner's list of skins to load, 2026-11-09, not yet examined) installs this way, by hand
     or with its own tool.
   - The format has three layers: resources (textures, icon sheets, bitmap and TrueType fonts),
     templates (image cut-outs, three- and nine-slice frames, buttons, scroll bars, with `<Parent>`
