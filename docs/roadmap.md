@@ -470,7 +470,24 @@ with its own sound, intro movie and pregame screens, then the better-looking ver
   placed in the skin's own units and scaled, so a retail or community skin looks the same at any
   resolution; (3) less clutter: each window's position, size, visibility and transparency saved
   (retail's chat windows already have window and font transparency), a compact HUD, and a key that hides
-  every window. How retail fits its UI to the resolution is asked of daoc-re, to start from its behaviour.
+  every window.
+  *Retail's behaviour (daoc-re RE/63, 2026-11-09, read from the client, not checked in play):*
+  - One UI scale, 1.0–4.0 (`user.dat` `ui_scale`, × 0.001). The whole UI is laid out on a virtual screen
+    of screen ÷ scale and stretched to fill it, so windows, art and text grow together. Retail never
+    shrinks below 1.0; at 1.0 windows keep their pixel size. The player changes it by dragging in the
+    screen's top-left 32 × 32 pixels ("UI Scale: x.xxx" in chat); there is no Options control.
+  - Window positions are absolute virtual pixels, clamped on screen; no anchoring. A character's layout
+    is saved in its own ini file (`[Panels]`, `Name=x,y,open,opacity,…`, plus size for resizable
+    windows), with shipped defaults per resolution for a new character.
+  - Font sizes don't follow the resolution, only the scale. Chat offers 9–21.
+  - Against clutter: opacity per window (10–100) and per chat text, a "Toggle Interface" key that hides
+    the UI, the Interface Elements window's toggles. No window lock, no general minimise, no chat fade.
+  - The 3D view and the UI share one resolution.
+
+  Ours: the same model, which Godot provides directly (the root window's content scale lays the 2D layer
+  out on screen ÷ scale): a scale in Settings rather than the hidden drag, below 1.0 allowed too, set from
+  the screen's density on first start. Then absolute, clamped window positions saved per character;
+  opacity per window; a Toggle Interface key.
 - **UI review: Camelot Unchained's client**, before step (3): its fonts, window design, HUD and
   interaction patterns, for observations our own skin can use. Its interface code is public
   (`csegames/CSE-UI`: TypeScript/React UI rendered in HTML/CSS by Coherent, MPL-2.0 per folder; fonts carry

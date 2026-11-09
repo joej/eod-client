@@ -29,7 +29,27 @@ shows it, even if not yet the retail window), **—** (nothing yet).
   bitmap set in `data/` (`pperdoll.bmp`, `charsheet.bmp`, `Magicsheet.bmp`, `combstylesheet.bmp`,
   `buttons.bmp`…; a skin overrides it from `ui/custom/oldstyle/`), and their layout is in the client
   itself. **The XML loader alone won't give us these:** we lay them out ourselves, on retail's art,
-  matching retail screenshots. Which windows exactly are built-in, and their sizes, is asked of daoc-re.
+  matching retail screenshots.
+- **Which ones (daoc-re RE/63, 2026-11-09):**
+  - **The stats panel** (right-hand, 192 × 448) is a mix. Its tab index, Attributes, Group and
+    Specs/Abilities pages are XML. Inventory (paper doll), combat styles and magic use the old art
+    (`pperdoll.bmp`, `combstylesheet.bmp`, `Magicsheet.bmp`, each 192 × 448).
+  - **Also without an XML file:**
+    - quickbars 1–3;
+    - the trade window (`trade.bmp`, 384 × 256) and trade timer;
+    - the bank (`vault.bmp`, 224 × 400);
+    - the lag meter and time display;
+    - character info;
+    - NPC talk (384 × 320) and dialogs (320 × 128);
+    - the quest log (`questbg.bmp`, 512 × 256);
+    - the spell-effects bar;
+    - the tradeskill window;
+    - consignment results and the money selector;
+    - six housing windows, siege and the war map.
+  - **Possibly XML after all:** some of these may be an XML window under another name (bank and
+    `vault_window`, NPC talk and `interact_window`, quest log and `quest_window`). Check before building
+    one ourselves.
+  - **Unknown:** their inner layout is in the client and hasn't been read.
 
 ## The windows
 
@@ -161,6 +181,6 @@ Built later: several chat windows with their own filters, default channel, font 
 
 ## Screen size and UI scale
 
-See roadmap M9, "Screen and UI scale". Retail's chat context menu already has per-window and per-font
-transparency (`window_alpha_value`, `font_alpha_value`), a starting point for cutting clutter. How retail
-fits windows to the resolution is asked of daoc-re.
+See roadmap M9, "Screen and UI scale", which records retail's behaviour (one UI scale from 1.0 to 4.0
+over a virtual screen; absolute window positions saved per character; opacity per window; a Toggle
+Interface key) and our plan.
