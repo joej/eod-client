@@ -43,7 +43,13 @@ public static class GltfExporter
         foreach (NifMesh mesh in model.Meshes)
         {
             if (mesh.Helper)
-                continue; // collision/climb/shadow-caster proxy — the client never draws it
+            {
+                // A collision volume (under "collidee", "collider", "collision …") is kept as never-drawn geometry
+                // the client collides with (CollisionPrefix). Other helpers (climb, pick, shadow) are left out.
+                if (mesh.Collision && mesh.Triangles.Length > 0)
+                    scene.AddRigidMesh(BuildCollisionMesh(mesh), Matrix4x4.Identity).WithName(CollisionPrefix + NodeName(mesh));
+                continue;
+            }
             // Name the node after the mesh, so the client can tell meshes apart (water surfaces are
             // matched to their water.csv row by it; the inspect readout shows it).
             scene.AddRigidMesh(BuildMesh(mesh, nifSpace: false), Matrix4x4.Identity).WithName(NodeName(mesh));
@@ -139,6 +145,22 @@ public static class GltfExporter
     // The glTF node name: the NIF shape's own name when it has one (a figure's part variants, e.g.
     // "Body1:0", are chosen by it), else the mesh name (water00, mesh12).
     private static string NodeName(NifMesh m) => string.IsNullOrEmpty(m.ShapeName) ? m.Name : m.ShapeName;
+
+    /// <summary>The name prefix of a model's collision volumes: never drawn, only collided with (roadmap M9, solid
+    /// world). Also their material's name.</summary>
+    public const string CollisionPrefix = "eodcollide_";
+
+    // A collision volume: positions only (no normals, UVs or colours), one plain material named for what it is.
+    private static IMeshBuilder<MaterialBuilder> BuildCollisionMesh(NifMesh m)
+    {
+        var material = new MaterialBuilder(CollisionPrefix + "volume").WithUnlitShader();
+        var mesh = new MeshBuilder<VertexPosition>(CollisionPrefix + m.Name);
+        var prim = mesh.UsePrimitive(material);
+        VertexBuilder<VertexPosition, VertexEmpty, VertexEmpty> V(int i) => new(new VertexPosition(Vertex(m, i, false, false, nifSpace: false).Geometry.Position));
+        foreach (var (a, b, c) in m.Triangles)
+            prim.AddTriangle(V(a), V(b), V(c));
+        return mesh;
+    }
 
     // The UV sets past the layer one (TEXCOORD_2 and 3; Godot's CUSTOM0.xy and .zw): the detail map's when the
     // dark map holds TEXCOORD_1 (an emblem shield: pattern, logo and surface on three sets), then the mesh's

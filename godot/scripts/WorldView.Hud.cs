@@ -73,6 +73,8 @@ public partial class WorldView
         _targetWindow.Button("ASSIST", new Vector2(50, 50), 48, () => TargetCommand("/assist"));
         _targetWindow.Button("ATTACK", new Vector2(102, 50), 43, () => _ = SendAttack(!_attacking));
         overlay.AddChild(_targetWindow);
+        // Offline (no server: the fixed camera views) there's nothing to show, and they would hide the world.
+        _summary.Visible = _session is not null;
     }
 
     // Each frame: the windows show what the client holds.
@@ -101,7 +103,7 @@ public partial class WorldView
         _targetBar.Set(t?.Dead == true ? 0 : t?.Health ?? -1);
         _floatTargetBar.Set(t?.Dead == true ? 0 : t?.Health ?? -1);
         // Retail keeps the target window open, empty without a target; we hide it then (less clutter).
-        _targetWindow.Visible = t is not null;
+        _targetWindow.Visible = t is not null && _session is not null;
     }
 
     private void FaceTarget()

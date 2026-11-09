@@ -47,6 +47,7 @@ public partial class WorldView
             };
             var qb = new Quickbar(this, bar, window, s);
             _bars.Add(qb);
+            window.Visible = _session is not null;   // offline: nothing to use, and the world shows clear
             overlay.AddChild(window);
         }
     }

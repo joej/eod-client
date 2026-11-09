@@ -490,16 +490,21 @@ public sealed class NifFileTests
         // game.dll's visibility pass hides (and the client never draws) nodes named exactly
         // collidee/climb/sclimb/pickee/ladder/shadowcaster and any node with the NiAVObject Hidden
         // flag. keep.NIF carries collidee subtrees; those shapes are flagged Helper by
-        // the reader and must NOT reach the exported scene — rendering them was the z-fighting
-        // placeholder geometry (and, for the keep, the collision hull overlapping the real stone).
+        // the reader and must NOT reach the scene as drawn geometry — rendering them was the z-fighting
+        // placeholder geometry (and, for the keep, the collision hull overlapping the real stone). Since
+        // 2026-11-09 the collision volumes among them are exported as "eodcollide_" meshes (never drawn:
+        // the client collides with them); the other helpers are still dropped.
         NifModel model = NifFile.Read(File.ReadAllBytes(path));
         Assert.Contains(model.Meshes, m => m.Helper);                 // the keep has helper shapes
         Assert.Contains(model.Meshes, m => !m.Helper);                // and real ones
+        Assert.Contains(model.Meshes, m => m.Helper && m.Collision);  // some of them collision volumes
 
-        int exported = GltfExporter.BuildScene(model).ToGltf2().LogicalMeshes.Count;
-        int nonHelper = model.Meshes.Count(m => !m.Helper);
-        Assert.Equal(nonHelper, exported);                            // only non-helpers are exported
-        Assert.True(exported < model.Meshes.Count, "some shapes should be dropped");
+        var gltf = GltfExporter.BuildScene(model).ToGltf2();
+        int drawn = gltf.LogicalNodes.Count(n => n.Mesh is not null && !n.Name.StartsWith(GltfExporter.CollisionPrefix));
+        int volumes = gltf.LogicalNodes.Count(n => n.Mesh is not null && n.Name.StartsWith(GltfExporter.CollisionPrefix));
+        Assert.Equal(model.Meshes.Count(m => !m.Helper), drawn);                      // drawn: only non-helpers
+        Assert.Equal(model.Meshes.Count(m => m.Helper && m.Collision && m.Triangles.Length > 0), volumes);
+        Assert.True(volumes > 0, "the keep's collidee volumes should be exported for collision");
     }
 
     [LiveTheory("live-nif/keep-422.nif")]

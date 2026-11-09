@@ -195,7 +195,16 @@ public partial class WorldView
             // Trimesh collision per placed object: the chase camera pulls in off buildings and the
             // character stands on floors. ~1,500 static bodies for a full zone.
             foreach (MeshInstance3D mi in FindMeshes(inst))
+            {
+                // A collision volume (the converter's "eodcollide_" nodes) is never drawn. Until the character
+                // collides with them (roadmap M9, solid world) they are simply left out.
+                if (mi.Name.ToString().StartsWith(DaocAssets.Nif.GltfExporter.CollisionPrefix, System.StringComparison.Ordinal))
+                {
+                    mi.Visible = false;
+                    continue;
+                }
                 mi.CreateTrimeshCollision();
+            }
             parts.Placed++;
             yield return true;
         }
