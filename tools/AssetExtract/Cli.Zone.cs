@@ -140,12 +140,40 @@ internal static partial class Cli
             if (indexPath is not null && libDir is not null)
             {
                 if (!File.Exists(indexPath)) { Console.Error.WriteLine($"No such index: {indexPath} (run `mpk index` first)."); return 1; }
-                var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir);
+                // Each zone's own 64 tiles (the same names in every zone: never looked up by name across zones), from its
+                // texNNN.mpk or the use_texture zone's, into textures/terrain/zoneNNN/, where the client looks first.
+                string zoneDigits = new(Path.GetFileNameWithoutExtension(datMpk).Where(char.IsDigit).ToArray());
+                string tileDir = Path.Combine(libDir, "textures", "terrain", $"zone{zoneDigits}");
                 int got = 0, miss = 0;
-                foreach (NifMesh m in meshes)
-                    if (m.TextureFile is { } tf)
-                        if (library.GatherTexture(tf) is not null) got++; else miss++;
-                Console.WriteLine($"  tiles: {got} gathered, {miss} missing -> {Path.GetFullPath(libDir)}/textures");
+                if (ZoneTerrain.TileArchive(datMpk, terrain.UseTexture) is string tileMpk)
+                {
+                    Directory.CreateDirectory(tileDir);
+                    using MpkArchive tex = MpkArchive.Open(tileMpk);
+                    foreach (NifMesh m in meshes)
+                    {
+                        // By name across extensions: some zones' tiles are .bmp (zones 100-104 and others), kept as they are
+                        // (the client binds a tile by its stem, any of .dds/.tga/.bmp/.png).
+                        string stem = Path.GetFileNameWithoutExtension(m.TextureFile ?? "");
+                        MpkEntry? e = stem.Length == 0 ? null : new[] { ".dds", ".bmp", ".tga" }
+                            .Select(ext => tex.TryGetEntry(stem + ext, out MpkEntry x) ? x : (MpkEntry?)null).FirstOrDefault(x => x is not null);
+                        if (e is MpkEntry entry)
+                        {
+                            byte[] bytes = tex.Extract(entry);
+                            // The install's BMP tiles store their file size in 4-byte units (16653 for 66,614 bytes), which
+                            // Godot's loader takes as the length and refuses: write the true size.
+                            if (bytes.Length > 6 && bytes[0] == 'B' && bytes[1] == 'M')
+                                BitConverter.GetBytes(bytes.Length).CopyTo(bytes, 2);
+                            File.WriteAllBytes(Path.Combine(tileDir, entry.Name.ToLowerInvariant()), bytes);
+                            got++;
+                        }
+                        else
+                            miss++;
+                    }
+                    Console.WriteLine($"  tiles: {got} from {Path.GetFileName(tileMpk)}, {miss} missing -> {Path.GetFullPath(tileDir)}" +
+                                      (terrain.FlipX || terrain.FlipY ? $" (mirrored: {(terrain.FlipX ? "x" : "")}{(terrain.FlipY ? "y" : "")})" : ""));
+                }
+                else
+                    Console.WriteLine($"  tiles: no texNNN.mpk for this zone{(terrain.UseTexture is int u ? $" or zone {u}" : "")}");
             }
             return 0;
         }

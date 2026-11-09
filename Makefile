@@ -57,7 +57,8 @@ CLI_SRC    := $(X)/Program.cs $(X)/Options.cs $(X)/GlobalUsings.cs $(X)/AssetExt
 ZONE_SRC   := $(COMMON_SRC) $(filter-out $(A)/Zone/ZoneAudit.cs,$(wildcard $(A)/Zone/*.cs)) \
               $(A)/Nif/GltfExporter.cs $(A)/Nif/NifMesh.cs $(A)/Nif/NifReader.cs \
               $(CLI_SRC) $(X)/Cli.Zone.cs $(X)/Cli.Sky.cs \
-              $(wildcard $(CLIENT)/zones/trees/tree_clusters.mpk)
+              $(wildcard $(CLIENT)/zones/trees/tree_clusters.mpk) \
+              $(wildcard $(CLIENT)/zones/textures/LIGHTDEF.CSV $(CLIENT)/zones/textures/lightdef.csv)
 TOOL_SRC   := $(shell find $(A) tools/AssetExtract -name '*.cs' -not -path '*/obj/*' -not -path '*/bin/*') \
               $(A)/DaocAssets.csproj tools/AssetExtract/AssetExtract.csproj
 
@@ -121,7 +122,7 @@ $(ZONEDIR)/zone$(1)/models.mk: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(ZONE
 	@mkdir -p $$(@D)
 	@$(MPK) zonedeps $$(zone$(1)_DAT) --index $(INDEX) --var zone$(1)_MODELS > $$@.tmp && mv $$@.tmp $$@
 
-$(ZONEDIR)/zone$(1)/terrain.glb: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $$(zone$(1)_EDGEDAT) $(INDEX) $(ZONE_SRC) | $(TOOL)
+$(ZONEDIR)/zone$(1)/terrain.glb: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $$(zone$(1)_TEX) $$(zone$(1)_EDGEDAT) $(INDEX) $(ZONE_SRC) | $(TOOL)
 	@mkdir -p $$(@D)
 	$(MPK) terrain $$(zone$(1)_DAT) $$(zone$(1)_POS) $$(zone$(1)_EDGES) --index $(INDEX) --library $(LIB) --out $$@
 

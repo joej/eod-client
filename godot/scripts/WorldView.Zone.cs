@@ -54,6 +54,32 @@ public partial class WorldView
         foreach (bool step in WaterSteps(parts, lib)) yield return step;
         foreach (bool step in JumpSteps(parts)) yield return step;
         foreach (bool step in BoundSteps(parts)) yield return step;
+        foreach (bool step in LightSteps(parts)) yield return step;
+    }
+
+    // The zone's fixed coloured lights (lights.csv, from the zone's lights.csv and LIGHTDEF.CSV: torches, fires, lamps):
+    // an omni light each, its range the definition's (256/512/1024 units), no shadows (DaocAssets.Zone.ZoneLights).
+    private static System.Collections.Generic.IEnumerable<bool> LightSteps(ZoneParts parts)
+    {
+        string csv = parts.Dir.Length == 0 ? "" : parts.Dir.PathJoin("lights.csv");
+        if (csv.Length == 0 || !Godot.FileAccess.FileExists(csv))
+            yield break;
+        var lights = DaocAssets.Zone.ZoneLights.ReadCsv(Godot.FileAccess.GetFileAsString(csv));
+        if (lights.Count == 0)
+            yield break;
+        var root = new Node3D { Name = "Lights" };
+        foreach (DaocAssets.Zone.ZoneLight l in lights)
+            root.AddChild(new OmniLight3D
+            {
+                Position = ToGodot(l.X, l.Y, l.Z),
+                LightColor = new Color(l.R / 255f, l.G / 255f, l.B / 255f),
+                OmniRange = l.Range * RegionMetresPerUnit,
+                LightEnergy = 1.5f,
+                ShadowEnabled = false,
+            });
+        parts.Root.AddChild(root);
+        GD.Print($"[world] zone {parts.Id}: {lights.Count} light(s)");
+        yield return true;
     }
 
     // The zone terrain .glb. The exporter already baked region units → metres (× 0.025) into its vertices
@@ -79,8 +105,11 @@ public partial class WorldView
         int textured = 0;
         foreach (MeshInstance3D tileMesh in FindMeshes(terrain).ToList())
         {
-            textured += ModelTexturing.Apply(tileMesh,
-                libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir);
+            // The zone's own tiles first (textures/terrain/zoneNNN: every zone names its 64 tiles alike, so the shared
+            // folder's copy is only one zone's, kept as a fallback for an old library).
+            textured += ModelTexturing.Apply(tileMesh, libraryDir.PathJoin("overrides"),
+                libraryDir.PathJoin("textures").PathJoin("terrain").PathJoin($"zone{parts.Id:000}"),
+                libraryDir.PathJoin("textures"), libraryDir);
             yield return true;
         }
 

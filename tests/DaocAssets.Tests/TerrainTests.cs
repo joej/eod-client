@@ -348,6 +348,51 @@ public sealed class TerrainTests
         return [.. head, .. body];
     }
 
+    [Fact]
+    public void AFlipMirrorsTheTileTexturesButNotTheHeights()
+    {
+        // W16 (daoc-re RE/69): flip_x / flip_y mirror the ground textures inside each tile; heights stay.
+        string Zone(string flips)
+        {
+            byte[] sector = System.Text.Encoding.Latin1.GetBytes("[terrain]\nscalefactor=8\noffsetfactor=32\n" + flips);
+            string path = Path.Combine(Path.GetTempPath(), "daoc-flip-" + Guid.NewGuid().ToString("N") + ".mpk");
+            File.WriteAllBytes(path, MpkBuilder.Build(("terrain.pcx", FlatPcx(8, 8, 10)), ("offset.pcx", FlatPcx(8, 8, 0)), ("SECTOR.DAT", sector)));
+            return path;
+        }
+        string plain = Zone(""), flipped = Zone("flip_x=1\nflip_y=1\nuse_texture=006\n");
+        try
+        {
+            ZoneTerrain a = ZoneTerrain.Read(plain, 1, 1), b = ZoneTerrain.Read(flipped, 1, 1);
+            Assert.Equal((false, false, (int?)null), (a.FlipX, a.FlipY, a.UseTexture));
+            Assert.Equal((true, true, (int?)6), (b.FlipX, b.FlipY, b.UseTexture));
+            var ma = a.BuildTiledMesh(0, 0, 1).Single();
+            var mb = b.BuildTiledMesh(0, 0, 1).Single();
+            Assert.Equal(ma.Vertices, mb.Vertices);
+            for (int i = 0; i < ma.TexCoords!.Length; i++)
+                Assert.Equal(new System.Numerics.Vector2(1, 1) - ma.TexCoords[i], mb.TexCoords![i]);
+        }
+        finally { File.Delete(plain); File.Delete(flipped); }
+    }
+
+    [Fact]
+    public void AZoneUsesItsOwnTilesElseTheBorrowedZones()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "daoc-tiles-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            foreach (string z in new[] { "zone004", "zone006", "zone157", "Zone152" })
+                Directory.CreateDirectory(Path.Combine(root, z));
+            foreach ((string dir, string file) in new[] { ("zone004", "tex004.mpk"), ("zone006", "tex006.mpk"), ("Zone152", "TEX152.mpk") })
+                File.WriteAllBytes(Path.Combine(root, dir, file), []);
+            // Zone 4 has its own tiles: kept, whatever use_texture says (it also says ignore_use_texture).
+            Assert.EndsWith("tex004.mpk", ZoneTerrain.TileArchive(Path.Combine(root, "zone004", "dat004.mpk"), 6));
+            // Zone 157 has none: zone 152's (any case).
+            Assert.EndsWith("TEX152.mpk", ZoneTerrain.TileArchive(Path.Combine(root, "zone157", "dat157.mpk"), 152));
+            Assert.Null(ZoneTerrain.TileArchive(Path.Combine(root, "zone157", "dat157.mpk"), null));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
     private static byte[] FlatPcx(int w, int h, byte value)
     {
         var head = new byte[128];

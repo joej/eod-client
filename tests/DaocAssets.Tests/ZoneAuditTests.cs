@@ -46,7 +46,7 @@ public class ZoneAuditTests
         Assert.Contains("| river#.type | yes | 1 | `RIVER` · `LAKE` |", md);   // river00 and river01 grouped
         Assert.Contains("| fixtures.csv | yes | 1 | dat#.mpk |", md);
         Assert.Contains("2 rows; `Fixtures,, / ID,NIF #,X` ×1", md);
-        Assert.Contains("| lights.csv | no | 1 |", md);
+        Assert.Contains("| lights.csv | yes | 1 |", md);   // read since 2026-11-09 (the zone's fixed lights)
         Assert.Contains("- sounds.dat: 1 zone(s)", md);
     }
 

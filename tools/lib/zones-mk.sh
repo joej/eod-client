@@ -46,6 +46,9 @@ grep -v '^#' "$tsv" | while IFS=$'\t' read -r zone region ox oy w h name; do
     # The csv archive beside it holds the zone's edge walls (bound.csv), which the client reads from there.
     csv=$(find "$(dirname "$dat")" -maxdepth 1 -iname "csv$n.mpk" | head -1)
     echo "zone${n}_CSV := $csv"
+    # Its ground tiles (texRR-CC.dds), copied per zone by the terrain step.
+    tex=$(find "$(dirname "$dat")" -maxdepth 1 -iname "tex$n.mpk" | head -1)
+    echo "zone${n}_TEX := $tex"
     echo "zone${n}_POS := --offset $((ox * 8192)) $((oy * 8192)) --size $w $h"
 done
 # Each outdoor zone's neighbours on its east and south edges (same region, touching the edge, corners

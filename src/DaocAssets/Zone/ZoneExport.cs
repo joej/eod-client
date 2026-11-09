@@ -49,11 +49,15 @@ public static class ZoneExport
         ZoneLayout layout;
         (float X, float Y, float Z)? landing = null;
         List<ZoneJump> jumpPoints = [];
+        List<ZoneLight> lights = [];
         // The zone's files as the client reads them: its csv archive first, then its dat archive (ZoneArchive).
         using (ZoneArchive zone = ZoneArchive.Open(zoneDatMpk))
         {
             // A tree cluster ("Elm1CL5.nif") is no file: its trees go in its place (TreeClusters).
             layout = (clusters ?? TreeClusters.None).Expand(ZoneLayout.Read(zone, offsetX, offsetY));
+            // Its fixed coloured lights (torches, fires, lamps), coloured and sized by the install's LIGHTDEF.CSV.
+            if (zone.Text("lights.csv") is string lightRows && ZoneLights.FindDefinitions(zoneDatMpk) is string defs)
+                lights = ZoneLights.Parse(lightRows, ZoneLights.ParseDefinitions(File.ReadAllText(defs, Encoding.Latin1)), offsetX, offsetY);
             if (zone.Text("zonejump.csv") is string csv)
             {
                 jumpPoints = ZoneJumps.Parse(csv, offsetX, offsetY);
@@ -64,6 +68,7 @@ public static class ZoneExport
         Directory.CreateDirectory(outDir);
         // The zone's edge walls (ZoneBounds): what stops the player walking off the map.
         File.WriteAllText(Path.Combine(outDir, "bounds.csv"), ZoneBounds.ToCsv(ReadBounds(zoneDatMpk, offsetX, offsetY)));
+        File.WriteAllText(Path.Combine(outDir, "lights.csv"), ZoneLights.ToCsv(lights));
         // The zone's doorways (city gates, dungeon entrances): the client sends their zone point on
         // walking through one (C->S 0x90).
         File.WriteAllText(Path.Combine(outDir, "jumps.csv"), ZoneJumps.ToCsv(jumpPoints));

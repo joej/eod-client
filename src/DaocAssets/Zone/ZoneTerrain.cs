@@ -38,6 +38,20 @@ public sealed class ZoneTerrain
     /// </summary>
     public float CellSize => (float)RegionWidth / Cells;
 
+    /// <summary>
+    /// SECTOR.DAT [terrain] flip_x / flip_y: the ground textures are mirrored inside each tile (u → 1 − u, v → 1 − v); the
+    /// heights are not (daoc-re RE/69, W16). Zones that set flip_y borrow a neighbour's look (use_texture).
+    /// </summary>
+    public bool FlipX { get; init; }
+    public bool FlipY { get; init; }
+
+    /// <summary>
+    /// SECTOR.DAT [terrain] use_texture: the zone whose ground tiles to use when this zone has none of its own (zones 157
+    /// and 253 in the owner's install). Zones that have their own (4, 116, 216, 251, 252) keep them; three of those also
+    /// say ignore_use_texture=1.
+    /// </summary>
+    public int? UseTexture { get; init; }
+
     private ZoneTerrain(Pcx terrain, Pcx offset, int scaleFactor, int offsetFactor, int sizeX, int sizeY)
     {
         if (terrain.Width != offset.Width || terrain.Height != offset.Height)
@@ -67,7 +81,10 @@ public sealed class ZoneTerrain
         string sector = zone.Text("SECTOR.DAT") ?? throw new MpkFormatException("Zone archive has no member 'SECTOR.DAT'.");
 
         (int scale, int off) = ParseFactors(sector);
-        return new ZoneTerrain(terrain, offset, scale, off, sizeX, sizeY);
+        return new ZoneTerrain(terrain, offset, scale, off, sizeX, sizeY)
+        {
+            FlipX = Ini(sector, "flip_x") == 1, FlipY = Ini(sector, "flip_y") == 1, UseTexture = Ini(sector, "use_texture"),
+        };
     }
 
     /// <summary>
@@ -171,7 +188,8 @@ public sealed class ZoneTerrain
                 verts[i] = new System.Numerics.Vector3(px, -py, z);
                 System.Numerics.Vector3 nrm = NormalAtCell(cx, cy);
                 normals[i] = nrm with { Y = -nrm.Y };
-                uvs[i] = new System.Numerics.Vector2(lx / (float)cellsPerTile, ly / (float)cellsPerTile);
+                float u = lx / (float)cellsPerTile, v = ly / (float)cellsPerTile;
+                uvs[i] = new System.Numerics.Vector2(FlipX ? 1 - u : u, FlipY ? 1 - v : v);
             }
 
             var tris = new (ushort, ushort, ushort)[cellsPerTile * cellsPerTile * 2];
@@ -219,6 +237,28 @@ public sealed class ZoneTerrain
             return t.HeightAtCell(cx, cy);
         }
         return null;
+    }
+
+    /// <summary>
+    /// The archive holding a zone's ground tiles (texRR-CC.dds): its own texNNN.mpk beside its dat archive, or, when it has
+    /// none, the texMMM.mpk of the zone its SECTOR.DAT names in use_texture (a sibling zone folder). Null if neither exists.
+    /// Each zone has its own tiles under the same 64 names, so they must never be looked up by name across zones.
+    /// </summary>
+    public static string? TileArchive(string zoneDatMpk, int? useTexture)
+    {
+        string dir = Path.GetDirectoryName(Path.GetFullPath(zoneDatMpk))!;
+        string digits = new(Path.GetFileNameWithoutExtension(zoneDatMpk).Where(char.IsDigit).ToArray());
+        if (FileIn(dir, $"tex{digits}.mpk") is string own)
+            return own;
+        if (useTexture is not int other || Path.GetDirectoryName(dir) is not string zones)
+            return null;
+        string name = $"zone{other:000}";
+        string? sibling = Directory.EnumerateDirectories(zones).FirstOrDefault(d => Path.GetFileName(d).Equals(name, StringComparison.OrdinalIgnoreCase));
+        return sibling is null ? null : FileIn(sibling, $"tex{other:000}.mpk");
+
+        static string? FileIn(string d, string file) => Directory.Exists(d)
+            ? Directory.EnumerateFiles(d).FirstOrDefault(f => Path.GetFileName(f).Equals(file, StringComparison.OrdinalIgnoreCase))
+            : null;
     }
 
     /// <summary>The tile names this terrain references (<c>texXX-YY.dds</c>), for a gather step.</summary>

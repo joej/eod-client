@@ -59,7 +59,7 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 | Sky | not SECTOR.DAT: `zones/sky/sky_<name>.dat`, chosen by `zones/zones.mpk` → `zones.dat` `skydome` (zone, else region, else `sky_default`); SECTOR.DAT `[sky]` colour and `[terrain]` horizon/clouds are not read by the client | 329 | M7d: **read** (`SkyDefinition`, `mpk sky`) |
 | Forest fog regions | `[forest]`: colour, fog, rectangles and circles | 269 | M7d |
 | Far ground | `[farground]` texture | 134 | M7d |
-| Static lights | `lights.csv` (x, y, z and a fourth value, likely the light type) | 304 | M7d |
+| Static lights | `lights.csv` (x, y, z, type: a row of `zones/textures/LIGHTDEF.CSV`, colour and a range of 256/512/1024 units; −1 none): torches, fires and lamps, not day/night lighting (daoc-re RE/69) | 304 | **read** (2026-11-09, `ZoneLights`: an omni light each, no shadows; 1,667 in the converted zones) |
 | Baked terrain shading | `shadow.pcx`, `shademap.pcx` | 98, 86 | M7d |
 | Terrain holes | `[holes]` (probably cave entrances cut in the heightmap) | 98 | M7d |
 | Grass and ground cover | `grassmap.pcx`, `densemap.pcx` | 84 | M13 |
@@ -75,7 +75,7 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 | Folder | Contents | Roadmap |
 |---|---|---|
 | `anims/` | 4,060 `.kfa` animations | M7b (audit the format first) |
-| `light/` | `SYSPAL.PCX`, `SYSTEM.COL`, `TRAN555/565.TRA`: legacy palette/translucency tables, not referenced by the client (checked 2026-11-03). Day/night lighting comes from `terrain/lights.csv` and the zones' light settings | none |
+| `light/` | `SYSPAL.PCX`, `SYSTEM.COL`, `TRAN555/565.TRA`: legacy palette/translucency tables, not referenced by the client (checked 2026-11-03). Day/night lighting is not in `lights.csv` (each zone's are fixed coloured lights; `terrain/lights.csv` is a developer copy) | none |
 | `zones/sky/` | `sky.mpk` (25 `sky_<name>.dat`: sun, moon, stars, cloud layers, per weather × time of day canopy and cloud gradients, ambient/sun light, fog colour, storms, rain, snow) and its textures | M7d (day), M12 (clock, weather) |
 | `zones/zones.mpk` | `zones.dat`: every zone's name, region, offsets, size, type, entry music, sky; each region's sky, grass (`grass_alb.csv`/`.dds`) and expansion | M7d, M8, M13 |
 | `water/` | the shader water's parts (2026-11-03): always loaded `lavabase/lavadetail/lavaglow.dds`, `water_wake.dds`, `footsplash.NIF`, `lava1/2_sfx.NIF`; Shrouded Isles and Reflective water add `Displacement1.bmp`, `Droplet1.bmp`; Reflective adds `bump3.tga`. `acidcloud/flame000/hotglow.tga`: no known user. Modes and settings: open question W24 | M13 |

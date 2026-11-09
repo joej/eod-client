@@ -124,8 +124,8 @@ public class ZoneWaterTests
             ZoneWater.CsvRow(r with { Index = 1, Name = "Lake, North", Flow = 12.5f }), "bad,row");
         var rows = ZoneWater.ReadCsv(csv);
         Assert.Equal(2, rows.Count);
-        Assert.Equal(new WaterRow("water00", "watery", -50f), rows["water00"]);
-        Assert.Equal(new WaterRow("water01", "watery", 12.5f), rows["water01"]);
+        Assert.Equal(new WaterRow("water00", "watery", -50f, r.Type), rows["water00"]);
+        Assert.Equal(new WaterRow("water01", "watery", 12.5f, r.Type), rows["water01"]);
     }
 
     [LiveFact("live-terrain/SECTOR.DAT")]
