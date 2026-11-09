@@ -27,12 +27,13 @@ public partial class WorldView
 
     private void NameNpc(Entity e, NpcCreate npc)
     {
-        if ((npc.Flags2 & 0x02) != 0 || npc.Untargetable || npc.Name.Length == 0)
-            return;
         int realm = npc.Flags >> 6;
         int level = npc.Level & 0x7F;   // 0x80: a statue
         Color color = realm == 0 ? ConColour(ConColors.Of(PlayerLevel, level))
             : realm == (int)PlayerRealm || PlayerRealm == Realm.None ? Friendly : RealmNameColour(realm);
+        (e.Level, e.NameColor) = (level, color);   // for the target windows
+        if ((npc.Flags2 & 0x02) != 0 || npc.Untargetable || npc.Name.Length == 0)
+            return;
         e.Nameplate = Nameplate(e.Node, HeadHeight(e), npc.Name, npc.GuildName, color, ClientSettings.NameKinds.Monsters);
     }
 
@@ -41,6 +42,7 @@ public partial class WorldView
         int realm = (p.Flags >> 2) & 0x03;
         string name = string.Join(' ', new[] { p.Prefix, p.Name, p.LastName }.Where(s => s.Length > 0));
         bool enemy = realm != 0 && PlayerRealm != Realm.None && realm != (int)PlayerRealm;
+        e.NameColor = enemy ? RealmNameColour(realm) : FriendlyPlayer;
         e.Nameplate = Nameplate(e.Node, HeadHeight(e), name, p.GuildName, enemy ? RealmNameColour(realm) : FriendlyPlayer,
             enemy ? ClientSettings.NameKinds.Enemies : ClientSettings.NameKinds.Players);
     }

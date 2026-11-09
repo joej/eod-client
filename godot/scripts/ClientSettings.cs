@@ -162,6 +162,25 @@ public static class ClientSettings
         }
     }
 
+    /// <summary>
+    /// The scale of the game's windows (summary, target…): skin pixels to screen pixels, as retail's ui_scale
+    /// (1.0–4.0; retail never goes below 1). 0 = not set: follow the screen's density (2 on a Retina display).
+    /// </summary>
+    public static float UiScale
+    {
+        get => (float)Load().GetValue("interface", "ui_scale", 0.0).AsDouble();
+        set => SaveIn("interface", "ui_scale", value);
+    }
+
+    /// <summary>Where a game window was last dragged (its top-left, in skin pixels), or null: its default.</summary>
+    public static Vector2? WindowPosition(string window)
+    {
+        ConfigFile cfg = Load();
+        return cfg.HasSectionKey("windows", window) ? cfg.GetValue("windows", window).AsVector2() : null;
+    }
+
+    public static void SaveWindowPosition(string window, Vector2 position) => SaveIn("windows", window, position);
+
     /// <summary>The player's own key bindings (section "keys": action name = key codes, comma-separated; empty =
     /// no key). Actions not listed use the preset's keys.</summary>
     public static Dictionary<ControlAction, Key[]> LoadKeys()

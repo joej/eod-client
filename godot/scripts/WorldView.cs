@@ -147,7 +147,10 @@ public partial class WorldView : Node3D
         public string CombatIdle = "combat_idle";   // the clip for standing in attack mode, by the weapon in use
         public Node3D? QuestGlyph;    // the glyph over a quest giver's head (null: none)
         public string Name = "";
-        public bool Dead;             // died (0xAE) and not yet revived: lies in its Death clip
+        public byte Health = 100;     // percent, from its position updates (0xA1, 0xA9)
+        public int Level;             // an NPC's level (0 for players: not sent)
+        public Color NameColor = new(0.92f, 0.90f, 0.82f);   // con or realm colour, as its nameplate
+        public bool Dead;            // died (0xAE) and not yet revived: lies in its Death clip
         public Label3D? Nameplate;    // its name (and role or guild) over its head
     }
 
@@ -465,6 +468,7 @@ public partial class WorldView : Node3D
         BuildNpcWindow(overlay);
         BuildDeathPanel(overlay);
         BuildMapWindow(overlay);
+        BuildHud(overlay);
         NameSelf();
         AddChild(overlay);
         _viewSetting = ViewOverride() ?? ClientSettings.ViewDistance;
@@ -880,6 +884,7 @@ public partial class WorldView : Node3D
     public override void _PhysicsProcess(double delta)
     {
         WalkToTarget();
+        FollowStep();
         UpdatePlayer(delta);
         if (_chase)
             CheckJumpPoints();
@@ -902,6 +907,7 @@ public partial class WorldView : Node3D
 
     public override void _Process(double delta)
     {
+        UpdateHud();
         _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)
         {

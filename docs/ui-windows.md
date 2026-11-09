@@ -57,8 +57,8 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 
 | Window | Shows / does | Server data | Ours | Milestone |
 |---|---|---|---|---|
-| `summary`, `new_summary_window` | Your health, power, endurance; the target's name and health; level, realm rank, XP bar | 0xAD vitals; 0x91 XP/points; 0x16 player info; target from our own selection | All decoded (0x91, 0x16/3 since 2026-11-09) and shown in the status line; no window yet | M9 |
-| `float_target_window` | The target's name and health; assist, face, follow, stick, attack, invite | The target's health % rides in 0xA1/0xA9 updates; 0xF6 ChangeTarget | Target selection and ring shown; its health — | M9 |
+| `summary`, `new_summary_window` | Your health, power, endurance; the target's name and health; level, realm rank, XP bar | 0xAD vitals; 0x91 XP/points; 0x16 player info; target from our own selection | Window built 2026-11-09 (retail's new_summary_window layout, our style): name, level, RR, your three bars, target name and health | M9 |
+| `float_target_window` | The target's name and health; assist, face, follow, stick, attack, invite | The target's health % rides in 0xA1/0xA9 updates; 0xF6 ChangeTarget | Window built 2026-11-09 (float_target_window layout): name in con colour, health, FACE/FOLLOW/STICK (client-side), INVITE/ASSIST (server commands), ATTACK | M9 |
 | Quickbars (built-in) | Spells, styles, abilities, items and macros on keys 1–0, several bars | 0x16 skills (sub 1) and spell lines (sub 2) to fill them; 0xD6 cooldowns; using one sends C→S use-skill/spell | Lists, cooldowns (0xD6) and the use requests (0xBB, 0x7D, 0x71) done and checked live (2026-11-09; `/useskill <name>` until the bars exist); the bars — | M9/M10 |
 | `chat_window` (+ `context_window`, `chatrename`, `chat_config_window`, `channel_window`) | Several chat windows (tabs), each with its own filter of message types and default channel, font size and **window/font transparency** | 0xAF messages (type byte) | One log, all types, coloured per type; slash commands sent. No tabs, filters or transparency | M9 |
 | `compass` | Heading, on a bar | None (our own heading) | — | M9 |

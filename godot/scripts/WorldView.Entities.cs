@@ -54,6 +54,7 @@ public partial class WorldView
         float yaw = YawFromHeading(u.HeadingOnly);
         if (_entities.TryGetValue(u.ObjectId, out Entity? e))
         {
+            e.Health = u.HealthPercent;
             e.TargetPosition = pos;
             e.TargetYaw = yaw;
         }
@@ -342,6 +343,7 @@ public partial class WorldView
             return;   // not seen created yet: its 0x4B will place it
         e.TargetPosition = ToGodot(p.X, p.Y, p.Z);
         e.TargetYaw = YawFromHeading(p.HeadingOnly);
+        e.Health = p.HealthPercent;
         SetCombat(p.ObjectId, e, p.InCombat);
     }
 
