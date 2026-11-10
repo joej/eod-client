@@ -78,4 +78,39 @@ public partial class WorldView
         "0" or "off" or "hide" or "no" or "false" => false,
         _ => null,
     };
+
+    // The torch (T): a warm light the character carries, lighting the ground ahead and a little around. Ours alone so far:
+    // whether retail tells the server (other players seeing it) and its exact reach are asked of daoc-re.
+    private SpotLight3D? _torch;
+
+    private void ToggleTorch() => SetTorch(_torch is null || !_torch.Visible);
+
+    private void SetTorch(bool lit)
+    {
+        if (_torch is null)
+        {
+            _torch = new SpotLight3D
+            {
+                Name = "Torch",
+                // Shoulder height, a little ahead (the body faces -Z), tilted down toward the ground in front.
+                Position = new Vector3(0, 1.7f, -0.3f),
+                Rotation = new Vector3(Mathf.DegToRad(-25), 0, 0),
+                LightColor = new Color(1f, 0.72f, 0.42f),
+                LightEnergy = 3f,
+                SpotRange = 18f,
+                SpotAngle = 55f,
+                SpotAttenuation = 1.2f,
+                ShadowEnabled = true,
+                Visible = false,
+            };
+            // A dim glow all round, so the character itself and its feet are lit too.
+            _torch.AddChild(new OmniLight3D { LightColor = _torch.LightColor, LightEnergy = 0.8f, OmniRange = 5f });
+            _body.AddChild(_torch);
+        }
+        if (_torch.Visible == lit)
+            return;
+        _torch.Visible = lit;
+        GD.Print($"[world] torch {(_torch.Visible ? "lit" : "out")}");
+        AppendChat(_torch.Visible ? "You light your torch." : "You put out your torch.", LocalReply);
+    }
 }

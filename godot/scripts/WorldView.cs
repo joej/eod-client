@@ -792,6 +792,10 @@ public partial class WorldView : Node3D
         {
             ToggleMap();
         }
+        else if (KeyBindings.Pressed(@event, ControlAction.Torch) && !ChatInputActive)
+        {
+            ToggleTorch();
+        }
         else if (KeyBindings.Pressed(@event, ControlAction.AttackMode) && !ChatInputActive)
         {
             // H toggles attack mode: our binding, a key the install's RPG preset leaves free (F is retail's face

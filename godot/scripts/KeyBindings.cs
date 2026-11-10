@@ -12,7 +12,7 @@ namespace EodClient;
 
 public enum ControlAction
 {
-    Forward, Back, TurnLeft, TurnRight, StrafeLeft, StrafeRight, Jump, Sprint, AutoRun, AttackMode, Map,
+    Forward, Back, TurnLeft, TurnRight, StrafeLeft, StrafeRight, Jump, Sprint, AutoRun, AttackMode, Map, Torch,
 }
 
 public static class KeyBindings
@@ -34,6 +34,8 @@ public static class KeyBindings
         [ControlAction.AttackMode] = K(Key.H),
         // The map window: M, free in every preset (retail's map key is unconfirmed).
         [ControlAction.Map] = K(Key.M),
+        // The torch: T in the 2001 manual (docs/controls.md); a light the player carries.
+        [ControlAction.Torch] = K(Key.T),
     };
 
     private static readonly Dictionary<string, Dictionary<ControlAction, (Key[] Keys, MouseButton[] Buttons)>> Tables = new()
@@ -74,7 +76,7 @@ public static class KeyBindings
         ControlAction.TurnLeft => "Turn left", ControlAction.TurnRight => "Turn right",
         ControlAction.StrafeLeft => "Strafe left", ControlAction.StrafeRight => "Strafe right",
         ControlAction.Jump => "Jump", ControlAction.Sprint => "Sprint", ControlAction.AutoRun => "Auto-run",
-        ControlAction.AttackMode => "Attack mode", ControlAction.Map => "Map", _ => a.ToString(),
+        ControlAction.AttackMode => "Attack mode", ControlAction.Map => "Map", ControlAction.Torch => "Torch", _ => a.ToString(),
     };
 
     /// <summary>The keys that trigger <paramref name="action"/>: the player's own, else the preset's.</summary>
