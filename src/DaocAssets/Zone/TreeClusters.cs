@@ -6,10 +6,11 @@
 // the converter places one tree per offset instead. Used by the tutorial zones (27: 51 placements) and
 // zone 335. The file holds the table twice; the first row of a name wins.
 //
-// A cluster turns and scales as one model: an offset is in the model's own axes, so it rotates with the
-// fixture's angle the way a model's vertices do (NIF Y is world -Y at angle 0, see GltfExporter.NifToGltf
-// and the client's placement). Each tree stands on the ground at its own position. Whether retail mirrors
-// the offsets that way, and grounds each tree, is unconfirmed (open question W53).
+// Where each tree goes: retail's own rule for a cluster's points (daoc-re RE/66, from the code that stamps the trees'
+// shadows into shadow.pcx; ZoneShadow): with θ = 180° − the fixture's angle and s its scale,
+//     x' = X + s·(cos θ·x + sin θ·y),   y' = Y + s·(cos θ·y − sin θ·x)        (z ignored)
+// That code turns the offsets; that the trees themselves are placed the same way is assumed, so their shadows land
+// under them (open question W53). Each tree stands on the ground at its own position (also unconfirmed).
 
 using System.Globalization;
 
@@ -86,21 +87,42 @@ public sealed class TreeClusters
                 fixtures.Add(f);
                 continue;
             }
-            double a = f.AngleDeg * Math.PI / 180;
-            float cos = (float)Math.Cos(a), sin = (float)Math.Sin(a);
             foreach ((float ox, float oy, float oz) in cluster.Offsets)
+            {
+                (float x, float y) = Place(f, ox, oy);
                 fixtures.Add(f with
                 {
                     NifName = cluster.Tree,
-                    X = f.X + f.Scale * (ox * cos + oy * sin),
-                    Y = f.Y + f.Scale * (ox * sin - oy * cos),
+                    X = x,
+                    Y = y,
                     Z = f.Z + f.Scale * oz,
                     // Each tree stands on the ground at its own spot: kept at the cluster's one height, trees
                     // on a slope floated up to 44 m or sank 6 m (tutorial zones, 2026-11-08).
                     OnGround = true,
                 });
+            }
         }
         return new ZoneLayout { Fixtures = fixtures };
+    }
+
+    /// <summary>
+    /// The points where a layout's clusters (not yet expanded) darken the ground: one per tree, in the layout's
+    /// coordinates (ZoneShadow.Stamp). A single tree that is no cluster leaves none, as in retail.
+    /// </summary>
+    public IEnumerable<(float X, float Y)> ShadowPoints(ZoneLayout layout)
+    {
+        foreach (ZoneFixture f in layout.Fixtures)
+            if (_byName.TryGetValue(Bare(f.NifName), out var cluster))
+                foreach ((float ox, float oy, float _) in cluster.Offsets)
+                    yield return Place(f, ox, oy);
+    }
+
+    // Retail's turn of a cluster offset (see the header): θ = 180° − angle, as a heading.
+    private static (float X, float Y) Place(ZoneFixture f, float ox, float oy)
+    {
+        double t = (180 - f.AngleDeg) * Math.PI / 180;
+        float cos = (float)Math.Cos(t), sin = (float)Math.Sin(t);
+        return (f.X + f.Scale * (cos * ox + sin * oy), f.Y + f.Scale * (cos * oy - sin * ox));
     }
 
     private static string Bare(string name) => name[(name.LastIndexOfAny(['/', '\\']) + 1)..];

@@ -60,7 +60,7 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 | Forest fog regions | `[forest]`: colour, fog, rectangles and circles | 269 | M7d |
 | Far ground | `[farground]` texture | 134 | M7d |
 | Static lights | `lights.csv` (x, y, z, type: a row of `zones/textures/LIGHTDEF.CSV`, colour and a range of 256/512/1024 units; −1 none): torches, fires and lamps, not day/night lighting (daoc-re RE/69) | 304 | **read** (2026-11-09, `ZoneLights`: an omni light each, no shadows; 1,667 in the converted zones) |
-| Baked terrain shading | `shadow.pcx`, `shademap.pcx` | 98, 86 | M7d |
+| Baked terrain shading | `shadow.pcx` (ground shading, darkened under tree clusters), `shademap.pcx` (grass tint only) | 98, 86 | shadow.pcx **read** (2026-11-10, `ZoneShadow`: multiplies the Atlantis ground; W8); shademap.pcx with the grass (M7d) |
 | Terrain holes | `[holes]` (probably cave entrances cut in the heightmap) | 98 | M7d |
 | Grass and ground cover | `grassmap.pcx`, `densemap.pcx` | 84 | M13 |
 | Snow | `snowmap.tga` | 18 | later |

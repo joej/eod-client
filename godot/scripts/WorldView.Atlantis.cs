@@ -5,7 +5,9 @@
 // colour = layer 0, then lerp(colour, layer i, its mask weight) for each further layer. The zone's layer textures go
 // into one texture array (decompressed, 512 x 512, mipmapped: they come as 512 and 1024 DXT1) and its masks into
 // another; each patch gets a shader material with its layers' indices, repeats and mask slots. Settings → Classic
-// terrain keeps the baked tiles instead, as retail's option does; a patch without layers keeps its tile.
+// terrain keeps the baked tiles instead, as retail's option does; a patch without layers keeps its tile. The blend is
+// multiplied by the zone's ground shading (shadow.pgm, from shadow.pcx with the tree-cluster stamps: ZoneShadow), one
+// texel per heightmap cell, as retail's terrain vertex colours.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -35,6 +37,8 @@ public partial class WorldView
             uniform vec2 tiles[12];
             uniform int clamped[12];
             uniform vec2 flip;
+            uniform sampler2D shade : hint_default_white, filter_linear, repeat_disable;
+            uniform vec2 patch_at;
             void fragment() {
                 // The tile's UVs, mirrored back where the zone mirrors its classic tiles (flip_x / flip_y).
                 vec2 local = mix(UV, vec2(1.0) - UV, flip);
@@ -50,6 +54,9 @@ public partial class WorldView
                     float w = texture(masks, vec3(local, float(mask_index[i])))[channel[i]];
                     colour = mix(colour, c, w);
                 }
+                // The ground shading: texel i sits on heightmap cell i (32 cells per patch), as a vertex colour would.
+                vec2 cell = (patch_at + local) * 32.0;
+                colour *= texture(shade, (cell + 0.5) / vec2(textureSize(shade, 0))).r;
                 ALBEDO = colour;
                 ROUGHNESS = 1.0;
             }
@@ -106,6 +113,12 @@ public partial class WorldView
         }
         if (images.Count == 0 || maskImages.Count == 0)
             yield break;
+        // The ground shading (absent from zones converted before it: unshaded).
+        ImageTexture? shade = null;
+        string shadowPath = parts.Dir.PathJoin("shadow.pgm");
+        if (Godot.FileAccess.FileExists(shadowPath)
+            && ZoneShadow.ReadPgm(Godot.FileAccess.GetFileAsBytes(shadowPath)) is var (sw, sh, pixels))
+            shade = ImageTexture.CreateFromImage(Image.CreateFromData(sw, sh, false, Image.Format.L8, pixels));
         var layerArray = new Texture2DArray();
         layerArray.CreateFromImages(images);
         var maskArray = new Texture2DArray();
@@ -148,11 +161,14 @@ public partial class WorldView
             mat.SetShaderParameter("tiles", tiles);
             mat.SetShaderParameter("clamped", clamp);
             mat.SetShaderParameter("flip", new Vector2(flipX ? 1 : 0, flipY ? 1 : 0));
+            mat.SetShaderParameter("patch_at", new Vector2(px, py));
+            if (shade is not null)
+                mat.SetShaderParameter("shade", shade);
             for (int s = 0; s < mi.Mesh.GetSurfaceCount(); s++)
                 mi.SetSurfaceOverrideMaterial(s, mat);
             painted++;
         }
-        GD.Print($"[world] zone {parts.Id}: Atlantis terrain on {painted} patch(es), {images.Count} layer texture(s), {maskImages.Count} mask(s)");
+        GD.Print($"[world] zone {parts.Id}: Atlantis terrain on {painted} patch(es), {images.Count} layer texture(s), {maskImages.Count} mask(s), {(shade is null ? "no ground shading" : "ground shading")}");
         yield return true;
     }
 

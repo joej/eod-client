@@ -31,8 +31,8 @@ public sealed class TreeClustersTests
 
         // Two trees (the third slot is unused), then the keep unchanged.
         Assert.Equal(["elm1.NIF", "elm1.NIF", "keep.nif"], layout.Fixtures.Select(f => f.NifName));
-        // At angle 0 an offset is in the model's axes: X as the world's, Y mirrored (NIF Y is world -Y).
-        Assert.Equal((10100f, 20000f), (layout.Fixtures[0].X, layout.Fixtures[0].Y));
+        // Retail's rule (θ = 180° − angle): at angle 0 both offsets are mirrored, (x, y) → (−x, −y).
+        Assert.Equal((9900f, 20000f), (layout.Fixtures[0].X, layout.Fixtures[0].Y));
         Assert.Equal((10000f, 19800f), (layout.Fixtures[1].X, layout.Fixtures[1].Y));
         Assert.All(layout.Fixtures.Take(2), f => Assert.True(f.OnGround));
         Assert.Equal(["elm1.NIF", "keep.nif"], layout.Models);
@@ -43,10 +43,9 @@ public sealed class TreeClustersTests
     {
         ZoneLayout layout = TreeClusters.Parse(Csv).Expand(new ZoneLayout { Fixtures = [At("Elm1CL2.nif", 90, scale: 2)] });
 
-        // (100, 0) at 90° and scale 2: dx = 2·(100·cos 90 + 0) = 0, dy = 2·(100·sin 90 − 0) = 200.
+        // At 90°, θ = 90°: (100, 0) → 2·(cos θ·100, −sin θ·100) = (0, −200); (0, 200) → 2·(sin θ·200, cos θ·200) = (400, 0).
         Assert.Equal(10000f, layout.Fixtures[0].X, 0.01f);
-        Assert.Equal(20200f, layout.Fixtures[0].Y, 0.01f);
-        // (0, 200): dx = 2·(0 + 200·sin 90) = 400, dy = 2·(0 − 200·cos 90) = 0.
+        Assert.Equal(19800f, layout.Fixtures[0].Y, 0.01f);
         Assert.Equal(10400f, layout.Fixtures[1].X, 0.01f);
         Assert.Equal(20000f, layout.Fixtures[1].Y, 0.01f);
         Assert.All(layout.Fixtures, f => Assert.Equal(2f, f.Scale));
@@ -59,6 +58,18 @@ public sealed class TreeClustersTests
         var cluster = At("Elm1CL2.nif", 0) with { OnGround = false };
         ZoneLayout layout = TreeClusters.Parse(Csv).Expand(new ZoneLayout { Fixtures = [cluster] });
         Assert.All(layout.Fixtures, f => Assert.True(f.OnGround));
+    }
+
+    [Fact]
+    public void ShadowPointsAreTheTreesOfClustersOnly()
+    {
+        // The stamps fall where the trees stand; a single tree (or any other model) leaves none.
+        TreeClusters clusters = TreeClusters.Parse(Csv);
+        var placed = new ZoneLayout { Fixtures = [At("Elm1CL2.nif", 90, scale: 2), At("elm1.nif", 0), At("keep.nif", 0)] };
+        var points = clusters.ShadowPoints(placed).ToList();
+        var trees = clusters.Expand(placed).Fixtures.Take(2).Select(f => (f.X, f.Y)).ToList();
+        Assert.Equal(2, points.Count);
+        Assert.Equal(trees, points);
     }
 
     [Fact]

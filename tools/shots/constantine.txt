@@ -1,0 +1,7 @@
+# Fixed camera poses in Constantine's Sound (tutorial zone 27, region 27) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 27
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# Its densest tree clusters (Elm1CL5.nif and the like): each tree of a cluster should stand on its own soft ground
+# shadow (shadow.pcx stamps, ZoneShadow; cluster layout, open question W53).
+grove_high    102400 86500 9000   0 -45   # the cluster grove from the south, above the trees
+grove_top     102400 83968 12000  0 -88   # straight down: shadows under the trees, not beside them
