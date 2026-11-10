@@ -120,6 +120,14 @@ public static class ClientSettings
         set => SaveIn("game", "compass", value);
     }
 
+    /// <summary>The XP bubbles (retail's floating Level Exp. window; retail shows them on its menu bar instead). Shown by
+    /// default, as we have no menu bar yet.</summary>
+    public static bool ShowLevelXp
+    {
+        get => Load().GetValue("game", "level_xp", true).AsBool();
+        set => SaveIn("game", "level_xp", value);
+    }
+
     /// <summary>Retail's "Names: Colored": names in con and realm colours; off, all white.</summary>
     public static bool ColouredNames
     {

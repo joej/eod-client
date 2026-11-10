@@ -7,7 +7,7 @@
 // were left is remembered.
 //
 // Summary: your name, level and realm rank; your health (red), endurance (green) and power (yellow) with their
-// percentages; your target's name in its con colour and its health. Target: the target's name and health, and
+// percentages (the power bar always, empty for a class without power); your target's name in its con colour and its health. Target: the target's name and health, and
 // FACE, FOLLOW, STICK, INVITE, ASSIST, ATTACK. Retail's /face, /follow and /stick are the client's own (the
 // server has no such commands): face turns you toward the target; follow runs after it, stopping about 5 m
 // away; stick keeps you within about 2 m and facing it. A movement key ends follow and stick. Invite and assist
@@ -96,7 +96,8 @@ public partial class WorldView
         {
             _hpBar.Set(v.HealthPercent);
             _endBar.Set(v.EndurancePercent);
-            _powerBar.Set(v.MaxMana > 0 ? v.ManaPercent : -1);
+            // Always drawn, as retail's: a class without power shows it empty (0), not missing.
+            _powerBar.Set(v.MaxMana > 0 ? v.ManaPercent : 0);
         }
         bool has = _target != 0 && _entities.TryGetValue(_target, out _);
         Entity? t = has ? _entities[_target] : null;

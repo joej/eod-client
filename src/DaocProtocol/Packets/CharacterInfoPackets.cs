@@ -21,6 +21,12 @@ public sealed record PointsUpdate(uint RealmPoints, ushort LevelPermill, ushort 
 {
     public const byte Code = 0x91;
 
+    /// <summary>Full XP bubbles, 0–9 of 10: retail's coarse bar (level progress / 100, whole bubbles only).</summary>
+    public int Bubbles => Math.Min(LevelPermill, (ushort)999) / 100;
+
+    /// <summary>Progress within the current bubble, 0–99: retail's fine (blue) bar, filling ten times per level.</summary>
+    public int BubbleProgress => Math.Min(LevelPermill, (ushort)999) % 100;
+
     public static PointsUpdate Parse(ReadOnlySpan<byte> payload)
     {
         var r = new PayloadReader(payload);

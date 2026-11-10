@@ -32,6 +32,19 @@ public class CharacterInfoPacketTests
         Assert.Equal(p.Payload, u.ToBytes());
     }
 
+    [Theory]
+    [InlineData(0, 0, 0)]
+    [InlineData(99, 0, 99)]
+    [InlineData(100, 1, 0)]
+    [InlineData(457, 4, 57)]
+    [InlineData(999, 9, 99)]
+    [InlineData(1000, 9, 99)]   // out of range: kept on the last bubble, never an 11th
+    public void BubblesAreWholeTenthsAndTheFineBarTheRest(int permill, int bubbles, int fine)
+    {
+        var u = new PointsUpdate(0, (ushort)permill, 0, 0, 0, 0, 0, 0, 0, 0);
+        Assert.Equal((bubbles, fine), (u.Bubbles, u.BubbleProgress));
+    }
+
     [Fact]
     public void MoneyReadsEachCoin()
     {

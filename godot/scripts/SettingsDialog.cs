@@ -220,6 +220,13 @@ public partial class SettingsDialog : AcceptDialog
             ClientSettings.NotifyChanged(display: false);
         };
         column.AddChild(compass);
+        var xp = new CheckBox { Text = "XP bubbles", ButtonPressed = ClientSettings.ShowLevelXp, FocusMode = Control.FocusModeEnum.None };
+        xp.Toggled += on =>
+        {
+            ClientSettings.ShowLevelXp = on;
+            ClientSettings.NotifyChanged(display: false);
+        };
+        column.AddChild(xp);
 
         column.AddChild(new Label { Text = "Display Names" });
         var grid = new GridContainer { Columns = 2 };
