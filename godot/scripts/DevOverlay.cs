@@ -61,7 +61,9 @@ public partial class DevOverlay : CanvasLayer
         _statusBox = Panel("STATUS", out PanelContainer statusPanel);
         statusPanel.Position = new Vector2(16, 16);
         _status = SmallLabel("", Text);
+        _status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _statusBox.AddChild(_status);
+
 
         // Top right: layers + render mode.
         _layers = Panel("LAYERS", out PanelContainer layersPanel);
@@ -89,6 +91,9 @@ public partial class DevOverlay : CanvasLayer
         _inspect.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _inspect.CustomMinimumSize = new Vector2(400, 0);
         inspectBox.AddChild(_inspect);
+        Resizable(inspectPanel, _inspect, () => 400, inspectPanel);
+        // The status text wraps to stop short of the layers panel (whose width follows its toggles and stats).
+        Resizable(statusPanel, _status, () => Mathf.Max(320, layersPanel.GlobalPosition.X - 16 - 16 - 24 - 12), layersPanel);
     }
 
     /// <summary>Adds a checkbox to the layers panel; <paramref name="onChange"/> runs on toggle.
@@ -149,6 +154,52 @@ public partial class DevOverlay : CanvasLayer
         ShowRenderMode();
     }
 
+    // A panel whose text wraps to a width the player can change with the grip at its bottom-right corner; the width starts
+    // at defaultWidth (re-applied when the game window resizes, until the player sets one).
+    private static void Resizable(PanelContainer panel, Label text, System.Func<float> defaultWidth, Control follows)
+    {
+        bool chosen = false;
+        void Fit()
+        {
+            if (!chosen)
+                SetWidth(panel, text, defaultWidth());
+        }
+        // Fitted after layout, and again whenever the panel it keeps clear of moves or resizes (that covers the game
+        // window resizing too).
+        Callable.From(Fit).CallDeferred();
+        follows.ItemRectChanged += Fit;
+        var grip = new Label { Text = "◢", MouseFilter = Control.MouseFilterEnum.Stop, MouseDefaultCursorShape = Control.CursorShape.Fdiagsize, Modulate = new Color(1, 1, 1, 0.35f) };
+        grip.AddThemeFontSizeOverride("font_size", 12);
+        // A PanelContainer lays out every child; the grip goes on a free layer over it, in its bottom-right corner (pushed
+        // into the panel's margin).
+        var layer = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
+        panel.AddChild(layer);
+        layer.AddChild(grip);
+        grip.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.BottomRight);
+        grip.Position += new Vector2(10, 8);
+        bool dragging = false;
+        grip.GuiInput += e =>
+        {
+            if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } b)
+            {
+                dragging = b.Pressed;
+                grip.AcceptEvent();
+            }
+            else if (e is InputEventMouseMotion m && dragging)
+            {
+                chosen = true;
+                SetWidth(panel, text, text.CustomMinimumSize.X + m.Relative.X);
+                grip.AcceptEvent();
+            }
+        };
+    }
+
+    private static void SetWidth(PanelContainer panel, Label text, float width)
+    {
+        text.CustomMinimumSize = new Vector2(Mathf.Max(160, width), 0);
+        panel.ResetSize();
+    }
+
     private void ShowRenderMode() =>
         _renderButton.Text = $"F2 render: {RenderModes[_renderMode].ToString().ToLowerInvariant()}";
 
@@ -157,6 +208,7 @@ public partial class DevOverlay : CanvasLayer
     {
         // Stop: a click on a panel must not fall through to the world as an inspect click.
         panel = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Stop };
+        Draggable(panel);
         panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
             BgColor = new Color(0.05f, 0.06f, 0.05f, 0.8f),
@@ -172,6 +224,32 @@ public partial class DevOverlay : CanvasLayer
         box.AddChild(SmallLabel(title, Accent));
         _root.AddChild(panel);
         return box;
+    }
+
+    // Moved by dragging anywhere on it (its controls keep their clicks). A panel anchored to the right or bottom edge is
+    // re-anchored to the top left on its first move, keeping its place on screen.
+    private static void Draggable(PanelContainer panel)
+    {
+        Vector2? from = null;
+        panel.GuiInput += e =>
+        {
+            if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } b)
+            {
+                from = b.Pressed ? b.GlobalPosition : null;
+                if (b.Pressed)
+                    foreach (Side side in new[] { Side.Left, Side.Top, Side.Right, Side.Bottom })
+                        panel.SetAnchor(side, 0, keepOffset: true);
+                panel.AcceptEvent();
+            }
+            else if (e is InputEventMouseMotion m && from is Vector2 start)
+            {
+                Vector2 screen = panel.GetViewportRect().Size;
+                Vector2 to = panel.Position + (m.GlobalPosition - start);
+                panel.Position = new Vector2(Mathf.Clamp(to.X, 0, Mathf.Max(0, screen.X - panel.Size.X)), Mathf.Clamp(to.Y, 0, Mathf.Max(0, screen.Y - panel.Size.Y)));
+                from = m.GlobalPosition;
+                panel.AcceptEvent();
+            }
+        };
     }
 
     private Label SmallLabel(string text, Color color)
