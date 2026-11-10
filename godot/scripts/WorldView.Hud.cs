@@ -21,6 +21,13 @@ namespace EodClient;
 public partial class WorldView
 {
     private HudWindow _summary = null!, _targetWindow = null!;
+    private Button? _inviteButton, _assistButton;
+
+    private static void Dim(Button? b, bool off)
+    {
+        if (b is not null && b.Disabled != off)
+            b.Disabled = off;
+    }
     private HudBar _hpBar = null!, _endBar = null!, _powerBar = null!, _targetBar = null!, _floatTargetBar = null!;
     private Label _summaryTitle = null!, _summaryLevel = null!, _summaryTarget = null!, _floatTargetName = null!;
     private ushort _follow;          // follow or stick: the object followed (0: none)
@@ -69,8 +76,8 @@ public partial class WorldView
         _targetWindow.Button("FACE", new Vector2(4, 30), 44, FaceTarget);
         _targetWindow.Button("FOLLOW", new Vector2(50, 30), 48, () => Follow(5f));
         _targetWindow.Button("STICK", new Vector2(102, 30), 43, () => Follow(2f));
-        _targetWindow.Button("INVITE", new Vector2(4, 50), 44, () => TargetCommand("/invite"));
-        _targetWindow.Button("ASSIST", new Vector2(50, 50), 48, () => TargetCommand("/assist"));
+        _inviteButton = _targetWindow.Button("INVITE", new Vector2(4, 50), 44, () => TargetCommand("/invite"));
+        _assistButton = _targetWindow.Button("ASSIST", new Vector2(50, 50), 48, () => TargetCommand("/assist"));
         _targetWindow.Button("ATTACK", new Vector2(102, 50), 43, () => _ = SendAttack(!_attacking));
         overlay.AddChild(_targetWindow);
         // Offline (no server: the fixed camera views) there's nothing to show, and they would hide the world.
@@ -102,6 +109,12 @@ public partial class WorldView
         }
         _targetBar.Set(t?.Dead == true ? 0 : t?.Health ?? -1);
         _floatTargetBar.Set(t?.Dead == true ? 0 : t?.Health ?? -1);
+        // Retail's buttons are always live (float_target_window.xml has no rules); ours dim where the server would refuse:
+        // INVITE only a player of your realm; ASSIST anyone of your realm, players and friendly NPCs (a guard: its target),
+        // not monsters or enemies (OpenDAoC's /assist: "We cannot assist npc's or players of an enemy realm").
+        bool ours = t is not null && t.Realm != 0 && (PlayerRealm == Realm.None || t.Realm == (int)PlayerRealm);
+        Dim(_inviteButton, !(ours && t!.IsPlayer));
+        Dim(_assistButton, !ours);
         // Retail keeps the target window open, empty without a target; we hide it then (less clutter).
         _targetWindow.Visible = t is not null && _session is not null;
     }
@@ -207,7 +220,7 @@ public partial class WorldView
             return bar;
         }
 
-        public void Button(string text, Vector2 at, float width, System.Action pressed, float height = 17)
+        public Button Button(string text, Vector2 at, float width, System.Action pressed, float height = 17)
         {
             var b = new Button
             {
@@ -216,7 +229,8 @@ public partial class WorldView
             };
             b.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(System.Math.Min(8, height - 2) * _scale));
             // Retail's buttons are 17 skin pixels high: no padding, or Godot's default grows them out of the frame.
-            foreach ((string state, float shade) in new[] { ("normal", 0.16f), ("hover", 0.24f), ("pressed", 0.10f) })
+            b.AddThemeColorOverride("font_disabled_color", new Color(0.5f, 0.52f, 0.55f, 0.6f));   // dimmed: can't apply here
+            foreach ((string state, float shade) in new[] { ("normal", 0.16f), ("hover", 0.24f), ("pressed", 0.10f), ("disabled", 0.08f) })
                 b.AddThemeStyleboxOverride(state, new StyleBoxFlat
                 {
                     BgColor = new Color(shade, shade + 0.02f, shade + 0.05f, 0.95f),
@@ -226,6 +240,7 @@ public partial class WorldView
                 });
             b.Pressed += pressed;
             AddChild(b);
+            return b;
         }
 
         // A small clickable glyph (a page arrow): a label, not a button, so it fits a few skin pixels.

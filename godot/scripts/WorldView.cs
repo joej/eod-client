@@ -137,6 +137,8 @@ public partial class WorldView : Node3D
     {
         public required Node3D Node;
         public Vector3 TargetPosition;
+        public int Realm;             // 0 none (monsters), 1 Albion, 2 Midgard, 3 Hibernia
+        public bool IsPlayer;
         public bool Grounded;         // stands on the ground under TargetPosition, whatever height the server sends (NPCs)
         public float? GroundY;        // that ground's height, probed for ProbedAt
         public Vector3 ProbedAt = new(float.NaN, 0, 0);
