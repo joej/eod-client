@@ -116,6 +116,12 @@ public class CharacterPacketTests
     }
 
     [Theory]
+    [InlineData(0x20, true)]          // GameNPC.eFlags.FLYING
+    [InlineData(0x40 | 0x10, false)]  // realm and peace bits: walks on the ground
+    public void AnNpcFlagged0x20Flies(int flags, bool flying) =>
+        Assert.Equal(flying, new NpcCreate(1, 0, 0, 0, 0, 0, 100, 50, 1, (byte)flags, "n", "").Flying);
+
+    [Theory]
     [InlineData(0x00, 4)]
     [InlineData(0x10, 0)]
     [InlineData(0x40, 3)]

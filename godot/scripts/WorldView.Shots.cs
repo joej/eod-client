@@ -113,18 +113,21 @@ public partial class WorldView
                     (_walkTo, _walkUntil) = (found, _seconds + 30);
             };
         }
-        // --object MODEL[,MODEL...] places server objects (0xD9) with those models 300 units apart east of the character,
+        // --object MODEL[,MODEL...] places server objects (0xD9) with those models 300 units apart east of the character
+        // (--object-dx N: N units apart instead, negative for west),
         // through the path a server's object takes (OnWorldObject): to check one's look offline.
         int objArg = System.Array.IndexOf(args, "--object");
         if (objArg >= 0 && objArg + 1 < args.Length)
         {
             string[] ids = args[objArg + 1].Split(',');
+            int dxArg = System.Array.IndexOf(args, "--object-dx");
+            int dx = dxArg >= 0 && dxArg + 1 < args.Length && int.TryParse(args[dxArg + 1], out int d) ? d : 300;
             GetTree().CreateTimer(1).Timeout += () =>
             {
                 var p = _world.Position;
                 for (int k = 0; k < ids.Length; k++)
                     if (ushort.TryParse(ids[k], out ushort model))
-                        OnWorldObject(new ObjectCreate((ushort)(60000 + k), 0, (ushort)p.Z, (uint)(p.X + 300 * (k + 1)), (uint)p.Y, model, $"test {model}"));
+                        OnWorldObject(new ObjectCreate((ushort)(60000 + k), 0, (ushort)p.Z, (uint)(p.X + dx * (k + 1)), (uint)p.Y, model, $"test {model}"));
             };
         }
         // --torch lights the character's torch on entering (to check its look).

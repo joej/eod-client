@@ -97,6 +97,11 @@ public partial class WorldView
             pickable: !npc.Untargetable);
         if (_entities.TryGetValue(npc.ObjectId, out Entity? spawned))
         {
+            // OpenDAoC's server has no terrain: a creature wandering over a hill keeps its spawn height and floats or
+            // sinks (owner's goblin fishermen, Black Mtns. South, 2026-11-10). Unless it flies or swims, it stands on
+            // the ground under where the server puts it (GroundEntities).
+            spawned.Grounded = !npc.Flying && !npc.Swimming;
+            spawned.ProbedAt = new Vector3(float.NaN, 0, 0);
             SetQuestGlyph(spawned, npc.Quest);
             spawned.Name = npc.Name;
             NameNpc(spawned, npc);
@@ -591,6 +596,40 @@ public partial class WorldView
     private static Dictionary<int, float> ReadFigureScales(string path) =>
         ReadFigureTable(path).ToDictionary(kv => kv.Key, kv => kv.Value.Scale);
 
+    // The ground under each grounded NPC, probed in the physics frame (rays are only reliable there) whenever the server
+    // moves it: the first floor or terrain from a little above its reported height down; when there is none (it was
+    // sent under the ground), the terrain from high above. Without either (the zone not loaded yet), its own height.
+    private void GroundEntities()
+    {
+        foreach (Entity e in _entities.Values)
+        {
+            if (!e.Grounded)
+            {
+                e.GroundY = null;
+                continue;
+            }
+            Vector3 at = e.TargetPosition;
+            if (Mathf.Abs(at.X - e.ProbedAt.X) < 0.05f && Mathf.Abs(at.Z - e.ProbedAt.Z) < 0.05f && Mathf.Abs(at.Y - e.ProbedAt.Y) < 0.05f)
+                continue;
+            float? y = GroundRay(at + Vector3.Up * 3f, at + Vector3.Down * 40f, ~NotSolid)
+                       ?? GroundRay(new Vector3(at.X, at.Y + 80f, at.Z), at, TerrainLayer);
+            if (y is null)
+                continue;   // nothing loaded under it yet: probe again next frame
+            if (float.IsNaN(e.ProbedAt.X) && Mathf.Abs(y.Value - at.Y) > 1f)
+                GD.Print($"[entity] \"{e.Name}\" stood on the ground: {(y.Value - at.Y) / RegionMetresPerUnit:+0;-0} units from the server's height");
+            (e.GroundY, e.ProbedAt) = (y, at);
+        }
+    }
+
+    private float? GroundRay(Vector3 from, Vector3 to, uint mask)
+    {
+        var ray = PhysicsRayQueryParameters3D.Create(from, to);
+        ray.CollisionMask = mask;
+        ray.HitBackFaces = false;   // not a bridge's underside
+        Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
+        return hit.Count > 0 ? hit["position"].AsVector3().Y : null;
+    }
+
     // Ease each entity toward the last position/facing the server reported. The per-NPC update rate
     // is low (~1 Hz in the capture), so without this they teleport; with it they glide. The rate is
     // frame-rate independent (exponential smoothing). Yaw lerps the short way around the circle.
@@ -600,7 +639,8 @@ public partial class WorldView
         foreach (Entity e in _entities.Values)
         {
             e.Age += delta;
-            e.Node.Position = e.Node.Position.Lerp(e.TargetPosition, t);
+            Vector3 target = e.GroundY is float gy ? new Vector3(e.TargetPosition.X, gy, e.TargetPosition.Z) : e.TargetPosition;
+            e.Node.Position = e.Node.Position.Lerp(target, t);
             float yaw = e.Node.Rotation.Y;
             e.Node.Rotation = new Vector3(0, yaw + Mathf.AngleDifference(yaw, e.TargetYaw) * t, 0);
 

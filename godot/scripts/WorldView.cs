@@ -137,6 +137,9 @@ public partial class WorldView : Node3D
     {
         public required Node3D Node;
         public Vector3 TargetPosition;
+        public bool Grounded;         // stands on the ground under TargetPosition, whatever height the server sends (NPCs)
+        public float? GroundY;        // that ground's height, probed for ProbedAt
+        public Vector3 ProbedAt = new(float.NaN, 0, 0);
         public float TargetYaw;
         public double Age;            // seconds since spawn, for a brief "is this real" grace period
         public AnimationPlayer? Player;   // a DAoC figure's clips (idle, walk, run), or null for a capsule
@@ -901,6 +904,7 @@ public partial class WorldView : Node3D
     {
         WalkToTarget();
         FollowStep();
+        GroundEntities();
         UpdatePlayer(delta);
         if (_chase)
             CheckJumpPoints();

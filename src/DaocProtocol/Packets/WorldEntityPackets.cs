@@ -93,6 +93,10 @@ public sealed record NpcCreate(
 
     public ushort HeadingOnly => (ushort)(Heading & 0x0FFF);
 
+    /// <summary>Flags 0x20: the NPC flies (PacketLib1124.SendNPCCreate: GameNPC.eFlags.FLYING), so its height is its own,
+    /// not the ground's.</summary>
+    public bool Flying => (Flags & 0x20) != 0;
+
     /// <summary>The second flags byte (PacketLib1124.SendNPCCreate): 0x01 can't be targeted, 0x02 name
     /// hidden, 0x04 stealthed, 0x08/0x10 quest available/finishable, 0x80 a pet.</summary>
     public byte Flags2 { get; init; }
