@@ -29,6 +29,11 @@ internal static partial class Cli
         foreach (string extra in new[] { "brdr_0.bmp", "wgsm_0.bmp" })
             if (Directory.EnumerateFiles(source).FirstOrDefault(f => Path.GetFileName(f).Equals(extra, StringComparison.OrdinalIgnoreCase)) is string file)
                 File.Copy(file, Path.Combine(outDir, extra), overwrite: true);
+        // The compass strip (ui/atlantis/compass.bmp, the stock skin's: 512 x 32 for 360°, daoc-re RE/74).
+        string? ui = Directory.EnumerateDirectories(client).FirstOrDefault(d => Path.GetFileName(d).Equals("ui", StringComparison.OrdinalIgnoreCase));
+        string? skin = ui is null ? null : Directory.EnumerateDirectories(ui).FirstOrDefault(d => Path.GetFileName(d).Equals("atlantis", StringComparison.OrdinalIgnoreCase));
+        if (skin is not null && Directory.EnumerateFiles(skin).FirstOrDefault(f => Path.GetFileName(f).Equals("compass.bmp", StringComparison.OrdinalIgnoreCase)) is string compass)
+            File.Copy(compass, Path.Combine(outDir, "compass.bmp"), overwrite: true);
         // From the server's number to a picture: icons.csv, spells.csv, styles.csv (DaocAssets.Ui.IconTable).
         if (FindInstallFile(client, "gamedata.mpk") is not string gamedata)
         {

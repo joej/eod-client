@@ -476,6 +476,7 @@ public partial class WorldView : Node3D
         BuildMapWindow(overlay);
         BuildHud(overlay);
         BuildQuickbars(overlay);
+        BuildCompass(overlay);
         NameSelf();
         AddChild(overlay);
         _viewSetting = ViewOverride() ?? ClientSettings.ViewDistance;
@@ -929,6 +930,7 @@ public partial class WorldView : Node3D
     {
         UpdateHud();
         UpdateQuickbars();
+        UpdateCompass();
         _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)
         {

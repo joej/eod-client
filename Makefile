@@ -202,7 +202,7 @@ $(MAPS): $(CLIENT)/ui/maps/regions.dat $(A)/Zone/MapLayout.cs $(A)/Zone/IniFile.
 ICONS := $(LIB)/icons/.icons.done
 .PHONY: icons
 icons: $(ICONS)
-$(ICONS): $(wildcard $(CLIENT)/icons/*.bmp $(CLIENT)/Icons/*.bmp) $(CLIENT)/gamedata.mpk $(A)/Ui/IconSheets.cs $(A)/Ui/IconTable.cs $(CLI_SRC) $(X)/Cli.Icons.cs | $(TOOL)
+$(ICONS): $(wildcard $(CLIENT)/icons/*.bmp $(CLIENT)/Icons/*.bmp $(CLIENT)/ui/atlantis/compass.bmp) $(CLIENT)/gamedata.mpk $(A)/Ui/IconSheets.cs $(A)/Ui/IconTable.cs $(CLI_SRC) $(X)/Cli.Icons.cs | $(TOOL)
 	@mkdir -p $(@D)
 	$(MPK) icons $(CLIENT) --out $(@D)
 	@touch $@

@@ -112,6 +112,14 @@ public static class ClientSettings
         set => SaveIn("game", "show_names", (int)value);
     }
 
+    /// <summary>The compass strip over the quickbars (retail's Interface Elements → COMPASS). Ours starts shown; retail's
+    /// default.ini starts it hidden.</summary>
+    public static bool ShowCompass
+    {
+        get => Load().GetValue("game", "compass", true).AsBool();
+        set => SaveIn("game", "compass", value);
+    }
+
     /// <summary>Retail's "Names: Colored": names in con and realm colours; off, all white.</summary>
     public static bool ColouredNames
     {

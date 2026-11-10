@@ -170,6 +170,14 @@ public partial class SettingsDialog : AcceptDialog
         namesRow.AddChild(colour);
         column.AddChild(namesRow);
 
+        var compass = new CheckBox { Text = "Compass", ButtonPressed = ClientSettings.ShowCompass, FocusMode = Control.FocusModeEnum.None };
+        compass.Toggled += on =>
+        {
+            ClientSettings.ShowCompass = on;
+            ClientSettings.NotifyChanged(display: false);
+        };
+        column.AddChild(compass);
+
         column.AddChild(new Label { Text = "Display Names" });
         var grid = new GridContainer { Columns = 2 };
         grid.AddThemeConstantOverride("h_separation", 30);
