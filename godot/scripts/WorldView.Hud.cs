@@ -342,7 +342,6 @@ public partial class WorldView
         private readonly ColorRect _fill;
         private readonly float _width;
         public Label? Number;
-        public bool HideZero;   // the number isn't drawn at 0 (retail's DontDrawWhenZero)
 
         public HudBar(float width, float height, Color colour)
         {
@@ -359,7 +358,7 @@ public partial class WorldView
             _fill.Visible = percent >= 0;
             _fill.Size = new Vector2(_width * Mathf.Clamp(percent, 0, 100) / 100f, Size.Y);
             if (Number is not null)
-                Number.Text = percent > 0 || (percent == 0 && !HideZero) ? percent.ToString() : "";
+                Number.Text = percent >= 0 ? percent.ToString() : "";
         }
     }
 }
