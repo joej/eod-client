@@ -145,8 +145,22 @@ public partial class CharacterScreen : Control
         }
         finally
         {
-            GetTree().Quit();   // whatever happened, the window was asked to close
+            QuitCleanly(0);   // whatever happened, the window was asked to close
         }
+    }
+
+    /// <summary>
+    /// Ends the program without racing .NET's finalizer thread: every pending finalizer runs now, on this thread, while
+    /// the engine is whole, and the quit itself waits for the next frame. A finalizer releasing a Godot object during the
+    /// engine's teardown aborted the client on Cmd-Q (owner's crash report, 2026-11-10; the same race after --shots,
+    /// WorldView.Shots).
+    /// </summary>
+    internal void QuitCleanly(int code)
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        GetTree().CallDeferred(SceneTree.MethodName.Quit, code);
     }
 
     // Runs a UI action's task without awaiting it. Each action catches the failures it expects (a lost

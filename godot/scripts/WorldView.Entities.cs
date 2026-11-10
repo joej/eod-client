@@ -615,6 +615,11 @@ public partial class WorldView
                        ?? GroundRay(new Vector3(at.X, at.Y + 80f, at.Z), at, TerrainLayer);
             if (y is null)
                 continue;   // nothing loaded under it yet: probe again next frame
+            // Over water (a water surface above the ground): it swims, as creatures the server didn't flag do (water snakes
+            // and eels were pulled 25 m down to the riverbed, 2026-11-10). Its own height, kept between the bed and the surface.
+            if (GroundRay(new Vector3(at.X, at.Y + 40f, at.Z), new Vector3(at.X, y.Value, at.Z), WaterLayer) is float water
+                && water > y.Value)
+                y = Mathf.Clamp(at.Y, y.Value, water);
             if (float.IsNaN(e.ProbedAt.X) && Mathf.Abs(y.Value - at.Y) > 1f)
                 GD.Print($"[entity] \"{e.Name}\" stood on the ground: {(y.Value - at.Y) / RegionMetresPerUnit:+0;-0} units from the server's height");
             (e.GroundY, e.ProbedAt) = (y, at);

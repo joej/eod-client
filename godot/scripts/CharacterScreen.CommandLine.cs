@@ -24,7 +24,7 @@ public partial class CharacterScreen
         }
         var world = new WorldPosition(new PositionAndObjectId(x, y, z, 0, 0, region, 0), zone);
         _world = NewWorldView(world, offline: true);
-        _world.QuitPressed += () => GetTree().Quit();
+        _world.QuitPressed += () => QuitCleanly(0);
         GetTree().Root.CallDeferred(Node.MethodName.AddChild, _world);
         Visible = false;
         // After _Ready: resizing the window from inside it fails ("Parent node is busy setting up children") and
@@ -119,6 +119,6 @@ public partial class CharacterScreen
         }
 
         await Disconnect();
-        GetTree().Quit(ok ? 0 : 1);
+        QuitCleanly(ok ? 0 : 1);
     }
 }
