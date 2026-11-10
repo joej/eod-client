@@ -36,6 +36,7 @@ public partial class WorldView
             uniform int channel[12];
             uniform vec2 tiles[12];
             uniform int clamped[12];
+            uniform int zone_wide[12];
             uniform vec2 flip;
             uniform sampler2D shade : hint_default_white, filter_linear, repeat_disable;
             uniform vec2 patch_at;
@@ -46,7 +47,9 @@ public partial class WorldView
                 bool based = false;
                 for (int i = 0; i < count; i++) {
                     if (tex_index[i] < 0) continue;
-                    vec2 uv = clamped[i] == 1 ? clamp(local, vec2(0.001), vec2(0.999)) * tiles[i] : local * tiles[i];
+                    // A layer drawn once (num tiles 1) is a picture of the whole zone: each patch takes its 1/8 x 1/8 of it.
+                    vec2 uv = zone_wide[i] == 1 ? clamp((patch_at + local) / 8.0, vec2(0.0005), vec2(0.9995))
+                        : clamped[i] == 1 ? clamp(local, vec2(0.001), vec2(0.999)) * tiles[i] : local * tiles[i];
                     vec3 c = texture(layers, vec3(uv, float(tex_index[i]))).rgb;
                     if (!based) { colour = c; based = true; continue; }
                     // The mask in the tile's own orientation: flipped vertically, the snow in Vale of Mularn broke off
@@ -136,7 +139,8 @@ public partial class WorldView
                 || !byPatch.TryGetValue((px, py), out var stack) || mi.Mesh is null)
                 continue;
             int n = System.Math.Min(stack.Count, AtlantisMaxLayers);
-            int[] tex = new int[AtlantisMaxLayers], maskAt = new int[AtlantisMaxLayers], chan = new int[AtlantisMaxLayers], clamp = new int[AtlantisMaxLayers];
+            int[] tex = new int[AtlantisMaxLayers], maskAt = new int[AtlantisMaxLayers], chan = new int[AtlantisMaxLayers], clamp = new int[AtlantisMaxLayers],
+                zoneWide = new int[AtlantisMaxLayers];
             var tiles = new Vector2[AtlantisMaxLayers];
             for (int i = 0; i < AtlantisMaxLayers; i++)
             {
@@ -150,6 +154,7 @@ public partial class WorldView
                 chan[i] = l.Weight.Channel;
                 tiles[i] = new Vector2(l.Tiles / l.UScale, l.Tiles / l.VScale);
                 clamp[i] = l.Tileable ? 0 : 1;
+                zoneWide[i] = l.ZoneWide ? 1 : 0;
             }
             var mat = new ShaderMaterial { Shader = AtlantisShader };
             mat.SetShaderParameter("layers", layerArray);
@@ -160,6 +165,7 @@ public partial class WorldView
             mat.SetShaderParameter("channel", chan);
             mat.SetShaderParameter("tiles", tiles);
             mat.SetShaderParameter("clamped", clamp);
+            mat.SetShaderParameter("zone_wide", zoneWide);
             mat.SetShaderParameter("flip", new Vector2(flipX ? 1 : 0, flipY ? 1 : 0));
             mat.SetShaderParameter("patch_at", new Vector2(px, py));
             if (shade is not null)

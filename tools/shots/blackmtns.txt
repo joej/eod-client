@@ -1,0 +1,7 @@
+# Fixed camera poses in Black Mtns. South (zone 2) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 2
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# The middle of the zone, where four Atlantis patches meet: the owner saw each patch a different shade, meeting at
+# hard seams (2026-11-10), until the zone's one-repeat map was sampled zone-wide (AtlantisLayer.ZoneWide).
+corner_low    516500 467400 2700  285 -25   # as the owner saw it: chase-camera height over the corner
+corner_high   516096 468600 5200    0 -55   # the four patches from the south, higher up

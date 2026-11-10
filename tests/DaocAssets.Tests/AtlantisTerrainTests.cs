@@ -33,4 +33,12 @@ public sealed class AtlantisTerrainTests
         Assert.Equal((1f, false), (layers[4].Tiles, layers[4].Tileable));
         Assert.Equal(layers, AtlantisTerrain.ReadCsv(AtlantisTerrain.ToCsv(layers) + "flip,0,1\n"));
     }
+
+    [Fact]
+    public void ALayerDrawnOnceIsAMapOfTheWholeZone()
+    {
+        Assert.True(new AtlantisLayer(3, 4, 6, "zones/bmsouth.dds", 1, 1, 1, true, false).ZoneWide);
+        Assert.True(new AtlantisLayer(0, 0, 2, "zones/cursedforest.dds", 1, 1, 1, true, true).ZoneWide);
+        Assert.False(new AtlantisLayer(3, 4, 0, "zones/darkgrass2.dds", 256, 1, 1, true, true).ZoneWide);
+    }
 }

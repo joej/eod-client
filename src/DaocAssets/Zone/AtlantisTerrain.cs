@@ -15,7 +15,8 @@
 //                  zones/TerrainTex. The folders share names with different contents, so they're kept apart.
 //
 // Drawn: colour = layer 0; for each further layer, colour = lerp(colour, layer, weight); the ground shading on top.
-// The UV rule (patch-local × num tiles ÷ scale, clamped when not tileable) and whether an invisible layer keeps its
+// A layer with num tiles 1 is a map of the whole zone (AtlantisLayer.ZoneWide), sampled at the zone's UV. For the
+// others, the UV rule (patch-local × num tiles ÷ scale, clamped when not tileable) and whether an invisible layer keeps its
 // mask slot are unconfirmed (we assume it does: the slot is the row's place in the patch).
 
 using System.Globalization;
@@ -28,6 +29,15 @@ public sealed record AtlantisLayer(int PatchX, int PatchY, int Index, string Tex
 {
     /// <summary>The mask file holding this layer's weight, and its channel (0 R, 1 G, 2 B).</summary>
     public (string Mask, int Channel) Weight => ($"patch{PatchX:00}{PatchY:00}-{Index / 3:00}.dds", Index % 3);
+
+    /// <summary>
+    /// A layer drawn once (num tiles 1) is a painted map of the whole zone (named after it: bmsouth.dds,
+    /// salisburybasemap.dds), not of one patch: each patch takes its 1/64 of it. Measured 2026-11-10: in 68 of 71 zones
+    /// each classic tile matches its own 1/64 of the map (median correlation 0.83) and not the whole map squeezed into a
+    /// patch (about 0); stretched per patch, neighbouring patches showed different parts and met at visible seams.
+    /// The other 3 are the Atlantis zones 70-72, whose maps cover only some patches.
+    /// </summary>
+    public bool ZoneWide => Tiles == 1;
 }
 
 public static class AtlantisTerrain
