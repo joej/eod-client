@@ -153,7 +153,7 @@ public partial class WorldView
         private readonly string _key;
         private readonly float _scale;
         private readonly System.Func<Vector2, Vector2> _defaultAt;   // screen size → top-left, in skin pixels
-        private bool _placed;                                        // dragged now, or remembered: stays put
+        private Vector2? _home;                                      // where the player put it (skin pixels), or null: the default
         public bool DragAnywhere;                                    // dragged by any free spot, not just the top edge
         public System.Action<int>? Wheel;                            // the mouse wheel over it: -1 up, +1 down
         private Vector2? _dragFrom;
@@ -169,8 +169,7 @@ public partial class WorldView
                 BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
                 CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3, CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3,
             });
-            if (ClientSettings.WindowPosition(key) is Vector2 saved)
-                (Position, _placed) = (saved * scale, true);
+            _home = ClientSettings.WindowPosition(key);
             Ready += () =>
             {
                 Place();
@@ -178,11 +177,12 @@ public partial class WorldView
             };
         }
 
-        // At its default (until the player moves it), recomputed when the game window changes size; kept on screen.
+        // Where the player put it, else its default, recomputed whenever the game window changes size; kept on screen. The
+        // clamp never changes the home: the world first opens in the small login window, and clamping a remembered place to
+        // that lost it once the window grew (owner, 2026-11-10: "quickbar placement is not remembered").
         private void Place()
         {
-            if (!_placed)
-                Position = _defaultAt(GetViewportRect().Size / _scale) * _scale;
+            Position = (_home ?? _defaultAt(GetViewportRect().Size / _scale)) * _scale;
             Clamp();
         }
 
@@ -266,8 +266,8 @@ public partial class WorldView
                 else if (!mb.Pressed && _dragFrom is not null)
                 {
                     _dragFrom = null;
-                    _placed = true;
-                    ClientSettings.SaveWindowPosition(_key, Position / _scale);
+                    _home = Position / _scale;
+                    ClientSettings.SaveWindowPosition(_key, _home.Value);
                 }
                 AcceptEvent();
             }
