@@ -172,6 +172,16 @@ public static class ClientSettings
         set => SaveIn("interface", "ui_scale", value);
     }
 
+    /// <summary>
+    /// Classic terrain: the baked ground tiles instead of retail's default layered "Atlantis" ground (its own option has
+    /// the same name). Off by default, as in retail.
+    /// </summary>
+    public static bool ClassicTerrain
+    {
+        get => Load().GetValue("graphics", "classic_terrain", false).AsBool();
+        set => Save("classic_terrain", value);
+    }
+
     /// <summary>Where a game window was last dragged (its top-left, in skin pixels), or null: its default.</summary>
     public static Vector2? WindowPosition(string window)
     {

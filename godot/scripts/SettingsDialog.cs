@@ -114,6 +114,17 @@ public partial class SettingsDialog : AcceptDialog
         };
         grid.AddChild(frames);
 
+        // Retail's ground option: its layered "Atlantis" terrain (the default) or the classic baked tiles. Zones built
+        // after the change use it (the next zone you enter, or a restart for the one you're in).
+        grid.AddChild(new Label { Text = "Terrain" });
+        var classic = new CheckBox
+        {
+            Text = "Classic terrain (baked tiles)", ButtonPressed = ClientSettings.ClassicTerrain, FocusMode = Control.FocusModeEnum.None,
+            TooltipText = "Off: retail's default layered ground (Atlantis Terrain). Applies to zones loaded after the change.",
+        };
+        classic.Toggled += on => ClientSettings.ClassicTerrain = on;
+        grid.AddChild(classic);
+
         grid.AddChild(new Label { Text = "Field of view" });
         var fovRow = new HBoxContainer();
         var fov = new HSlider

@@ -112,6 +112,8 @@ public partial class WorldView
                 libraryDir.PathJoin("textures"), libraryDir);
             yield return true;
         }
+        // Retail's default ground, layered detail textures, over the tiles (Settings → Classic terrain: the tiles).
+        foreach (bool step in AtlantisSteps(parts, terrain, libraryDir)) yield return step;
 
         var green = new StandardMaterial3D
         {
@@ -128,6 +130,8 @@ public partial class WorldView
                 // Both sides: a camera that dips under a slope still sees ground (the exported
                 // triangles face up, with normals from the heightmap, since 2026-11-03). Green only
                 // where no tile was applied.
+                if (mi.GetSurfaceOverrideMaterial(s) is ShaderMaterial)
+                    continue;   // an Atlantis patch
                 if (mi.GetSurfaceOverrideMaterial(s) is BaseMaterial3D tile)
                 {
                     tile.CullMode = BaseMaterial3D.CullModeEnum.Disabled;

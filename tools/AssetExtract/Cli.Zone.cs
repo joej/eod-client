@@ -174,6 +174,21 @@ internal static partial class Cli
                 }
                 else
                     Console.WriteLine($"  tiles: no texNNN.mpk for this zone{(terrain.UseTexture is int u ? $" or zone {u}" : "")}");
+
+                // "Atlantis Terrain" (W8): the zone's layered ground, from its terNNN.mpk: atlantis.csv beside terrain.glb,
+                // the masks into the zone's tile folder, the layer textures into textures/terraintex/<folder>/.
+                string atlantisCsv = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outPath))!, "atlantis.csv");
+                string? terMpk = Directory.EnumerateFiles(Path.GetDirectoryName(Path.GetFullPath(datMpk))!)
+                    .FirstOrDefault(f => Path.GetFileName(f).Equals($"ter{zoneDigits}.mpk", StringComparison.OrdinalIgnoreCase));
+                if (terMpk is not null && AtlantisLayers(terMpk, datMpk, tileDir, libDir) is { } layers)
+                {
+                    // The zone's mirroring too, so the client can undo it for the masks (the tiles' UVs carry it).
+                    File.WriteAllText(atlantisCsv, AtlantisTerrain.ToCsv(layers.Layers) + $"flip,{(terrain.FlipX ? 1 : 0)},{(terrain.FlipY ? 1 : 0)}\n");
+                    Console.WriteLine($"  atlantis: {layers.Layers.Count} layers on {layers.Layers.Select(l => (l.PatchX, l.PatchY)).Distinct().Count()} patches, " +
+                                      $"{layers.Textures} textures, {layers.Masks} masks, {layers.Missing} textures missing");
+                }
+                else if (File.Exists(atlantisCsv))
+                    File.Delete(atlantisCsv);
             }
             return 0;
         }
@@ -182,6 +197,52 @@ internal static partial class Cli
             Console.Error.WriteLine($"terrain: {e.Message}");
             return 1;
         }
+    }
+
+    // The Atlantis layers of a terNNN.mpk, their masks copied into tileDir/atlantis and their textures into
+    // textures/terraintex/<scope>/ (the layer's Texture becomes that library path; "" when the install lacks it).
+    private static (List<AtlantisLayer> Layers, int Textures, int Masks, int Missing)? AtlantisLayers(
+        string terMpk, string datMpk, string tileDir, string libDir)
+    {
+        using MpkArchive ter = MpkArchive.Open(terMpk);
+        if (!ter.TryGetEntry("textures.csv", out MpkEntry csvEntry))
+            return null;
+        List<AtlantisLayer> layers = AtlantisTerrain.Parse(System.Text.Encoding.Latin1.GetString(ter.Extract(csvEntry)));
+        if (layers.Count == 0)
+            return null;
+        string maskDir = Path.Combine(tileDir, "atlantis");
+        Directory.CreateDirectory(maskDir);
+        int masks = 0;
+        foreach (string mask in layers.Select(l => l.Weight.Mask).Distinct())
+            if (ter.TryGetEntry(mask, out MpkEntry m))
+            {
+                File.WriteAllBytes(Path.Combine(maskDir, mask), ter.Extract(m));
+                masks++;
+            }
+        var folders = AtlantisTerrain.TextureFolders(datMpk);
+        var resolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        int missing = 0;
+        foreach (string name in layers.Select(l => l.Texture).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            string found = "";
+            foreach ((string scope, string folder) in folders)
+                if (Directory.EnumerateFiles(folder).FirstOrDefault(f =>
+                        Path.GetFileName(f).Equals(name + ".dds", StringComparison.OrdinalIgnoreCase)) is string file)
+                {
+                    found = $"{scope}/{name.ToLowerInvariant()}.dds";
+                    string dest = Path.Combine(libDir, "textures", "terraintex", scope, name.ToLowerInvariant() + ".dds");
+                    if (!File.Exists(dest) || new FileInfo(dest).Length != new FileInfo(file).Length)
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                        File.Copy(file, dest, overwrite: true);
+                    }
+                    break;
+                }
+            if (found.Length == 0)
+                missing++;
+            resolved[name] = found;
+        }
+        return (layers.Select(l => l with { Texture = resolved[l.Texture] }).ToList(), resolved.Count(r => r.Value.Length > 0), masks, missing);
     }
 
     // water <dat<NNN>.mpk> --offset X Y --out DIR [--index index.json --library LIBDIR]: the zone's

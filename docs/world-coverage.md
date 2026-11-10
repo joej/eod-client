@@ -64,7 +64,7 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 | Terrain holes | `[holes]` (probably cave entrances cut in the heightmap) | 98 | M7d |
 | Grass and ground cover | `grassmap.pcx`, `densemap.pcx` | 84 | M13 |
 | Snow | `snowmap.tga` | 18 | later |
-| Per-patch terrain textures | `textures.csv`, `patch#-#.dds`, `lod#-#.dds` (96 zones), possibly the "Atlantis terrain" option (open question W8) | 96 | M7d / W8 |
+| Per-patch terrain textures | `ter###.mpk`: `textures.csv` (each patch's layers), `patchXXYY-NN.dds` masks (128², DXT3), with layer textures from `TerrainTex/` folders: retail's default "Atlantis Terrain" (daoc-re RE/70). `lod###.mpk` distant textures not read | 96 | **read** (2026-11-09, `AtlantisTerrain`: 86 converted zones; Settings → Classic terrain keeps the tiles; W8) |
 | Zone jumps | `zonejump.csv`, `[jumpNN]` travel points | 345, 45 | M8 |
 | Zone bounds | `bound.csv` (used since 2026-11-08: the invisible edge walls, see `ZoneBounds`), `borders.csv`, `adjacency.csv` | 98, 9, 4 | M8 |
 | Ambient sound | `sounds.dat` beside each zone's archives | 389 | M12 |
