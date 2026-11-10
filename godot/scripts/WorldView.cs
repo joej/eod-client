@@ -437,7 +437,7 @@ public partial class WorldView : Node3D
         _bridge.ChatReceived += OnChatReceived;
         SubscribeDeath();
         SubscribeCharacter();
-        _bridge.PingReplied += () => _pings++;
+        _bridge.PingReplied += OnPingReplied;
         _bridge.Jumped += OnJumped;
         _bridge.QuitArrived += reply =>
         {
@@ -480,6 +480,7 @@ public partial class WorldView : Node3D
         BuildQuickbars(overlay);
         BuildCompass(overlay);
         BuildXpWindow(overlay);
+        BuildMenuBar(overlay);
         _builtScale = UiScale;
         ScaleChatAndNpc(_builtScale / ChatDesignScale);
         NameSelf();
@@ -828,7 +829,9 @@ public partial class WorldView : Node3D
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
         {
             // Esc closes the map or the NPC window, else drops the inspect selection and the target (retail: Esc clears it).
-            if (_mapWindow.Visible)
+            if (_mainMenu is { Visible: true })
+                _mainMenu.Visible = false;
+            else if (_mapWindow.Visible)
                 _mapWindow.Visible = false;
             else if (_npcWindow.Visible)
                 _npcWindow.Visible = false;
@@ -943,6 +946,7 @@ public partial class WorldView : Node3D
         UpdateQuickbars();
         UpdateCompass();
         UpdateXp();
+        UpdateMenuBar();
         _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)
         {

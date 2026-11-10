@@ -143,6 +143,9 @@ public partial class WorldView
         // --torch lights the character's torch on entering (to check its look).
         if (System.Array.IndexOf(args, "--torch") >= 0)
             GetTree().CreateTimer(1).Timeout += () => SetTorch(true);
+        // --main-menu opens the menu bar's MENU (to see it in a --shot).
+        if (System.Array.IndexOf(args, "--main-menu") >= 0)
+            GetTree().CreateTimer(1).Timeout += ToggleMainMenu;
         // --command TEXT (repeatable) sends each slash command in turn, 2 s apart from 2 s after entering: e.g.
         // a GM "/jump to X Y Z REGION" to set up a --campose/--shot check somewhere exact.
         int delay = 2;

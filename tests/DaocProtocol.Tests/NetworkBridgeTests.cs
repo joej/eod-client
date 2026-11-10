@@ -19,7 +19,7 @@ public class NetworkBridgeTests
         int moved = 0, npcs = 0, pings = 0;
         bridge.ObjectMoved += _ => moved++;
         bridge.NpcSpawned += _ => npcs++;
-        bridge.PingReplied += () => pings++;
+        bridge.PingReplied += _ => pings++;
 
         foreach (ServerPacket p in Recorded)
             bridge.Dispatch(p);

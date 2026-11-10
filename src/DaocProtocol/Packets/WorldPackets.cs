@@ -87,6 +87,12 @@ public static class PingRequest
 
     /// <summary>The timestamp echoed by 0x29.</summary>
     public static uint ParseReply(ReadOnlySpan<byte> payload) => new PayloadReader(payload).U32BE();
+
+    /// <summary>
+    /// Milliseconds from a ping sent at <paramref name="sent"/> (our clock, Environment.TickCount) to
+    /// <paramref name="now"/>, across the counter's wrap. The retail lag meter's round trip.
+    /// </summary>
+    public static int RoundTrip(uint sent, uint now) => (int)Math.Min(now - sent, int.MaxValue);
 }
 
 /// <summary>Where the server put us: 0x20, sent during world init.</summary>

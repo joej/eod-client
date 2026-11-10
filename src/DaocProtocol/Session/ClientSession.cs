@@ -73,6 +73,11 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// <summary>How long to wait for each reply before throwing <see cref="TimeoutException"/>.</summary>
     public TimeSpan ReplyTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
+    private uint _pingSent;
+
+    /// <summary>When the last keep-alive ping went out (Environment.TickCount), for the lag meter's wait on a late reply.</summary>
+    public uint PingSentAt => Volatile.Read(ref _pingSent);
+
     public SessionState State { get; private set; } = SessionState.Connected;
 
     /// <summary>
@@ -480,7 +485,9 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
                 long now = Environment.TickCount64;
                 if (now >= nextPing)
                 {
-                    await connection.SendAsync(PingRequest.Code, PingRequest.Payload((uint)Environment.TickCount), cancellationToken).ConfigureAwait(false);
+                    uint stamp = (uint)Environment.TickCount;
+                    Volatile.Write(ref _pingSent, stamp);
+                    await connection.SendAsync(PingRequest.Code, PingRequest.Payload(stamp), cancellationToken).ConfigureAwait(false);
                     nextPing = now + (long)PingInterval.TotalMilliseconds;
                 }
 

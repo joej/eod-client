@@ -108,8 +108,9 @@ public sealed class NetworkBridge(Action<string>? log = null)
     /// <summary>A countdown window opened or closed (0xF3; after death, the release timer).</summary>
     public event Action<TimerWindow>? TimerChanged;
 
-    /// <summary>The server answered a keep-alive (0x29). Kept so the overlay can count pings.</summary>
-    public event Action? PingReplied;
+    /// <summary>The server answered a keep-alive (0x29), echoing our timestamp (Environment.TickCount when sent): for the
+    /// overlay's count and the lag meter's round trip (PingRequest.RoundTrip).</summary>
+    public event Action<uint>? PingReplied;
 
     /// <summary>Every packet, handled or not, for the overlay's running total.</summary>
     public int PacketCount { get; private set; }
@@ -235,7 +236,7 @@ public sealed class NetworkBridge(Action<string>? log = null)
                     TimerChanged?.Invoke(TimerWindow.Parse(packet.Payload));
                     break;
                 case PingRequest.ReplyCode:
-                    PingReplied?.Invoke();
+                    PingReplied?.Invoke(PingRequest.ParseReply(packet.Payload));
                     break;
                 case QuitReply.Code:
                     QuitArrived?.Invoke(packet);

@@ -74,6 +74,12 @@ public class WorldPacketTests
         Assert.Equal(ping.Sequence + 1, new PayloadReader(reply.Payload[8..]).U16BE());
     }
 
+    [Theory]
+    [InlineData(1000u, 1180u, 180)]
+    [InlineData(0xFFFF_FF00u, 0x0000_0064u, 356)]   // across TickCount's wrap
+    public void PingRoundTripIsTheTimeSinceTheEchoedStamp(uint sent, uint now, int ms) =>
+        Assert.Equal(ms, PingRequest.RoundTrip(sent, now));
+
     [Fact]
     public void PositionParsesRecordedServer()
     {

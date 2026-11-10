@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // WorldView: the interface size (retail's ui_scale; daoc-re RE/63). One multiplier for every window we draw: the summary,
-// target window, quickbars, compass and XP bubbles (skin pixels × the scale), and the chat pane and NPC dialogue (laid out for 1.5,
+// target window, quickbars, compass, XP bubbles and menu bar (skin pixels × the scale), and the chat pane and NPC dialogue (laid out for 1.5,
 // our default at 1080p, so they keep today's look there). Set in Settings → Display → Interface size, or as retail does:
 // drag with the left button held in the screen's top-left 32 × 32 pixels ("UI Scale: x.xxx" in chat). Applied live.
 
@@ -26,7 +26,7 @@ public partial class WorldView
         if (_summary is not null && IsInstanceValid(_summary) && _summary.GetParent() is CanvasLayer overlay)
         {
             // Rebuilt at the new size; each window keeps its remembered place (stored in skin pixels).
-            foreach (Node old in new Node?[] { _summary, _targetWindow, _compassWindow, _xpWindow }
+            foreach (Node old in new Node?[] { _summary, _targetWindow, _compassWindow, _xpWindow, _menuBar, _mainMenu }
                          .Concat(_bars.Select(b => (Node)b.Window)).OfType<Node>())
                 old.QueueFree();
             _bars.Clear();
@@ -35,6 +35,7 @@ public partial class WorldView
             BuildQuickbars(overlay);
             BuildCompass(overlay);
             BuildXpWindow(overlay);
+            BuildMenuBar(overlay);
         }
         ScaleChatAndNpc(s / ChatDesignScale);
     }
