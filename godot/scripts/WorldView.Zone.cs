@@ -232,32 +232,10 @@ public partial class WorldView
                 (placement.Collide == 0 ? "  not solid" : ""));
             zoneRoot.AddChild(inst);
             // Trimesh collision per placed object: the chase camera pulls in off buildings and the
-            // character stands on floors. ~1,500 static bodies for a full zone.
-            foreach (MeshInstance3D mi in FindMeshes(inst))
-            {
-                // Not solid (fixtures.csv's Collide 0: trees, campfire logs): no walls and nothing to stand on, as retail
-                // makes an object solid only when the column is set (daoc-re RE/69).
-                if (placement.Collide == 0)
-                {
-                    if (mi.Name.ToString().StartsWith(DaocAssets.Nif.GltfExporter.CollisionPrefix, System.StringComparison.Ordinal))
-                        mi.Visible = false;
-                    continue;
-                }
-                // A collision volume (the converter's "eodcollide_" nodes): never drawn; a body on the wall layer,
-                // which only the character's movement meets (WorldView.Walls).
-                if (mi.Name.ToString().StartsWith(DaocAssets.Nif.GltfExporter.CollisionPrefix, System.StringComparison.Ordinal))
-                {
-                    mi.Visible = _showWalls;
-                    if (_showWalls)
-                        mi.MaterialOverride = WallLook;
-                    mi.CreateTrimeshCollision();
-                    foreach (Node c in mi.GetChildren())
-                        if (c is StaticBody3D wall)
-                            (wall.CollisionLayer, wall.CollisionMask) = (WallLayer, 0);
-                    continue;
-                }
-                mi.CreateTrimeshCollision();
-            }
+            // character stands on floors. ~1,500 static bodies for a full zone. Not solid (fixtures.csv's Collide 0:
+            // trees, campfire logs): no walls and nothing to stand on, as retail makes an object solid only when the
+            // column is set (daoc-re RE/69).
+            MakeSolid(inst, placement.Collide != 0);
             parts.Placed++;
             yield return true;
         }

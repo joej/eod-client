@@ -90,6 +90,42 @@ public partial class WorldView
         return new Vector3(at.X, to.Y, at.Z);
     }
 
+    /// <summary>
+    /// Gives a placed model its collision. Solid: each collision volume (the converter's "eodcollide_" nodes, never drawn)
+    /// becomes a body on the wall layer, which only the character's movement meets (WallStep); each drawn surface a body
+    /// to stand on and for the camera. <paramref name="drawnWalls"/>: a solid model without collision volumes is walled
+    /// by its drawn surfaces instead. Not solid: nothing (its volumes stay hidden).
+    /// </summary>
+    private static void MakeSolid(Node3D model, bool solid, bool drawnWalls = false)
+    {
+        var meshes = FindMeshes(model).ToList();
+        bool hasVolumes = meshes.Any(IsCollisionVolume);
+        foreach (MeshInstance3D mi in meshes)
+        {
+            bool volume = IsCollisionVolume(mi);
+            if (volume)
+            {
+                mi.Visible = solid && _showWalls;
+                if (mi.Visible)
+                    mi.MaterialOverride = WallLook;
+            }
+            if (!solid)
+                continue;
+            mi.CreateTrimeshCollision();
+            foreach (Node c in mi.GetChildren())
+                if (c is StaticBody3D body)
+                {
+                    if (volume)
+                        (body.CollisionLayer, body.CollisionMask) = (WallLayer, 0);
+                    else if (drawnWalls && !hasVolumes)
+                        body.CollisionLayer |= WallLayer;
+                }
+        }
+    }
+
+    private static bool IsCollisionVolume(MeshInstance3D mi) =>
+        mi.Name.ToString().StartsWith(DaocAssets.Nif.GltfExporter.CollisionPrefix, System.StringComparison.Ordinal);
+
     // --show-walls (dev): the collision volumes drawn, translucent red, to see where they are.
     private static readonly bool _showWalls = System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--show-walls") >= 0;
     private static readonly StandardMaterial3D WallLook = new()
