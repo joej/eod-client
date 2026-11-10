@@ -183,3 +183,5 @@ Built later: several chat windows with their own filters, default channel, font 
 See roadmap M9, "Screen and UI scale", which records retail's behaviour (one UI scale from 1.0 to 4.0
 over a virtual screen; absolute window positions saved per character; opacity per window; a Toggle
 Interface key) and our plan.
+
+**Interface size (2026-11-10):** Settings → Display → Interface size (1.0–4.0, Auto = screen height ÷ 720: 1.5 at 1080p) and retail's top-left-corner drag (daoc-re RE/63) scale every window we draw, live. Window places are kept relative to the nearest screen edge (retail keeps the top-left corner only).

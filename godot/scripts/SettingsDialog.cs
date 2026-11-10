@@ -125,6 +125,49 @@ public partial class SettingsDialog : AcceptDialog
         classic.Toggled += on => ClientSettings.ClassicTerrain = on;
         grid.AddChild(classic);
 
+        // Retail's ui_scale (1.0–4.0): every game window and its text together. Auto follows the screen (1.5 at 1080p).
+        grid.AddChild(new Label { Text = "Interface size" });
+        var uiRow = new HBoxContainer();
+        var ui = new HSlider
+        {
+            MinValue = 1, MaxValue = 4, Step = 0.05, Value = WorldView.UiScale, CustomMinimumSize = new Vector2(150, 0),
+            SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+        };
+        var uiValue = new Label { Text = $"{WorldView.UiScale:0.00}", CustomMinimumSize = new Vector2(40, 0) };
+        var auto = new Button { Text = "Auto", FocusMode = Control.FocusModeEnum.None, TooltipText = "Follow the screen's size (1.5 at 1080p)" };
+        // Applied when the handle is let go, or at once for a click or key (rebuilding the windows on every step of a drag
+        // would stutter).
+        bool dragging = false;
+        void Apply()
+        {
+            ClientSettings.UiScale = (float)ui.Value;
+            ClientSettings.NotifyChanged(display: false);
+        }
+        ui.DragStarted += () => dragging = true;
+        ui.DragEnded += changed =>
+        {
+            dragging = false;
+            if (changed)
+                Apply();
+        };
+        ui.ValueChanged += value =>
+        {
+            uiValue.Text = $"{value:0.00}";
+            if (!dragging)
+                Apply();
+        };
+        auto.Pressed += () =>
+        {
+            ClientSettings.UiScale = 0;
+            ui.SetValueNoSignal(WorldView.UiScale);
+            uiValue.Text = $"{WorldView.UiScale:0.00}";
+            ClientSettings.NotifyChanged(display: false);
+        };
+        uiRow.AddChild(ui);
+        uiRow.AddChild(uiValue);
+        uiRow.AddChild(auto);
+        grid.AddChild(uiRow);
+
         grid.AddChild(new Label { Text = "Field of view" });
         var fovRow = new HBoxContainer();
         var fov = new HSlider

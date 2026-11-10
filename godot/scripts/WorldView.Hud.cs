@@ -33,7 +33,8 @@ public partial class WorldView
     private ushort _follow;          // follow or stick: the object followed (0: none)
     private float _followMetres;     // how close to keep
 
-    private static float UiScale
+    /// <summary>The interface size in use: the player's, else the screen's (see ClientSettings.UiScale).</summary>
+    internal static float UiScale
     {
         get
         {
@@ -166,7 +167,8 @@ public partial class WorldView
         private readonly string _key;
         private readonly float _scale;
         private readonly System.Func<Vector2, Vector2> _defaultAt;   // screen size → top-left, in skin pixels
-        private Vector2? _home;                                      // where the player put it (skin pixels), or null: the default
+        private Vector2? _home;                                      // where the player put it (skin pixels), or null: the default;
+                                                                     // a negative coordinate counts from the right or bottom edge
         public bool DragAnywhere;                                    // dragged by any free spot, not just the top edge
         public System.Action<int>? Wheel;                            // the mouse wheel over it: -1 up, +1 down
         private Vector2? _dragFrom;
@@ -195,7 +197,8 @@ public partial class WorldView
         // that lost it once the window grew (owner, 2026-11-10: "quickbar placement is not remembered").
         private void Place()
         {
-            Position = (_home ?? _defaultAt(GetViewportRect().Size / _scale)) * _scale;
+            Vector2 screen = GetViewportRect().Size / _scale;
+            Position = (_home is Vector2 h ? FromEdges(h, screen) : _defaultAt(screen)) * _scale;
             Clamp();
         }
 
@@ -281,7 +284,7 @@ public partial class WorldView
                 else if (!mb.Pressed && _dragFrom is not null)
                 {
                     _dragFrom = null;
-                    _home = Position / _scale;
+                    _home = ToEdges(Position / _scale, GetViewportRect().Size / _scale);
                     ClientSettings.SaveWindowPosition(_key, _home.Value);
                 }
                 AcceptEvent();
@@ -292,6 +295,23 @@ public partial class WorldView
                 Clamp();
                 AcceptEvent();
             }
+        }
+
+        // A window left in the right or bottom half of the screen keeps its distance from that edge (stored negative: its
+        // far side's offset from the edge), so it stays in its corner when the interface size or the window changes. Retail
+        // stores the top-left corner only; at a bigger size the bars near the bottom then piled up on each other.
+        private Vector2 ToEdges(Vector2 at, Vector2 screen)
+        {
+            Vector2 skin = Size / _scale;
+            float x = at.X + skin.X / 2 > screen.X / 2 ? -(screen.X - at.X - skin.X) - 1 : at.X;
+            float y = at.Y + skin.Y / 2 > screen.Y / 2 ? -(screen.Y - at.Y - skin.Y) - 1 : at.Y;
+            return new Vector2(x, y);
+        }
+
+        private Vector2 FromEdges(Vector2 home, Vector2 screen)
+        {
+            Vector2 skin = Size / _scale;
+            return new Vector2(home.X < 0 ? screen.X - skin.X + home.X + 1 : home.X, home.Y < 0 ? screen.Y - skin.Y + home.Y + 1 : home.Y);
         }
 
         // Kept wholly on screen, as retail clamps a dragged window.

@@ -130,6 +130,16 @@ public partial class WorldView
                         OnWorldObject(new ObjectCreate((ushort)(60000 + k), 0, (ushort)p.Z, (uint)(p.X + dx * (k + 1)), (uint)p.Y, model, $"test {model}"));
             };
         }
+        // --ui-drag PIXELS: 5 s in, retail's interface-size drag from the top-left corner, PIXELS to the right (synthetic mouse
+        // events through the normal input path), to check the live rebuild.
+        int uiDrag = System.Array.IndexOf(args, "--ui-drag");
+        if (uiDrag >= 0 && uiDrag + 1 < args.Length && float.TryParse(args[uiDrag + 1], out float dragBy))
+            GetTree().CreateTimer(5).Timeout += () =>
+            {
+                Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = new Vector2(10, 10) });
+                Input.ParseInputEvent(new InputEventMouseMotion { Position = new Vector2(10 + dragBy, 10) });
+                Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = new Vector2(10 + dragBy, 10) });
+            };
         // --torch lights the character's torch on entering (to check its look).
         if (System.Array.IndexOf(args, "--torch") >= 0)
             GetTree().CreateTimer(1).Timeout += () => SetTorch(true);

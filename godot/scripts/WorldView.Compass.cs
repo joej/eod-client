@@ -15,6 +15,7 @@ public partial class WorldView
     private const int CompassStrip = 512, CompassView = 128, CompassHigh = 32;
     private HudWindow? _compassWindow;
     private CompassBar? _compass;
+    private bool _compassSubscribed;
 
     private void BuildCompass(CanvasLayer overlay)
     {
@@ -43,8 +44,12 @@ public partial class WorldView
         _compass = new CompassBar(ImageTexture.CreateFromImage(img)) { Size = new Vector2(CompassView, CompassHigh) * s, MouseFilter = Control.MouseFilterEnum.Ignore };
         _compassWindow.AddChild(_compass);
         _compassWindow.Visible = ClientSettings.ShowCompass;
-        ClientSettings.Changed += OnCompassSetting;
-        TreeExiting += () => ClientSettings.Changed -= OnCompassSetting;
+        if (!_compassSubscribed)
+        {
+            _compassSubscribed = true;
+            ClientSettings.Changed += OnCompassSetting;
+            TreeExiting += () => ClientSettings.Changed -= OnCompassSetting;
+        }
         overlay.AddChild(_compassWindow);
     }
 

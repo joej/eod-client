@@ -479,6 +479,8 @@ public partial class WorldView : Node3D
         BuildHud(overlay);
         BuildQuickbars(overlay);
         BuildCompass(overlay);
+        _builtScale = UiScale;
+        ScaleChatAndNpc(_builtScale / ChatDesignScale);
         NameSelf();
         AddChild(overlay);
         _viewSetting = ViewOverride() ?? ClientSettings.ViewDistance;
@@ -653,6 +655,11 @@ public partial class WorldView : Node3D
     // P saves a screenshot of the current view.
     public override void _Input(InputEvent @event)
     {
+        if (InterfaceScaleDrag(@event))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         // Enter focuses the chat box so you can type; Escape drops focus back to the game. While the
         // box has focus the LineEdit consumes keys itself, so none of the game hotkeys below fire.
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Enter or Key.KpEnter }
@@ -837,6 +844,7 @@ public partial class WorldView : Node3D
     {
         _camera.Fov = ClientSettings.FieldOfView;
         RestyleNames();
+        ApplyInterfaceScale();
         if (display)
             ClientSettings.ApplyWindowMode();
     }
