@@ -123,6 +123,8 @@ public partial class WorldView
             GetTree().CreateTimer(delay).Timeout += () =>
             {
                 GD.Print($"[world] dev command: {command}");
+                if (LocalCommand(command))
+                    return;   // the client's own (/loc, /map, /quickbar)
                 if (command.StartsWith("/useskill ", System.StringComparison.OrdinalIgnoreCase))
                     UseSkillByName(command["/useskill ".Length..].Trim());   // the client's own command
                 else

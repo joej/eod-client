@@ -229,7 +229,7 @@ public partial class WorldView
         }
 
         // A small clickable glyph (a page arrow): a label, not a button, so it fits a few skin pixels.
-        public void Arrow(string glyph, Vector2 at, Vector2 size, System.Action pressed)
+        public Label Arrow(string glyph, Vector2 at, Vector2 size, System.Action pressed)
         {
             var l = new Label
             {
@@ -248,6 +248,7 @@ public partial class WorldView
                 }
             };
             AddChild(l);
+            return l;
         }
 
         public override void _GuiInput(InputEvent e)

@@ -96,6 +96,10 @@ public partial class WorldView
             AppendChat($"Camera saved: {_camDistance:0.0} m, tilt {Mathf.RadToDeg(_camPitch):0}°.", new Color(0.6f, 0.8f, 1f));
             return;
         }
+        // Commands retail's client answers itself (the server has none by these names: sent, /loc reached OpenDAoC's
+        // /loco emote, "You think this is crazy").
+        if (LocalCommand(line))
+            return;
         if (_session is null)
         {
             AppendChat("(offline: nothing is sent)", new Color(0.8f, 0.5f, 0.5f));

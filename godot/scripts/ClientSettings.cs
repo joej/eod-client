@@ -212,6 +212,13 @@ public static class ClientSettings
     public static void SaveQuickbarPage(string character, int bar, int page) =>
         SaveIn($"quickbar {character}", $"page{bar + 1}", page);
 
+    /// <summary>Whether a quickbar shows (/quickbar): bars 1 and 2 by default, bar 3 hidden, as retail's default.ini.</summary>
+    public static bool QuickbarShown(string character, int bar) =>
+        Load().GetValue($"quickbar {character}", $"shown{bar + 1}", bar < 2).AsBool();
+
+    public static void SaveQuickbarShown(string character, int bar, bool shown) =>
+        SaveIn($"quickbar {character}", $"shown{bar + 1}", shown);
+
     /// <summary>The player's own key bindings (section "keys": action name = key codes, comma-separated; empty =
     /// no key). Actions not listed use the preset's keys.</summary>
     public static Dictionary<ControlAction, Key[]> LoadKeys()

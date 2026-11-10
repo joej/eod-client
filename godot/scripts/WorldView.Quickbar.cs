@@ -47,9 +47,18 @@ public partial class WorldView
             };
             var qb = new Quickbar(this, bar, window, s);
             _bars.Add(qb);
-            window.Visible = _session is not null;   // offline: nothing to use, and the world shows clear
             overlay.AddChild(window);
+            ShowQuickbar(bar, ClientSettings.QuickbarShown(PlayerName, bar), save: false);
         }
+    }
+
+    // Retail's default.ini shows bars 1 and 2 and hides bar 3 (Quickbar3=0,338,0,...: its third field); /quickbar turns
+    // one on or off, remembered per character. Offline nothing is shown: there is nothing to use.
+    private void ShowQuickbar(int bar, bool shown, bool save)
+    {
+        if (save)
+            ClientSettings.SaveQuickbarShown(PlayerName, bar, shown);
+        _bars[bar].Window.Visible = shown && _session is not null;
     }
 
     private void UpdateQuickbars()
@@ -256,6 +265,7 @@ public partial class WorldView
         private readonly QuickSlot[] _slots = new QuickSlot[BarSlots];
         private readonly Label _page;
         private int _pageIndex;
+        private readonly Label[] _arrows = new Label[2];   // faint until the mouse is over the bar
 
         public Quickbar(WorldView view, int bar, HudWindow window, float scale)
         {
@@ -263,9 +273,9 @@ public partial class WorldView
             _pageIndex = Mathf.Clamp(ClientSettings.QuickbarPage(view.PlayerName, bar), 0, BarPages - 1);
             // The handle: the bar's number, and its page between up and down arrows (the mouse wheel turns it too).
             window.Label(new Vector2(1, 1), new Vector2(24, 11), 8, centred: true).Text = $"Bar {bar + 1}";
-            window.Arrow("▲", new Vector2(1, 12), new Vector2(24, 9), () => Turn(-1));
+            _arrows[0] = window.Arrow("▲", new Vector2(1, 12), new Vector2(24, 9), () => Turn(-1));
             _page = window.Label(new Vector2(1, 20), new Vector2(24, 10), 9, centred: true);
-            window.Arrow("▼", new Vector2(1, 29), new Vector2(24, 9), () => Turn(+1));
+            _arrows[1] = window.Arrow("▼", new Vector2(1, 29), new Vector2(24, 9), () => Turn(+1));
             window.Wheel = by => Turn(by);
             for (int i = 0; i < BarSlots; i++)
             {
@@ -351,6 +361,9 @@ public partial class WorldView
         // Icons appear once the skill list arrives; cooldowns count down.
         public void Refresh(long now)
         {
+            bool over = Window.GetGlobalRect().HasPoint(Window.GetViewport().GetMousePosition());
+            foreach (Label a in _arrows)
+                a.Modulate = new Color(1, 1, 1, over ? 1f : 0.25f);
             for (int i = 0; i < BarSlots; i++)
             {
                 string entry = Entry(i);
