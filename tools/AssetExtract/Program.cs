@@ -74,6 +74,9 @@ internal static partial class Cli
         if (command == "cata")
             return CataCmd(args);
 
+        if (command == "objects")
+            return ObjectsCmd(args);
+
         string inputPath = args[1];
         if (!File.Exists(inputPath))
         {
@@ -117,6 +120,7 @@ internal static partial class Cli
               mpk model    <name.nif> --index index.json --library LIBDIR
               mpk figure   <model-id> --gamedata gamedata.mpk --index index.json --library LIBDIR
               mpk figures  --gamedata gamedata.mpk --index index.json --library LIBDIR   (every model id: classic figures, and Catacombs versions)
+              mpk objects  --gamedata gamedata.mpk --index index.json --library LIBDIR   (the models of the server's objects: carts, banners, items on the ground)
               mpk cata     <model-id> --gamedata gamedata.mpk --index index.json --library LIBDIR   (its Catacombs figure)
               mpk zonedeps <dat<NNN>.mpk> --index index.json --var NAME
               mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR [--size W H]

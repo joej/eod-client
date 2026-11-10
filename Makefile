@@ -173,6 +173,14 @@ $(FIGURES): $(INDEX) $(MODEL_SRC) $(wildcard $(A)/Figures/*.cs) \
 	$(MPK) figures --gamedata $(CLIENT)/gamedata.mpk --index $(INDEX) --library $(LIB)
 	@touch $@
 
+# --- server objects: the models a server-placed object (0xD9: carts, banners, items on the ground) can name ------
+OBJECTS := $(LIB)/models/objects.csv
+.PHONY: objects
+objects: $(OBJECTS)
+$(OBJECTS): $(INDEX) $(MODEL_SRC) $(A)/Figures/WorldObjects.cs $(CLI_SRC) $(X)/Cli.Figures.cs | $(TOOL)
+	@mkdir -p $(@D)
+	$(MPK) objects --gamedata $(CLIENT)/gamedata.mpk --index $(INDEX) --library $(LIB)
+
 # --- loading screens: the pictures, tips, bar and font the client shows while it loads a region ----------
 LOADING := $(LIB)/loading/loading.csv
 .PHONY: loading
@@ -201,7 +209,7 @@ $(ICONS): $(wildcard $(CLIENT)/icons/*.bmp $(CLIENT)/Icons/*.bmp) $(CLIENT)/game
 
 # --- every zone ----------------------------------------------------------------------------------------
 .PHONY: zones check-zones
-zones: $(foreach z,$(ZONES) $(CITIES),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(LOADING) $(MAPS) $(ICONS)
+zones: $(foreach z,$(ZONES) $(CITIES),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(OBJECTS) $(LOADING) $(MAPS) $(ICONS)
 
 $(ZONEDIR)/summary.md: $(foreach z,$(ZONES) $(CITIES),$(ZONEDIR)/zone$(z)/zonecheck.md)
 	@{ echo "# Zone check, every converted zone (outdoor and cities)"; echo; \

@@ -28,8 +28,8 @@ public partial class WorldView
         return ToGodot(zone.X + xOffset, zone.Y + yOffset, z);
     }
 
-    // Static world objects (0xD9: doors, items, banners), by object id: not drawn as entities (a keep's
-    // gate is part of its zone model), and a position update for one must not turn it into a capsule.
+    // Static world objects (0xD9: doors, items, banners), by object id: drawn by their model (WorldView.Objects), not as
+    // entities, and a position update for one must not turn it into a capsule.
     private readonly Dictionary<ushort, ObjectCreate> _worldObjects = new();
 
     // OpenDAoC's model for a creature it has hidden (HideableNpc.HiddenModel).
@@ -42,7 +42,7 @@ public partial class WorldView
     private void OnWorldObject(ObjectCreate o)
     {
         _worldObjects[o.ObjectId] = o;
-        GD.Print($"[object] {o.ObjectId} \"{o.Name}\" model {o.Model} at {o.X} {o.Y} {o.Z} (not drawn)");
+        DrawWorldObject(o);
     }
 
     private void OnObjectMoved(ObjectUpdate u)
@@ -135,6 +135,7 @@ public partial class WorldView
         _objectsRequested.Remove(objectId);
         _equipment.Remove(objectId);
         _worldObjects.Remove(objectId);
+        RemoveWorldObjectNode(objectId);
         _hiddenNpcs.Remove(objectId);
         if (_entities.Remove(objectId, out Entity? e))
             e.Node.QueueFree();

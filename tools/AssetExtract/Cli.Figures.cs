@@ -337,6 +337,44 @@ internal static partial class Cli
         Console.WriteLine($"cata items: {items.Count} items with a Catacombs look, {missing} of their textures not in the install");
     }
 
+    // objects <gamedata.mpk>: every model a server object (0xD9) can name (WorldObjects: objects.csv → items.csv), converted
+    // from the item folders into the library, and models/objects.csv "model,glb" for the client to place them.
+    private static int ObjectsCmd(string[] args)
+    {
+        if (FigureOptions(args, 1) is not var (gamedata, indexPath, libDir)) return Usage();
+        var index = AssetIndex.Load(indexPath);
+        var library = new AssetLibrary(index, libDir).Scoped("items", ItemFolders);
+        Dictionary<int, string> models;
+        using (MpkArchive mpk = MpkArchive.Open(gamedata))
+        {
+            string Text(string name) => System.Text.Encoding.Latin1.GetString(mpk.Extract(name));
+            models = DaocAssets.Figures.WorldObjects.Parse(Text("objects.csv"), Text("items.csv"));
+        }
+        string modelsDir = Path.Combine(libDir, "models");
+        Directory.CreateDirectory(modelsDir);
+        var stems = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        int absent = 0, failed = 0;
+        foreach (string nif in models.Values.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            ModelResult r = library.GetModel(nif);
+            stems[nif] = r.GlbPath is null ? null : ModelStem(modelsDir, r.GlbPath);
+            if (r.Origin == AssetOrigin.Missing) absent++;
+            else if (r.GlbPath is null) { failed++; Console.Error.WriteLine($"  {nif}: {r.Error}"); }
+        }
+        var table = new System.Text.StringBuilder("model,glb\n");
+        int placed = 0;
+        foreach ((int model, string nif) in models.OrderBy(kv => kv.Key))
+            if (stems[nif] is string stem)
+            {
+                table.Append(CultureInfo.InvariantCulture, $"{model},{stem}\n");
+                placed++;
+            }
+        File.WriteAllText(Path.Combine(modelsDir, "objects.csv"), table.ToString());
+        Console.WriteLine($"objects: {placed} of {models.Count} object models drawable ({stems.Count} model files: " +
+            $"{absent} not in the install, {failed} failed)");
+        return 0;
+    }
+
     // Install folders each kind of asset comes from first. Names are looked up across the whole install,
     // and the install reuses them for different files: giant.nif is the creature in figures/ and a statue in
     // zones/Nifs/GIANT.npk; a creature skin in figures/skins/*.mpk can share its name with a housing trophy's
