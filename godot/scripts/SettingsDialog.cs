@@ -220,7 +220,20 @@ public partial class SettingsDialog : AcceptDialog
             ClientSettings.NotifyChanged(display: false);
         };
         column.AddChild(compass);
-        var xp = new CheckBox { Text = "XP bubbles", ButtonPressed = ClientSettings.ShowLevelXp, FocusMode = Control.FocusModeEnum.None };
+        var summaryRow = new HBoxContainer();
+        summaryRow.AddChild(new Label { Text = "Summary" });
+        var summary = new OptionButton { FocusMode = Control.FocusModeEnum.None };
+        summary.AddItem("Classic");
+        summary.AddItem("New");
+        summary.Select(ClientSettings.ClassicSummary ? 0 : 1);
+        summary.ItemSelected += index =>
+        {
+            ClientSettings.ClassicSummary = index == 0;
+            ClientSettings.NotifyChanged(display: false);
+        };
+        summaryRow.AddChild(summary);
+        column.AddChild(summaryRow);
+        var xp = new CheckBox { Text = "Floating XP window", ButtonPressed = ClientSettings.ShowLevelXp, FocusMode = Control.FocusModeEnum.None };
         xp.Toggled += on =>
         {
             ClientSettings.ShowLevelXp = on;

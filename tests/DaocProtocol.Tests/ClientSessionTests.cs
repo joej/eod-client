@@ -739,6 +739,8 @@ public class ClientSessionTests
             Assert.Equal(SessionState.InWorld, session.State);
             Assert.NotNull(session.World);
             Assert.Contains(session.TakeSkipped(), p => p.Code == ChatMessage.Code);
+            // The server reads the stand-up on its own task: wait for it (asserting at once failed under a full parallel run).
+            await server.WaitForAsync(p => p.Code == SitRequest.Code);
         }
 
         ClientPacket stand = Assert.Single(server.Received, p => p.Code == SitRequest.Code);

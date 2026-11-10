@@ -5,9 +5,9 @@
 // server's level progress v in ‰ (0x91): whole bubbles = v / 100, the fine bar = v mod 100, so the bubbles step every
 // 10% and the blue bar fills ten times per level (PointsUpdate.Bubbles / BubbleProgress).
 //
-// Retail's default home for the bubbles is the menu bar along the bottom (Exp button, bubbles, money, the page
-// buttons, the meters), and it starts this window hidden. We have no menu bar yet, so this window starts shown, where
-// retail's default.ini puts it at 1024 x 768 (916, 624: the bottom-right corner). Settings → Game → XP bubbles hides it.
+// Retail shows the bubbles on its menu bar along the bottom (Exp button, bubbles, money, the page buttons, the meters)
+// and on the classic summary (ours: WorldView.ClassicSummary), and starts this window hidden; so does ours. Settings →
+// Game → Floating XP window shows it, where retail's default.ini puts it (bottom right).
 // Drawn in our plain style, not the skin's exp_low / exp_high art.
 
 using DaocProtocol.Packets;

@@ -120,11 +120,19 @@ public static class ClientSettings
         set => SaveIn("game", "compass", value);
     }
 
-    /// <summary>The XP bubbles (retail's floating Level Exp. window; retail shows them on its menu bar instead). Shown by
-    /// default, as we have no menu bar yet.</summary>
+    /// <summary>The classic summary (retail's `summary`: Hit, End, Pow and the Exp bubbles), our default; off, the newer
+    /// new_summary_window (level and realm rank, no XP).</summary>
+    public static bool ClassicSummary
+    {
+        get => Load().GetValue("game", "classic_summary", true).AsBool();
+        set => SaveIn("game", "classic_summary", value);
+    }
+
+    /// <summary>The floating Level Exp. window (more XP bubbles; the classic summary and retail's menu bar have them too).
+    /// Hidden by default, as retail's default.ini has it.</summary>
     public static bool ShowLevelXp
     {
-        get => Load().GetValue("game", "level_xp", true).AsBool();
+        get => Load().GetValue("game", "level_xp", false).AsBool();
         set => SaveIn("game", "level_xp", value);
     }
 

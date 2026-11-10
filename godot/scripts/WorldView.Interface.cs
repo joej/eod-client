@@ -20,7 +20,7 @@ public partial class WorldView
     private void ApplyInterfaceScale()
     {
         float s = UiScale;
-        if (Mathf.IsEqualApprox(s, _builtScale))
+        if (Mathf.IsEqualApprox(s, _builtScale) && ClientSettings.ClassicSummary == _builtClassicSummary)
             return;
         _builtScale = s;
         if (_summary is not null && IsInstanceValid(_summary) && _summary.GetParent() is CanvasLayer overlay)

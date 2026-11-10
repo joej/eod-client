@@ -60,14 +60,21 @@ public partial class WorldView
         // quickbar 3,
         // the target window centred low, where retail's default.ini puts FloatTarget (y 547 at 1024 x 768: 221 skin
         // pixels above the bottom, clear of the quickbars).
-        _summary = new HudWindow("summary", new Vector2(160, 90), s, screen => new Vector2(0, screen.Y * 0.29f));
-        _summaryTitle = _summary.Label(new Vector2(11, 2), new Vector2(138, 14), 11, centred: true);
-        _summaryLevel = _summary.Label(new Vector2(8, 16), new Vector2(144, 12), 9);
-        _hpBar = _summary.Bar(new Vector2(26, 31), 125, new Color(0.85f, 0.15f, 0.12f), new Vector2(3, 28));
-        _endBar = _summary.Bar(new Vector2(26, 42), 125, new Color(0.2f, 0.75f, 0.25f), new Vector2(3, 39));
-        _powerBar = _summary.Bar(new Vector2(26, 52), 125, new Color(0.9f, 0.8f, 0.2f), new Vector2(3, 50));
-        _summaryTarget = _summary.Label(new Vector2(5, 61), new Vector2(150, 14), 11, centred: true);
-        _targetBar = _summary.Bar(new Vector2(26, 77), 125, new Color(0.85f, 0.15f, 0.12f), new Vector2(3, 75));
+        _builtClassicSummary = ClientSettings.ClassicSummary;
+        if (_builtClassicSummary)
+            BuildClassicSummary(s);
+        else
+        {
+            _summary = new HudWindow("summary", new Vector2(160, 90), s, screen => new Vector2(0, screen.Y * 0.29f));
+            _summaryTitle = _summary.Label(new Vector2(11, 2), new Vector2(138, 14), 11, centred: true);
+            _summaryLevel = _summary.Label(new Vector2(8, 16), new Vector2(144, 12), 9);
+            _hpBar = _summary.Bar(new Vector2(26, 31), 125, new Color(0.85f, 0.15f, 0.12f), new Vector2(3, 28));
+            _endBar = _summary.Bar(new Vector2(26, 42), 125, new Color(0.2f, 0.75f, 0.25f), new Vector2(3, 39));
+            _powerBar = _summary.Bar(new Vector2(26, 52), 125, new Color(0.9f, 0.8f, 0.2f), new Vector2(3, 50));
+            _summaryTarget = _summary.Label(new Vector2(5, 61), new Vector2(150, 14), 11, centred: true);
+            _targetBar = _summary.Bar(new Vector2(26, 77), 125, new Color(0.85f, 0.15f, 0.12f), new Vector2(3, 75));
+            (_summaryXp, _summaryXpFine) = (null, null);
+        }
         overlay.AddChild(_summary);
 
         _targetWindow = new HudWindow("target", new Vector2(150, 70), s,
@@ -98,6 +105,11 @@ public partial class WorldView
             _endBar.Set(v.EndurancePercent);
             // Always drawn, as retail's: a class without power shows it empty (0), not missing.
             _powerBar.Set(v.MaxMana > 0 ? v.ManaPercent : 0);
+        }
+        if (_summaryXp is not null)
+        {
+            _summaryXp.Full = _points?.Bubbles ?? 0;
+            _summaryXpFine!.Set(_points?.BubbleProgress ?? 0);
         }
         bool has = _target != 0 && _entities.TryGetValue(_target, out _);
         Entity? t = has ? _entities[_target] : null;
@@ -216,9 +228,9 @@ public partial class WorldView
             return l;
         }
 
-        public HudBar Bar(Vector2 at, float width, Color colour, Vector2 numberAt)
+        public HudBar Bar(Vector2 at, float width, Color colour, Vector2 numberAt, float height = 7)
         {
-            var bar = new HudBar(width * _scale, 7 * _scale, colour) { Position = at * _scale };
+            var bar = new HudBar(width * _scale, height * _scale, colour) { Position = at * _scale };
             AddChild(bar);
             bar.Number = Label(numberAt, new Vector2(22, 11), 9, centred: true);
             return bar;
@@ -330,6 +342,7 @@ public partial class WorldView
         private readonly ColorRect _fill;
         private readonly float _width;
         public Label? Number;
+        public bool HideZero;   // the number isn't drawn at 0 (retail's DontDrawWhenZero)
 
         public HudBar(float width, float height, Color colour)
         {
@@ -346,7 +359,7 @@ public partial class WorldView
             _fill.Visible = percent >= 0;
             _fill.Size = new Vector2(_width * Mathf.Clamp(percent, 0, 100) / 100f, Size.Y);
             if (Number is not null)
-                Number.Text = percent >= 0 ? percent.ToString() : "";
+                Number.Text = percent > 0 || (percent == 0 && !HideZero) ? percent.ToString() : "";
         }
     }
 }
