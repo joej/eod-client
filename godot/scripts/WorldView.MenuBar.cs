@@ -7,8 +7,8 @@
 //   JOURNAL 284, MAP 340, WARMAP 376, ATTRIB. 437, INV. 488, SKILLS 521, SPELLS 564, STYLES 610, GROUP 656 (y 8)
 //   the meters (703, 720, 737; 16 x 16): performance, lag, frame rate (DaocProtocol.Session.Meters), once a second
 //   MENU (754)
-// What we have works: MAP (as M), MENU. The other page buttons open windows we haven't built (the journal, the war map,
-// the right-hand stats panel) and are dimmed until then. Retail's Exp button switches between level, realm and champion
+// What we have works: MAP (as M), MENU, and the six stats-panel pages (WorldView.StatsPanel; its inventory and group
+// pages are placeholders). JOURNAL and WARMAP open windows we haven't built and are dimmed until then. Retail's Exp button switches between level, realm and champion
 // XP; ours shows level XP only, so it's a label. Performance is retail's share of packets lost or late; over TCP we
 // have no such count, so ours is good while packets arrive and bad when none have for 6 s.
 //
@@ -57,8 +57,9 @@ public partial class WorldView
         (string Text, float X, float Width, System.Action? Pressed)[] buttons =
         [
             ("JOURNAL", 284, 55, null), ("MAP", 340, 35, ToggleMap), ("WARMAP", 376, 60, null),
-            ("ATTRIB.", 437, 50, null), ("INV.", 488, 32, null), ("SKILLS", 521, 42, null), ("SPELLS", 564, 45, null),
-            ("STYLES", 610, 45, null), ("GROUP", 656, 45, null), ("MENU", 754, 40, ToggleMainMenu),
+            ("ATTRIB.", 437, 50, () => ToggleStatsPage(StatsAttributes)), ("INV.", 488, 32, () => ToggleStatsPage(StatsInventory)),
+            ("SKILLS", 521, 42, () => ToggleStatsPage(StatsSkills)), ("SPELLS", 564, 45, () => ToggleStatsPage(StatsSpells)),
+            ("STYLES", 610, 45, () => ToggleStatsPage(StatsStyles)), ("GROUP", 656, 45, () => ToggleStatsPage(StatsGroup)), ("MENU", 754, 40, ToggleMainMenu),
         ];
         foreach ((string text, float x, float width, System.Action? pressed) in buttons)
         {

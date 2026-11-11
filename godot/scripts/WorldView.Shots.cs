@@ -169,6 +169,11 @@ public partial class WorldView
         // --main-menu opens the menu bar's MENU (to see it in a --shot).
         if (System.Array.IndexOf(args, "--main-menu") >= 0)
             GetTree().CreateTimer(1).Timeout += ToggleMainMenu;
+        // --stats PAGE opens the stats panel at a page (attributes, inventory, skills, styles, spells, group), as its
+        // menu-bar button would; late enough for the server's lists to have arrived.
+        int si = System.Array.IndexOf(args, "--stats");
+        if (si >= 0 && si + 1 < args.Length && System.Array.FindIndex(StatsTabNames, n => n.Equals(args[si + 1], System.StringComparison.OrdinalIgnoreCase)) is int page and >= 0)
+            GetTree().CreateTimer(3).Timeout += () => ToggleStatsPage(page);
         // --command TEXT (repeatable) sends each slash command in turn, 2 s apart from 2 s after entering: e.g.
         // a GM "/jump to X Y Z REGION" to set up a --campose/--shot check somewhere exact.
         int delay = 2;

@@ -111,6 +111,9 @@ public sealed class NetworkBridge(Action<string>? log = null)
     /// <summary>The game clock (0x7E): at world entry and every 15 minutes.</summary>
     public event Action<GameTime>? TimeChanged;
 
+    /// <summary>The character's stats or resists (0xFB; <see cref="StatsUpdate.IsResists"/> says which).</summary>
+    public event Action<StatsUpdate>? StatsChanged;
+
     /// <summary>The server answered a keep-alive (0x29), echoing our timestamp (Environment.TickCount when sent): for the
     /// overlay's count and the lag meter's round trip (PingRequest.RoundTrip).</summary>
     public event Action<uint>? PingReplied;
@@ -240,6 +243,9 @@ public sealed class NetworkBridge(Action<string>? log = null)
                     break;
                 case GameTime.Code:
                     TimeChanged?.Invoke(GameTime.Parse(packet.Payload));
+                    break;
+                case StatsUpdate.Code:
+                    StatsChanged?.Invoke(StatsUpdate.Parse(packet.Payload));
                     break;
                 case PingRequest.ReplyCode:
                     PingReplied?.Invoke(PingRequest.ParseReply(packet.Payload));

@@ -94,6 +94,7 @@ public partial class WorldView
     private bool OverHud(Vector2 at) =>
         _bars.Any(b => b.Window.Visible && b.Window.GetGlobalRect().HasPoint(at))
         || (_summary?.Visible == true && _summary.GetGlobalRect().HasPoint(at))
+        || (_statsPanel?.Visible == true && _statsPanel.GetGlobalRect().HasPoint(at))
         || (_targetWindow?.Visible == true && _targetWindow.GetGlobalRect().HasPoint(at));
 
     // ----- what a slot holds -----

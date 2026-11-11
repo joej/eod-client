@@ -26,7 +26,7 @@ public partial class WorldView
         if (_summary is not null && IsInstanceValid(_summary) && _summary.GetParent() is CanvasLayer overlay)
         {
             // Rebuilt at the new size; each window keeps its remembered place (stored in skin pixels).
-            foreach (Node old in new Node?[] { _summary, _targetWindow, _compassWindow, _xpWindow, _menuBar, _mainMenu, _clockWindow }
+            foreach (Node old in new Node?[] { _summary, _targetWindow, _compassWindow, _xpWindow, _menuBar, _mainMenu, _clockWindow, _statsPanel }
                          .Concat(_bars.Select(b => (Node)b.Window)).OfType<Node>())
                 old.QueueFree();
             _bars.Clear();
@@ -37,6 +37,7 @@ public partial class WorldView
             BuildXpWindow(overlay);
             BuildMenuBar(overlay);
             BuildClock(overlay);
+            BuildStatsPanel(overlay);
         }
         ScaleChatAndNpc(s / ChatDesignScale);
     }

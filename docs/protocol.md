@@ -510,6 +510,22 @@ one 0xFA, three 0x91, XP 0 of 50 at level 1; the skill list twice: 3 specialisat
 no spell lines, 14 crafting skills). A list caster's spell lines are so far checked only against bytes built
 in OpenDAoC's layout.*
 
+Stats and resists share one packet, told apart by the byte at offset 72:
+
+```
+S→C 0xFB StatsUpdate (78)    five columns of nine places: base (u16 BE), buffs and debuffs (signed u16 BE),
+                             item bonuses (u16 BE), item cap (u8), realm-ability bonus (u8); then u8 kind
+                             (00 stats, FF resists), u8 constitution lost to deaths, u16 BE max health
+                             (stats only), u16 0.
+  stats order                strength, dexterity, constitution, quickness, intelligence, piety, empathy,
+                             charisma (ninth place 0)
+  resists order              crush, slash, thrust, heat, cold, matter, body, spirit, energy (base = racial)
+```
+
+The character has base + buffs + min(items, cap) + realm abilities: the server writes the buff column as what is
+left once those are taken off its own total. *Checked against the RustDAoC 1.127e capture (both kinds decode and
+rebuild byte for byte; a Briton's racial resists) and live 2026-11-11 (eodtest2/Quitcheck and Spellcheck).*
+
 ## Using skills and spells
 
 ```
