@@ -550,6 +550,25 @@ with 0x02 for both slots (or a chat line saying why not); moving an item out of 
 wields it. *Checked against the RustDAoC 1.127e capture (both 0x02 packets, a cloak with two spells, and 0xBD decode
 and rebuild byte for byte) and live 2026-11-11 (Quitcheck: sword 10 → 41 → 10, helm 21 → 42 → 100 → back on).*
 
+### An item's details
+
+The client's small item window (selected with a right-click) is filled from the 0x02 item data it already holds and
+sends nothing. Its INFO, REPAIR, CRAFT and SALVAGE buttons, and its use entries, do:
+
+```
+C→S 0xD8 DetailRequest       u16 BE type, 2 bytes (not read), u32 BE id, u32 BE extra (12 bytes). Types: 1 an
+                             inventory item (id = slot), 100 repair, 101 self-craft, 102 salvage (id = slot).
+                             OpenDAoC reads u16 type, u32, u16 id: the id's low 16 bits.
+S→C 0xC4 DetailWindow        u8 mode (0 a description, 1 statistics and titles), u8 more (not 0: the next 0xC4
+                             continues this window), u8-length caption, then (u8 line number, u8-length text)
+                             pairs, then 0. The lines are shown in order in a scrolling window titled with the caption.
+C→S 0x71 UseSlot type 1 / 2  use the item's first or second use spell (type 0: a plain use)
+```
+
+Salvage and self-craft only apply to backpack items (40–79); the client refuses others itself. *The request's layout
+matches the one 0xD8 in the RustDAoC 1.127e capture (a spell delve, type 24); live 2026-11-11, INFO on Quitcheck's
+practice sword (slot 10) brought a 13-line 0xC4 titled "practice sword".*
+
 ## Using skills and spells
 
 ```

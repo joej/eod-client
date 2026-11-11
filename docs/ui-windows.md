@@ -93,7 +93,7 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 
 | Window | Shows / does | Server data | Ours | Milestone |
 |---|---|---|---|---|
-| Inventory and paper doll (built-in) | Worn gear on a figure, backpack slots, drag and drop, encumbrance | 0x02 InventoryUpdate (equipment, backpack), 0xBD encumbrance; moves go C→S | Built 2026-11-11 as the stats panel's Inventory page: each slot where `pperdoll.bmp` has its frame (our style, word labels), item icons by model (objects.csv → icons.csv), 5 bags of 8 backpack rows, money and encumbrance; hover describes, double-click uses (0x71), drag moves (0xDD), onto the figure wears (slot 100), onto a quickbar uses later. No figure drawn in the middle yet, no `mini_info` | M10 |
+| Inventory and paper doll (built-in) | Worn gear on a figure, backpack slots, drag and drop, encumbrance | 0x02 InventoryUpdate (equipment, backpack), 0xBD encumbrance; moves go C→S | Built 2026-11-11 as the stats panel's Inventory page: each slot where `pperdoll.bmp` has its frame (our style, word labels), item icons by model (objects.csv → icons.csv), 5 bags of 8 backpack rows, money and encumbrance; hover describes, double-click uses (0x71), drag moves (0xDD), onto the figure wears (slot 100), onto a quickbar uses later, right-click opens `mini_info`. No figure drawn in the middle yet | M10 |
 | Character sheet (built-in) / `stats_attributes_window` | Stats, resists, armour factor, level, class, race | 0xFB stats and resists; 0x16 player info | Built 2026-11-11 as the stats panel's Attributes page (skin positions, our style; each stat's and resist's make-up in its tooltip; our own "additional info" lines; only OPTIONS of the six buttons works) | M10 |
 | `stats_combat_window` | Weapon skill, damage, speed | 0x16 / 0xFB | — | M10 |
 | `stats_spec_abil_window` | Specialisations, abilities, trade skills | 0x16 skills | Built 2026-11-11 as the stats panel's Skills page | M10 |
@@ -101,7 +101,7 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 | `concentration_window` | Your concentration buffs | 0x75 | — | M10 |
 | `quiver_window` | Arrows in the quiver | 0x02 | — | M10 |
 | Effect icons (built-in?) | Active buffs and debuffs with timers | 0x7F UpdateIcons | — | M10 |
-| `mini_info` | Delve: an item's or spell's details | 0xD8 DelveInfo | — | M10 |
+| `mini_info`, `info` | An item's details, small (`mini_info`) and full (`info`) | none for `mini_info` (0x02 data); 0xD8 → 0xC4 for `info`; 0xD8 types 100–102 repair, craft, salvage | Built 2026-11-11 for inventory items: right-click selects and opens it (again to close), the skin's layout (con-coloured name, icon, 7 lines), INFO / SALVAGE / REPAIR / CRAFT, a use entry per use spell; INFO fills the `info` window from 0xC4. Not yet for spells, styles or quickbar icons; `info` isn't resizable | M10 |
 | `title_window` | Titles to choose | 0xC4 (titles) | — | later |
 
 ### Trade and money (M10)

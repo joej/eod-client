@@ -484,6 +484,7 @@ public partial class WorldView : Node3D
         BuildMenuBar(overlay);
         BuildClock(overlay);
         BuildStatsPanel(overlay);
+        BuildItemWindows(overlay);
         _builtScale = UiScale;
         ScaleChatAndNpc(_builtScale / ChatDesignScale);
         NameSelf();
@@ -834,6 +835,10 @@ public partial class WorldView : Node3D
             // Esc closes the map or the NPC window, else drops the inspect selection and the target (retail: Esc clears it).
             if (_mainMenu is { Visible: true })
                 _mainMenu.Visible = false;
+            else if (_infoWindow is { Visible: true })
+                _infoWindow.Visible = false;
+            else if (_miniInfo is { Visible: true })
+                CloseMiniInfo();
             else if (_statsPanel is { Visible: true })
                 _statsPanel.Visible = false;
             else if (_mapWindow.Visible)

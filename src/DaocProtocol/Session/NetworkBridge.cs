@@ -123,6 +123,11 @@ public sealed class NetworkBridge(Action<string>? log = null)
     /// <summary>How much the character carries and can carry (0xBD).</summary>
     public event Action<Encumbrance>? EncumbranceChanged;
 
+    /// <summary>A text window (0xC4): an item's description and the like. The bool is true when the window continues the
+    /// previous one (that packet's "more" flag was set), whose lines it adds to.</summary>
+    public event Action<DetailWindow, bool>? DetailWindowArrived;
+    private bool _detailContinues;
+
     /// <summary>The server answered a keep-alive (0x29), echoing our timestamp (Environment.TickCount when sent): for the
     /// overlay's count and the lag meter's round trip (PingRequest.RoundTrip).</summary>
     public event Action<uint>? PingReplied;
@@ -262,6 +267,11 @@ public sealed class NetworkBridge(Action<string>? log = null)
                     break;
                 case Encumbrance.Code:
                     EncumbranceChanged?.Invoke(Encumbrance.Parse(packet.Payload));
+                    break;
+                case DetailWindow.Code:
+                    DetailWindow window = DetailWindow.Parse(packet.Payload);
+                    DetailWindowArrived?.Invoke(window, _detailContinues);
+                    _detailContinues = window.More != 0;
                     break;
                 case PingRequest.ReplyCode:
                     PingReplied?.Invoke(PingRequest.ParseReply(packet.Payload));

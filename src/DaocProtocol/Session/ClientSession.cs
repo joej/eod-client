@@ -655,6 +655,16 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         SendUseAsync(UseRequest.SlotCode, slot, type, cancellationToken);
 
     /// <summary>
+    /// Asks for the details of something (C→S 0xD8, <see cref="DetailRequest"/>): type 1 an inventory item by slot, which
+    /// the server answers with a 0xC4 text window; 100 / 101 / 102 repair, self-craft or salvage the item in that slot.
+    /// </summary>
+    public Task RequestDetailAsync(ushort type, uint id, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(DetailRequest.Code, DetailRequest.Payload(type, id), cancellationToken);
+    }
+
+    /// <summary>
     /// Moves an item (C→S 0xDD): to another inventory slot (swapping with what is there), onto the paper doll
     /// (<see cref="InventorySlot.PaperDoll"/>: the server picks the slot), or out of a slot to wear or take off. A
     /// <paramref name="count"/> of 0 moves the whole stack. The server answers with 0x02 for the slots that changed.

@@ -184,6 +184,22 @@ public partial class WorldView
                 GetTree().CreateTimer(moveAt).Timeout += () => MoveItem(from, to);
                 moveAt += 3;
             }
+        // --select SLOT [info|repair|craft|salvage|use1|use2] right-clicks an inventory item (the mini_info window) at 4 s,
+        // then presses one of its buttons at 6 s: e.g. --select 10 info opens the server's description of the right-hand weapon.
+        int sel = System.Array.IndexOf(args, "--select");
+        if (sel >= 0 && sel + 1 < args.Length && byte.TryParse(args[sel + 1], out byte selSlot))
+        {
+            GetTree().CreateTimer(4).Timeout += () => SelectItem(selSlot);
+            string action = sel + 2 < args.Length ? args[sel + 2].ToLowerInvariant() : "";
+            System.Action? press = action switch
+            {
+                "info" => () => ItemAction(DetailRequest.InventoryItem), "repair" => () => ItemAction(DetailRequest.Repair),
+                "craft" => () => ItemAction(DetailRequest.SelfCraft), "salvage" => () => ItemAction(DetailRequest.Salvage),
+                "use1" => () => UseSelected(1), "use2" => () => UseSelected(2), _ => null,
+            };
+            if (press is not null)
+                GetTree().CreateTimer(6).Timeout += press;
+        }
         // --command TEXT (repeatable) sends each slash command in turn, 2 s apart from 2 s after entering: e.g.
         // a GM "/jump to X Y Z REGION" to set up a --campose/--shot check somewhere exact.
         int delay = 2;

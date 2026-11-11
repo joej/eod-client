@@ -10,9 +10,9 @@
 //   the backpack: 8 rows (icon and name) and 5 bags on the right, one per 8 of the 40 slots (40–79)
 //   a strip along the bottom: money and encumbrance (0xBD)
 // Items come from 0x02 (DaocProtocol.Session.Inventory); each is drawn by its model's icon (objects.csv → icons.csv).
-// Hover: what the item is. Double-click: use it (0x71, as retail's use). Drag: onto another slot moves it (0xDD; the
-// server swaps, equips or refuses), onto the figure lets the server choose where it's worn, onto a quickbar slot puts
-// "use this slot" there. Retail's right-click select and mini_info window aren't built.
+// Hover: what the item is. Right-click: select it and show the mini_info window (WorldView.MiniInfo; again to close).
+// Double-click: use it (0x71, as retail's use). Drag: onto another slot moves it (0xDD; the server swaps, equips or
+// refuses), onto the figure lets the server choose where it's worn, onto a quickbar slot puts "use this slot" there.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -174,7 +174,7 @@ public partial class WorldView
             lines.Add($"Spell: {item.SpellName2}");
         if (item.WeightTenths > 0)
             lines.Add($"Weight {item.WeightTenths / 10.0:0.0} lbs");
-        lines.Add("Double-click to use; drag to move or onto a quickbar.");
+        lines.Add("Right-click for details; double-click to use; drag to move or onto a quickbar.");
         return string.Join("\n", lines);
     }
 
@@ -255,6 +255,11 @@ public partial class WorldView
             if (e is InputEventMouseButton { Pressed: true, DoubleClick: true, ButtonIndex: MouseButton.Left } && _item is not null)
             {
                 _view.UseInventorySlot(Slot);
+                AcceptEvent();
+            }
+            else if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right } && _item is not null && Slot != InventorySlot.PaperDoll)
+            {
+                _view.SelectItem(Slot);
                 AcceptEvent();
             }
         }
