@@ -609,6 +609,33 @@ Salvage and self-craft only apply to backpack items (40–79); the client refuse
 matches the one 0xD8 in the RustDAoC 1.127e capture (a spell delve, type 24); live 2026-11-11, INFO on Quitcheck's
 practice sword (slot 10) brought a 13-line 0xC4 titled "practice sword".*
 
+### A spell's or style's details
+
+The item window describes a spell or style too, from its 0x16 entry (name, level, a style's opening) and from a
+structured record the server keeps for it:
+
+```
+C→S 0xD8 DetailRequest       as above, type 24 spell, 25 style, 26 song, 27 realm ability, 28 ability; id = the
+                             thing's id in its 0x16 entry (OpenDAoC's InternalID).
+S→C 0xD8 DelveInfo           one string and a 0 byte: (Kind (key "value")(key "value")…). Kinds: Spell, Style,
+                             Song, RealmAbility, Ability. No escaping; values may hold line breaks; empty and "0"
+                             values are left out. A song is answered with its Song record, then its Spell record.
+```
+
+Spell keys (OpenDAoC): Function, Index, Name, cast_timer (the cast time less 2000 ms, only for casts of 2 s or more),
+instant, damage_type, level, power_cost (negative: a percentage), cost_type, range, duration (seconds), dur_type,
+timer_value (recast, seconds), target, radius, concentration_points, frequency, delve_string. Style keys: Index (as a
+signed 16-bit number), OpeningStyle, FollowupStyle, Name, Icon, Level, Fatigue, DefensiveMod, AttackMod, OpeningDamage,
+OpeningType, OpeningResult, Hidden, OpeningNumber, Weapon, SpecialNumber (the spell it fires), SpecialType.
+
+OpenDAoC answers each (type, id) once an hour per connection, so the client keeps what it gets (we keep it for the
+connection, across region changes). At world entry it sends every ability's, style's and list spell's record unasked.
+A style's 0x16 entry gives its opening in its Special word: 0x100 none; a low byte under 100 the result of our last
+attack (7: after a style, whose index from the first non-specialisation entry + 100 is the high byte); 100+ the
+enemy's last attack; 200+ a position (0 behind, 1 side, 2 front). *The record layout matches the one 0xD8 in the
+RustDAoC 1.127e capture (Tornado's Dance, Index 30125, the answer to that capture's type-24 request); live 2026-11-11,
+Quitcheck's Stun style (its stun spell came on request, type 24) and Spellcheck's Ruby Shield.*
+
 ## Using skills and spells
 
 ```
@@ -705,4 +732,5 @@ after a quit is accepted.
 | World, keep-alive, server moves, logout | `Packets/WorldPackets.cs`, `World/Zones.cs` | `WorldPacketTests` |
 | Attack mode, other players' moves | `Packets/CombatPackets.cs`, `Packets/WorldEntityPackets.cs` | `CombatPacketTests` |
 | Groups, dialogs | `Packets/GroupPackets.cs`, `World/GroupState.cs` | `GroupPacketTests` |
+| Item, spell and style details | `Packets/DetailPackets.cs`, `World/ItemInfo.cs`, `World/DelveText.cs`, `World/DelveCache.cs` | `DetailPacketTests`, `DelveTests` |
 | Session flow | `Session/ClientSession.cs`, `Net/DaocConnection.cs` | `ClientSessionTests` (against a fake server replaying recorded replies) |

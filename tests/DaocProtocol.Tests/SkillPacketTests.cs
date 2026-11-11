@@ -67,6 +67,23 @@ public class SkillPacketTests
     }
 
     [Fact]
+    public void TheRecordedPaladinsStylesDescribeTheirOpenings()
+    {
+        var book = new SkillBook();
+        foreach (ServerPacket p in Sub(SkillListPage.Subcode))
+            book.Add(SkillListPage.Parse(p.Payload));
+        List<SkillEntry> styles = book.Skills.Where(e => e.Page == SkillPage.Style).ToList();
+        Assert.NotEmpty(styles);
+        List<DaocProtocol.World.SkillInfo> described = styles.Select(e => book.Describe(e.Name)!).ToList();
+        Assert.All(described, (d, i) => Assert.Equal((DaocProtocol.World.SkillKind.Style, styles[i].Id), (d.Kind, d.Id)));
+        // A follow-up names a style the Paladin has (the server's index from the first non-specialisation entry).
+        var chained = described.Where(d => d.Opening?.Label == "Previous Style Req.").ToList();
+        Assert.NotEmpty(chained);
+        Assert.All(chained, d => Assert.Contains(d.Opening!.Value, styles.Select(s => s.Name)));
+        Assert.Null(book.Describe(book.Skills[0].Name));   // a specialisation: no item window
+    }
+
+    [Fact]
     public void ASpellLineReadsItsSpellsAndTheFooterEndsTheLines()
     {
         // OpenDAoC's layout for a line "Rejuvenation" (id 0x0102) with a level 5 spell and a level 12 ability.

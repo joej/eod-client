@@ -13,8 +13,7 @@
 //     OPTIONS works yet).
 //   Skills: Specializations with the points left, Abilities, Tradeskills (0x16 subcodes 1 and 8).
 //   Styles, Spells: retail draws these sheets itself (combstylesheet.bmp, Magicsheet.bmp); ours are lists with the
-//     icons. Double-click uses one, drag puts it on a quickbar (as retail's). Retail's select-and-describe (mini_info)
-//     isn't built.
+//     icons. Double-click uses one, drag puts it on a quickbar, right-click describes it in the item window (as retail's).
 //   Inventory: the paper doll and backpack (WorldView.Inventory).
 //   Group: the members, their bars and effect icons, and the group buttons (WorldView.Group).
 
@@ -270,6 +269,13 @@ public partial class WorldView
     {
         SheetList list = Styled(new SheetList(), page, s, at, size);
         list.FixedIconSize = new Vector2I(1, 1) * Mathf.RoundToInt(20 * s);
+        // Right-click a spell or style: the item window describes it (as an item's right-click on the INV. page).
+        list.AllowRmbSelect = true;
+        list.ItemClicked += (i, _, button) =>
+        {
+            if (button == (long)MouseButton.Right && list.GetItemMetadata((int)i).AsString() is string e && e.StartsWith("skill:"))
+                SelectSkill(e[6..]);
+        };
         list.ItemActivated += i =>
         {
             if (list.GetItemMetadata((int)i).AsString() is string entry && entry.StartsWith("skill:"))
@@ -427,7 +433,7 @@ public partial class WorldView
         if (styles.Count == 0)
             SheetHeading(_styleList, "No combat styles.");
         foreach (SkillEntry e in styles)
-            SheetRow(_styleList, e.Name, e.Level, $"{e.Name}: combat style, level {e.Level}. Double-click to ready it; drag it to a quickbar.");
+            SheetRow(_styleList, e.Name, e.Level, $"{e.Name}: combat style, level {e.Level}. Double-click to ready it, right-click for its details; drag it to a quickbar.");
     }
 
     private void FillSpells()
@@ -440,7 +446,7 @@ public partial class WorldView
             SheetHeading(_spellList, line.LineName);
             foreach (LineEntry e in line.Entries)
             {
-                SheetRow(_spellList, e.Name, e.Level, $"{e.Name}: {line.LineName}, level {e.Level}. Double-click to cast; drag it to a quickbar.");
+                SheetRow(_spellList, e.Name, e.Level, $"{e.Name}: {line.LineName}, level {e.Level}. Double-click to cast, right-click for its details; drag it to a quickbar.");
                 rows++;
             }
         }
@@ -449,7 +455,7 @@ public partial class WorldView
             SheetHeading(_spellList, page.Key switch { SkillPage.Song => "Songs", SkillPage.AbilitySpell => "Abilities", _ => "Spells" });
             foreach (SkillEntry e in page)
             {
-                SheetRow(_spellList, e.Name, e.Level, $"{e.Name}: level {e.Level}. Double-click to cast; drag it to a quickbar.");
+                SheetRow(_spellList, e.Name, e.Level, $"{e.Name}: level {e.Level}. Double-click to cast, right-click for its details; drag it to a quickbar.");
                 rows++;
             }
         }

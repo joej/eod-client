@@ -205,6 +205,15 @@ public partial class WorldView
             if (press is not null)
                 GetTree().CreateTimer(6).Timeout += press;
         }
+        // --select-skill NAME [info] right-clicks that spell or style on its sheet at 5 s (the item window), then presses INFO at 8 s.
+        int ss = System.Array.IndexOf(args, "--select-skill");
+        if (ss >= 0 && ss + 1 < args.Length)
+        {
+            string skillName = args[ss + 1];
+            GetTree().CreateTimer(5).Timeout += () => SelectSkill(skillName);
+            if (ss + 2 < args.Length && args[ss + 2].Equals("info", System.StringComparison.OrdinalIgnoreCase))
+                GetTree().CreateTimer(8).Timeout += () => ItemAction(DetailRequest.InventoryItem);
+        }
         // --group invite|disband SECONDS (repeatable) presses that Group-page button at that time (after a --target); --accept-dialogs
         // answers every server dialog yes as it arrives (a group invite): together, two clients form a group unattended.
         for (int gr = System.Array.IndexOf(args, "--group"); gr >= 0 && gr + 2 < args.Length; gr = System.Array.IndexOf(args, "--group", gr + 1))

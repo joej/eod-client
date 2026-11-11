@@ -64,6 +64,39 @@ public sealed class SkillBook
         return null;
     }
 
+    /// <summary>
+    /// The spell, song or style of that name as the item window describes it (its id, level, icon; a style's opening),
+    /// or null for anything else (a specialisation, an ability). A style that follows another names it by its index from
+    /// the first non-specialisation entry.
+    /// </summary>
+    public World.SkillInfo? Describe(string name)
+    {
+        int specs = SpecCount;
+        foreach (SkillEntry e in Skills)
+        {
+            if (!e.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            return e.Page switch
+            {
+                SkillPage.Style => new World.SkillInfo(World.SkillKind.Style, e.Id, e.Name, e.Level, e.Icon,
+                    World.DelveText.Opening(e.Special, i => specs + i is int at && at >= specs && at < Skills.Count ? Skills[at].Name : null)),
+                SkillPage.Spell or SkillPage.AbilitySpell => new World.SkillInfo(World.SkillKind.Spell, e.Id, e.Name, e.Level, e.Icon),
+                SkillPage.Song => new World.SkillInfo(World.SkillKind.Song, e.Id, e.Name, e.Level, e.Icon),
+                _ => null,
+            };
+        }
+        foreach (SpellLinePage line in SpellLines)
+            foreach (LineEntry e in line.Entries)
+                if (e.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                    return e.Kind switch
+                    {
+                        LineEntryKind.Spell => new World.SkillInfo(World.SkillKind.Spell, e.Id, e.Name, e.Level, e.Icon),
+                        LineEntryKind.Style => new World.SkillInfo(World.SkillKind.Style, e.Id, e.Name, e.Level, e.Icon),
+                        _ => null,
+                    };
+        return null;
+    }
+
     private int SpecCount => Skills.TakeWhile(s => s.Page == SkillPage.Specialization).Count();
 
     // Cooldowns by what they apply to (page and id, or line id and entry id), not by list position: the

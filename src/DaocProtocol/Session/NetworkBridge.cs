@@ -17,8 +17,14 @@ namespace DaocProtocol.Session;
 /// Routes incoming server packets to typed events. Construct it once per world session, subscribe
 /// to the events you care about, then feed it every drained <see cref="ServerPacket"/>.
 /// </summary>
-public sealed class NetworkBridge(Action<string>? log = null)
+public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves = null)
 {
+    /// <summary>The delve records received (0xD8), shared with the session so they outlive this bridge.</summary>
+    public DelveCache Delves { get; } = delves ?? new DelveCache();
+
+    /// <summary>A delve record arrived (0xD8): a spell's, style's or ability's details. Already in <see cref="Delves"/>.</summary>
+    public event Action<DelveRecord>? DelveArrived;
+
     /// <summary>An in-view entity moved or changed facing (0xA1 ObjectUpdate, the common case).</summary>
     public event Action<ObjectUpdate>? ObjectMoved;
 
@@ -290,6 +296,11 @@ public sealed class NetworkBridge(Action<string>? log = null)
                 case GroupMemberUpdate.Code:
                     Group.Apply(GroupMemberUpdate.Parse(packet.Payload));
                     GroupChanged?.Invoke(Group);
+                    break;
+                case DelveRecord.Code:
+                    DelveRecord record = DelveRecord.Parse(packet.Payload);
+                    Delves.Add(record);
+                    DelveArrived?.Invoke(record);
                     break;
                 case Dialog.Code:
                     DialogArrived?.Invoke(Dialog.Parse(packet.Payload));

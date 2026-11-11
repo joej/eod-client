@@ -12,7 +12,13 @@
 //   info (retail's info_window.xml, 300 x 448, movable, closable): the server's 0xC4 text window, its caption as the title
 //     and its lines in a scrolling text area at 10, 22 (280 x 400). A 0xC4 marked "more" is continued by the next one.
 //     Retail's info window is also resizable; ours isn't yet.
+//   The same window for a spell or style (right-click one on the Spells or Styles page; RE/74 3.2): the name, "Magical
+//     Ability" or "Combat Style", its level, and the spell's target and concentration or the style's opening (DelveText).
+//     The target and concentration come from the server's record for the spell (0xD8 type 24, 25 for a style, 26 a song,
+//     by its id; answered with a 0xD8 record, kept in the session's DelveCache); the window fills in when it comes. INFO
+//     shows the record's long text in the info window, in the client's wording, titled with its name. No item buttons.
 
+using System.Collections.Generic;
 using System.Linq;
 using DaocProtocol.Packets;
 using DaocProtocol.World;
@@ -24,6 +30,9 @@ public partial class WorldView
 {
     private HudWindow? _miniInfo, _infoWindow;
     private byte? _miniSlot;   // the selected item's slot
+    private SkillInfo? _miniSkill;   // or the selected spell or style
+    private Button[] _itemButtons = [];
+    private SkillInfo? _infoSkill;   // the spell or style the info window shows (or will, once its record comes)
     private Label? _miniTitle;
     private readonly Label[] _miniLines = new Label[8];
     private TextureRect? _miniIcon, _miniBorder;
@@ -57,9 +66,12 @@ public partial class WorldView
                 ? _miniInfo.Label(new Vector2(39, 24 + 11 * (i - 1)), new Vector2(102, 11), 8)
                 : _miniInfo.Label(new Vector2(5, 57 + 11 * (i - 4)), new Vector2(136, 11), 8);
         _miniInfo.Button("INFO", new Vector2(6, 111), 60, () => ItemAction(DetailRequest.InventoryItem), height: 22);
-        _miniInfo.Button("SALVAGE", new Vector2(78, 111), 60, () => ItemAction(DetailRequest.Salvage), height: 22);
-        _miniInfo.Button("REPAIR", new Vector2(6, 139), 60, () => ItemAction(DetailRequest.Repair), height: 22);
-        _miniInfo.Button("CRAFT", new Vector2(78, 139), 60, () => ItemAction(DetailRequest.SelfCraft), height: 22);
+        _itemButtons =
+        [
+            _miniInfo.Button("SALVAGE", new Vector2(78, 111), 60, () => ItemAction(DetailRequest.Salvage), height: 22),
+            _miniInfo.Button("REPAIR", new Vector2(6, 139), 60, () => ItemAction(DetailRequest.Repair), height: 22),
+            _miniInfo.Button("CRAFT", new Vector2(78, 139), 60, () => ItemAction(DetailRequest.SelfCraft), height: 22),
+        ];
         _miniUses =
         [
             _miniInfo.Button("", new Vector2(7, 166), 130, () => UseSelected(1)),
@@ -84,6 +96,7 @@ public partial class WorldView
             _miniSubscribed = true;
             _bridge.InventoryChanged += _ => FillMiniInfo();
             _bridge.DetailWindowArrived += ShowDetail;
+            _bridge.DelveArrived += OnDelve;
         }
     }
 
@@ -97,14 +110,43 @@ public partial class WorldView
             CloseMiniInfo();
             return;
         }
-        _miniSlot = slot;
+        (_miniSlot, _miniSkill) = (slot, null);
         _miniInfo.Visible = true;
         FillMiniInfo();
     }
 
+    /// <summary>Right-click on a spell or style: the same select-and-show, toggle and switch as an item's.</summary>
+    private void SelectSkill(string name)
+    {
+        if (_miniInfo is null || _bridge.Skills.Describe(name) is not SkillInfo skill)
+            return;
+        if (_miniSkill?.Id == skill.Id && _miniSkill.Kind == skill.Kind && _miniInfo.Visible)
+        {
+            CloseMiniInfo();
+            return;
+        }
+        (_miniSkill, _miniSlot) = (skill, null);
+        _miniInfo.Visible = true;
+        AskDelve(skill.DelveType, skill.Id);
+        FillMiniInfo();
+    }
+
+    // Asks for a record once per connection (the server answers each once an hour); nothing if it's here already (the
+    // server sends every ability's and style's record unasked at world entry).
+    private void AskDelve(ushort type, ushort id)
+    {
+        string kind = type == DetailRequest.StyleDelve ? "Style" : "Spell";
+        if (_session is null || _bridge.Delves.Get(kind, id) is not null || !_session.Delves.ShouldAsk(type, id))
+            return;
+        GD.Print($"[world] delve request type {type}, id {id}");
+        _ = _session.RequestDetailAsync(type, id);
+    }
+
+    private DelveRecord? Record(SkillInfo s) => _bridge.Delves.Get(s.RecordKind, s.Id);
+
     private void CloseMiniInfo()
     {
-        _miniSlot = null;
+        (_miniSlot, _miniSkill) = (null, null);
         if (_miniInfo is not null)
             _miniInfo.Visible = false;
     }
@@ -112,8 +154,17 @@ public partial class WorldView
     // The selected item's lines; the window closes when the slot empties (the item was moved, sold or used up).
     private void FillMiniInfo()
     {
-        if (_miniInfo is null || !IsInstanceValid(_miniInfo) || _miniSlot is not byte slot || !_miniInfo.Visible)
+        if (_miniInfo is null || !IsInstanceValid(_miniInfo) || !_miniInfo.Visible)
             return;
+        if (_miniSkill is SkillInfo skill)
+        {
+            FillSkillInfo(skill);
+            return;
+        }
+        if (_miniSlot is not byte slot)
+            return;
+        foreach (Button b in _itemButtons)
+            b.Visible = true;
         if (_bridge.Inventory[slot] is not InventoryItem item)
         {
             CloseMiniInfo();
@@ -138,9 +189,72 @@ public partial class WorldView
         _miniInfo.Size = new Vector2(144, 168 + 19 * shown) * UiScale;
     }
 
+    private void FillSkillInfo(SkillInfo skill)
+    {
+        string[] lines = DelveText.MiniInfo(skill, Record(skill));
+        for (int i = 0; i < 8; i++)
+            _miniLines[i].Text = lines[i];
+        _miniTitle!.AddThemeColorOverride("font_color", Colors.White);
+        SlotPicture picture = EntryPicture("skill:" + skill.Name);
+        (_miniIcon!.Texture, _miniBorder!.Texture) = (picture.Icon, picture.Border);
+        foreach (Button b in _itemButtons.Concat(_miniUses))
+            b.Visible = false;
+        _miniInfo!.Size = new Vector2(144, 140) * UiScale;   // INFO only
+    }
+
+    // A record came: refill the window and the info text that wait for it.
+    private void OnDelve(DelveRecord r)
+    {
+        GD.Print($"[world] delve: {r.Kind} {r.Index} \"{r.Name}\" ({r.Values.Count} values)");
+        if (_miniSkill is SkillInfo m && m.Id == r.Index)
+            FillMiniInfo();
+        if (_infoSkill is SkillInfo i && (i.Id == r.Index || (r.Kind == "Spell" && Record(i)?.Int("SpecialNumber") == r.Index)))
+            ShowSkillDetail(i);
+    }
+
+    // INFO on a spell or style: its record's long text (the client builds it; the server's record has the values).
+    private void ShowSkillDetail(SkillInfo skill)
+    {
+        if (_infoWindow is null || !IsInstanceValid(_infoWindow) || _infoText is null)
+            return;
+        _infoSkill = skill;
+        if (Record(skill) is not DelveRecord r)
+        {
+            AskDelve(skill.DelveType, skill.Id);
+            return;   // shown when it comes
+        }
+        List<DelveLine> lines;
+        if (r.Kind == "Style")
+        {
+            if (r.Int("SpecialNumber") is int special and not 0)
+                AskDelve(DetailRequest.SpellDelve, (ushort)special);
+            lines = DelveText.Style(r, id => _bridge.Delves.Get("Spell", id));
+        }
+        else
+            lines = DelveText.Spell(r);
+        _infoText.Clear();
+        _infoTitle!.Text = r.Name.Length > 0 ? r.Name : skill.Name;
+        // Labels white, values light grey (200), or the value's own colour (a style's to-hit and defence words).
+        foreach (DelveLine l in lines)
+        {
+            if (l.Label.Length > 0)
+                _infoText.AddText(l.Label + ": ");
+            _infoText.PushColor(l.Colour is var (cr, cg, cb) ? Color.Color8(cr, cg, cb) : (l.Label.Length > 0 ? Color.Color8(200, 200, 200) : Colors.White));
+            _infoText.AddText(l.Value + "\n");
+            _infoText.Pop();
+        }
+        _infoWindow.Visible = true;
+        GD.Print($"[world] info window \"{_infoTitle.Text}\": {lines.Count} lines from the {r.Kind} record");
+    }
+
     // INFO, REPAIR, CRAFT or SALVAGE on the selected item: 0xD8 with the action's type and the item's slot.
     private void ItemAction(ushort type)
     {
+        if (_miniSkill is SkillInfo skill && type == DetailRequest.InventoryItem)
+        {
+            ShowSkillDetail(skill);
+            return;
+        }
         if (_session is null || _miniSlot is not byte slot)
             return;
         bool backpack = slot is >= InventorySlot.FirstBackpack and <= InventorySlot.LastBackpack;
@@ -167,6 +281,7 @@ public partial class WorldView
     {
         if (_infoWindow is null || !IsInstanceValid(_infoWindow) || _infoText is null)
             return;
+        _infoSkill = null;
         if (!continues)
         {
             _infoText.Clear();

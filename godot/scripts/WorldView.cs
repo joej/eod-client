@@ -413,7 +413,7 @@ public partial class WorldView : Node3D
 
         // Dispatcher: route drained packets to entity handlers (M5). Subscribe before the first
         // drain in _Process so no world packet is missed.
-        _bridge = new NetworkBridge(message => GD.PrintErr(message));
+        _bridge = new NetworkBridge(message => GD.PrintErr(message), _session?.Delves);
         _bridge.ObjectMoved += OnObjectMoved;
         _bridge.NpcSpawned += OnNpcSpawned;
         _bridge.PlayerSpawned += OnPlayerSpawned;

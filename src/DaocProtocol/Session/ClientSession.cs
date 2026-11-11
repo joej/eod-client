@@ -672,6 +672,9 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         return connection.SendAsync(DetailRequest.Code, DetailRequest.Payload(type, id), cancellationToken);
     }
 
+    /// <summary>The delve records the server has sent on this connection (it sends each once an hour per connection).</summary>
+    public DelveCache Delves { get; } = new();
+
     /// <summary>Invites the current target into our group (C→S 0x87). The server answers in chat; the target gets a
     /// 0x81 group-invite dialog.</summary>
     public Task InviteToGroupAsync(CancellationToken cancellationToken = default)
