@@ -481,6 +481,7 @@ public partial class WorldView : Node3D
         BuildCompass(overlay);
         BuildXpWindow(overlay);
         BuildMenuBar(overlay);
+        BuildClock(overlay);
         _builtScale = UiScale;
         ScaleChatAndNpc(_builtScale / ChatDesignScale);
         NameSelf();
@@ -947,6 +948,7 @@ public partial class WorldView : Node3D
         UpdateCompass();
         UpdateXp();
         UpdateMenuBar();
+        UpdateClock();
         _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)
         {

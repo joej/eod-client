@@ -108,6 +108,9 @@ public sealed class NetworkBridge(Action<string>? log = null)
     /// <summary>A countdown window opened or closed (0xF3; after death, the release timer).</summary>
     public event Action<TimerWindow>? TimerChanged;
 
+    /// <summary>The game clock (0x7E): at world entry and every 15 minutes.</summary>
+    public event Action<GameTime>? TimeChanged;
+
     /// <summary>The server answered a keep-alive (0x29), echoing our timestamp (Environment.TickCount when sent): for the
     /// overlay's count and the lag meter's round trip (PingRequest.RoundTrip).</summary>
     public event Action<uint>? PingReplied;
@@ -234,6 +237,9 @@ public sealed class NetworkBridge(Action<string>? log = null)
                     break;
                 case TimerWindow.Code:
                     TimerChanged?.Invoke(TimerWindow.Parse(packet.Payload));
+                    break;
+                case GameTime.Code:
+                    TimeChanged?.Invoke(GameTime.Parse(packet.Payload));
                     break;
                 case PingRequest.ReplyCode:
                     PingReplied?.Invoke(PingRequest.ParseReply(packet.Payload));

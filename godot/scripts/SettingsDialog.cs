@@ -220,6 +220,13 @@ public partial class SettingsDialog : AcceptDialog
             ClientSettings.NotifyChanged(display: false);
         };
         column.AddChild(compass);
+        var clock = new CheckBox { Text = "Clock", ButtonPressed = ClientSettings.ShowClock, FocusMode = Control.FocusModeEnum.None };
+        clock.Toggled += on =>
+        {
+            ClientSettings.ShowClock = on;
+            ClientSettings.NotifyChanged(display: false);
+        };
+        column.AddChild(clock);
         var summaryRow = new HBoxContainer();
         summaryRow.AddChild(new Label { Text = "Summary" });
         var summary = new OptionButton { FocusMode = Control.FocusModeEnum.None };

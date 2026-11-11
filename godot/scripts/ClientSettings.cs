@@ -120,6 +120,13 @@ public static class ClientSettings
         set => SaveIn("game", "compass", value);
     }
 
+    /// <summary>The clock (retail's Interface Elements → CLOCK): the game time of day. Shown by default.</summary>
+    public static bool ShowClock
+    {
+        get => Load().GetValue("game", "clock", true).AsBool();
+        set => SaveIn("game", "clock", value);
+    }
+
     /// <summary>The classic summary (retail's `summary`: Hit, End, Pow and the Exp bubbles), our default; off, the newer
     /// new_summary_window (level and realm rank, no XP).</summary>
     public static bool ClassicSummary
