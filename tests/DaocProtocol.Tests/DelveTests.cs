@@ -43,9 +43,9 @@ public class DelveTests
     public void ASpellWithCostRangeAndConcentration()
     {
         DelveRecord r = DelveRecord.Parse("(Spell (Function \"light\")(Index \"1234\")(Name \"Blast\")(cast_timer \"1000\")(damage_type \"10\")(level \"12\")" +
-            "(power_cost \"-5\")(range \"1500\")(duration \"75\")(dur_type \"2\")(timer_value \"30\")(target \"1\")(radius \"350\")(concentration_points \"4\"))");
-        Assert.Equal(["Level: 12", "Duration: 1:15 min", "Concentration cost: 4", "Power cost: 5%", "Target: Targeted area effect",
-                "Range: 1500", "Area radius: 350", "Casting time: 3.0 seconds", "Recast: 30 sec", "Magic Type: Heat"],
+            "(power_cost \"-5\")(range \"1500\")(duration \"75\")(dur_type \"2\")(timer_value \"30\")(frequency \"2499\")(target \"1\")(radius \"350\")(concentration_points \"4\"))");
+        Assert.Equal(["Level: 12", "Duration: 1 minute 15 seconds every 2.5 sec", "Concentration cost: 4", "Power cost: 5%", "Target: Targeted area effect",
+                "Range: 1500", "Area radius: 350", "Casting time: 3.0 seconds", "Recast: 30 seconds", "Magic Type: Heat"],
             DelveText.Spell(r).Select(l => l.ToString()));
         Assert.Equal("4 Conc. Pts", DelveText.MiniInfo(new SkillInfo(SkillKind.Spell, 1234, "Blast", 12, 0), r)[4]);
         // Range 0 with a radius: point-blank.
@@ -62,11 +62,19 @@ public class DelveTests
         DelveRecord stun = DelveRecord.Parse("(Spell (Index \"4321\")(Name \"Stun\")(instant \"1\")(duration \"5\")(dur_type \"2\"))");
         List<DelveLine> lines = DelveText.Style(r, id => id == 4321 ? stun : null);
         Assert.Equal(["Opening: Bash", "Weapon Type: Crushing", "Follow-up Style(s): Crush, Smash", "Endurance Cost: Medium", "Damage: Medium",
-                "To Hit: Medium Penalty", "Defense: No Bonus", "", "Special: Stun", "Duration: 5 sec", "Target: Self", "Casting time: Instant"],
+                "To Hit: Medium Penalty", "Defense: No Bonus", "", "Special: Stun", "Duration: 5 seconds", "Target: Self", "Casting time: Instant"],
             lines.Select(l => l.ToString()));
         Assert.Equal(((byte)254, (byte)131, (byte)49), lines[5].Colour);
         Assert.Equal("Special: a spell effect", DelveText.Style(r, _ => null).Last().ToString());
     }
+
+    [Theory]
+    [InlineData(45, "45 seconds")]
+    [InlineData(1, "1 second")]
+    [InlineData(60, "1 minute")]
+    [InlineData(90, "1 minute 30 seconds")]
+    [InlineData(121, "2 minutes 1 second")]
+    public void TimesAreWrittenAsTheClientDoes(int seconds, string expected) => Assert.Equal(expected, DelveText.Time(seconds));
 
     [Theory]
     [InlineData((ushort)0x100, null)]

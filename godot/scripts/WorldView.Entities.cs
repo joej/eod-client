@@ -669,15 +669,17 @@ public partial class WorldView
             float yaw = e.Node.Rotation.Y;
             e.Node.Rotation = new Vector3(0, yaw + Mathf.AngleDifference(yaw, e.TargetYaw) * t, 0);
 
-            // The clip follows how fast the figure is gliding (metres per second, smoothed): DAoC's
-            // walk is about 2 m/s, its run about 4.8.
+            // The clip follows how fast the figure is gliding (metres per second, smoothed). Retail runs a figure above OUR
+            // max speed (0xB6, read as units/s: normally 100, 2.5 m/s), for every figure, so the line rises with our speed
+            // buffs (daoc-re RE/82, correcting RE/77).
+            float runAbove = (_speedPercent > 0 ? _speedPercent : 100) * RegionMetresPerUnit;
             if (e.Player is not null && delta > 0 && !e.Dead)
             {
                 Vector3 step = e.Node.Position - e.LastPosition;
                 step.Y = 0;
                 e.Speed = Mathf.Lerp(e.Speed, step.Length() / (float)delta, Mathf.Min(1f, (float)delta * 4f));
                 e.LastPosition = e.Node.Position;
-                PlayClip(e, e.Speed > 3.2f ? "run" : e.Speed > 0.4f ? "walk" : Idle(e.Player, e.InCombat, e.CombatIdle));
+                PlayClip(e, e.Speed > runAbove ? "run" : e.Speed > 0.4f ? "walk" : Idle(e.Player, e.InCombat, e.CombatIdle));
             }
         }
     }

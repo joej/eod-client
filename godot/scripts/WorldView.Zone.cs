@@ -382,10 +382,18 @@ public partial class WorldView
             if (band != "nadir")
                 _skyMaterial.SetShaderParameter("c_" + band, Col($"clouds.{band}"));
         }
-        _environment.AmbientLightColor = Col("ambient");
-        _environment.AmbientLightEnergy = Num("ambient_amount", 0.5f) * 1.4f;
-        _sun.LightColor = Col("sun");
-        _sun.LightEnergy = Num("sun_amount", 0.6f) * 1.7f;
+        // Retail's fixed-function lights (daoc-re RE/82): ambient = ambient_light × ambient_light_amount, sun = dynamic_light ×
+        // dynamic_light_amount, added and multiplied with the texture in display (gamma) space. Godot adds lights in linear
+        // space, which kept far more of the blue ambient than retail shows (owner, 2026-11-11: our daylight greyer and colder
+        // than retail's). So each colour is dimmed by its amount before Godot linearises it, as retail does, and the two
+        // strengths are the best fit of Godot's sum to retail's over the sky file's dawn, day, dusk and night and every sun
+        // angle (Camelot Hills; error 0.010 against 0.221 for the old colour-then-energy lighting).
+        Color ambient = Col("ambient"), sun = Col("sun");
+        float ambientAmount = Num("ambient_amount", 0.5f), sunAmount = Num("sun_amount", 0.6f);
+        _environment.AmbientLightColor = new Color(ambient.R * ambientAmount, ambient.G * ambientAmount, ambient.B * ambientAmount);
+        _environment.AmbientLightEnergy = 1.15f;
+        _sun.LightColor = new Color(sun.R * sunAmount, sun.G * sunAmount, sun.B * sunAmount);
+        _sun.LightEnergy = 1.85f;
         _environment.FogLightColor = Col("fog");
         if (now is uint time)
         {

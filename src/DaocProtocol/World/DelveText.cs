@@ -4,8 +4,9 @@
 // "Combat Style", "%s Level", "Target: %s", "%d Conc. Pts", "Opening: %s", "Positional: %s", "Previous Style Req.") and the
 // long text of the info window, built from the server's 0xD8 record in the order and wording the client uses (as described
 // by daoc-re RE/74 and RE/77). The record's keys are OpenDAoC's (SpellDelve.GetSpellString / GetStyleString, @f0aaa1e).
-// Where the description left a choice open (the duration's time format, how "%s Level" is filled, the split of the
-// "Medium/Low Penalty" and "High/Very High Bonus" words, the stealth line), ours is marked "(ours)".
+// Times and the pulse suffix as the client writes them (RE/82). Where the description left a choice open (how "%s Level"
+// is filled, the split of the "Medium/Low Penalty" and "High/Very High Bonus" words, the stealth line), ours is marked
+// "(ours)".
 
 using DaocProtocol.Packets;
 
@@ -99,7 +100,9 @@ public static class DelveText
         int duration = r.Int("duration");
         switch (r.Int("dur_type"))
         {
-            case 0 or 2 when duration > 0 && duration != 0xFFFF: Add("Duration", Time(duration)); break;
+            case 0 or 2 when duration > 0 && duration != 0xFFFF:
+                Add("Duration", Time(duration) + (r.Int("frequency") > 0 ? $" every {(r.Int("frequency") + 1) / 1000.0:0.0} sec" : ""));
+                break;
             case 3: Add("Duration", "BY LEVEL"); break;
             case 4: Add("Duration", "Concentration"); break;
             case 5: Add("Duration", "Focus"); break;
@@ -215,8 +218,16 @@ public static class DelveText
         16 => "Body", 20 => "Energy", 21 => "Essence", _ => null,
     };
 
-    /// <summary>Seconds as "N sec" or "M:SS min" (ours: the client's format is unknown).</summary>
-    public static string Time(int seconds) => seconds < 60 ? $"{seconds} sec" : $"{seconds / 60}:{seconds % 60:00} min";
+    /// <summary>Seconds as the client writes them: "1 minute 30 seconds", "45 seconds", "2 minutes" (plural above 1, a zero
+    /// part left out).</summary>
+    public static string Time(int seconds)
+    {
+        int m = seconds / 60, sec = seconds % 60;
+        string Part(int n, string unit) => $"{n} {unit}{(n > 1 ? "s" : "")}";
+        if (m == 0)
+            return Part(sec, "second");
+        return sec == 0 ? Part(m, "minute") : $"{Part(m, "minute")} {Part(sec, "second")}";
+    }
 
     public static string Ordinal(int n) => (n % 100) switch
     {
