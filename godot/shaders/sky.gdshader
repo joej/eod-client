@@ -38,6 +38,7 @@ uniform bool has_clouds = false;
 
 uniform sampler2D sun_disk : source_color, filter_linear;
 uniform bool has_sun = false;
+uniform bool sun_up = true;         // false at night: the light is the moon's, with no disk
 uniform vec4 sun_color : source_color = vec4(1.0);
 uniform float sun_size = 0.035;     // angular radius, radians (guess)
 
@@ -77,7 +78,7 @@ void sky() {
 		col = mix(col, top.rgb * cg.rgb, top.a * cg.a);
 	}
 
-	if (has_sun) {
+	if (has_sun && sun_up) {
 		vec3 s = normalize(LIGHT0_DIRECTION);
 		float a = acos(clamp(dot(d, s), -1.0, 1.0));
 		if (a < sun_size) {

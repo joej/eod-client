@@ -296,14 +296,13 @@ public partial class WorldView
         GD.Print($"[world] zone {parts.Id}: water {parts.WaterBodies} bod{(parts.WaterBodies == 1 ? "y" : "ies")}");
     }
 
-    // Applies a zone's sky from sky.csv (written by `mpk sky` beside zone.csv) for one weather condition
-    // and time of day: the sky shader's canopy and cloud gradients, cloud layers and sun disk; ambient and
-    // sun light from the file; and depth fog in the file's distance-fog colour. Fog distances come from
-    // SECTOR.DAT's [fog]: clip is the client's far plane (view distance) and amount the percentage of
-    // that distance, measured back from it, that is fogged (Camelot Hills: 15% of 16000 units → fog
-    // from 340 to 400 m); amount 0 turns fog off. Light energies are scaled by eye. Returns the sky's name,
-    // or null (the current sky stays) when the zone has no sky.csv.
-    private string? ApplySky(string dir, string condition, string time)
+    // Applies a zone's sky from sky.csv (written by `mpk sky` beside zone.csv) for one weather condition: the sky shader's
+    // cloud layers and sun disk, then everything that changes with the time of day (ApplySkyTime): the canopy and cloud
+    // gradients, ambient and sun light, and the depth fog's colour. Fog distances come from SECTOR.DAT's [fog]: clip is
+    // the client's far plane (view distance) and amount the percentage of that distance, measured back from it, that is
+    // fogged (Camelot Hills: 15% of 16000 units → fog from 340 to 400 m); amount 0 turns fog off. Light energies are
+    // scaled by eye. Returns the sky's name, or null (the current sky stays) when the zone has no sky.csv.
+    private string? ApplySky(string dir, string condition)
     {
         if (string.IsNullOrEmpty(dir))
             return null;
@@ -317,21 +316,11 @@ public partial class WorldView
             if (comma > 0)
                 kv[line[..comma]] = line[(comma + 1)..].Trim();
         }
-        string k = $"{condition}.{time}";
-        Color Col(string key) => kv.TryGetValue(key, out string? v) && Floats(v) is { Length: >= 3 } f
-            ? new Color(f[0], f[1], f[2], f.Length > 3 ? f[3] : 1f) : Colors.White;
-        float Num(string key, float fallback) =>
-            kv.TryGetValue(key, out string? v) && Floats(v) is { Length: >= 1 } f ? f[0] : fallback;
+        (_skyValues, _skyCondition) = (kv, condition);
 
         string lib = string.IsNullOrEmpty(_libraryPath) ? dir : _libraryPath;
         string[] texDirs = [lib.PathJoin("overrides"), lib.PathJoin("textures"), lib];
-        var mat = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/sky.gdshader") };
-        foreach (string band in new[] { "zenith", "east1", "east2", "east3", "east4", "west1", "west2", "west3", "west4", "nadir" })
-        {
-            mat.SetShaderParameter(band, Col($"{k}.canopy.{band}"));
-            if (band != "nadir")
-                mat.SetShaderParameter("c_" + band, Col($"{k}.clouds.{band}"));
-        }
+        var mat = _skyMaterial = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/sky.gdshader") };
         // cloud0 = top, cloud1 = bottom (the first two layers; the "2" layers are weather variants).
         foreach (var (key, uniform) in new[] { ("cloud0", "top"), ("cloud1", "bottom") })
         {
@@ -349,26 +338,64 @@ public partial class WorldView
         {
             mat.SetShaderParameter("sun_disk", disk);
             mat.SetShaderParameter("has_sun", true);
-            mat.SetShaderParameter("sun_color", Col("sun.noon_color"));
+            mat.SetShaderParameter("sun_color", SkyColour("sun.noon_color"));
         }
         _environment.BackgroundMode = Godot.Environment.BGMode.Sky;
         _environment.Sky = new Sky { SkyMaterial = mat };
-
         _environment.AmbientLightSource = Godot.Environment.AmbientSource.Color;
-        _environment.AmbientLightColor = Col($"{k}.ambient");
-        _environment.AmbientLightEnergy = Num($"{k}.ambient_amount", 0.5f) * 1.4f;
-        _sun.LightColor = Col($"{k}.sun");
-        _sun.LightEnergy = Num($"{k}.sun_amount", 0.6f) * 1.7f;
+        ApplySkyTime();
 
-        _zoneClip = Num("fog.clip", 0) * RegionMetresPerUnit;
-        _fogShare = Mathf.Clamp(Num("fog.amount", 0) / 100f, 0f, 1f);
-        _environment.FogLightColor = Col($"{k}.fog");
+        _zoneClip = SkyNumber("fog.clip", 0) * RegionMetresPerUnit;
+        _fogShare = Mathf.Clamp(SkyNumber("fog.amount", 0) / 100f, 0f, 1f);
         float clip = _zoneClip, amount = _fogShare;
         string name = kv.GetValueOrDefault("sky", "?");
-        GD.Print($"[world] sky: sky_{name} {k}, zone view {clip:0} m, fogged share {amount:0.00}");
+        GD.Print($"[world] sky: sky_{name} {condition}, zone view {clip:0} m, fogged share {amount:0.00}");
         return name;
     }
 
+    private System.Collections.Generic.Dictionary<string, string>? _skyValues;
+    private ShaderMaterial? _skyMaterial;
+    private string _skyCondition = "clear";
+
+    private Color SkyColour(string key) => _skyValues is not null && _skyValues.TryGetValue(key, out string? v) && Floats(v) is { Length: >= 3 } f
+        ? new Color(f[0], f[1], f[2], f.Length > 3 ? f[3] : 1f) : Colors.White;
+
+    private float SkyNumber(string key, float fallback) =>
+        _skyValues is not null && _skyValues.TryGetValue(key, out string? v) && Floats(v) is { Length: >= 1 } f ? f[0] : fallback;
+
+    // Everything in the sky that follows the clock (SkyCycle): the two canopies around the time of day blended, and the sun
+    // (by day) or moon (by night) on its arc. Without a game time yet (offline views, before the server's 0x7E) the sky
+    // is the file's day and the sun stays where it was set up.
+    private void ApplySkyTime()
+    {
+        if (_skyValues is null || _skyMaterial is null)
+            return;
+        uint? now = GameMillisOfDay;
+        (string from, string to, float t) = now is uint ms ? DaocAssets.Zone.SkyCycle.Blend(ms) : ("day", "day", 0f);
+        string a = $"{_skyCondition}.{from}", b = $"{_skyCondition}.{to}";
+        Color Col(string key) => SkyColour($"{a}.{key}").Lerp(SkyColour($"{b}.{key}"), t);
+        float Num(string key, float fallback) => Mathf.Lerp(SkyNumber($"{a}.{key}", fallback), SkyNumber($"{b}.{key}", fallback), t);
+
+        foreach (string band in new[] { "zenith", "east1", "east2", "east3", "east4", "west1", "west2", "west3", "west4", "nadir" })
+        {
+            _skyMaterial.SetShaderParameter(band, Col($"canopy.{band}"));
+            if (band != "nadir")
+                _skyMaterial.SetShaderParameter("c_" + band, Col($"clouds.{band}"));
+        }
+        _environment.AmbientLightColor = Col("ambient");
+        _environment.AmbientLightEnergy = Num("ambient_amount", 0.5f) * 1.4f;
+        _sun.LightColor = Col("sun");
+        _sun.LightEnergy = Num("sun_amount", 0.6f) * 1.7f;
+        _environment.FogLightColor = Col("fog");
+        if (now is uint time)
+        {
+            // Toward the sun or moon: east = +X, up = +Y, south = +Z (DAoC's y). The light shines along its -Z, away from it.
+            var (east, up, south) = DaocAssets.Zone.SkyCycle.Toward(time);
+            var toward = new Vector3(east, Mathf.Max(up, 0.05f), south).Normalized();
+            _sun.Basis = Basis.LookingAt(-toward, Mathf.Abs(toward.Y) > 0.99f ? Vector3.Forward : Vector3.Up);
+            _skyMaterial.SetShaderParameter("sun_up", DaocAssets.Zone.SkyCycle.SunUp(time));
+        }
+    }
     // View distance: the zone's own (classic) times the player's setting. The camera's far plane and the
     // fog scale together, keeping the zone's fogged share, so a longer view still fades out the way the
     // zone does. Zones without sky.csv keep a long fixed far plane and no fog.

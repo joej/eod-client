@@ -151,6 +151,18 @@ public partial class WorldView
                 Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at });
                 Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at });
             };
+        // --time H[:MM] starts the game clock there (the server's time ignored), to see the sky at that hour; offline too.
+        int timeAt = System.Array.IndexOf(args, "--time");
+        if (timeAt >= 0 && timeAt + 1 < args.Length)
+        {
+            string[] hm = args[timeAt + 1].Split(':');
+            if (float.TryParse(hm[0], out float hour))
+            {
+                float minutes = hm.Length > 1 && float.TryParse(hm[1], out float m) ? m : 0;
+                (_gameTime, _gameTimeAt, _timeForced, _skyTimeAt) =
+                    (new DaocProtocol.Packets.GameTime((uint)((hour * 60 + minutes) * 60_000), 24), _seconds, true, -1);
+            }
+        }
         // --torch lights the character's torch on entering (to check its look).
         if (System.Array.IndexOf(args, "--torch") >= 0)
             GetTree().CreateTimer(1).Timeout += () => SetTorch(true);

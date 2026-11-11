@@ -218,7 +218,7 @@ public partial class WorldView
         if (zone.Id != _skyZone && _zones.TryGetValue(zone.Id, out ZoneParts? parts) && parts.Dir.Length > 0)
         {
             _skyZone = zone.Id;
-            if (ApplySky(parts.Dir, "clear", "day") is string sky)
+            if (ApplySky(parts.Dir, "clear") is string sky)
             {
                 _skyName = sky;
                 ApplyViewDistance(_viewSetting);

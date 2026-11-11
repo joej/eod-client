@@ -36,7 +36,9 @@ public partial class WorldView
             _clockSubscribed = true;
             _bridge.TimeChanged += t =>
             {
-                (_gameTime, _gameTimeAt) = (t, _seconds);
+                if (_timeForced)
+                    return;
+                (_gameTime, _gameTimeAt, _skyTimeAt) = (t, _seconds, -1);
                 GD.Print($"[world] game time {GameClock.Format(t.MillisOfDay)}, day increment {t.DayIncrement}");
             };
             ClientSettings.Changed += OnClockSetting;
@@ -51,11 +53,26 @@ public partial class WorldView
             _clockWindow.Visible = _session is not null && ClientSettings.ShowClock;
     }
 
+    /// <summary>The game time of day now (ms since midnight), or null before the server has sent one.</summary>
+    private uint? GameMillisOfDay => _gameTime is GameTime t ? GameClock.Advance(t, (_seconds - _gameTimeAt) * 1000) : null;
+
+    private double _skyTimeAt = -1;
+    private bool _timeForced;   // --time: a fixed start, the server's 0x7E ignored
+
+    // The sky follows the clock: re-blended four times a second (a game minute takes 2.5 s at the usual rate).
+    private void UpdateSkyTime()
+    {
+        if (_gameTime is null || _seconds - _skyTimeAt < 0.25)
+            return;
+        _skyTimeAt = _seconds;
+        ApplySkyTime();
+    }
+
     private void UpdateClock()
     {
         if (_clockWindow is null || !_clockWindow.Visible || _clockText is null)
             return;
-        string text = _gameTime is GameTime t ? GameClock.Format(GameClock.Advance(t, (_seconds - _gameTimeAt) * 1000)) : "";
+        string text = GameMillisOfDay is uint ms ? GameClock.Format(ms) : "";
         if (_clockText.Text != text)
             _clockText.Text = text;
     }

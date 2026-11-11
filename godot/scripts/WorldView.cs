@@ -331,7 +331,7 @@ public partial class WorldView : Node3D
         // origin), objects and water; neighbours stream in after (WorldView.Streaming). Without terrain a
         // flat placeholder, except in a capital city, which is all models: no plane cutting through it.
         ZoneParts first = AddFirstZone();
-        _skyName = ApplySky(first.Dir, "clear", "day");
+        _skyName = ApplySky(first.Dir, "clear");
         bool modelsOnly = first.Placed > 0;
         if (first.Terrain is null && !modelsOnly)
             AddChild(new MeshInstance3D
@@ -949,6 +949,7 @@ public partial class WorldView : Node3D
         UpdateXp();
         UpdateMenuBar();
         UpdateClock();
+        UpdateSkyTime();
         _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)
         {
