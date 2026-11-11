@@ -434,6 +434,46 @@ it: C→S 0xAF `00 "&whis keyword"`. Retail also puts the target in every 0xA9 (
 action flags 0x80, plus 0x30 while a target is in view. *Verified live 2026-11-07* with Master Visur at
 Prydwen Keep (eodtest2): target, examine, his destinations, and [towns] answered with the town list.
 
+### Other players
+
+OpenDAoC doesn't send another player in view by itself (only in a few cases: stealth ending, a player arriving). A
+client that gets a player's 0xA9 position or 0xBA heading under a session id it hasn't seen created asks for it:
+
+```
+C→S 0xD5 CreatePlayerRequest u16 LE session id (we send it as u32 LE, as 0xBE's object request; the server reads 2
+                             bytes). Answered with 0x4B PlayerCreate and the player's 0x15 equipment.
+```
+
+The opcode is 0xD5 (0x7D ^ 168); the server's handler describes itself as "0x7C", and a request sent as 0x7C goes
+nowhere. *Verified live 2026-11-11: before the request, a player standing 100 units away (Quitcheck, seen from Testjoe)
+never appeared; with it, it appears within a second.*
+
+## Groups
+
+```
+C→S 0x87 InviteToGroup       no payload: invites the current target (a player of our realm in no group; we lead our
+                             group or have none). The server answers in chat.
+S→C 0x81 Dialog              u8 0, u8 code (5 group invite, 3 guild invite, 6 a server script's question), u16 BE
+                             data1 (a group invite: the inviter's session id), data2, data3, u16 BE (not read),
+                             u8 type (0 OK, 1 yes/no), u8 wrap (1: wrap; 0: the text has its own line breaks),
+                             the text, 0.
+C→S 0x82 DialogResponse      u16 BE data1, data2, data3 (echoed), u8 code, u8 answer (1 yes / OK).
+S→C 0x16 subcode 6           u8 6, u8 count, then per member: u8-length name, u8-length class ("NPC" for a pet),
+                             u16 BE object id, u8 level. Leader first; the order is each member's index. Count 0: no
+                             group (at world entry, and on leaving).
+S→C 0x70 GroupMemberUpdate   records until a 0 byte. 0x20 | index: health, power, endurance percent, u8 state
+                             (0x01 dead, 0x02 mezzed, 0x04 diseased, 0x08 poisoned, 0x10 link dead, 0x20 in another
+                             region with the three values 0, 0x40 nearsighted). 0x80 | index: u8 count, then per
+                             effect u8 0, u16 BE icon.
+C→S 0x9F DisbandFromGroup    no payload: removes the current target if it is in our group and we lead it, else
+                             ourselves.
+```
+
+*Verified live 2026-11-11 with two of our clients: Testjoe targeted Quitcheck and invited it; Quitcheck got the 0x81
+("Testjoe has invited you to join\nhis group. Do you wish to join?", code 5, yes/no), answered yes, and both received
+the two-member list (leader first) and 0x70 records; Testjoe's 0x9F with Quitcheck targeted removed it, and both
+received count 0. The layouts follow OpenDAoC @f0aaa1e (the 1.127e capture has no group packets).*
+
 ## Swimming
 
 The client sends 0xA9 with state flag 0x04 while it swims; other clients see it in the relayed position.
@@ -664,4 +704,5 @@ after a quit is accepted.
 | Character screen | `Packets/CharacterPackets.cs` | `CharacterPacketTests`, `CharacterCreateTests` |
 | World, keep-alive, server moves, logout | `Packets/WorldPackets.cs`, `World/Zones.cs` | `WorldPacketTests` |
 | Attack mode, other players' moves | `Packets/CombatPackets.cs`, `Packets/WorldEntityPackets.cs` | `CombatPacketTests` |
+| Groups, dialogs | `Packets/GroupPackets.cs`, `World/GroupState.cs` | `GroupPacketTests` |
 | Session flow | `Session/ClientSession.cs`, `Net/DaocConnection.cs` | `ClientSessionTests` (against a fake server replaying recorded replies) |

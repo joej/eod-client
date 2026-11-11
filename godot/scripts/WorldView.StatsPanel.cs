@@ -16,7 +16,7 @@
 //     icons. Double-click uses one, drag puts it on a quickbar (as retail's). Retail's select-and-describe (mini_info)
 //     isn't built.
 //   Inventory: the paper doll and backpack (WorldView.Inventory).
-//   Group: not built yet (it needs the group packets).
+//   Group: the members, their bars and effect icons, and the group buttons (WorldView.Group).
 
 using System.Collections.Generic;
 using System.Linq;
@@ -79,7 +79,7 @@ public partial class WorldView
         _styleList = Sheet(_statsPages[StatsStyles], s, new Vector2(4, 6), new Vector2(184, 404));
         _spellList = Sheet(_statsPages[StatsSpells], s, new Vector2(4, 6), new Vector2(184, 404));
         BuildInventoryPage(_statsPages[StatsInventory], s);
-        NotBuilt(_statsPages[StatsGroup], s, "The group page isn't built yet.");
+        BuildGroupPage(_statsPages[StatsGroup], s);
         ShowStatsPage(_statsPage);
         _statsDirty = true;
         overlay.AddChild(_statsPanel);
@@ -318,6 +318,7 @@ public partial class WorldView
             case StatsSkills: FillSkills(); break;
             case StatsStyles: FillStyles(); break;
             case StatsSpells: FillSpells(); break;
+            case StatsGroup: FillGroup(); break;
         }
     }
 

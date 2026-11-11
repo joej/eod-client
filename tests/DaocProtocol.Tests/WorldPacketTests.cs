@@ -34,6 +34,15 @@ public class WorldPacketTests
     }
 
     [Fact]
+    public void APlayerCreateRequestIsOpcodeD5WithTheSessionLittleEndian()
+    {
+        // eClientPackets.CreatePlayerRequest = 0xD5 (0x7D ^ 168); PlayerCreationRequestHandler reads the session id as
+        // u16 little-endian on 1.126+. (Sent as 0x7C, which its description names, it never reached the handler.)
+        Assert.Equal(0xD5, CreatePlayerRequest.Code);
+        Assert.Equal(new byte[] { 0x13, 0x01, 0, 0 }, CreatePlayerRequest.Payload(0x0113));
+    }
+
+    [Fact]
     public void AJumpPointRequestCarriesTheZonePointAsTheServerReadsIt()
     {
         // OpenDAoC 1.126+ (PlayerRegionChangeRequestHandler): ReadShortLowEndian, then the zonepoint table.

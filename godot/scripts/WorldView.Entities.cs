@@ -126,6 +126,20 @@ public partial class WorldView
             GD.Print($"[entity] {p.ObjectId} \"{p.Name}\": no figure for model {DaocProtocol.Packets.PlayerModel.Id(p.Model)} (sent {p.Model}): a capsule");
     }
 
+    // Players we heard from but never saw created: asked for by session id (0xD5, as the server expects of a client), again
+    // after 5 s if the create still hasn't come (out of range then, or gone).
+    private readonly Dictionary<ushort, double> _playersRequested = new();
+
+    private void RequestPlayer(ushort sessionId)
+    {
+        if (_session is null || _closedReason is not null || sessionId == 0
+            || (_playersRequested.TryGetValue(sessionId, out double at) && _seconds - at < 5))
+            return;
+        _playersRequested[sessionId] = _seconds;
+        GD.Print($"[entity] player session {sessionId}: heard from but never created, create requested");
+        _ = Send(() => _session.RequestPlayerAsync(sessionId), "player create request");
+    }
+
     // Objects whose create we asked for (0xBE), so each is asked for once while in view.
     private readonly HashSet<ushort> _objectsRequested = new();
 
@@ -346,7 +360,10 @@ public partial class WorldView
             return;
         _sessionObjects[p.SessionId] = p.ObjectId;
         if (!_entities.TryGetValue(p.ObjectId, out Entity? e))
-            return;   // not seen created yet: its 0x4B will place it
+        {
+            RequestPlayer(p.SessionId);   // not seen created yet: ask for its 0x4B, which places it
+            return;
+        }
         e.TargetPosition = ToGodot(p.X, p.Y, p.Z);
         e.TargetYaw = YawFromHeading(p.HeadingOnly);
         e.Health = p.HealthPercent;
@@ -357,7 +374,10 @@ public partial class WorldView
     private void OnPlayerTurned(PlayerHeading h)
     {
         if (!_sessionObjects.TryGetValue(h.SessionId, out ushort objectId) || !_entities.TryGetValue(objectId, out Entity? e))
+        {
+            RequestPlayer(h.SessionId);
             return;
+        }
         e.TargetYaw = YawFromHeading(h.HeadingOnly);
         SetCombat(objectId, e, h.InCombat);
     }

@@ -96,6 +96,7 @@ public partial class WorldView
         || (_summary?.Visible == true && _summary.GetGlobalRect().HasPoint(at))
         || (_statsPanel?.Visible == true && _statsPanel.GetGlobalRect().HasPoint(at))
         || ItemWindowsHave(at)
+        || GroupWindowsHave(at)
         || (_targetWindow?.Visible == true && _targetWindow.GetGlobalRect().HasPoint(at));
 
     // ----- what a slot holds -----

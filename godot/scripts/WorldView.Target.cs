@@ -107,6 +107,7 @@ public partial class WorldView
         if (id == _target)
             return;
         _target = id;
+        _statsDirty = true;   // the Group page marks the targeted member and dims its buttons by the target
         _targetRing?.QueueFree();
         _targetRing = null;
         if (id != 0 && _entities.TryGetValue(id, out Entity? e))

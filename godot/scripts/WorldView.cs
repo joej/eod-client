@@ -485,6 +485,7 @@ public partial class WorldView : Node3D
         BuildClock(overlay);
         BuildStatsPanel(overlay);
         BuildItemWindows(overlay);
+        BuildDialog(overlay);
         _builtScale = UiScale;
         ScaleChatAndNpc(_builtScale / ChatDesignScale);
         NameSelf();

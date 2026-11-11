@@ -584,6 +584,14 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         return connection.SendAsync(CreateObjectRequest.Code, CreateObjectRequest.Payload(objectId), cancellationToken);
     }
 
+    /// <summary>Asks the server for another player's create packet (0xD5, by session id), for a player we get position
+    /// updates for but never saw created.</summary>
+    public Task RequestPlayerAsync(ushort sessionId, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(CreatePlayerRequest.Code, CreatePlayerRequest.Payload(sessionId), cancellationToken);
+    }
+
     /// <summary>Selects <paramref name="objectId"/> (0 clears the target): C->S 0xB0. The server answers in chat.</summary>
     public Task SetTargetAsync(ushort objectId, CancellationToken cancellationToken = default)
     {
@@ -662,6 +670,28 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     {
         Require(SessionState.InWorld);
         return connection.SendAsync(DetailRequest.Code, DetailRequest.Payload(type, id), cancellationToken);
+    }
+
+    /// <summary>Invites the current target into our group (C→S 0x87). The server answers in chat; the target gets a
+    /// 0x81 group-invite dialog.</summary>
+    public Task InviteToGroupAsync(CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(GroupRequest.InviteCode, [], cancellationToken);
+    }
+
+    /// <summary>Disbands (C→S 0x9F): the current target if it is in our group and we lead it, otherwise ourselves.</summary>
+    public Task DisbandFromGroupAsync(CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(GroupRequest.DisbandCode, [], cancellationToken);
+    }
+
+    /// <summary>Answers a server dialog (C→S 0x82): yes / OK, or no.</summary>
+    public Task AnswerDialogAsync(Dialog dialog, bool yes, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(Dialog.ResponseCode, dialog.Response(yes), cancellationToken);
     }
 
     /// <summary>

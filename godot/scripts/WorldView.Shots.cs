@@ -84,17 +84,22 @@ public partial class WorldView
         if (kw >= 0 && kw + 1 < args.Length)
             _devKeyword = args[kw + 1];
         // --target NAME|nearest: select that creature (the nearest of that name, or the nearest of any) 4 s in, as a
-        // click would: to check the target windows.
+        // click would: to check the target windows. --target-at SECONDS picks another time (after a --command /jump).
         int ta = System.Array.IndexOf(args, "--target");
         if (ta >= 0 && ta + 1 < args.Length)
         {
             string name = args[ta + 1];
-            GetTree().CreateTimer(4.0).Timeout += () =>
+            int tat = System.Array.IndexOf(args, "--target-at");
+            double targetAt = tat >= 0 && tat + 1 < args.Length && double.TryParse(args[tat + 1], System.Globalization.CultureInfo.InvariantCulture, out double tAt) ? tAt : 4.0;
+            GetTree().CreateTimer(targetAt).Timeout += () =>
             {
                 ushort found = _entities.Where(kv => kv.Value.Name.Length > 0 && (name == "nearest"
                         || kv.Value.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)))
                     .OrderBy(kv => kv.Value.Node.Position.DistanceTo(_body.Position)).Select(kv => kv.Key).FirstOrDefault();
-                GD.Print(found == 0 ? $"[target] --target: no \"{name}\" in view" : $"[target] --target: {_entities[found].Name} (#{found})");
+                GD.Print(found == 0 ? $"[target] --target: no \"{name}\" in view; nearest: " + string.Join(", ", _entities
+                        .OrderBy(kv => kv.Value.Node.Position.DistanceTo(_body.Position)).Take(6)
+                        .Select(kv => $"#{kv.Key} \"{kv.Value.Name}\"{(kv.Value.IsPlayer ? " (player)" : "")}"))
+                    : $"[target] --target: {_entities[found].Name} (#{found})");
                 if (found != 0)
                     SetTarget(found);
             };
@@ -200,6 +205,22 @@ public partial class WorldView
             if (press is not null)
                 GetTree().CreateTimer(6).Timeout += press;
         }
+        // --group invite|disband SECONDS (repeatable) presses that Group-page button at that time (after a --target); --accept-dialogs
+        // answers every server dialog yes as it arrives (a group invite): together, two clients form a group unattended.
+        for (int gr = System.Array.IndexOf(args, "--group"); gr >= 0 && gr + 2 < args.Length; gr = System.Array.IndexOf(args, "--group", gr + 1))
+        {
+            if (!double.TryParse(args[gr + 2], System.Globalization.CultureInfo.InvariantCulture, out double groupAt))
+                continue;
+            string what = args[gr + 1].ToLowerInvariant();
+            GetTree().CreateTimer(groupAt).Timeout += () =>
+            {
+                if (what == "invite")
+                    GroupSend(() => _session!.InviteToGroupAsync(), "invite");
+                else if (what == "disband")
+                    GroupSend(() => _session!.DisbandFromGroupAsync(), "disband");
+            };
+        }
+        _acceptDialogs = System.Array.IndexOf(args, "--accept-dialogs") >= 0;
         // --command TEXT (repeatable) sends each slash command in turn, 2 s apart from 2 s after entering: e.g.
         // a GM "/jump to X Y Z REGION" to set up a --campose/--shot check somewhere exact.
         int delay = 2;

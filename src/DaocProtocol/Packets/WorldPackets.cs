@@ -282,6 +282,21 @@ public static class CreateObjectRequest
 }
 
 /// <summary>
+/// C→S 0xD5 CreatePlayerRequest (0x7D ^ 0xA8; its handler's description says "0x7C"): asks the server for another
+/// player's create packet (0x4B). OpenDAoC never sends a player in view by itself
+/// (outside a few cases: stealth ending, a player arriving); a client that gets a player's position (0xA9) or heading
+/// (0xBA) under a session id it doesn't know asks for it (PlayerCreationRequestHandler: the session id as u16
+/// little-endian on 1.126+, answered with 0x4B and the player's 0x15 equipment). We send it as u32 LE, as 0xBE's; retail's
+/// exact payload is unconfirmed.
+/// </summary>
+public static class CreatePlayerRequest
+{
+    public const byte Code = 0xD5;
+
+    public static byte[] Payload(ushort sessionId) => new PayloadWriter().U32LE(sessionId).ToArray();
+}
+
+/// <summary>
 /// C->S 0x90 PlayerRegionChangeRequest: the player walked through a jump point (a city gate, a dungeon
 /// entrance; the zone archive's zonejump.csv) and the client names its zone point. OpenDAoC 1.126+
 /// (<c>PlayerRegionChangeRequestHandler</c>) reads the id as u16 little-endian, looks it up in its

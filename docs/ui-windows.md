@@ -97,7 +97,7 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 | Character sheet (built-in) / `stats_attributes_window` | Stats, resists, armour factor, level, class, race | 0xFB stats and resists; 0x16 player info | Built 2026-11-11 as the stats panel's Attributes page (skin positions, our style; each stat's and resist's make-up in its tooltip; our own "additional info" lines; only OPTIONS of the six buttons works) | M10 |
 | `stats_combat_window` | Weapon skill, damage, speed | 0x16 / 0xFB | — | M10 |
 | `stats_spec_abil_window` | Specialisations, abilities, trade skills | 0x16 skills | Built 2026-11-11 as the stats panel's Skills page | M10 |
-| `stats_spells_window`, spell and style sheets (built-in) | Spell lines and combat styles, to cast or drag to a quickbar | 0x16 spell lines and skills; 0xD8 delve text | Built 2026-11-11 as the stats panel's Styles and Spells pages: lists with icons (double-click uses, drag to a quickbar); no `mini_info` or delve yet. The panel's tab strip (`stats_index`) has word tabs; its Group page is a placeholder | M10 |
+| `stats_spells_window`, spell and style sheets (built-in) | Spell lines and combat styles, to cast or drag to a quickbar | 0x16 spell lines and skills; 0xD8 delve text | Built 2026-11-11 as the stats panel's Styles and Spells pages: lists with icons (double-click uses, drag to a quickbar); no `mini_info` or delve yet. The panel's tab strip (`stats_index`) has word tabs | M10 |
 | `concentration_window` | Your concentration buffs | 0x75 | — | M10 |
 | `quiver_window` | Arrows in the quiver | 0x02 | — | M10 |
 | Effect icons (built-in?) | Active buffs and debuffs with timers | 0x7F UpdateIcons | — | M10 |
@@ -118,7 +118,9 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 
 | Window | Shows / does | Server data | Ours | Milestone |
 |---|---|---|---|---|
-| `minigroup_window`, `new_group_window`, `group_buffs`, `stats_group_window` | Group members' health, power, endurance, class, level, buffs | 0x70 GroupMemberUpdate | — | later |
+| `stats_group_window` | The stats panel's Group page: up to 8 members (name, class, level; health, endurance and power bars; 6 effect icons), and the group buttons | 0x16 subcode 6 (the list), 0x70 (bars, state, icons); C→S 0x87 invite, 0x9F disband | Built 2026-11-11 at the skin's positions: click a row to target that member; INVITE, DISBAND, ASSIST, FOLLOW, STICK, FACE, MAP work and dim where the server would refuse; MINI, FIND, SET LFG, BENEFITS, WARMAP, CGF, OPTIONS open windows not built yet (dimmed). A member's state (dead, mezzed, link dead, away) shows in orange where its class goes (retail's name-colour rule is unknown) | M10 |
+| dialog box | The server's questions and notices: group and guild invites, scripts' yes/no questions | 0x81 Dialog; C→S 0x82 answer | Built 2026-11-11: 320 × 128, centred, YES / NO or OK; a new one replaces one still open | M10 |
+| `minigroup_window`, `new_group_window`, `group_buffs` | The floating group window, buffs | 0x70 GroupMemberUpdate | — | later |
 | `lfg_window`, `group_results_window`, `casual_group_finder_window`, `group_options_window` | Looking for group, finder | 0x86, 0xE7, 0xB4 | — | later |
 | `community_window`, `minifriends_window` | Guild, alliance and friends lists, MOTD, guild commands | 0xC5/0xC6 friends; guild and alliance lists (packets to identify in OpenDAoC) | — | later |
 | `emblem_picker` | Guild emblem | 0xE2 | — | later |

@@ -10,6 +10,7 @@
 
 using DaocProtocol.Net;
 using DaocProtocol.Packets;
+using DaocProtocol.World;
 namespace DaocProtocol.Session;
 
 /// <summary>
@@ -128,6 +129,15 @@ public sealed class NetworkBridge(Action<string>? log = null)
     public event Action<DetailWindow, bool>? DetailWindowArrived;
     private bool _detailContinues;
 
+    /// <summary>The group list or a member's state changed (0x16 subcode 6, 0x70); <see cref="Group"/> holds the result.</summary>
+    public event Action<GroupState>? GroupChanged;
+
+    /// <summary>Our group, as last sent.</summary>
+    public GroupState Group { get; } = new();
+
+    /// <summary>The server asks something (0x81): a group invite, a script's yes/no question, a notice.</summary>
+    public event Action<Dialog>? DialogArrived;
+
     /// <summary>The server answered a keep-alive (0x29), echoing our timestamp (Environment.TickCount when sent): for the
     /// overlay's count and the lag meter's round trip (PingRequest.RoundTrip).</summary>
     public event Action<uint>? PingReplied;
@@ -161,6 +171,10 @@ public sealed class NetworkBridge(Action<string>? log = null)
                 break;
             case CraftingSkills.Subcode:
                 CraftingSkillsChanged?.Invoke(CraftingSkills.Parse(packet.Payload));
+                break;
+            case GroupWindow.Subcode:
+                Group.Set(GroupWindow.Parse(packet.Payload));
+                GroupChanged?.Invoke(Group);
                 break;
             default:
                 _unhandled[packet.Code] = _unhandled.GetValueOrDefault(packet.Code) + 1;
@@ -272,6 +286,13 @@ public sealed class NetworkBridge(Action<string>? log = null)
                     DetailWindow window = DetailWindow.Parse(packet.Payload);
                     DetailWindowArrived?.Invoke(window, _detailContinues);
                     _detailContinues = window.More != 0;
+                    break;
+                case GroupMemberUpdate.Code:
+                    Group.Apply(GroupMemberUpdate.Parse(packet.Payload));
+                    GroupChanged?.Invoke(Group);
+                    break;
+                case Dialog.Code:
+                    DialogArrived?.Invoke(Dialog.Parse(packet.Payload));
                     break;
                 case PingRequest.ReplyCode:
                     PingReplied?.Invoke(PingRequest.ParseReply(packet.Payload));
