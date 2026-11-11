@@ -240,8 +240,7 @@ public partial class WorldView
         {
             var b = new Button
             {
-                Text = text, Position = at * _scale, Size = new Vector2(width, height) * _scale,
-                FocusMode = FocusModeEnum.None, ClipText = true,
+                Text = text, Position = at * _scale, FocusMode = FocusModeEnum.None, ClipText = true,
             };
             b.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(System.Math.Min(8, height - 2) * _scale));
             // Retail's buttons are 17 skin pixels high: no padding, or Godot's default grows them out of the frame.
@@ -254,6 +253,11 @@ public partial class WorldView
                     BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
                     CornerRadiusTopLeft = 2, CornerRadiusTopRight = 2, CornerRadiusBottomLeft = 2, CornerRadiusBottomRight = 2,
                 });
+            // Sized once it is in the scene: before that Godot measures its minimum with the default theme's font (31 pixels
+            // high at scale 1.15), holds the size to it and never shrinks it, so stacked buttons overlapped (owner, 2026-11-11).
+            Vector2 size = new Vector2(width, height) * _scale;
+            b.Size = size;
+            b.Ready += () => b.Size = size;
             b.Pressed += pressed;
             AddChild(b);
             return b;

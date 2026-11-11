@@ -98,10 +98,10 @@ public partial class WorldView
             int bag = b;
             var button = new Button
             {
-                Text = (b + 1).ToString(), Position = new Vector2(172, 245 + 27 * b) * s, Size = new Vector2(15, 24) * s,
+                Text = (b + 1).ToString(), Position = new Vector2(172, 245 + 27 * b) * s,
                 FocusMode = Control.FocusModeEnum.None, TooltipText = $"Bag {b + 1}: backpack slots {b * 8 + 1}–{b * 8 + 8}",
             };
-            StyleButton(button, s);
+            StyleButton(button, s, new Vector2(15, 24));
             button.Pressed += () => ShowBag(bag);
             p.AddChild(button);
             _bagButtons.Add(button);

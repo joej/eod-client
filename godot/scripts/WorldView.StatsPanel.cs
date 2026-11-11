@@ -203,10 +203,10 @@ public partial class WorldView
         {
             var b = new Button
             {
-                Text = text, Position = at * s, Size = new Vector2(58, 17) * s, FocusMode = Control.FocusModeEnum.None,
+                Text = text, Position = at * s, FocusMode = Control.FocusModeEnum.None,
                 ClipText = true, Disabled = pressed is null, TooltipText = pressed is null ? "Not built yet" : "",
             };
-            StyleButton(b, s);
+            StyleButton(b, s, new Vector2(58, 17));
             if (pressed is not null)
                 b.Pressed += pressed;
             p.AddChild(b);
@@ -231,7 +231,10 @@ public partial class WorldView
         l.AutowrapMode = TextServer.AutowrapMode.WordSmart;
     }
 
-    private static void StyleButton(Button b, float s)
+    // The panel's button look, then its size in skin pixels, applied again once it is in the scene: before that Godot measures
+    // its minimum with the default theme's font, holds the size to it and never shrinks it (stacked buttons overlapped, owner
+    // 2026-11-11).
+    private static void StyleButton(Button b, float s, Vector2 size)
     {
         b.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(8 * s));
         b.AddThemeColorOverride("font_disabled_color", new Color(0.5f, 0.52f, 0.55f, 0.6f));
@@ -242,6 +245,8 @@ public partial class WorldView
                 BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
                 CornerRadiusTopLeft = 2, CornerRadiusTopRight = 2, CornerRadiusBottomLeft = 2, CornerRadiusBottomRight = 2,
             });
+        b.Size = size * s;
+        b.Ready += () => b.Size = size * s;
     }
 
     private static T Styled<T>(T list, Control page, float s, Vector2 at, Vector2 size) where T : ItemList

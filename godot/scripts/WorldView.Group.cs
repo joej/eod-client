@@ -81,8 +81,8 @@ public partial class WorldView
         // The skin's buttons, 58 wide at x 5 / 66 / 127, page y 308 to 398.
         Button B(string text, int x, int y, System.Action? pressed)
         {
-            var b = new Button { Text = text, Position = new Vector2(x, y) * s, Size = new Vector2(58, 17) * s, FocusMode = Control.FocusModeEnum.None, ClipText = true };
-            StyleButton(b, s);
+            var b = new Button { Text = text, Position = new Vector2(x, y) * s, FocusMode = Control.FocusModeEnum.None, ClipText = true };
+            StyleButton(b, s, new Vector2(58, 17));
             if (pressed is null)
             {
                 b.Disabled = true;
