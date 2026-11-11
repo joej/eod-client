@@ -302,6 +302,27 @@ public partial class WorldView
     // the client's far plane (view distance) and amount the percentage of that distance, measured back from it, that is
     // fogged (Camelot Hills: 15% of 16000 units → fog from 340 to 400 m); amount 0 turns fog off. Light energies are
     // scaled by eye. Returns the sky's name, or null (the current sky stays) when the zone has no sky.csv.
+    // The sky values of the region's first zone (lowest id), converted next to this one, or null if it isn't converted.
+    private System.Collections.Generic.Dictionary<string, string>? RegionFogValues(string dir)
+    {
+        ushort region = _world.Position.RegionId;
+        Zone? first = Zones.All.Where(z => z.RegionId == region).OrderBy(z => z.Id).FirstOrDefault();
+        string? parent = System.IO.Path.GetDirectoryName(dir.TrimEnd('/'));
+        if (first is null || parent is null)
+            return null;
+        string csv = parent.PathJoin($"zone{first.Id:000}").PathJoin("sky.csv");
+        if (!Godot.FileAccess.FileExists(csv))
+            return null;
+        var kv = new System.Collections.Generic.Dictionary<string, string>();
+        foreach (string line in Godot.FileAccess.GetFileAsString(csv).Split('\n').Skip(1))
+        {
+            int comma = line.IndexOf(',');
+            if (comma > 0)
+                kv[line[..comma]] = line[(comma + 1)..].Trim();
+        }
+        return kv;
+    }
+
     private string? ApplySky(string dir, string condition)
     {
         if (string.IsNullOrEmpty(dir))
@@ -345,8 +366,11 @@ public partial class WorldView
         _environment.AmbientLightSource = Godot.Environment.AmbientSource.Color;
         ApplySkyTime();
 
-        _zoneClip = SkyNumber("fog.clip", 0) * RegionMetresPerUnit;
-        _fogShare = Mathf.Clamp(SkyNumber("fog.amount", 0) / 100f, 0f, 1f);
+        // Fog is the REGION's (W17 note): read from the region's first zone's [fog], other zones' ignored; amount 0 is no fog.
+        var fogValues = RegionFogValues(dir) ?? kv;
+        float FogNumber(string key) => fogValues.TryGetValue(key, out string? v) && Floats(v) is { Length: >= 1 } f ? f[0] : 0;
+        _zoneClip = FogNumber("fog.clip") * RegionMetresPerUnit;
+        _fogShare = Mathf.Clamp(FogNumber("fog.amount") / 100f, 0f, 1f);
         float clip = _zoneClip, amount = _fogShare;
         string name = kv.GetValueOrDefault("sky", "?");
         GD.Print($"[world] sky: sky_{name} {condition}, zone view {clip:0} m, fogged share {amount:0.00}");

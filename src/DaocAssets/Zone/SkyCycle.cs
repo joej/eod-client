@@ -17,7 +17,7 @@ public static class SkyCycle
     // (hour, canopy): the canopy is pure at each key and blends linearly to the next.
     private static readonly (float Hour, string Time)[] Keys =
     [
-        (0f, "night"), (4.5f, "night"), (6f, "dawn"), (8f, "day"), (16.5f, "day"), (18f, "dusk"), (19.5f, "night"), (24f, "night"),
+        (0f, "night"), (4.5f, "night"), (6f, "dawn"), (7.5f, "day"), (16.5f, "day"), (18f, "dusk"), (19.5f, "night"), (24f, "night"),
     ];
 
     /// <summary>The two canopies to blend at <paramref name="millisOfDay"/> and how far from the first to the second

@@ -13,8 +13,8 @@ public sealed class SkyCycleTests
     [InlineData(2f, "night", "night", 0.444f)]
     [InlineData(5.25f, "night", "dawn", 0.5f)]
     [InlineData(6f, "dawn", "day", 0f)]        // pure dawn at 6
-    [InlineData(7f, "dawn", "day", 0.5f)]
-    [InlineData(12f, "day", "day", 0.4706f)]   // day held from 8 to 16:30
+    [InlineData(7f, "dawn", "day", 0.6667f)]    // day from 7:30 (retail's slot), not 8
+    [InlineData(12f, "day", "day", 0.5f)]      // day held from 7:30 to 16:30
     [InlineData(17.25f, "day", "dusk", 0.5f)]
     [InlineData(18f, "dusk", "night", 0f)]     // pure dusk at 18
     [InlineData(23.9f, "night", "night", 0.983f)]

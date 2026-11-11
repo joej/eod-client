@@ -14,6 +14,7 @@
 // are server commands; attack toggles attack mode.
 
 using DaocProtocol.Packets;
+using DaocProtocol.World;
 using Godot;
 
 namespace EodClient;
@@ -136,8 +137,12 @@ public partial class WorldView
         _floatTargetName.Text = name;
         if (t is not null)
         {
-            _summaryTarget.AddThemeColorOverride("font_color", t.NameColor);
-            _floatTargetName.AddThemeColorOverride("font_color", t.NameColor);
+            // The windows' own palette (icons-con-combat "Window text"): a creature that cons in its window con colour,
+            // anything else (players, friendly NPCs) white.
+            bool cons = !t.IsPlayer && !(t.Realm != 0 && (t.Realm == (int)PlayerRealm || PlayerRealm == Realm.None));
+            Color text = cons ? WindowConColour(ConColors.Of(PlayerLevel, t.Level)) : Colors.White;
+            _summaryTarget.AddThemeColorOverride("font_color", text);
+            _floatTargetName.AddThemeColorOverride("font_color", text);
         }
         _targetBar.Set(t?.Dead == true ? 0 : t?.Health ?? -1);
         _floatTargetBar.Set(t?.Dead == true ? 0 : t?.Health ?? -1);
@@ -160,12 +165,27 @@ public partial class WorldView
             _bodyYaw = Mathf.Atan2(-d.X, -d.Z);   // the body faces its -Z
     }
 
+    // Retail's /follow and /stick (targeting note): refused if the target is farther than 767 units, stopped beyond 3072
+    // (follow) or 1200 (stick), with its messages.
+    private float _followStopUnits;
+
     private void Follow(float metres)
     {
-        if (_target == 0)
+        var tone = new Color(1f, 1f, 1f);
+        if (_target == 0 || !_entities.TryGetValue(_target, out Entity? e))
+        {
+            (_follow, _autoRun) = (0, false);
+            AppendChat("You are no longer auto-following your target.", tone);
             return;
-        (_follow, _followMetres) = (_target, metres);
-        AppendChat(metres > 3 ? "You follow your target." : "You stick to your target.", new Color(0.6f, 0.8f, 1f));
+        }
+        bool stick = metres <= 3;
+        if (e.Node.Position.DistanceTo(_body.Position) > 767 * RegionMetresPerUnit)
+        {
+            AppendChat($"{e.Name} is too far away to {(stick ? "stick to" : "follow")}!", tone);
+            return;
+        }
+        (_follow, _followMetres, _followStopUnits) = (_target, metres, stick ? 1200 : 3072);
+        AppendChat(stick ? $"You auto-stick {e.Name}." : $"You auto-follow {e.Name}.", tone);
     }
 
     // Called with the walk-to code each physics frame: run after the followed entity, stop when close.
@@ -175,6 +195,12 @@ public partial class WorldView
             return;
         if (!_entities.TryGetValue(_follow, out Entity? e) || e.Dead)
         {
+            (_follow, _autoRun) = (0, false);
+            return;
+        }
+        if (e.Node.Position.DistanceTo(_body.Position) > _followStopUnits * RegionMetresPerUnit)
+        {
+            AppendChat($"{e.Name} is too far away to keep {(_followMetres <= 3 ? "sticking" : "following")}!", new Color(1f, 1f, 1f));
             (_follow, _autoRun) = (0, false);
             return;
         }

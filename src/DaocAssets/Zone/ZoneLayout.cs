@@ -77,13 +77,13 @@ public sealed class ZoneLayout
             bool onGround = cols.Length > 11 && cols[11] == "1";
             // Column 8, Collide: non-zero makes the object solid (the model's collision nodes give the shape).
             int collide = cols.Length > 8 && int.TryParse(cols[8], NumberStyles.Integer, CultureInfo.InvariantCulture, out int cv) ? cv : 1;
-            // Columns 15–18: an axis-angle turn. Axis (0,0,0): turn by A. A vertical axis is the same turn as A
-            // (its angle is −A in 9,984 of 10,091 such rows, the rest at 0 or 180°): A is kept. Any other axis
-            // tilts the object, and retail ignores A for it (daoc-re RE/69).
+            // Columns 15–18: an axis-angle turn. Axis (0,0,0): turn by A. Any other axis, vertical ones too, turns the object
+            // by the 3D Angle INSTEAD of A (world-data rules note §2). A vertical axis's angle is −A in 9,984 of 10,091 such
+            // rows (the same turn); the other ~107 sit at 0 or 180°, and retail turns them that way, not by A.
             float tilt = 0, axX = 0, axY = 0, axZ = 0;
             if (cols.Length > 18 && TryFloat(cols[15], out float th) && TryFloat(cols[16], out float ax)
                 && TryFloat(cols[17], out float ay) && TryFloat(cols[18], out float az)
-                && (Math.Abs(ax) > 1e-4f || Math.Abs(ay) > 1e-4f) && Math.Abs(th) > 1e-5f)
+                && (Math.Abs(ax) > 1e-6f || Math.Abs(ay) > 1e-6f || Math.Abs(az) > 1e-6f))
                 (tilt, axX, axY, axZ) = (th, ax, ay, az);
             fixtures.Add(new ZoneFixture(
                 model.Name, model.Label,

@@ -25,9 +25,9 @@ public sealed partial class ZoneAudit
     /// section we read that is NOT here, so a key missing from this list shows up as unreviewed.</summary>
     public static readonly IReadOnlySet<string> UsedSectorKeys = new HashSet<string>
     {
-        "terrain.scalefactor", "terrain.offsetfactor",
+        "terrain.scalefactor", "terrain.offsetfactor", "terrain.flip_x", "terrain.flip_y", "terrain.use_texture",
         "river#.name", "river#.type", "river#.height", "river#.texture", "river#.multitexture",
-        "river#.flow", "river#.color", "river#.left#", "river#.right#",
+        "river#.flow", "river#.color", "river#.left#", "river#.right#", "river#.bankpoints",
         "fog.clip", "fog.amount", "fog.red", "fog.green", "fog.blue",
     };
 

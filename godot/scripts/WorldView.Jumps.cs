@@ -80,9 +80,9 @@ public partial class WorldView
 
     private void UseJump(ZoneJump j)
     {
-        _jumpQuietUntil = _seconds + 3;
+        // Retail: 0x90 at most once every 10 s, and no message of its own (W47 note).
+        _jumpQuietUntil = _seconds + 10;
         GD.Print($"[world] through jump point {j.Name} (zone point {j.ZonePoint})");
-        AppendChat($"Through {j.Name}…", new Color(0.6f, 0.8f, 1f));
         if (_session is not null)
             _ = _session.UseJumpPointAsync(j.ZonePoint);
     }

@@ -68,7 +68,8 @@ public static class ZoneJumps
     /// line cross, and z is between the line's floor and top (with <paramref name="slack"/> units of
     /// leeway, since a character's Z follows the ground and a doorway's floor is drawn at it). Either
     /// direction counts: the install lists two-way gates twice with the ends swapped, and which way a
-    /// one-way row fires on is not known (open question W47).
+    /// one-way row fires on is not known (open question W47). Retail's doorway is exactly between the two heights; the
+    /// slack is ours, kept on purpose: our character stands on our ground, which can sit a little under the doorway's floor.
     /// </summary>
     public static bool Crosses(ZoneJump j, float ax, float ay, float bx, float by, float z, float slack = 64)
     {

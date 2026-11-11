@@ -52,8 +52,8 @@ public partial class WorldView
         }
     }
 
-    // Retail's default.ini shows bars 1 and 2 and hides bar 3 (Quickbar3=0,338,0,...: its third field); /quickbar turns
-    // one on or off, remembered per character. Offline nothing is shown: there is nothing to use.
+    // Retail's default.ini shows all three bars (the 7th field of QuickbarN=; the third, read before, is unused); /quickbar
+    // turns one on or off, remembered per character. Offline nothing is shown: there is nothing to use.
     private void ShowQuickbar(int bar, bool shown, bool save)
     {
         if (save)
@@ -423,9 +423,12 @@ public partial class WorldView
             // Without an icon (a command, or one the sheets lack): its name, small.
             _name = Text(new Vector2(1, 8), new Vector2(30, 18), 7, HorizontalAlignment.Center, scale);
             _name.AutowrapMode = TextServer.AutowrapMode.Arbitrary;
-            _veil = new ColorRect { Size = Size, Color = new Color(0, 0, 0, 0.6f), Visible = false, MouseFilter = MouseFilterEnum.Ignore };
+            _veil = new ColorRect { Size = Size, Color = new Color(0, 0, 0, 0), Visible = false, MouseFilter = MouseFilterEnum.Ignore };
             AddChild(_veil);
-            _wait = Text(new Vector2(0, 9), new Vector2(32, 14), 10, HorizontalAlignment.Center, scale);
+            // The cooldown time, small, at retail's (4, 20) on the button.
+            _wait = Text(new Vector2(4, 20), new Vector2(28, 11), 8, HorizontalAlignment.Left, scale);
+            _wait.AddThemeColorOverride("font_outline_color", Colors.Black);
+            _wait.AddThemeConstantOverride("outline_size", Mathf.RoundToInt(2 * scale));
             // The key, bottom left: the one corner the style marks never use (their grid has no down-left place).
             Label k = Text(new Vector2(1, 22), new Vector2(14, 10), 8, HorizontalAlignment.Left, scale);
             k.Text = key;
@@ -467,8 +470,12 @@ public partial class WorldView
 
         public void Cooldown(double seconds)
         {
-            _veil.Visible = seconds > 0;
-            _wait.Text = seconds > 0 ? (seconds >= 60 ? $"{seconds / 60:0}m" : $"{System.Math.Ceiling(seconds):0}") : "";
+            // Retail (open-answers "Cooldowns"): the icon at 40% brightness, back to 100% over the last 500 ms; the time as
+            // "%ds" from 3 s to a minute, "%dm" from 1 to 19 minutes, nothing under 3 s or from 20 minutes.
+            float b = seconds <= 0 ? 1f : seconds >= 0.5 ? 0.4f : 0.4f + 0.6f * (float)(1 - seconds / 0.5);
+            var shade = new Color(b, b, b);
+            _icon.Modulate = _border.Modulate = _marks.Modulate = shade;
+            _wait.Text = seconds >= 3 && seconds < 60 ? $"{(int)seconds}s" : seconds >= 60 && seconds < 1200 ? $"{(int)(seconds / 60)}m" : "";
         }
 
         public override void _GuiInput(InputEvent e)

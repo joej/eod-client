@@ -113,7 +113,7 @@ public static class ZoneWater
                 Type = keys.GetValueOrDefault("type", "").ToUpperInvariant(),
                 Height = Float(keys.GetValueOrDefault("height")),
                 Texture = Stem(keys.GetValueOrDefault("texture", "")) is { Length: > 0 } t ? t
-                    : keys.GetValueOrDefault("type", "").Equals("LAVA", StringComparison.OrdinalIgnoreCase) ? DefaultLavaTexture
+                    : WaterBody.Classify(keys.GetValueOrDefault("type", "")) == WaterKind.Lava ? DefaultLavaTexture
                     : DefaultTexture,
                 MultiTexture = Stem(keys.GetValueOrDefault("multitexture", "")),
                 Flow = Float(keys.GetValueOrDefault("flow")),

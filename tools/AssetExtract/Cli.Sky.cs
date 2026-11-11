@@ -73,7 +73,8 @@ internal static partial class Cli
         static string C(System.Numerics.Vector4 c) => FormattableString.Invariant($"{c.X:0.###} {c.Y:0.###} {c.Z:0.###} {c.W:0.###}");
         static string C3(System.Numerics.Vector3 c) => FormattableString.Invariant($"{c.X:0.###} {c.Y:0.###} {c.Z:0.###} 1");
         var lines = new List<string> { "key,value", $"sky,{name}" };
-        lines.Add(FormattableString.Invariant($"fog.clip,{sector.Float("fog", "clip") ?? 0}"));
+        // The client's defaults when a key is missing: clip 640, amount 0 (W17 note).
+        lines.Add(FormattableString.Invariant($"fog.clip,{sector.Float("fog", "clip") ?? 640}"));
         lines.Add(FormattableString.Invariant($"fog.amount,{sector.Float("fog", "amount") ?? 0}"));
         if (sector.Color("fog", "red") is null && sector.Float("fog", "red") is float fr)
             lines.Add(FormattableString.Invariant($"fog.sector_color,{fr / 255:0.###} {(sector.Float("fog", "green") ?? 0) / 255:0.###} {(sector.Float("fog", "blue") ?? 0) / 255:0.###} 1"));

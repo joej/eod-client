@@ -19,12 +19,17 @@ public sealed class ZoneTiltTests
     {
         string fixtures = Header +
             "1,1,Rock,100,200,300,0,100,0,0,0,0,0,0,1,0.000000,0.000000,0.000000,0.000000\r\n" +      // not solid, no axis
-            "2,1,Rock,100,200,300,315,100,2048,0,0,0,0,0,2,0.785398,0.000000,0.000000,1.000000\r\n" + // vertical: A kept
-            "3,1,Rock,100,200,300,90,100,1,0,0,0,0,0,3,0.500000,1.000000,0.000000,0.000000\r\n";      // tilted about x
+            "2,1,Rock,100,200,300,315,100,2048,0,0,0,0,0,2,0.785398,0.000000,0.000000,1.000000\r\n" + // vertical: the 3D turn
+            "3,1,Rock,100,200,300,90,100,1,0,0,0,0,0,3,0.500000,1.000000,0.000000,0.000000\r\n" +     // tilted about x
+            "4,1,Rock,100,200,300,90,100,1,0,0,0,0,0,4,0.000000,0.000000,0.000000,1.000000\r\n";      // vertical at 0: not A
         IReadOnlyList<ZoneFixture> f = ZoneLayout.Parse(Nifs, fixtures, 0, 0).Fixtures;
         Assert.Equal((0, 0f), (f[0].Collide, f[0].Tilt));
-        Assert.Equal((2048, 315, 0f), (f[1].Collide, f[1].AngleDeg, f[1].Tilt));
+        // Any axis set: the client turns by the 3D Angle about it INSTEAD of A (world-data rules §2), vertical axes too.
+        Assert.Equal((2048, 315, 0.785398f, 1f), (f[1].Collide, f[1].AngleDeg, f[1].Tilt, f[1].AxisZ));
         Assert.Equal((0.5f, 1f, 0f, 0f), (f[2].Tilt, f[2].AxisX, f[2].AxisY, f[2].AxisZ));
+        // A vertical axis at angle 0 with A = 90 (one of the ~107 rows that disagree): no turn, as retail draws it.
+        var p = new ZonePlacement("rock.glb", 0, 0, 0, f[3].AngleDeg, 1, 1, f[3].Tilt, f[3].AxisX, f[3].AxisY, f[3].AxisZ);
+        Assert.Equal(System.Numerics.Quaternion.Identity, p.Rotation);
     }
 
     [Fact]

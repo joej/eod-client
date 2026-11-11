@@ -243,9 +243,10 @@ public static class ClientSettings
     public static void SaveQuickbarPage(string character, int bar, int page) =>
         SaveIn($"quickbar {character}", $"page{bar + 1}", page);
 
-    /// <summary>Whether a quickbar shows (/quickbar): bars 1 and 2 by default, bar 3 hidden, as retail's default.ini.</summary>
+    /// <summary>Whether a quickbar shows (/quickbar): all three by default, as retail's default.ini (the 7th field of the
+    /// QuickbarN= line is 1 in 50 of its 59 layouts for bar 3).</summary>
     public static bool QuickbarShown(string character, int bar) =>
-        Load().GetValue($"quickbar {character}", $"shown{bar + 1}", bar < 2).AsBool();
+        Load().GetValue($"quickbar {character}", $"shown{bar + 1}", true).AsBool();
 
     public static void SaveQuickbarShown(string character, int bar, bool shown) =>
         SaveIn($"quickbar {character}", $"shown{bar + 1}", shown);

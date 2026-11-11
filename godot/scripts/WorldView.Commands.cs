@@ -3,7 +3,11 @@
 // WorldView: slash commands the client answers itself, as retail's does; the server never sees them.
 //   /loc                     where you are, in the zone's own coordinates (the ones /faceloc takes) and heading
 //   /map                     the zone map, as the M key
-//   /quickbar <bar> <on|off> show or hide a quickbar (1|0 too, as retail; also show/hide, yes/no)
+//   /quickbar <bar> <on|off> show or hide a quickbar (1|0 too, as retail; also show/hide, yes/no); /qbar the same
+//   /follow, /stick, /face   on the current target (the target window's buttons; retail's ranges and messages)
+//   /clock                   show or hide the clock
+//   /resetcamera             the camera's home: 240 units away, level (retail); /setcamera saves the current one
+//   /snapback                retail's camera swing-back (off by default): not built
 
 using DaocProtocol.Packets;
 using DaocProtocol.World;
@@ -28,8 +32,29 @@ public partial class WorldView
                 ToggleMap();
                 GD.Print("[local] /map: map toggled");
                 return true;
-            case "/quickbar":
+            case "/quickbar" or "/qbar":
                 QuickbarCommand(words);
+                return true;
+            case "/follow":
+                Follow(5f);
+                return true;
+            case "/stick":
+                Follow(2f);
+                return true;
+            case "/face":
+                FaceTarget();
+                return true;
+            case "/clock":
+                ClientSettings.ShowClock = !ClientSettings.ShowClock;
+                ClientSettings.NotifyChanged(false);   // the clock window follows the setting
+                return true;
+            case "/resetcamera":
+                (_camDistance, _camPitch, _camOrbit) = (240 * RegionMetresPerUnit, 0f, 0f);
+                ClientSettings.Camera = (_camDistance, _camPitch);
+                Reply("Camera reset.");
+                return true;
+            case "/snapback":
+                Reply("The camera swing-back isn't built yet (retail's default is off).");
                 return true;
             default:
                 return false;

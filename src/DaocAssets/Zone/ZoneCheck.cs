@@ -23,14 +23,15 @@ public readonly record struct ZonePlacement(string Glb, float X, float Y, float 
 {
     /// <summary>
     /// How the placement turns the model, in the model's own (glTF / Godot: Y up, metres) frame: about the vertical by
-    /// −AngleDeg, or, for a tilted placement, by Tilt about its axis carried into that frame (zone (x, y, z) → (x, z, y)).
+    /// −AngleDeg, or, when the row has an axis (vertical or not), by Tilt about it carried into that frame (zone (x, y, z) →
+    /// (x, z, y)): retail uses the axis-angle turn instead of A whenever the axis isn't (0,0,0).
     /// For a vertical axis the two agree (Tilt = −A), which is what fixes the sign.
     /// </summary>
     public Quaternion Rotation
     {
         get
         {
-            if (Tilt == 0 || (AxisX == 0 && AxisY == 0 && AxisZ == 0))
+            if (AxisX == 0 && AxisY == 0 && AxisZ == 0)
                 return Quaternion.CreateFromAxisAngle(Vector3.UnitY, -AngleDeg * MathF.PI / 180f);
             // The axis is in the zone's frame. Whether it is the world's or the model's own (whose Y is the world's -Y)
             // only changes the sign of its Y, which is near 0 in 619 of the install's 644 tilted rows: the zone check

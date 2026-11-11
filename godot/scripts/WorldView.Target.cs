@@ -17,7 +17,6 @@ public partial class WorldView
     private const uint EntityLayer = 1 << 2;
 
     private ushort _target;                  // the object we target (0: none)
-    private MeshInstance3D? _targetRing;     // the ring at the target's feet
     private Vector2? _pendingInteract;       // a right click to resolve in the physics frame
     private Vector2 _rightFrom;
     private float _rightMoved;               // how far the mouse moved while the right button was down
@@ -106,24 +105,15 @@ public partial class WorldView
     {
         if (id == _target)
             return;
+        ushort old = _target;
         _target = id;
         _statsDirty = true;   // the Group page marks the targeted member and dims its buttons by the target
-        _targetRing?.QueueFree();
-        _targetRing = null;
-        if (id != 0 && _entities.TryGetValue(id, out Entity? e))
-        {
-            var ring = new TorusMesh { InnerRadius = 0.55f, OuterRadius = 0.7f, Rings = 32, RingSegments = 6 };
-            _targetRing = new MeshInstance3D
-            {
-                Mesh = ring, Position = new Vector3(0, 0.05f, 0), Scale = new Vector3(1, 0.15f, 1),
-                MaterialOverride = new StandardMaterial3D
-                {
-                    AlbedoColor = new Color(1f, 0.85f, 0.25f, 0.85f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                    Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                },
-            };
-            e.Node.AddChild(_targetRing);
-        }
+        // Retail draws no ring: the target's plate turns white at full opacity, and a target pick closes the item window
+        // (targeting-and-chat "Differences", "Keys").
+        RestylePlate(old);
+        RestylePlate(id);
+        if (id != 0)
+            CloseMiniInfo();
         if (_session is not null)
             _ = Send(() => _session.SetTargetAsync(id), "target");
     }
@@ -148,7 +138,6 @@ public partial class WorldView
         if (id != _target)
             return;
         _target = 0;
-        _targetRing = null;   // freed with the entity's node
     }
 
     private string TargetLine => _target != 0 && _entities.TryGetValue(_target, out Entity? e)

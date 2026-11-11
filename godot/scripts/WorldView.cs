@@ -102,6 +102,10 @@ public partial class WorldView : Node3D
     private float _camDistance = ClientSettings.Camera?.Distance ?? 5.5f;   // spring length target, metres (OfflineDAoC default; /setcamera)
     private float _camOrbit;              // a left-drag pan round the character (radians); right-click resets it
     private bool _panActive, _panMoved;   // a left press on the world, and whether it has become a drag
+    private double _leftDownAt, _rightDownAt;   // when each button went down: a release within 250 ms is a click (retail)
+    private double _lastInteractAt = -10;       // right-click interact at most once a second (retail)
+    // Retail's mouse rates (camera note "Mouse and keys"): a pixel turns 1/4096 of a turn and tilts 0.1°; tilt ±80°.
+    private const float YawPerPixel = Mathf.Tau / 4096f, PitchPerPixel = Mathf.Pi / 1800f, MaxTilt = 80f * Mathf.Pi / 180f;
     private Vector2 _panFrom;
     private bool _autoRun;                // NumLock auto-run
     private const float CamMin = 1.25f;  // 50 DAoC units; game.dll cameradistance clamp
@@ -155,6 +159,7 @@ public partial class WorldView : Node3D
         public string CombatIdle = "combat_idle";   // the clip for standing in attack mode, by the weapon in use
         public Node3D? QuestGlyph;    // the glyph over a quest giver's head (null: none)
         public string Name = "";
+        public string Guild = "";     // a player's guild (its plate turns the guild colour when it is ours)
         public byte Health = 100;     // percent, from its position updates (0xA1, 0xA9)
         public int Level;             // an NPC's level (0 for players: not sent)
         public Color NameColor = new(0.92f, 0.90f, 0.82f);   // con or realm colour, as its nameplate
@@ -703,7 +708,8 @@ public partial class WorldView : Node3D
         // Left-drag pans the chase camera round the character (retail); a left click without a drag still inspects.
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false } up && _panActive)
         {
-            if (!_panMoved && !_lookActive && !ChatInputActive)
+            // A click is a release within 250 ms of the press; held longer it was a pan (retail).
+            if (_seconds - _leftDownAt <= 0.25 && !_lookActive && !ChatInputActive)
                 _pendingClick = up.Position;
             _panActive = false;
         }
@@ -712,9 +718,8 @@ public partial class WorldView : Node3D
             _panMoved |= pm.Position.DistanceTo(_panFrom) > 4;
             if (_panMoved && _chase)
             {
-                const float panSens = 0.005f;
-                _camOrbit -= Mathf.Clamp(pm.Relative.X, -80, 80) * panSens;
-                _camPitch = Mathf.Clamp(_camPitch - Mathf.Clamp(pm.Relative.Y, -80, 80) * panSens, -0.87f, 0.87f);
+                _camOrbit -= Mathf.Clamp(pm.Relative.X, -80, 80) * YawPerPixel;
+                _camPitch = Mathf.Clamp(_camPitch - Mathf.Clamp(pm.Relative.Y, -80, 80) * PitchPerPixel, -MaxTilt, MaxTilt);
             }
         }
         else if (@event is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Right)
@@ -722,12 +727,11 @@ public partial class WorldView : Node3D
             // A right click without a drag interacts with what is under the cursor (resolved in the physics
             // frame); a drag is mouse-look. In the classic layout the right button walks instead.
             if (mb.Pressed)
-                (_rightFrom, _rightMoved) = (mb.Position, 0);
-            else if (_lookActive && _rightMoved < 6 && !KeyBindings.Moves(MouseButton.Right))
-                _pendingInteract = _rightFrom;
+                (_rightFrom, _rightMoved, _rightDownAt) = (mb.Position, 0, _seconds);
+            else if (_lookActive && _seconds - _rightDownAt <= 0.25 && !KeyBindings.Moves(MouseButton.Right))
+                _pendingInteract = _rightFrom;   // released within 250 ms: a click (retail), not mouselook
             _lookActive = mb.Pressed;
-            if (mb.Pressed)
-                _camOrbit = 0;   // right-click aligns the camera behind the character again (retail)
+            // Mouselook turns the character and keeps the camera's orbit angle (retail; snapback is off by default).
             Input.MouseMode = mb.Pressed ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
             _freshCapture = mb.Pressed;   // swallow the first (often huge) motion delta after capture
         }
@@ -754,7 +758,6 @@ public partial class WorldView : Node3D
                 _freshCapture = false;   // drop the first post-capture delta (a large recenter spike)
                 return;
             }
-            const float sens = 0.005f;
             // Clamp per-event delta so an occasional spike can't snap the view.
             Vector2 d = new(Mathf.Clamp(mm.Relative.X, -80, 80), Mathf.Clamp(mm.Relative.Y, -80, 80));
             mm = new InputEventMouseMotion { Relative = d };
@@ -762,14 +765,14 @@ public partial class WorldView : Node3D
             {
                 // Right-drag steers: the character turns with the camera yaw, and pitch tilts the view.
                 // Camera stays behind the -Z-facing body, so its yaw trails bodyYaw by 180°.
-                _bodyYaw -= mm.Relative.X * sens;
+                _bodyYaw -= mm.Relative.X * YawPerPixel;
                 _camYaw = _bodyYaw + Mathf.Pi;
-                _camPitch = Mathf.Clamp(_camPitch - mm.Relative.Y * sens, -0.87f, 0.87f); // ±50°
+                _camPitch = Mathf.Clamp(_camPitch - mm.Relative.Y * PitchPerPixel, -MaxTilt, MaxTilt);
             }
             else
             {
-                _camYaw -= mm.Relative.X * sens;
-                _camPitch = Mathf.Clamp(_camPitch - mm.Relative.Y * sens, -1.5f, 1.5f);
+                _camYaw -= mm.Relative.X * YawPerPixel * 3;   // the free-fly dev camera: a little quicker
+                _camPitch = Mathf.Clamp(_camPitch - mm.Relative.Y * PitchPerPixel * 3, -1.5f, 1.5f);
             }
         }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.P })
@@ -833,7 +836,7 @@ public partial class WorldView : Node3D
         }
         else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
         {
-            // Esc closes the map or the NPC window, else drops the inspect selection and the target (retail: Esc clears it).
+            // Esc closes a window, else clears the target and stops attacking, else opens the main menu (retail).
             if (_mainMenu is { Visible: true })
                 _mainMenu.Visible = false;
             else if (_infoWindow is { Visible: true })
@@ -846,10 +849,18 @@ public partial class WorldView : Node3D
                 _mapWindow.Visible = false;
             else if (_npcWindow.Visible)
                 _npcWindow.Visible = false;
+            else if (_target != 0 || _attacking)
+            {
+                // Retail: Esc clears the target and stops attacking; with nothing left to clear it opens the main menu.
+                ClearInspect();
+                SetTarget(0);
+                if (_attacking)
+                    _ = SendAttack(false);
+            }
             else
             {
                 ClearInspect();
-                SetTarget(0);
+                ToggleMainMenu();
             }
         }
     }
@@ -889,7 +900,7 @@ public partial class WorldView : Node3D
         // In the classic layout the left button walks backward instead.
         if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } mb
             && !_lookActive && !ChatInputActive && !KeyBindings.Moves(MouseButton.Left))
-            (_panActive, _panMoved, _panFrom) = (true, false, mb.Position);
+            (_panActive, _panMoved, _panFrom, _leftDownAt) = (true, false, mb.Position, _seconds);
     }
 
     // Switches between the chase rig and a free-fly debug camera by reparenting the one Camera3D:
@@ -937,17 +948,30 @@ public partial class WorldView : Node3D
         if (_pendingClick is Vector2 click)
         {
             _pendingClick = null;
-            // A creature or player under the cursor is targeted; anything else is inspected (dev).
+            // A creature or player under the cursor is targeted; empty ground or scenery clears the target (retail), and
+            // the dev inspect readout describes what was hit.
             if (PickEntity(click) is ushort picked)
                 SetTarget(picked);
             else
+            {
+                SetTarget(0);
                 Inspect(click);
+            }
         }
         if (_pendingInteract is Vector2 at)
         {
             _pendingInteract = null;
-            if (PickEntity(at) is ushort other)
-                Interact(other);
+            // Retail: a right click on a player does nothing; on an NPC or object it targets and interacts, once a second.
+            if (PickEntity(at) is ushort other && !(_entities.TryGetValue(other, out Entity? oe) && oe.IsPlayer))
+            {
+                if (_seconds - _lastInteractAt < 1)
+                    AppendChat("You must wait one more second to interact again!", new Color(1f, 1f, 1f));
+                else
+                {
+                    _lastInteractAt = _seconds;
+                    Interact(other);
+                }
+            }
         }
     }
 

@@ -59,7 +59,10 @@ public partial class WorldView
             if (d.VictimId == _world.Position.ObjectId)
                 Die();
             else if (_entities.TryGetValue(d.VictimId, out Entity? e))
+            {
                 DropEntity(e, true);
+                RestylePlate(d.VictimId);   // the dead colour; it stays the target (retail keeps it)
+            }
         };
         _bridge.PlayerRevived += r =>
         {
@@ -67,7 +70,10 @@ public partial class WorldView
             if (r.ObjectId == _world.Position.ObjectId)
                 Revive();
             else if (_entities.TryGetValue(r.ObjectId, out Entity? e))
+            {
                 DropEntity(e, false);
+                RestylePlate(r.ObjectId);
+            }
         };
         _bridge.TimerChanged += t =>
         {

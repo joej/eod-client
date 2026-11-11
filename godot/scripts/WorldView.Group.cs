@@ -117,6 +117,9 @@ public partial class WorldView
             _bridge.GroupChanged += g =>
             {
                 _statsDirty = true;
+                foreach (var (id, e) in _entities)   // group members' plates take the group colour
+                    if (e.IsPlayer)
+                        RestylePlate(id);
                 if (g.Members.Count != logged)
                     GD.Print($"[world] group: {(g.InGroup ? string.Join(", ", g.Members.Select(m => $"{m.Name} ({m.ClassName} {m.Level})")) : "none")}");
                 logged = g.Members.Count;

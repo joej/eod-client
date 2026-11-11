@@ -54,9 +54,9 @@ public class ZoneAuditTests
     public void ListsIgnoredFieldsAndDegenerateValuesInFilesWeRead()
     {
         // What the review list exists for: fields of files we read that nobody reads (fixtures.csv's On
-        // Ground column, unread until 0478b56; [terrain] flip_y), and degenerate values in fields we do
+        // Ground column, unread until 0478b56; [fog] rotate, which the client reads), and degenerate values in fields we do
         // read (a [sectorsize] sizex=0 read literally made a zone 0 units wide).
-        string sector = "[sectorsize]\nsizex=0\nsizey=8\n[terrain]\nscalefactor=0\nflip_y=1\n";
+        string sector = "[sectorsize]\nsizex=0\nsizey=8\n[terrain]\nscalefactor=0\nflip_y=1\n[fog]\nrotate=1\n";
         string csv = "Fixtures,,,,,,,,,,,On.\n" +
                      "ID,NIF #,Textual Name,X,Y,Z,A,Scale,Collide,Radius,Animate,Ground,Flip\n" +
                      "1,407,Keep,25344,47104,2880,0,100,5120,0,0,1,0\n" +
@@ -74,7 +74,8 @@ public class ZoneAuditTests
         Assert.Contains("| 11 | Ground | reads: On Ground | `1` ×2 |", md);
         Assert.Contains("| 12 | Flip | **ignored** | `0` ×2 |", md);
         Assert.Contains("| 5 | Z | reads: z (unless On Ground) **check:** `0` ×1 |", md);
-        Assert.Contains("| terrain.flip_y | 1 | **ignored** | `1` ×1 |", md);
+        Assert.Contains("| fog.rotate | 1 | **ignored** | `1` ×1 |", md);
+        Assert.DoesNotContain("| terrain.flip_y | 1 | **ignored**", md);   // read since the Atlantis layers (ZoneTerrain)
         // A degenerate value in a field we read is called out ([terrain] scalefactor=0 here).
         Assert.Contains("| terrain.scalefactor | 1 | reads **check:** `0` ×1 | `0` ×1 |", md);
     }
