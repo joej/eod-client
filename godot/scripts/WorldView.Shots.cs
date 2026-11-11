@@ -140,6 +140,17 @@ public partial class WorldView
                 Input.ParseInputEvent(new InputEventMouseMotion { Position = new Vector2(10 + dragBy, 10) });
                 Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = new Vector2(10 + dragBy, 10) });
             };
+        // --panel-click X Y: 5 s in, a left click (press and release) at window pixel X, Y: e.g. on a dev panel, to check
+        // it stays where it is.
+        int panelClick = System.Array.IndexOf(args, "--panel-click");
+        if (panelClick >= 0 && panelClick + 2 < args.Length && float.TryParse(args[panelClick + 1], out float clickX)
+            && float.TryParse(args[panelClick + 2], out float clickY))
+            GetTree().CreateTimer(5).Timeout += () =>
+            {
+                var at = new Vector2(clickX, clickY);
+                Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at });
+                Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at });
+            };
         // --torch lights the character's torch on entering (to check its look).
         if (System.Array.IndexOf(args, "--torch") >= 0)
             GetTree().CreateTimer(1).Timeout += () => SetTorch(true);

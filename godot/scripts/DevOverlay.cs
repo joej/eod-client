@@ -236,9 +236,12 @@ public partial class DevOverlay : CanvasLayer
             if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } b)
             {
                 from = b.Pressed ? b.GlobalPosition : null;
+                // keepOffset false: the offsets are recomputed so the panel stays put. With true they were kept as numbers
+                // measured from the old (right/bottom) anchor, which threw INSPECT and LAYERS off screen on their first
+                // click (owner, 2026-11-10: "a pane disappeared when I clicked it").
                 if (b.Pressed)
                     foreach (Side side in new[] { Side.Left, Side.Top, Side.Right, Side.Bottom })
-                        panel.SetAnchor(side, 0, keepOffset: true);
+                        panel.SetAnchor(side, 0, keepOffset: false);
                 panel.AcceptEvent();
             }
             else if (e is InputEventMouseMotion m && from is Vector2 start)
