@@ -8,6 +8,8 @@
 //               wgsm_0.bmp, -1 none) and a "spell" mark (not drawn yet: its cells, 100 and up, are in wglg_100).
 //   spells.csv  ID (the number the server sends for a spell) → Icon (an icons.csv ID).
 //   styles.csv  ID (the number the server sends for a style) → Icon (an icons.csv ID).
+//   objects.csv ID (an item's model, as 0x02 sends it) → Icon, column 3 (an icons.csv ID). daoc-re RE/75: the
+//               inventory, mini_info, vault and trade windows all draw an item this way; the dagger, model 1 → 201 → 901.
 //
 // Abilities and realm abilities send an icons.csv ID directly. Checked 2026-11-09: Sprint 409 → base 1602 (the
 // skills sheet), Amethyst Shield spell 1 → 1000 → base 91, Recenter style 110 → 654 → base 555 (a combat
@@ -20,7 +22,7 @@ using System.Globalization;
 namespace DaocAssets.Ui;
 
 /// <summary>Which table the server's number for an entry is looked up in.</summary>
-public enum IconKind { Icon, Spell, Style }
+public enum IconKind { Icon, Spell, Style, Item }
 
 /// <summary>A style mark: a cell of wgsm_0.bmp (10 x 10) and where it goes on the 32 x 32 icon.</summary>
 public readonly record struct IconMark(int Cell, int X, int Y);
@@ -32,6 +34,7 @@ public sealed class IconTable
 {
     private readonly Dictionary<int, IconPicture> _icons;
     private readonly Dictionary<int, int> _spells, _styles;
+    private Dictionary<int, int> _items = [];
 
     // Where each mark column (icons.csv columns 4–10) is drawn: up left, up, up right, right, down right, down, left.
     private static readonly (int X, int Y)[] MarkPlaces = [(0, 0), (11, 0), (22, 0), (22, 11), (22, 22), (11, 22), (0, 11)];
@@ -59,6 +62,18 @@ public sealed class IconTable
         return new IconTable(icons, Pairs(spellsCsv), Pairs(stylesCsv));
     }
 
+    /// <summary>The same, with objects.csv for items (model → icon, column 3).</summary>
+    public static IconTable Parse(string iconsCsv, string spellsCsv, string stylesCsv, string objectsCsv)
+    {
+        IconTable t = Parse(iconsCsv, spellsCsv, stylesCsv);
+        foreach (string[] c in Rows(objectsCsv))
+            if (c.Length > 3 && Int(c[0]) is int model && Int(c[3]) is int icon)
+                t._items.TryAdd(model, icon);
+        return t;
+    }
+
+    public int ItemCount => _items.Count;
+
     /// <summary>The picture (an icon-sheet number, a border frame, style marks) for the server's number, or null.</summary>
     public IconPicture? Resolve(IconKind kind, int number)
     {
@@ -66,6 +81,7 @@ public sealed class IconTable
         {
             IconKind.Spell => _spells.TryGetValue(number, out int s) ? s : null,
             IconKind.Style => _styles.TryGetValue(number, out int t) ? t : null,
+            IconKind.Item => _items.TryGetValue(number, out int o) ? o : null,
             _ => number,
         };
         return icon is int i && _icons.TryGetValue(i, out var picture) ? picture : null;

@@ -654,6 +654,17 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     public Task UseSlotAsync(byte slot, byte type = 0, CancellationToken cancellationToken = default) =>
         SendUseAsync(UseRequest.SlotCode, slot, type, cancellationToken);
 
+    /// <summary>
+    /// Moves an item (C→S 0xDD): to another inventory slot (swapping with what is there), onto the paper doll
+    /// (<see cref="InventorySlot.PaperDoll"/>: the server picks the slot), or out of a slot to wear or take off. A
+    /// <paramref name="count"/> of 0 moves the whole stack. The server answers with 0x02 for the slots that changed.
+    /// </summary>
+    public Task MoveItemAsync(ushort to, ushort from, ushort count = 0, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(MoveItemRequest.Code, MoveItemRequest.Payload(to, from, count), cancellationToken);
+    }
+
     private Task SendUseAsync(byte code, byte first, byte second, CancellationToken cancellationToken)
     {
         Require(SessionState.InWorld);

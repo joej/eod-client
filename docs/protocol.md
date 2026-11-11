@@ -526,6 +526,30 @@ The character has base + buffs + min(items, cap) + realm abilities: the server w
 left once those are taken off its own total. *Checked against the RustDAoC 1.127e capture (both kinds decode and
 rebuild byte for byte; a Briton's racial resists) and live 2026-11-11 (eodtest2/Quitcheck and Spellcheck).*
 
+## Inventory
+
+```
+S→C 0x02 InventoryUpdate     count, 0, visibility (0x01 cloak hidden, 0x02 helm hidden), hood (bit 0) | active
+                             quiver (bits 4–7), visible weapon slots, window (0 update, 1 all equipment, 2 the rest,
+                             3+ a vault, merchant or other window), then count × (u8 slot, item)
+  item (1.124+)              u16 0, level, value 1, value 2, hand << 6, damage type << 6 | object type, 0,
+                             u16 BE weight (tenths of a pound), condition %, durability %, quality %, bonus %,
+                             bonus level, u16 BE model (objects.csv row), extension, u16 BE colour or emblem,
+                             flags (0x02 salvage, 0x04 craft, 0x08 / 0x10: a spell follows, u16 BE icon + u8-length
+                             name), u16 BE effect, u8-length name. An empty slot: the same 24 bytes, all 0.
+  values by object type      weapon: DPS × 10, speed × 10; armour: AF, absorption %; shield: size, DPS × 10;
+                             arrows, bolts, poison: count, …; generic items: count (low, high byte)
+S→C 0xBD Encumbrance         u16 BE can carry, u16 BE carried (pounds)
+C→S 0xDD PlayerMoveItem      u16 0, u16 BE to-slot, u16 BE from-slot, u16 BE count (0: the whole stack)
+```
+
+Slots: 10–13 right hand, left hand, two-handed, ranged; 21–37 the armour and jewellery (21 helm, 22 hands, 23 feet,
+24 jewellery, 25 torso, 26 cloak, 27 legs, 28 arms, 29 neck, 32 waist, 33/34 wrists, 35/36 rings, 37 mythical);
+40–79 the backpack. A move to slot 100 lets the server choose where the item is worn. The server answers a move
+with 0x02 for both slots (or a chat line saying why not); moving an item out of a weapon slot sheathes it, into one
+wields it. *Checked against the RustDAoC 1.127e capture (both 0x02 packets, a cloak with two spells, and 0xBD decode
+and rebuild byte for byte) and live 2026-11-11 (Quitcheck: sword 10 → 41 → 10, helm 21 → 42 → 100 → back on).*
+
 ## Using skills and spells
 
 ```

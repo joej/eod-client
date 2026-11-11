@@ -151,6 +151,9 @@ public partial class WorldView
     // The entry's picture through gamedata's tables (IconTable).
     private SlotPicture EntryPicture(string entry)
     {
+        // An inventory slot: whatever item is in it now.
+        if (entry.StartsWith("slot:") && byte.TryParse(entry[5..], out byte slot))
+            return _bridge.Inventory[slot] is InventoryItem item ? ItemPicture(item) : SlotPicture.None;
         if (EntryIcon(entry) is not var (kind, number))
             return SlotPicture.None;
         _iconTable ??= LoadIconTable();
@@ -167,7 +170,7 @@ public partial class WorldView
     {
         string dir = (_libraryPath ?? "").PathJoin("icons");
         string Read(string f) => Godot.FileAccess.FileExists(dir.PathJoin(f)) ? Godot.FileAccess.GetFileAsString(dir.PathJoin(f)) : "";
-        return IconTable.Parse(Read("icons.csv"), Read("spells.csv"), Read("styles.csv"));
+        return IconTable.Parse(Read("icons.csv"), Read("spells.csv"), Read("styles.csv"), Read("objects.csv"));
     }
 
     private Texture2D? IconTexture(int icon)

@@ -174,6 +174,16 @@ public partial class WorldView
         int si = System.Array.IndexOf(args, "--stats");
         if (si >= 0 && si + 1 < args.Length && System.Array.FindIndex(StatsTabNames, n => n.Equals(args[si + 1], System.StringComparison.OrdinalIgnoreCase)) is int page and >= 0)
             GetTree().CreateTimer(3).Timeout += () => ToggleStatsPage(page);
+        // --move FROM TO (repeatable) moves an item between inventory slots as a drag would, 3 s apart from 5 s after
+        // entering: e.g. --move 10 40 --move 40 10 takes the right-hand weapon off and puts it back.
+        double moveAt = 5;
+        for (int mi = System.Array.IndexOf(args, "--move"); mi >= 0 && mi + 2 < args.Length;
+             mi = System.Array.IndexOf(args, "--move", mi + 1))
+            if (byte.TryParse(args[mi + 1], out byte from) && ushort.TryParse(args[mi + 2], out ushort to))
+            {
+                GetTree().CreateTimer(moveAt).Timeout += () => MoveItem(from, to);
+                moveAt += 3;
+            }
         // --command TEXT (repeatable) sends each slash command in turn, 2 s apart from 2 s after entering: e.g.
         // a GM "/jump to X Y Z REGION" to set up a --campose/--shot check somewhere exact.
         int delay = 2;

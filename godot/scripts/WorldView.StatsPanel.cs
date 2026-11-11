@@ -15,7 +15,8 @@
 //   Styles, Spells: retail draws these sheets itself (combstylesheet.bmp, Magicsheet.bmp); ours are lists with the
 //     icons. Double-click uses one, drag puts it on a quickbar (as retail's). Retail's select-and-describe (mini_info)
 //     isn't built.
-//   Inventory, Group: not built yet (the inventory needs the 0x02 item lists; the group page the group packets).
+//   Inventory: the paper doll and backpack (WorldView.Inventory).
+//   Group: not built yet (it needs the group packets).
 
 using System.Collections.Generic;
 using System.Linq;
@@ -77,7 +78,7 @@ public partial class WorldView
         BuildSkillsPage(_statsPages[StatsSkills], s);
         _styleList = Sheet(_statsPages[StatsStyles], s, new Vector2(4, 6), new Vector2(184, 404));
         _spellList = Sheet(_statsPages[StatsSpells], s, new Vector2(4, 6), new Vector2(184, 404));
-        NotBuilt(_statsPages[StatsInventory], s, "The inventory and paper doll aren't built yet.");
+        BuildInventoryPage(_statsPages[StatsInventory], s);
         NotBuilt(_statsPages[StatsGroup], s, "The group page isn't built yet.");
         ShowStatsPage(_statsPage);
         _statsDirty = true;
@@ -295,6 +296,14 @@ public partial class WorldView
         _bridge.PointsChanged += _ => _statsDirty = true;
         _bridge.PlayerInfoChanged += _ => _statsDirty = true;
         _bridge.WeaponStatsChanged += _ => _statsDirty = true;
+        _bridge.InventoryChanged += inv =>
+        {
+            _statsDirty = true;
+            GD.Print($"[world] inventory: {inv.Items.Count} item(s): " +
+                     string.Join(", ", inv.Items.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} {kv.Value.Name}")));
+        };
+        _bridge.EncumbranceChanged += e => (_encumbrance, _statsDirty) = (e, true);
+        _bridge.MoneyChanged += _ => _statsDirty = true;
     }
 
     private void UpdateStatsPanel()
@@ -305,6 +314,7 @@ public partial class WorldView
         switch (_statsPage)
         {
             case StatsAttributes: FillAttributes(); break;
+            case StatsInventory: FillInventory(); break;
             case StatsSkills: FillSkills(); break;
             case StatsStyles: FillStyles(); break;
             case StatsSpells: FillSpells(); break;

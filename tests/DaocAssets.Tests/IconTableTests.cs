@@ -47,6 +47,17 @@ public sealed class IconTableTests
     }
 
     [Fact]
+    public void AnItemGoesThroughObjectsCsv()
+    {
+        // objects.csv's two header rows, then the dagger: model 1 → Icon (column 3) 201 → base 901 (a weapon sheet).
+        const string objects = "Information,,NIF,Icon,Skins\r\nID,name,#,#,Body\r\n1,briton dagger,166,201,0\r\n";
+        IconTable t = IconTable.Parse(Icons + "201,dagger,901,-1,-1,-1,-1,-1,-1,-1,-1,-1\r\n", Spells, Styles, objects);
+        Assert.Equal((901, -1), Picture(t.Resolve(IconKind.Item, 1)));
+        Assert.Null(t.Resolve(IconKind.Item, 2));
+        Assert.Equal(1, t.ItemCount);
+    }
+
+    [Fact]
     public void ANumberMissingFromATableHasNoPicture()
     {
         IconTable t = IconTable.Parse(Icons, Spells, Styles);

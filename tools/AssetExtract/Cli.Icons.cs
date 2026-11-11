@@ -34,20 +34,21 @@ internal static partial class Cli
         string? skin = ui is null ? null : Directory.EnumerateDirectories(ui).FirstOrDefault(d => Path.GetFileName(d).Equals("atlantis", StringComparison.OrdinalIgnoreCase));
         if (skin is not null && Directory.EnumerateFiles(skin).FirstOrDefault(f => Path.GetFileName(f).Equals("compass.bmp", StringComparison.OrdinalIgnoreCase)) is string compass)
             File.Copy(compass, Path.Combine(outDir, "compass.bmp"), overwrite: true);
-        // From the server's number to a picture: icons.csv, spells.csv, styles.csv (DaocAssets.Ui.IconTable).
+        // From the server's number to a picture: icons.csv, spells.csv, styles.csv, objects.csv (DaocAssets.Ui.IconTable).
         if (FindInstallFile(client, "gamedata.mpk") is not string gamedata)
         {
             Console.Error.WriteLine("icons: no gamedata.mpk in the install");
             return 2;
         }
         using (var mpk = DaocAssets.Mpk.MpkArchive.Open(gamedata))
-            foreach (string table in new[] { "icons.csv", "spells.csv", "styles.csv" })
+            foreach (string table in new[] { "icons.csv", "spells.csv", "styles.csv", "objects.csv" })
                 File.WriteAllBytes(Path.Combine(outDir, table), mpk.Extract(table));
         var lookup = DaocAssets.Ui.IconTable.Parse(File.ReadAllText(Path.Combine(outDir, "icons.csv"), System.Text.Encoding.Latin1),
             File.ReadAllText(Path.Combine(outDir, "spells.csv"), System.Text.Encoding.Latin1),
-            File.ReadAllText(Path.Combine(outDir, "styles.csv"), System.Text.Encoding.Latin1));
+            File.ReadAllText(Path.Combine(outDir, "styles.csv"), System.Text.Encoding.Latin1),
+            File.ReadAllText(Path.Combine(outDir, "objects.csv"), System.Text.Encoding.Latin1));
         Console.WriteLine($"icons: {sheets.Count} sheets (icons {string.Join(", ", sheets.Keys.Order().Select(k => $"{k}–{k + 99}"))}); " +
-                          $"{lookup.Count} icon ids");
+                          $"{lookup.Count} icon ids, {lookup.ItemCount} item models");
         return sheets.Count > 0 ? 0 : 2;
     }
 }

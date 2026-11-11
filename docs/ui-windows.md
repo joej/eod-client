@@ -93,11 +93,11 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 
 | Window | Shows / does | Server data | Ours | Milestone |
 |---|---|---|---|---|
-| Inventory and paper doll (built-in) | Worn gear on a figure, backpack slots, drag and drop, encumbrance | 0x02 InventoryUpdate (equipment, backpack), 0xBD encumbrance; moves go C→S | — (others' visible gear 0x15 is decoded and drawn) | M10 |
+| Inventory and paper doll (built-in) | Worn gear on a figure, backpack slots, drag and drop, encumbrance | 0x02 InventoryUpdate (equipment, backpack), 0xBD encumbrance; moves go C→S | Built 2026-11-11 as the stats panel's Inventory page: each slot where `pperdoll.bmp` has its frame (our style, word labels), item icons by model (objects.csv → icons.csv), 5 bags of 8 backpack rows, money and encumbrance; hover describes, double-click uses (0x71), drag moves (0xDD), onto the figure wears (slot 100), onto a quickbar uses later. No figure drawn in the middle yet, no `mini_info` | M10 |
 | Character sheet (built-in) / `stats_attributes_window` | Stats, resists, armour factor, level, class, race | 0xFB stats and resists; 0x16 player info | Built 2026-11-11 as the stats panel's Attributes page (skin positions, our style; each stat's and resist's make-up in its tooltip; our own "additional info" lines; only OPTIONS of the six buttons works) | M10 |
 | `stats_combat_window` | Weapon skill, damage, speed | 0x16 / 0xFB | — | M10 |
 | `stats_spec_abil_window` | Specialisations, abilities, trade skills | 0x16 skills | Built 2026-11-11 as the stats panel's Skills page | M10 |
-| `stats_spells_window`, spell and style sheets (built-in) | Spell lines and combat styles, to cast or drag to a quickbar | 0x16 spell lines and skills; 0xD8 delve text | Built 2026-11-11 as the stats panel's Styles and Spells pages: lists with icons (double-click uses, drag to a quickbar); no `mini_info` or delve yet. The panel's tab strip (`stats_index`) has word tabs; its Inventory and Group pages are placeholders | M10 |
+| `stats_spells_window`, spell and style sheets (built-in) | Spell lines and combat styles, to cast or drag to a quickbar | 0x16 spell lines and skills; 0xD8 delve text | Built 2026-11-11 as the stats panel's Styles and Spells pages: lists with icons (double-click uses, drag to a quickbar); no `mini_info` or delve yet. The panel's tab strip (`stats_index`) has word tabs; its Group page is a placeholder | M10 |
 | `concentration_window` | Your concentration buffs | 0x75 | — | M10 |
 | `quiver_window` | Arrows in the quiver | 0x02 | — | M10 |
 | Effect icons (built-in?) | Active buffs and debuffs with timers | 0x7F UpdateIcons | — | M10 |
@@ -152,8 +152,8 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 ## What this means for the order of work
 
 - **The data layer is the bigger gap, not the windows.** We decode 0xAD (vitals), 0xAF (chat), 0xF3
-  (timer), 0xAE/0x89 (death), 0x91 (XP and points), 0xFA (money), 0x16 (who the character is, its skill, spell and crafting lists, weapon stats), 0xFB (stats and resists) and the
-  world's entity packets. Nearly every other window waits on a packet we don't parse yet: 0x02 (inventory), 0x7F (effect icons), 0x17 (merchant), 0xD8 (delve). Each is a small, testable piece in
+  (timer), 0xAE/0x89 (death), 0x91 (XP and points), 0xFA (money), 0x16 (who the character is, its skill, spell and crafting lists, weapon stats), 0xFB (stats and resists), 0x02 and 0xBD (inventory, encumbrance) and the
+  world's entity packets. Nearly every other window waits on a packet we don't parse yet: 0x7F (effect icons), 0x17 (merchant), 0xD8 (delve). Each is a small, testable piece in
   `DaocProtocol`, verifiable against OpenDAoC's writer and a live session, and worth doing before its window.
 - **M9's own windows:** the summary (vitals + target), the floating target window, the compass, the menu
   bar, the command and interface-elements windows, chat tabs and filters, and the quickbars (once the

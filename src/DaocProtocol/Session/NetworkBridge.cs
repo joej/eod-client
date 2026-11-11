@@ -114,6 +114,15 @@ public sealed class NetworkBridge(Action<string>? log = null)
     /// <summary>The character's stats or resists (0xFB; <see cref="StatsUpdate.IsResists"/> says which).</summary>
     public event Action<StatsUpdate>? StatsChanged;
 
+    /// <summary>What the character carries (0x02 for its own slots; <see cref="Inventory"/> holds the result).</summary>
+    public event Action<Inventory>? InventoryChanged;
+
+    /// <summary>The character's own items, slot by slot.</summary>
+    public Inventory Inventory { get; } = new();
+
+    /// <summary>How much the character carries and can carry (0xBD).</summary>
+    public event Action<Encumbrance>? EncumbranceChanged;
+
     /// <summary>The server answered a keep-alive (0x29), echoing our timestamp (Environment.TickCount when sent): for the
     /// overlay's count and the lag meter's round trip (PingRequest.RoundTrip).</summary>
     public event Action<uint>? PingReplied;
@@ -246,6 +255,13 @@ public sealed class NetworkBridge(Action<string>? log = null)
                     break;
                 case StatsUpdate.Code:
                     StatsChanged?.Invoke(StatsUpdate.Parse(packet.Payload));
+                    break;
+                case InventoryUpdate.Code:
+                    if (Inventory.Apply(InventoryUpdate.Parse(packet.Payload)))
+                        InventoryChanged?.Invoke(Inventory);
+                    break;
+                case Encumbrance.Code:
+                    EncumbranceChanged?.Invoke(Encumbrance.Parse(packet.Payload));
                     break;
                 case PingRequest.ReplyCode:
                     PingReplied?.Invoke(PingRequest.ParseReply(packet.Payload));
