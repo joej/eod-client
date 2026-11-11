@@ -220,6 +220,7 @@ public partial class WorldView
         _dialogYes = _dialogWindow.Button("YES", new Vector2(90, 102), 60, () => AnswerDialog(true));
         _dialogNo = _dialogWindow.Button("NO", new Vector2(170, 102), 60, () => AnswerDialog(false));
         _dialogOk = _dialogWindow.Button("OK", new Vector2(130, 102), 60, () => AnswerDialog(true));
+        _dialogOk.Visible = false;   // one set at a time: YES / NO, or OK
         overlay.AddChild(_dialogWindow);
         if (_dialog is Dialog open)
             ShowDialog(open);

@@ -77,6 +77,8 @@ public partial class WorldView
             _miniInfo.Button("", new Vector2(7, 166), 130, () => UseSelected(1)),
             _miniInfo.Button("", new Vector2(7, 185), 130, () => UseSelected(2)),
         ];
+        foreach (Button b in _miniUses)
+            b.Visible = false;   // shown per use spell (FillMiniInfo)
         overlay.AddChild(_miniInfo);
 
         _infoWindow = new HudWindow("info", new Vector2(300, 448), s, screen => new Vector2(screen.X / 2 - 150, 80)) { Visible = false };

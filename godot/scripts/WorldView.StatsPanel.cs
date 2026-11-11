@@ -117,10 +117,11 @@ public partial class WorldView
     {
         var l = new Label
         {
-            Text = text, Position = at * s, Size = size * s, ClipText = true, HorizontalAlignment = align,
+            Text = text, Position = at * s, ClipText = true, HorizontalAlignment = align,
             VerticalAlignment = VerticalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         l.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(font * s));
+        FixSize(l, size * s);
         if (colour is Color c)
             l.AddThemeColorOverride("font_color", c);
         page.AddChild(l);
@@ -139,11 +140,12 @@ public partial class WorldView
         page.AddChild(box);
         var l = new Label
         {
-            Position = new Vector2(1, 0) * s, Size = new Vector2(width - 4, 16) * s, ClipText = true,
+            Position = new Vector2(1, 0) * s, ClipText = true,
             HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         l.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(9 * s));
+        FixSize(l, new Vector2(width - 4, 16) * s);
         box.AddChild(l);
         return l;
     }
@@ -245,8 +247,7 @@ public partial class WorldView
                 BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
                 CornerRadiusTopLeft = 2, CornerRadiusTopRight = 2, CornerRadiusBottomLeft = 2, CornerRadiusBottomRight = 2,
             });
-        b.Size = size * s;
-        b.Ready += () => b.Size = size * s;
+        FixSize(b, size * s);
     }
 
     private static T Styled<T>(T list, Control page, float s, Vector2 at, Vector2 size) where T : ItemList

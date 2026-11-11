@@ -231,10 +231,11 @@ public partial class WorldView
             {
                 _name = new Label
                 {
-                    Position = new Vector2(side + 3 * s, 0), Size = new Vector2(size.X - side - 4 * s, size.Y), ClipText = true,
+                    Position = new Vector2(side + 3 * s, 0), ClipText = true,
                     VerticalAlignment = VerticalAlignment.Center, MouseFilter = MouseFilterEnum.Ignore,
                 };
                 _name.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(9 * s));
+                FixSize(_name, new Vector2(size.X - side - 4 * s, size.Y));
                 AddChild(_name);
             }
         }

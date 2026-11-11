@@ -38,6 +38,7 @@ public partial class WorldView
     private void ApplyDevArgs()
     {
         string[] args = OS.GetCmdlineUserArgs();
+        ScheduleUiDump();
         // --jumps: show the jump points' doorways (the dev overlay's "Jump points" switch).
         if (System.Array.IndexOf(args, "--jumps") >= 0 && !_jumpsVisible)
             _flipJumpsToggle?.Invoke();   // ticks the box, which shows them

@@ -437,10 +437,11 @@ public partial class WorldView
         {
             var l = new Label
             {
-                Position = at * scale, Size = size * scale, HorizontalAlignment = align, VerticalAlignment = VerticalAlignment.Center,
+                Position = at * scale, HorizontalAlignment = align, VerticalAlignment = VerticalAlignment.Center,
                 MouseFilter = MouseFilterEnum.Ignore, ClipText = true,
             };
             l.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(font * scale));
+            FixSize(l, size * scale);
             AddChild(l);
             return l;
         }

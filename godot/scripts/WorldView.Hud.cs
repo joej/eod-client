@@ -23,6 +23,18 @@ public partial class WorldView
     private HudWindow _summary = null!, _targetWindow = null!;
     private Button? _inviteButton, _assistButton;
 
+    /// <summary>
+    /// Gives a game-window control its size in pixels, now and again when it enters the scene. Set before its font override
+    /// (or outside the scene), Godot holds a control to the default theme's larger minimum and never shrinks it: buttons
+    /// overlapped and labels sat 20 skin pixels high where 11 were asked (tools/uicheck.py, 2026-11-11).
+    /// </summary>
+    internal static T FixSize<T>(T c, Vector2 size) where T : Control
+    {
+        c.Size = size;
+        c.Ready += () => c.Size = size;
+        return c;
+    }
+
     private static void Dim(Button? b, bool off)
     {
         if (b is not null && b.Disabled != off)
@@ -39,6 +51,12 @@ public partial class WorldView
         get
         {
             float s = ClientSettings.UiScale;
+            // --ui-scale X (the UI check runs each window at several sizes) overrides the setting.
+            string[] args = OS.GetCmdlineUserArgs();
+            int at = System.Array.IndexOf(args, "--ui-scale");
+            if (at >= 0 && at + 1 < args.Length && float.TryParse(args[at + 1], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out float forced))
+                s = forced;
             if (s <= 0)
             {
                 // Not set: retail's default, 1.0 (ui_scale 1000; no reference resolution, so windows keep their pixel size
@@ -186,6 +204,9 @@ public partial class WorldView
         public System.Action<int>? Wheel;                            // the mouse wheel over it: -1 up, +1 down
         private Vector2? _dragFrom;
 
+        public string Key => _key;
+        public float SkinScale => _scale;
+
         public HudWindow(string key, Vector2 skinSize, float scale, System.Func<Vector2, Vector2> defaultAt)
         {
             (_key, _scale, _defaultAt) = (key, scale, defaultAt);
@@ -219,11 +240,12 @@ public partial class WorldView
         {
             var l = new Label
             {
-                Position = at * _scale, Size = size * _scale, ClipText = true,
+                Position = at * _scale, ClipText = true,
                 HorizontalAlignment = centred ? HorizontalAlignment.Center : HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center, MouseFilter = MouseFilterEnum.Ignore,
             };
             l.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(fontSize * _scale));
+            FixSize(l, size * _scale);
             AddChild(l);
             return l;
         }
@@ -255,9 +277,7 @@ public partial class WorldView
                 });
             // Sized once it is in the scene: before that Godot measures its minimum with the default theme's font (31 pixels
             // high at scale 1.15), holds the size to it and never shrinks it, so stacked buttons overlapped (owner, 2026-11-11).
-            Vector2 size = new Vector2(width, height) * _scale;
-            b.Size = size;
-            b.Ready += () => b.Size = size;
+            FixSize(b, new Vector2(width, height) * _scale);
             b.Pressed += pressed;
             AddChild(b);
             return b;
@@ -268,12 +288,13 @@ public partial class WorldView
         {
             var l = new Label
             {
-                Text = glyph, Position = at * _scale, Size = size * _scale, MouseFilter = MouseFilterEnum.Stop,
+                Text = glyph, Position = at * _scale, MouseFilter = MouseFilterEnum.Stop,
                 HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
                 MouseDefaultCursorShape = CursorShape.PointingHand,
             };
             l.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(7 * _scale));
             l.AddThemeColorOverride("font_color", new Color(0.6f, 0.85f, 1f));
+            FixSize(l, size * _scale);
             l.GuiInput += e =>
             {
                 if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })

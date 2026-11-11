@@ -82,7 +82,7 @@ public partial class WorldView
         overlay.AddChild(_menuBar);
 
         // The main menu: hidden until MENU; at the top, centred, as retail's default.ini (481, 0 at 1024 x 768).
-        _mainMenu = new HudWindow("main_menu", new Vector2(224, 250), s, screen => new Vector2(screen.X / 2 - 112, 0)) { Visible = false };
+        _mainMenu = new HudWindow("main_menu", new Vector2(225, 250), s, screen => new Vector2(screen.X / 2 - 112.5f, 0)) { Visible = false };
         Label title = _mainMenu.Label(new Vector2(0, 18), new Vector2(224, 18), 11, centred: true);
         title.Text = "MAIN MENU";
         _mainMenu.Arrow("✕", new Vector2(204, 2), new Vector2(18, 14), () => _mainMenu.Visible = false);
