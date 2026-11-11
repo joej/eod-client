@@ -125,7 +125,7 @@ public partial class SettingsDialog : AcceptDialog
         classic.Toggled += on => ClientSettings.ClassicTerrain = on;
         grid.AddChild(classic);
 
-        // Retail's ui_scale (1.0–4.0): every game window and its text together. Auto follows the screen (1.5 at 1080p).
+        // Retail's ui_scale (1.0–4.0): every game window and its text together. Auto is retail's default, 1.0 (times a Retina display's density).
         grid.AddChild(new Label { Text = "Interface size" });
         var uiRow = new HBoxContainer();
         var ui = new HSlider
@@ -134,7 +134,7 @@ public partial class SettingsDialog : AcceptDialog
             SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
         };
         var uiValue = new Label { Text = $"{WorldView.UiScale:0.00}", CustomMinimumSize = new Vector2(40, 0) };
-        var auto = new Button { Text = "Auto", FocusMode = Control.FocusModeEnum.None, TooltipText = "Follow the screen's size (1.5 at 1080p)" };
+        var auto = new Button { Text = "Auto", FocusMode = Control.FocusModeEnum.None, TooltipText = "Retail's default size (1.0)" };
         // Applied when the handle is let go, or at once for a click or key (rebuilding the windows on every step of a drag
         // would stutter).
         bool dragging = false;

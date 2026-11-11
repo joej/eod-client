@@ -41,13 +41,13 @@ public partial class WorldView
             float s = ClientSettings.UiScale;
             if (s <= 0)
             {
-                // Not set: as if the skin were laid out for a 720-pixel-high screen (1.5 at 1080p, 2 at 1440p,
-                // 3 at 2160p), times the screen's density (2 on a Retina display, whose sizes are in points).
+                // Not set: retail's default, 1.0 (ui_scale 1000; no reference resolution, so windows keep their pixel size
+                // and look smaller on a bigger screen; daoc-re RE/63), times the screen's density (2 on a Retina display,
+                // whose sizes are in points). We used to scale as if for a 720-line screen (1.5 at 1080p), which made every
+                // window and its text half again retail's size (the owner's side-by-side, 2026-11-11).
                 if (DisplayServer.GetName() == "headless")
                     return 1;
-                int screen = DisplayServer.WindowGetCurrentScreen();
-                float density = DisplayServer.ScreenGetScale(screen);
-                s = Mathf.Max(1, DisplayServer.ScreenGetSize(screen).Y / density / 720f) * density;
+                s = DisplayServer.ScreenGetScale(DisplayServer.WindowGetCurrentScreen());
             }
             return Mathf.Clamp(s, 0.5f, 4f);
         }

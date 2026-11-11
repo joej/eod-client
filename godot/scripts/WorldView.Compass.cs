@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // WorldView: the compass (retail's `compass` window; daoc-re RE/74, 2026-11-10). The art is the stock skin's compass.bmp,
-// a 512 x 32 strip covering 360° with N centred at x 32 and a label every 64 px (45°); black is the colour key. The window
-// shows 128 x 32 of it, about 90°, centred on the character's bearing. Placed as retail's default.ini puts it at
+// a 512 x 32 strip covering 360° with N centred at x 32 and a label every 64 px (45°). compass.xml has two controls, 64 x 16
+// and 128 x 32; retail shows the small one (the owner's retail screen, 2026-11-11: 64 x 16 at UI scale 1, yellow letters on
+// black), so ours draws 128 x 32 of the strip, about 90°, into 64 x 16, centred on the character's bearing. The black stays:
+// retail draws it as a backing, not a colour key. Placed as retail's default.ini puts it at
 // 1024 x 768 (476, 621): centred, just above quickbar 1. Settings → Game → Compass hides it (retail starts it hidden).
 // The centring on the bearing is inferred from the art (the draw code wasn't traced).
 
@@ -12,7 +14,8 @@ namespace EodClient;
 
 public partial class WorldView
 {
-    private const int CompassStrip = 512, CompassView = 128, CompassHigh = 32;
+    private const int CompassStrip = 512, CompassView = 128, CompassHigh = 32;   // the art's strip and the slice shown
+    private const int CompassWide = 64, CompassTall = 16;                        // the window (compass.xml's small control)
     private HudWindow? _compassWindow;
     private CompassBar? _compass;
     private bool _compassSubscribed;
@@ -29,19 +32,14 @@ public partial class WorldView
         if (img.LoadBmpFromBuffer(Godot.FileAccess.GetFileAsBytes(path)) != Error.Ok)
             return;
         img.Convert(Image.Format.Rgba8);
-        // Black is the colour key: transparent.
-        for (int y = 0; y < img.GetHeight(); y++)
-            for (int x = 0; x < img.GetWidth(); x++)
-                if (img.GetPixel(x, y) is { R: < 0.02f, G: < 0.02f, B: < 0.02f })
-                    img.SetPixel(x, y, Colors.Transparent);
         float s = UiScale;
-        _compassWindow = new HudWindow("compass", new Vector2(CompassView, CompassHigh), s,
-            screen => new Vector2(screen.X / 2 - CompassView / 2f, screen.Y - 124 - CompassHigh - 2))
+        _compassWindow = new HudWindow("compass", new Vector2(CompassWide, CompassTall), s,
+            screen => new Vector2(screen.X / 2 - CompassWide / 2f, screen.Y - 124 - CompassTall - 2))
         {
             DragAnywhere = true,
             SelfModulate = Colors.Transparent,   // no frame: the strip alone, as retail's
         };
-        _compass = new CompassBar(ImageTexture.CreateFromImage(img)) { Size = new Vector2(CompassView, CompassHigh) * s, MouseFilter = Control.MouseFilterEnum.Ignore };
+        _compass = new CompassBar(ImageTexture.CreateFromImage(img)) { Size = new Vector2(CompassWide, CompassTall) * s, MouseFilter = Control.MouseFilterEnum.Ignore };
         _compassWindow.AddChild(_compass);
         _compassWindow.Visible = ClientSettings.ShowCompass;
         if (!_compassSubscribed)
@@ -98,7 +96,7 @@ public partial class WorldView
                 DrawTextureRectRegion(strip, new Rect2(first * scale, 0, (CompassView - first) * scale, Size.Y),
                     new Rect2(0, 0, CompassView - first, CompassHigh));
             // A centre tick: where you face.
-            DrawLine(new Vector2(Size.X / 2, 0), new Vector2(Size.X / 2, 4 * scale), new Color(1, 0.85f, 0.4f), 2);
+            DrawLine(new Vector2(Size.X / 2, 0), new Vector2(Size.X / 2, 4 * scale), new Color(1, 0.85f, 0.4f), Mathf.Max(1, 2 * scale));
         }
     }
 }
