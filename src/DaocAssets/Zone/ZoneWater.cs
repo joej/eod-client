@@ -7,7 +7,7 @@
 // waterline, so a flat surface spanning them at the river's height meets the terrain at the shore.
 // Verified on Camelot Hills (2026-11-01): river00 has 33 bank pairs, height 1916, banks at terrain
 // height ~2150 either side of a ~1610 riverbed, and the bridge at cell (143, 199) between pair 9's
-// banks. Not handled yet: extend_posx/posy/negx/negy (likely "continue to the zone edge"),
+// banks. Only the first `bankpoints` pairs count (at most 64), as the client reads them. Not handled yet: extend_posx/posy/negx/negy (likely "continue to the zone edge"),
 // tesselation, and the colour fields' exact encoding (kept raw).
 
 using System.Globalization;
@@ -98,7 +98,12 @@ public static class ZoneWater
             if (!name.StartsWith("river", StringComparison.OrdinalIgnoreCase)
                 || !int.TryParse(name.AsSpan(5), NumberStyles.None, CultureInfo.InvariantCulture, out int index))
                 continue;
-            List<Vector2> left = Points(keys, "left", cell), right = Points(keys, "right", cell);
+            // The client takes `bankpoints` pairs (at most 64), never more: 75 of the install's 578 bodies carry leftover pairs
+            // past their count (up to 128), and drawing those swept stray water across land (Avalon Marsh's stilt town under
+            // Marsh4, 8 pairs declared and 14 present; the owner's retail comparison, 2026-11-11). Every body declares it.
+            int declared = int.TryParse(keys.GetValueOrDefault("bankpoints"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int bp)
+                ? Math.Min(bp, MaxBankPoints) : MaxBankPoints;
+            List<Vector2> left = Points(keys, "left", cell, declared), right = Points(keys, "right", cell, declared);
             if (Math.Min(left.Count, right.Count) < 2)
                 continue;
             bodies.Add(new WaterBody
@@ -207,13 +212,17 @@ public static class ZoneWater
         tris.Add(z > 0 ? (a, b, c) : (a, c, b));
     }
 
-    private static List<Vector2> Points(Dictionary<string, string> keys, string prefix, float cell)
+    /// <summary>The client's cap on a body's bank pairs.</summary>
+    public const int MaxBankPoints = 64;
+
+    // leftNN / rightNN for NN below the declared count.
+    private static List<Vector2> Points(Dictionary<string, string> keys, string prefix, float cell, int count)
     {
         var points = new SortedDictionary<int, Vector2>();
         foreach ((string key, string value) in keys)
         {
             if (!key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                || !int.TryParse(key.AsSpan(prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out int i))
+                || !int.TryParse(key.AsSpan(prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out int i) || i >= count)
                 continue;
             string[] p = value.Split(',');
             if (p.Length >= 2 && float.TryParse(p[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)

@@ -59,6 +59,18 @@ public class ZoneWaterTests
     }
 
     [Fact]
+    public void OnlyTheDeclaredBankPairsCount()
+    {
+        // Avalon Marsh's Marsh4 declares 8 pairs and carries 14: the leftover ones sat across the zone and flooded the stilt
+        // town. The client reads bankpoints pairs (at most 64); a body declaring 0 has none.
+        string extra = Sector.Replace("bankpoints=3", "bankpoints=2");
+        WaterBody r = ZoneWater.Parse(extra)[0];
+        Assert.Equal((2, 2), (r.Left.Count, r.Right.Count));
+        Assert.DoesNotContain(ZoneWater.Parse(Sector.Replace("bankpoints=3", "bankpoints=0")), b => b.Index == 0);
+        Assert.Equal(3, ZoneWater.Parse(Sector)[0].Left.Count);   // exactly the declared count: all used
+    }
+
+    [Fact]
     public void ALakeThatNamesNoTextureGetsTheClassicWaterTexture()
     {
         // Cothrom Gorge's lakes (and most Shrouded Isles and Atlantis water) write "texture=" empty:
