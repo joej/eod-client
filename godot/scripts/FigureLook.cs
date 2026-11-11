@@ -387,6 +387,9 @@ public static class FigureLook
     {
         m.AlbedoColor = tint;
         m.EmissionEnabled = true;
+        // Multiply: Godot's Add operator emits (colour + texture) × energy, which with white added a flat 0.12 grey to every
+        // figure and washed the armour out (owner, 2026-11-11: "overly gray, less color").
+        m.EmissionOperator = BaseMaterial3D.EmissionOperatorEnum.Multiply;
         m.Emission = Colors.White;
         m.EmissionTexture = m.AlbedoTexture;
         m.EmissionEnergyMultiplier = 0.12f;
