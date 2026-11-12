@@ -3,8 +3,9 @@
 // A zone's fixed coloured lights: torches, fires, lamps (daoc-re RE/69). Each zone's lights.csv (csv archive first,
 // ZoneArchive) lists "x, y, z, type" in zone units; type -1 is skipped. The type is a row of the install's
 // zones/textures/LIGHTDEF.CSV: two header lines, then "id, name, r, g, b, c5, range, c7" ("9,fire-light,255,100,0,
-// 10,256,1"); the range is 256, 512 (BIG…) or 1024 (GIANT…) units, 256 when empty or 0. c5 (always 10) and c7 (1)
-// aren't known yet. The client makes one light per row as the area loads; they are not day/night lighting.
+// 10,256,1"); the range is 256, 512 (BIG…) or 1024 (GIANT…) units, 256 when empty or 0. c7 set = attenuation 1/(d/r)^2,
+// else 1/(d/r) (RE/82); every row of the install's file has it set, so only the quadratic one is carried. c5 (always
+// 10) isn't known. The client makes one light per row as the area loads; they are night lamps, lit 17:00-7:00.
 
 using System.Globalization;
 

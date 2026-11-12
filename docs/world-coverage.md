@@ -59,7 +59,7 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 | Sky | not SECTOR.DAT: `zones/sky/sky_<name>.dat`, chosen by `zones/zones.mpk` → `zones.dat` `skydome` (zone, else region, else `sky_default`); SECTOR.DAT `[sky]` colour and `[terrain]` horizon/clouds are not read by the client | 329 | M7d: **read** (`SkyDefinition`, `mpk sky`) |
 | Forest fog regions | `[forest]`: colour, fog, rectangles and circles | 269 | M7d |
 | Far ground | `[farground]` texture | 134 | M7d |
-| Static lights | `lights.csv` (x, y, z, type: a row of `zones/textures/LIGHTDEF.CSV`, colour and a range of 256/512/1024 units; −1 none): torches, fires and lamps, not day/night lighting (daoc-re RE/69) | 304 | **read** (2026-11-09, `ZoneLights`: an omni light each, no shadows; 1,667 in the converted zones) |
+| Static lights | `lights.csv` (x, y, z, type: a row of `zones/textures/LIGHTDEF.CSV`, colour and a range of 256/512/1024 units; −1 none): torches, fires and lamps, not day/night lighting (daoc-re RE/69) | 304 | **read** (2026-11-09, `ZoneLights`: an omni light each, no shadows; 1,667 in the converted zones). Night lamps since 2026-11-12: lit from 17:00 to 7:00 game time, fading over 3 s, falloff min(1, (range/d)²) with no cut-off (LIGHTDEF's last column; set on every row), no specular |
 | Baked terrain shading | `shadow.pcx` (ground shading, darkened under tree clusters), `shademap.pcx` (grass tint only) | 98, 86 | shadow.pcx **read** (2026-11-10, `ZoneShadow`: multiplies the Atlantis ground; W8); shademap.pcx with the grass (M7d) |
 | Terrain holes | `[holes]` (probably cave entrances cut in the heightmap) | 98 | M7d |
 | Grass and ground cover | `grassmap.pcx`, `densemap.pcx` | 84 | M13 |

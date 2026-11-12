@@ -999,6 +999,7 @@ public partial class WorldView : Node3D
         UpdateClock();
         UpdateStatsPanel();
         UpdateSkyTime();
+        UpdateLamps(delta);
         _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)
         {

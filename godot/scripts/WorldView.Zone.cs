@@ -57,8 +57,15 @@ public partial class WorldView
         foreach (bool step in LightSteps(parts)) yield return step;
     }
 
-    // The zone's fixed coloured lights (lights.csv, from the zone's lights.csv and LIGHTDEF.CSV: torches, fires, lamps):
-    // an omni light each, its range the definition's (256/512/1024 units), no shadows (DaocAssets.Zone.ZoneLights).
+    // The zone's night lamps (lights.csv, from the zone's lights.csv and LIGHTDEF.CSV: torches, fires, lamps). Retail lights
+    // each as a fixed-function point light of its colour, no specular, attenuated 1/(d/r)^2 (LIGHTDEF's last column; every
+    // row of it has that set) with no range cut-off, capped at 1 like all its vertex lighting: min(1, (r/d)^2) (daoc-re
+    // RE/82). Godot's omni falloff can't make that curve alone, so each lamp is two lights with no distance decay whose range
+    // windows add up to it: within 0.04 of retail out to 4 radii, 0 beyond 4.5 (ours, a least-squares fit). They are off
+    // by day: WorldView.Lamps fades them by the game clock.
+    private const float LampInnerRange = 1.8f, LampInnerEnergy = 0.79f, LampOuterRange = 4.5f, LampOuterEnergy = 0.236f;
+    private const string LampGroup = "lamps";
+
     private static System.Collections.Generic.IEnumerable<bool> LightSteps(ZoneParts parts)
     {
         string csv = parts.Dir.Length == 0 ? "" : parts.Dir.PathJoin("lights.csv");
@@ -69,16 +76,25 @@ public partial class WorldView
             yield break;
         var root = new Node3D { Name = "Lights" };
         foreach (DaocAssets.Zone.ZoneLight l in lights)
-            root.AddChild(new OmniLight3D
+            foreach ((float range, float energy) in new[] { (LampInnerRange, LampInnerEnergy), (LampOuterRange, LampOuterEnergy) })
             {
-                Position = ToGodot(l.X, l.Y, l.Z),
-                LightColor = new Color(l.R / 255f, l.G / 255f, l.B / 255f),
-                OmniRange = l.Range * RegionMetresPerUnit,
-                LightEnergy = 1.5f,
-                ShadowEnabled = false,
-            });
+                var lamp = new OmniLight3D
+                {
+                    Position = ToGodot(l.X, l.Y, l.Z),
+                    LightColor = new Color(l.R / 255f, l.G / 255f, l.B / 255f),
+                    OmniRange = l.Range * range * RegionMetresPerUnit,
+                    OmniAttenuation = 0f,
+                    LightEnergy = 0f,
+                    LightSpecular = 0f,
+                    ShadowEnabled = false,
+                    Visible = false,   // until WorldView.Lamps says it is night
+                };
+                lamp.SetMeta("energy", energy);
+                lamp.AddToGroup(LampGroup);
+                root.AddChild(lamp);
+            }
         parts.Root.AddChild(root);
-        GD.Print($"[world] zone {parts.Id}: {lights.Count} light(s)");
+        GD.Print($"[world] zone {parts.Id}: {lights.Count} lamp(s)");
         yield return true;
     }
 
