@@ -353,8 +353,9 @@ public partial class WorldView
         _body.Rotation = new Vector3(0, _bodyYaw, 0);
     }
 
-    // Pivot height on the body (shoulder/eye), metres — OfflineDAoC uses 1.55.
-    private static readonly Vector3 PivotHeight = new(0, 1.55f, 0);
+    // The point the chase camera orbits: 68 units above the feet, as retail's (camera note "Pivot"; retail also scales
+    // it by the model's size, ours doesn't yet). The camera home's height raises it (UpdateChaseCamera).
+    private static readonly Vector3 PivotHeight = new(0, 68 * RegionMetresPerUnit, 0);
 
     // Chase camera: orient the pivot (pitch, yaw) and lerp the spring length toward the zoom target.
     // The SpringArm3D itself does the position + collision pull-in; the camera, as its child, always
@@ -368,6 +369,7 @@ public partial class WorldView
         // behind in chase mode and right-drag turns the body, not the camera. (Adding _bodyYaw here
         // double-counted the body's rotation and skewed the camera off to the side.)
         _camPivot.Rotation = new Vector3(_camPitch, _camOrbit, 0);
+        _camPivot.Position = PivotHeight + new Vector3(0, _camHeight, 0);
         // Lerp the arm's TARGET length toward the zoom distance; the SpringArm shortens from this
         // target on its own when it hits placed geometry. Floor the target at CamMin so even a wall
         // the arm catches can't collapse the camera into the pivot (the "inside the capsule" bug).

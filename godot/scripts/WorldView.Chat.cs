@@ -88,14 +88,6 @@ public partial class WorldView
         if (line.Length == 0 || _closedReason is not null)
             return;
 
-        // /setcamera saves the chase camera's distance and tilt as the default for every later session (retail's
-        // command, handled by the client: the server never sees it).
-        if (line.Split(' ', 2)[0].Equals("/setcamera", System.StringComparison.OrdinalIgnoreCase))
-        {
-            ClientSettings.Camera = (_camDistance, _camPitch);
-            AppendChat($"Camera saved: {_camDistance:0.0} m, tilt {Mathf.RadToDeg(_camPitch):0}°.", new Color(0.6f, 0.8f, 1f));
-            return;
-        }
         // Commands retail's client answers itself (the server has none by these names: sent, /loc reached OpenDAoC's
         // /loco emote, "You think this is crazy").
         if (LocalCommand(line))

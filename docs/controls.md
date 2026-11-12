@@ -44,7 +44,8 @@ negative speed with no flag. Walking's speed is still to be captured.
 | Face target | F |
 | Pan camera | left-drag |
 | Align camera / mouse-look | right-drag |
-| Save the current camera as default | `/setcamera` |
+| Save the current camera as this character's home | `/setcamera` |
+| Reset camera to home | Home (classic layout: D); `/resetcamera` sets home to 240 units, height 10, level |
 | Spells, champion and master-level skills | K |
 | Melee combat styles | L |
 | Realm abilities, crafting, other skills | P |
@@ -106,6 +107,8 @@ them), saved per character.
 Presets RPG (default), MMO, FPS and classic (the 2001 layout), chosen in Settings → Keyboard (login screen or F10 in game), with your own keys kept over the layout as retail keeps user.dat's (click a key, press the new one; Backspace: no key; a key taken from another action leaves it).
 Backing up and strafing at 85 of 191 (scaled with the server's speed), backward sent negative; V sprint
 (`/sprint`); NumLock auto-run (forward or back stops it); left-drag pans the camera round the character, a click
-inspects, right-drag turns and re-aligns; mouse wheel zoom; `/setcamera` saves the camera's distance and tilt;
+inspects, right-drag turns and re-aligns; mouse wheel zoom; a camera home per character, as retail's: `/setcamera` saves the
+distance, height, angle and tilt, `/resetcamera` sets retail's 240 / 10 / 0 / 0, Home (classic: D) returns to it, and
+entering the world starts there (a character without one starts at 500 units, height 10, level);
 H attack mode (retail: F6 or A by layout, W34); Tab free-fly camera (ours); Enter or `/` to chat. No walk
 toggle, auto-run, consider or targeting keys yet.

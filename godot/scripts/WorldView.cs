@@ -99,8 +99,9 @@ public partial class WorldView : Node3D
     private SpringArm3D _camArm = null!;
     private float _camYaw;               // chase: orbit yaw (free-fly: camera yaw)
     private float _camPitch;
-    private float _camDistance = ClientSettings.Camera?.Distance ?? 5.5f;   // spring length target, metres (OfflineDAoC default; /setcamera)
-    private float _camOrbit;              // a left-drag pan round the character (radians); right-click resets it
+    private float _camDistance = 5.5f;    // spring length target, metres; set from the camera home on entering (WorldView.Camera)
+    private float _camOrbit;              // a left-drag pan round the character (radians); the Reset Camera key resets it
+    private float _camHeight;             // the camera home's height: the pivot raised (metres, +-50 units)
     private bool _panActive, _panMoved;   // a left press on the world, and whether it has become a drag
     private double _leftDownAt, _rightDownAt;   // when each button went down: a release within 250 ms is a click (retail)
     private double _lastInteractAt = -10;       // right-click interact at most once a second (retail)
@@ -399,6 +400,7 @@ public partial class WorldView : Node3D
         // camera in off terrain/walls/scenery (mask below) so it never clips into the ground — the
         // thing the old fixed-offset camera got wrong. Tab detaches it to a free-fly debug camera
         // (handy: the spawn is often inside a large structure — Eodarms starts at Prydwen Keep).
+        ApplyCameraHome(CameraHomeNow);
         _camPivot = new Node3D { Position = PivotHeight };
         _body.AddChild(_camPivot);
         _camArm = new SpringArm3D
@@ -427,7 +429,6 @@ public partial class WorldView : Node3D
         // -Z the pivot yaw is the body yaw turned 180°. Matching them put the camera in front, looking
         // at the nose (so walking read as "backwards toward the camera").
         _camYaw = _bodyYaw + Mathf.Pi;          // start behind the body
-        _camPitch = ClientSettings.Camera?.Pitch ?? -0.22f;   // ~-12.6°, OfflineDAoC default; /setcamera
 
         // Dispatcher: route drained packets to entity handlers (M5). Subscribe before the first
         // drain in _Process so no world packet is missed.
@@ -829,6 +830,10 @@ public partial class WorldView : Node3D
         {
             ToggleMap();
         }
+        else if (KeyBindings.Pressed(@event, ControlAction.ResetCamera) && !ChatInputActive && _chase)
+        {
+            ApplyCameraHome(CameraHomeNow);
+        }
         else if (KeyBindings.Pressed(@event, ControlAction.Torch) && !ChatInputActive)
         {
             ToggleTorch();
@@ -936,8 +941,8 @@ public partial class WorldView : Node3D
             // put the chase view at a skewed, buried angle on the way back. Zero it and re-seat the
             // chase pitch behind the body so it snaps cleanly back to "over the shoulder".
             _camera.Transform = Transform3D.Identity;
-            _camPitch = -0.22f;
-            _camPivot.Rotation = new Vector3(_camPitch, 0f, 0f);
+            ApplyCameraHome(CameraHomeNow);   // back at the home settings, as retail's death camera returns
+            _camPivot.Rotation = new Vector3(_camPitch, _camOrbit, 0f);
         }
         else
         {

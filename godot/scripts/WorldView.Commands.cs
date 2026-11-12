@@ -6,7 +6,8 @@
 //   /quickbar <bar> <on|off> show or hide a quickbar (1|0 too, as retail; also show/hide, yes/no); /qbar the same
 //   /follow, /stick, /face   on the current target (the target window's buttons; retail's ranges and messages)
 //   /clock                   show or hide the clock
-//   /resetcamera             the camera's home: 240 units away, level (retail); /setcamera saves the current one
+//   /setcamera               saves the camera's distance, height, angle and tilt as this character's home (retail)
+//   /resetcamera             sets home to retail's 240 units away, height 10, behind, level, and applies it
 //   /snapback                retail's camera swing-back (off by default): not built
 
 using DaocProtocol.Packets;
@@ -48,10 +49,11 @@ public partial class WorldView
                 ClientSettings.ShowClock = !ClientSettings.ShowClock;
                 ClientSettings.NotifyChanged(false);   // the clock window follows the setting
                 return true;
+            case "/setcamera":
+                SetCameraHome();
+                return true;
             case "/resetcamera":
-                (_camDistance, _camPitch, _camOrbit) = (240 * RegionMetresPerUnit, 0f, 0f);
-                ClientSettings.Camera = (_camDistance, _camPitch);
-                Reply("Camera reset.");
+                ResetCameraHome();
                 return true;
             case "/snapback":
                 Reply("The camera swing-back isn't built yet (retail's default is off).");

@@ -172,25 +172,45 @@ public static class ClientSettings
         set => SaveIn("controls", "preset", value);
     }
 
-    /// <summary>The chase camera's default distance (metres) and pitch (radians), as /setcamera saved them; null
-    /// until then.</summary>
-    public static (float Distance, float Pitch)? Camera
+    /// <summary>
+    /// A character's camera home (retail's panels file [Camera]): distance and height in game units, the orbit angle
+    /// and tilt in degrees (positive tilt = above, looking down). /setcamera saves it, /resetcamera sets it to retail's
+    /// 240 / 10 / 0 / 0, the Reset Camera key and entering the world apply it.
+    /// </summary>
+    public readonly record struct CameraHome(float Distance, float Height, float Angle, float Tilt)
     {
-        get
-        {
-            ConfigFile cfg = Load();
-            return cfg.HasSectionKey("controls", "camera_distance")
-                ? ((float)cfg.GetValue("controls", "camera_distance").AsDouble(), (float)cfg.GetValue("controls", "camera_pitch").AsDouble())
-                : null;
-        }
-        set
-        {
-            if (value is { } c)
-            {
-                SaveIn("controls", "camera_distance", c.Distance);
-                SaveIn("controls", "camera_pitch", c.Pitch);
-            }
-        }
+        /// <summary>Retail's limits for home: distance 0-500, height +-50, tilt +-80 degrees.</summary>
+        public CameraHome Clamped() => new(System.Math.Clamp(Distance, 0, 500), System.Math.Clamp(Height, -50, 50),
+            Angle, System.Math.Clamp(Tilt, -80, 80));
+    }
+
+    private static string CameraSection(string character) => character.Length > 0 ? $"camera {character}" : "camera";
+
+    /// <summary>The character's saved camera home, or null: never saved. Before homes were per character, /setcamera
+    /// saved one distance and pitch for everyone ([controls] camera_distance in metres, camera_pitch in radians, our
+    /// sign: negative = above); that is still read for a character with none of its own.</summary>
+    public static CameraHome? CameraHomeOf(string character)
+    {
+        ConfigFile cfg = Load();
+        string section = CameraSection(character);
+        if (cfg.HasSectionKey(section, "distance"))
+            return new CameraHome((float)cfg.GetValue(section, "distance").AsDouble(), (float)cfg.GetValue(section, "height", 0.0).AsDouble(),
+                (float)cfg.GetValue(section, "angle", 0.0).AsDouble(), (float)cfg.GetValue(section, "tilt", 0.0).AsDouble());
+        if (cfg.HasSectionKey("controls", "camera_distance"))
+            return new CameraHome((float)cfg.GetValue("controls", "camera_distance").AsDouble() / 0.025f, 10, 0,
+                -(float)(cfg.GetValue("controls", "camera_pitch", 0.0).AsDouble() * 180 / System.Math.PI));
+        return null;
+    }
+
+    public static void SaveCameraHome(string character, CameraHome home)
+    {
+        ConfigFile cfg = Load();
+        string section = CameraSection(character);
+        cfg.SetValue(section, "distance", home.Distance);
+        cfg.SetValue(section, "height", home.Height);
+        cfg.SetValue(section, "angle", home.Angle);
+        cfg.SetValue(section, "tilt", home.Tilt);
+        cfg.Save(Path);
     }
 
     /// <summary>

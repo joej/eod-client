@@ -12,7 +12,7 @@ namespace EodClient;
 
 public enum ControlAction
 {
-    Forward, Back, TurnLeft, TurnRight, StrafeLeft, StrafeRight, Jump, Sprint, AutoRun, AttackMode, Map, Torch,
+    Forward, Back, TurnLeft, TurnRight, StrafeLeft, StrafeRight, Jump, Sprint, AutoRun, AttackMode, Map, Torch, ResetCamera,
 }
 
 public static class KeyBindings
@@ -36,6 +36,8 @@ public static class KeyBindings
         [ControlAction.Map] = K(Key.M),
         // The torch: T in the 2001 manual (docs/controls.md); a light the player carries.
         [ControlAction.Torch] = K(Key.T),
+        // Reset Camera: Home, the 2001 manual's alternative key (its default, D, is the classic layout's below).
+        [ControlAction.ResetCamera] = K(Key.Home),
     };
 
     private static readonly Dictionary<string, Dictionary<ControlAction, (Key[] Keys, MouseButton[] Buttons)>> Tables = new()
@@ -51,6 +53,7 @@ public static class KeyBindings
     {
         Tables["classic"][ControlAction.Forward] = ([Key.Up], [MouseButton.Right]);
         Tables["classic"][ControlAction.Back] = ([Key.Down], [MouseButton.Left]);
+        Tables["classic"][ControlAction.ResetCamera] = ([Key.D, Key.Home], []);
     }
 
     private static string? _preset;
@@ -76,7 +79,8 @@ public static class KeyBindings
         ControlAction.TurnLeft => "Turn left", ControlAction.TurnRight => "Turn right",
         ControlAction.StrafeLeft => "Strafe left", ControlAction.StrafeRight => "Strafe right",
         ControlAction.Jump => "Jump", ControlAction.Sprint => "Sprint", ControlAction.AutoRun => "Auto-run",
-        ControlAction.AttackMode => "Attack mode", ControlAction.Map => "Map", ControlAction.Torch => "Torch", _ => a.ToString(),
+        ControlAction.AttackMode => "Attack mode", ControlAction.Map => "Map", ControlAction.Torch => "Torch",
+        ControlAction.ResetCamera => "Reset camera", _ => a.ToString(),
     };
 
     /// <summary>The keys that trigger <paramref name="action"/>: the player's own, else the preset's.</summary>
