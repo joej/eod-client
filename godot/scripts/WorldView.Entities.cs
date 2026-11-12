@@ -406,6 +406,7 @@ public partial class WorldView
         e.LastUpdate = _seconds;
         e.Health = p.HealthPercent;
         SetCombat(p.ObjectId, e, p.InCombat);
+        SetPosture(e, p.Posture);
     }
 
     // Another player turned, or its state changed standing still (0xBA).
@@ -419,6 +420,65 @@ public partial class WorldView
         TurnTo(e, YawFromHeading(h.HeadingOnly), blend: _seconds - e.LastUpdate <= 0.5);
         e.LastUpdate = _seconds;
         SetCombat(objectId, e, h.InCombat);
+        SetPosture(e, h.Posture);
+    }
+
+    // A player's posture changed (its 0xA9 / 0xBA state byte, daoc-re RE/77): dead lies down (also for one first seen
+    // dead, whose 0xAE we never got) and gets up again; sitting sits down, then holds the sit idle; landing from a jump
+    // standing still plays the land clip once. Riding has no mount to sit on yet: it stands (not built).
+    private void SetPosture(Entity e, PlayerPosture posture)
+    {
+        if (e.Posture == posture)
+            return;
+        PlayerPosture was = e.Posture;
+        e.Posture = posture;
+        if (_motionLog)
+            GetTree().CreateTimer(1.5).Timeout += () => GD.Print($"[motion] player \"{e.Name}\": {was} -> {posture}, " +
+                $"clip 1.5 s later {e.Player?.CurrentAnimation.ToString() ?? "-"} at {e.Player?.SpeedScale ?? 0:0.00}x");
+        if (posture == PlayerPosture.Dead)
+        {
+            if (!e.Dead)
+                DropEntity(e, true);
+            return;
+        }
+        if (was == PlayerPosture.Dead && e.Dead)
+            DropEntity(e, false);
+        e.Clip = "";   // the next frame picks the posture's clip
+        if (was is PlayerPosture.Jump or PlayerPosture.Fly && posture == PlayerPosture.Normal && e.MoveSpeed == 0 && e.Strafe == 0
+            && e.Player is { } player && player.HasAnimation("land"))
+        {
+            PlayHeld(e, "land");
+            e.HoldUntil = _seconds + player.GetAnimation("land").Length;
+        }
+    }
+
+    // A clip played once and held on its last frame (jump: the tucked pose in the air; land).
+    private static void PlayHeld(Entity e, string clip)
+    {
+        if (e.Player is null || e.Clip == clip || !e.Player.HasAnimation(clip))
+            return;
+        e.Player.GetAnimation(clip).LoopMode = Animation.LoopModeEnum.None;
+        e.Player.SpeedScale = 1f;
+        e.Player.Play(clip, customBlend: 0.1);
+        e.Clip = clip;
+    }
+
+    // Sits down (Sit Down once), then holds Sit Idle; a figure without the sit clips stands idle.
+    private static void SitDown(Entity e)
+    {
+        if (e.Player is null || e.Clip == "sit")
+            return;
+        if (!e.Player.HasAnimation("sit_down") || !e.Player.HasAnimation("sit_idle"))
+        {
+            PlayClip(e, "idle");
+            return;
+        }
+        e.Player.GetAnimation("sit_down").LoopMode = Animation.LoopModeEnum.None;
+        e.Player.GetAnimation("sit_idle").LoopMode = Animation.LoopModeEnum.Linear;
+        e.Player.SpeedScale = 1f;
+        e.Player.Play("sit_down", customBlend: 0.2);
+        e.Player.Queue("sit_idle");
+        e.Clip = "sit";
     }
 
     private void SetCombat(ushort objectId, Entity e, bool on)
@@ -787,7 +847,8 @@ public partial class WorldView
             {
                 var forward = new Vector3(-Mathf.Sin(yaw), 0, -Mathf.Cos(yaw));
                 var right = new Vector3(Mathf.Cos(yaw), 0, -Mathf.Sin(yaw));
-                p += (forward * speed + right * (e.Strafe * StrafeUnits * RegionMetresPerUnit)) * dt;
+                float sideways = e.Posture == PlayerPosture.Swim ? SwimStrafeUnits : StrafeUnits;
+                p += (forward * speed + right * (e.Strafe * sideways * RegionMetresPerUnit)) * dt;
                 if (!e.Grounded)
                     p.Y += e.ZSpeed * RegionMetresPerUnit * dt;
             }
@@ -824,33 +885,58 @@ public partial class WorldView
         }
     }
 
-    // Retail's sideways strafe speed, units per second (73 swimming).
-    private const float StrafeUnits = 110f;
+    // Retail's sideways strafe speed, units per second, on land and swimming.
+    private const float StrafeUnits = 110f, SwimStrafeUnits = 73f;
 
     private Vector3? FollowedPosition(ushort objectId) =>
         objectId == _world.Position.ObjectId ? _body.Position
         : _entities.TryGetValue(objectId, out Entity? f) ? f.Node.Position : null;
 
-    // The clip from the sent speed, played at the rate the figure's stride asks for (daoc-re RE/77, RE/83):
-    // rate = clamp(speed, lo, hi) / (size% x stride / 100). Run above OUR max speed (0xB6, normally 100 units/s), so the
-    // line rises with our speed buffs (RE/82, correcting RE/77); walk above 0; back below 0. Strafing plays walk at
-    // retail's strafe rate: our figures carry no strafe clips yet (anims.csv 11/12; ours).
+    // The clip from the posture and the sent speed (daoc-re RE/77, RE/83, RE/84). Sitting sits; jumping or flying holds
+    // the jump; climbing plays the ladder clip, frozen while it stands on the ladder (inferred); swimming plays the
+    // figure's swim clips (its Swim Alt set, else its crawl) at their own rate (RE/83: "speed / 50 or a fixed rate";
+    // ours: fixed). Otherwise run above OUR max speed (0xB6, normally 100 units/s; RE/82), walk above 0, back below 0,
+    // and standing while strafing the strafe clip, at rate = clamp(speed, lo, hi) / (size% x stride / 100). Those four
+    // freeze (rate 0) while a player is off the ground (its heading bit 0x1000 clear): falling mid-stride.
     private void AnimateMotion(Entity e)
     {
+        AnimationPlayer player = e.Player!;
+        if (_seconds < e.HoldUntil && !e.Moved)
+            return;   // landing
+        string Has(params string[] clips) => clips.FirstOrDefault(c => player.HasAnimation(c)) ?? clips[^1];
+        switch (e.Posture)
+        {
+            case PlayerPosture.Sit:
+                SitDown(e);
+                return;
+            case PlayerPosture.Jump or PlayerPosture.Fly:
+                PlayHeld(e, "jump");
+                return;
+            case PlayerPosture.Climb:
+                PlayClip(e, Has("ladder", "idle"), e.Moved || e.ZSpeed != 0 ? 1f : 0f);
+                return;
+            case PlayerPosture.Swim:
+                if (!e.Moved && e.Strafe == 0)
+                    PlayClip(e, Has("swim_idle", "crawl", "idle"));
+                else
+                    PlayClip(e, e.MoveSpeed < 0 ? Has("swim_back", "swim", "crawl", "walk") : Has("swim", "crawl", "walk"));
+                return;
+        }
         float units = e.MoveSpeed, runAbove = _speedPercent > 0 ? _speedPercent : 100;
+        float air = e.IsPlayer && !e.Grounded ? 0f : 1f;
         DaocAssets.Figures.Strides? s = e.Strides;
         float Rate(float speed, float lo, float hi, int stride, float fallback) =>
-            Mathf.Clamp(speed, lo, hi) / (e.SizeScale * (stride > 0 ? stride : fallback));
+            air * Mathf.Clamp(speed, lo, hi) / (e.SizeScale * (stride > 0 ? stride : fallback));
         if (!e.Moved && e.Strafe == 0)
-            PlayClip(e, Idle(e.Player, e.InCombat, e.CombatIdle));
+            PlayClip(e, Idle(player, e.InCombat, e.CombatIdle));
         else if (units > runAbove)
             PlayClip(e, "run", Rate(units, 50, 300, s?.Run ?? 0, 150));
         else if (units > 0)
             PlayClip(e, "walk", Rate(units, 50, 99999, s?.Walk ?? 0, 75));
         else if (units < 0)
-            PlayClip(e, e.Player!.HasAnimation("back") ? "back" : "walk", Rate(-units, 50, 99999, s?.Back ?? 0, 75));
+            PlayClip(e, Has("back", "walk"), Rate(-units, 50, 99999, s?.Back ?? 0, 75));
         else
-            PlayClip(e, "walk", Rate(80, 80, 80, s?.Strafe ?? 0, 75));
+            PlayClip(e, Has(e.Strafe < 0 ? "strafe_left" : "strafe_right", "walk"), Rate(80, 80, 80, s?.Strafe ?? 0, 75));
     }
 
     // models/strides.csv (mpk strides), read once: each model id's figure strides, classic and Catacombs.

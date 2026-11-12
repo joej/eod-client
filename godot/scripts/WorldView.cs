@@ -175,6 +175,8 @@ public partial class WorldView : Node3D
         public int Level;             // an NPC's level (0 for players: not sent)
         public Color NameColor = new(0.92f, 0.90f, 0.82f);   // con or realm colour, as its nameplate
         public bool Dead;            // died (0xAE) and not yet revived: lies in its Death clip
+        public PlayerPosture Posture; // a player's posture from its 0xA9 / 0xBA state byte (sit, swim, jump, climb, ...)
+        public double HoldUntil;      // a one-off clip (land) plays until then unless it moves
         public Label3D? Nameplate;    // its name (and role or guild) over its head
     }
 
@@ -602,8 +604,9 @@ public partial class WorldView : Node3D
         _landLeft = hold;
     }
 
-    // Sitting out the quit timer (the server sits the character down): sit down once, then hold the sit
-    // idle. Moving cancels the quit and the walk/run clip takes over. A figure converted before the sit
+    // Sitting (/sit, or the quit timer: the server sits the character down and says so in 0xAD): sit down once, then
+    // hold the sit idle; others see it from the 0x10 in our 0xA9. Moving stands up (and cancels a quit), and the
+    // walk/run clip takes over. A figure converted before the sit
     // clips existed keeps its idle.
     private void Sit()
     {

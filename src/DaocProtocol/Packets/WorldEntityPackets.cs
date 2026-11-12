@@ -304,6 +304,9 @@ public sealed record PlayerPosition(float X, float Y, float Z, float Speed, floa
     /// <summary>Action flag 0x40: the player was moved (teleported), so the client snaps it rather than keeping its own x/y.</summary>
     public bool Teleported => (ActionFlags & 0x40) != 0;
 
+    /// <summary>What the player is doing: bits 2-4 of the state byte (0x04 swim, 0x08 jump, 0x10 sit and their pairs).</summary>
+    public PlayerPosture Posture => (PlayerPosture)((StateFlags >> 2) & 7);
+
     public static PlayerPosition Parse(ReadOnlySpan<byte> payload)
     {
         var r = new PayloadReader(payload);
@@ -325,6 +328,7 @@ public sealed record PlayerPosition(float X, float Y, float Z, float Speed, floa
 /// player turned, or its state changed while standing. Keyed by session id, not object id (the player's
 /// 0x4B carries both). Also delivered over TCP without UDP.
 /// </summary>
+/// <param name="StateFlags">0xA9's state byte shifted right by 2 (no strafe bits): the posture is its low 3 bits.</param>
 /// <param name="Health">As in <see cref="PlayerPosition"/>: bit 0x80 attack mode.</param>
 public sealed record PlayerHeading(ushort SessionId, ushort Heading, byte ActionFlags, byte StateFlags, byte Health)
 {
@@ -332,6 +336,7 @@ public sealed record PlayerHeading(ushort SessionId, ushort Heading, byte Action
 
     public ushort HeadingOnly => (ushort)(Heading & 0x0FFF);
     public bool InCombat => (Health & 0x80) != 0;
+    public PlayerPosture Posture => (PlayerPosture)(StateFlags & 7);
 
     public static PlayerHeading Parse(ReadOnlySpan<byte> payload)
     {
@@ -383,3 +388,9 @@ public sealed record VisualEffect(ushort ObjectId, byte Kind, byte[] Data)
         return new VisualEffect(id, kind, payload[3..].ToArray());
     }
 }
+
+/// <summary>
+/// A player's posture, bits 2-4 of 0xA9's state byte (0xBA: bits 0-2). The three flags swim (0x04), jump (0x08) and
+/// sit (0x10) combine: swim + jump is flying, sit + swim dead, sit + jump riding, all three climbing (OpenDAoC StateFlags).
+/// </summary>
+public enum PlayerPosture : byte { Normal, Swim, Jump, Fly, Sit, Dead, Ride, Climb }

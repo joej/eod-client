@@ -488,6 +488,40 @@ public class ClientSessionTests
     }
 
     [Fact]
+    public async Task TheKeepAliveRepeatsASittingOrSwimmingPostureButNotAJumpOrAStrafe()
+    {
+        // Others read a posture from every 0xA9: a keep-alive without the sit bit would stand us up every 2 s.
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await session.GetCharactersAsync(Realm.Albion);
+            await session.EnterWorldAsync(Realm.Albion, slot: 0);
+            session.PositionInterval = TimeSpan.FromMilliseconds(50);
+            session.PingInterval = TimeSpan.FromMilliseconds(200);
+
+            async Task Hold(byte sent)
+            {
+                await session.MoveToAsync(561000f, 511700f, 2344f, heading: 2048, speed: 0, verticalSpeed: 0, landed: false, stateFlags: sent);
+                using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+                await session.KeepAliveAsync(stop.Token);
+            }
+            await Hold(0x10 | 0x40);   // sitting (and a strafe bit, which isn't repeated)
+            int sat = server.Received.Count;
+            await Hold(0x08);          // a jump: the keep-alive says normal
+            int jumped = server.Received.Count;
+            await Hold(0x04);          // swimming
+            List<byte> States(IEnumerable<ClientPacket> ps) => ps.Where(p => p.Code == PositionUpdate.Code).Skip(1).Select(p => p.Payload[26]).ToList();
+            Assert.Equal([0x10], States(server.Received.Take(sat)).Distinct());
+            Assert.Equal([0x00], States(server.Received.Take(jumped).Skip(sat)).Distinct());
+            Assert.Equal([0x04], States(server.Received.Skip(jumped)).Distinct());
+        }
+        Assert.Null(server.Error);
+    }
+
+    [Fact]
     public async Task TheTargetGoesInEveryPositionUpdateAndInteractTargetsFirst()
     {
         await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code

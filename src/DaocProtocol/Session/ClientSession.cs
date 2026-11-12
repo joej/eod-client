@@ -107,6 +107,11 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// <summary>Our health percent from the last 0xAD, sent in each 0xA9 (the server skips it).</summary>
     public byte HealthPercent { get; set; } = 100;
 
+    // 0xA9's posture bits (swim 0x04, jump 0x08, sit 0x10). The keep-alive repeats the last ones sent: others read a
+    // posture from every 0xA9, so a keep-alive without them would stand a sitting or swimming character up every 2 s.
+    private const byte PostureMask = 0x1C;
+    private byte _postureFlags;
+
     /// <summary>0xA9's state byte while dead: sitting and swimming together (OpenDAoC StateFlags.DEAD).</summary>
     public const byte DeadStateFlags = 0x14;
 
@@ -419,6 +424,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
                 throw new InvalidOperationException($"Session is {State}; MoveToAsync needs the world.");
 
             MoveSpeed = speed;
+            _postureFlags = (byte)((stateFlags & PostureMask) == 0x08 ? 0 : stateFlags & PostureMask);   // the keep-alive repeats it (not a jump)
             PositionAndObjectId moved = world.Position with { X = x, Y = y, Z = z, Heading = heading };
             World = new WorldPosition(moved, ZoneOrLast(moved, world.Zone));
             await SendPositionAsync(World, speed, cancellationToken, verticalSpeed, landed, stateFlags).ConfigureAwait(false);
@@ -475,7 +481,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
                 {
                     if (State == SessionState.InWorld && World is WorldPosition world
                         && Environment.TickCount64 - _lastPositionSent >= positionInterval)
-                        await SendPositionAsync(world, MoveSpeed, cancellationToken).ConfigureAwait(false);
+                        await SendPositionAsync(world, MoveSpeed, cancellationToken, stateFlags: _postureFlags).ConfigureAwait(false);
                 }
                 finally
                 {

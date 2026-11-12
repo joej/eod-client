@@ -55,10 +55,12 @@ public sealed class MonsterTables
     // monsters.csv column 40 ("Mon Effect"): the model's effect set, 0 = none.
     private const int EffectSetColumn = 40;
 
-    // anims.csv columns of the clips the client view uses (ID, name, Walk, Back, Run, ..., Idle at 10, Death at 11,
-    // ..., Sit Down and Sit Idle at 21-22: the quit timer sits the character down).
+    // anims.csv columns of the clips the client view uses (ID, name, then the client's clip slots from 0: Walk, Back, Run,
+    // ..., Jump and Land at 7-8, Idle at 10, Death at 11, Ladder at 12, Strafe Left / Right at 13-14, Sit Down and Sit Idle
+    // at 21-22, Crawl at 30: a creature's swim, e.g. the human Sw_h.kfa).
     private static readonly (string Clip, int Column)[] ClipColumns = [("walk", 2), ("back", 3), ("run", 4), ("idle", 10),
-        ("death", 11), ("sit_down", 21), ("sit_idle", 22), ("jump", 7), ("land", 8)];
+        ("death", 11), ("sit_down", 21), ("sit_idle", 22), ("jump", 7), ("land", 8), ("ladder", 12),
+        ("strafe_left", 13), ("strafe_right", 14), ("crawl", 30)];
 
     // The swimming clips: the Swim Alt of the idle, run and walk-backward clips.
     private static readonly (string Clip, int Column)[] SwimColumns = [("swim_idle", 10), ("swim", 4), ("swim_back", 3)];

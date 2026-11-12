@@ -476,15 +476,26 @@ How our client moves them (retail's rules):
   - Its heading turns over 500 ms only when the previous update came within 500 ms; otherwise it snaps.
   - It strafes sideways at 110 units/s (state flags 0x40 left, 0x80 right).
   - Heading bit 0x1000 = standing on the ground.
-- **The clip comes from the sent speed:**
-  - run above your own max speed (0xB6, normally 100), walk above 0, back below 0;
+  - **Posture** is bits 2-4 of the state byte (0xBA: bits 0-2): 0 normal, 1 swim, 2 jump, 3 fly, 4 sit, 5 dead,
+    6 riding, 7 climbing. Swimming strafes at 73 units/s.
+- **The clip comes from the posture, then the sent speed:**
+  - sit: Sit Down once, then Sit Idle; jump and fly: Jump, held (Land once on coming down standing still); climb: Ladder;
+    swim: the figure's swim clips; dead: Death, held (also for a player first seen dead);
+  - otherwise run above your own max speed (0xB6, normally 100), walk above 0, back below 0, and strafe left / right
+    while standing;
   - played at rate = clamp(speed) / (stride × size / 100), with the figure's strides from the client's monster tables
-    (`mpk strides`).
+    (`mpk strides`). Walk, run, back and strafe stop (rate 0) while a player is off the ground: falling mid-stride.
+- **Our own posture goes in every 0xA9**, the 2 s keep-alive included: OpenDAoC never sends it itself, it relays the
+  player's own byte. The server sits a player down (`/sit`, the quit timer) and says so in 0xAD's sitting byte; the
+  client then sends 0x10 until the player moves, which stands them up on both sides.
 
 *Measured live 2026-11-11 (Camelot Hills, `--motion-log`):*
 - Wandering NPCs walk at 70 units/s. Over 600 updates, where the client had moved them landed a median 10 units from
   the server's next position (90%: 12). Standing in place instead would be 70-140 units off.
 - A running player (191 units/s) landed 4-10 units off.
+
+*Verified live 2026-11-12:* a player's `/sit` and `/stand`, seen by a second client: Normal → Sit (Sit Idle playing) and
+back after 12 s, with no stand-up in between from the keep-alives.
 
 ## Groups
 
@@ -726,7 +737,8 @@ u8 mana %, u8 endurance %, u16 0
 S→C **0xBA PlayerHeading** (1.127, `PlayerHeadingUpdateHandler.CreateOutPak1127`), keyed by session id
 (the player's 0x4B gives both ids): `u16 BE session`, `u16 BE target` (0), `u16 BE heading`,
 `u8 steed seat`, `u8 action flags`, `u8 0`, `u8 state flags`, `u8 health`, `u8 mana %`,
-`u8 endurance %`, `u8 0`.
+`u8 endurance %`, `u8 0`. Its state flags are 0xA9's shifted right by 2, without the strafe bits: the posture is the
+low 3 bits.
 
 *Verified live (2026-11-05):* our own 0x74 on and off. Other players' bit is from the server's writer,
 not yet seen with a second player.

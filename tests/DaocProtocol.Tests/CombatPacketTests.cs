@@ -52,6 +52,30 @@ public class CombatPacketTests
         Assert.False(PlayerPosition.Parse(payload).InCombat);
     }
 
+    [Theory]
+    [InlineData(0x00, PlayerPosture.Normal)]
+    [InlineData(0x04, PlayerPosture.Swim)]
+    [InlineData(0x08, PlayerPosture.Jump)]
+    [InlineData(0x0C, PlayerPosture.Fly)]
+    [InlineData(0x10, PlayerPosture.Sit)]
+    [InlineData(0x14, PlayerPosture.Dead)]
+    [InlineData(0x18, PlayerPosture.Ride)]
+    [InlineData(0x1C, PlayerPosture.Climb)]
+    [InlineData(0x10 | 0x80 | 0x20, PlayerPosture.Sit)]   // strafe bits don't touch it
+    public void APlayersPostureIsBitsTwoToFourOfItsStateByteAndTheLowThreeOfTheHeadingPackets(int state, PlayerPosture posture)
+    {
+        byte[] position = new PayloadWriter()
+            .F32LE(0).F32LE(0).F32LE(0).F32LE(0).F32LE(0).U16BE(7).U16BE(1234).U16BE(0)
+            .U8((byte)state).U8(0).U16BE(0).U16BE(0x1000).U8(0).U8(0).U8(0).U8(100).U8(100).U8(100).U16BE(0)
+            .ToArray();
+        Assert.Equal(posture, PlayerPosition.Parse(position).Posture);
+        // 0xBA carries the same byte shifted right by 2, strafe bits dropped (OpenDAoC PlayerHeadingUpdateHandler).
+        byte[] heading = new PayloadWriter()
+            .U16BE(7).U16BE(0).U16BE(0).U8(0).U8(0).U8(0).U8((byte)((state & 0x1C) >> 2)).U8(100).U8(100).U8(100).U8(0)
+            .ToArray();
+        Assert.Equal(posture, PlayerHeading.Parse(heading).Posture);
+    }
+
     [Fact]
     public void AnotherPlayersHeadingNamesItBySessionAndCarriesItsAttackMode()
     {

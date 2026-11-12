@@ -81,6 +81,8 @@ public partial class WorldView
             QuitInterrupted?.Invoke();
         }
         if (moving)
+            _sitting = false;   // moving stands up (the server stands us up too: GamePlayer.OnPlayerMove)
+        if (moving)
         {
             // Body faces -Z in Godot; forward is its -Z basis, strafe its +X basis (right). Both are
             // flattened to the ground plane, summed, then normalised so diagonal moves aren't faster.
@@ -121,10 +123,15 @@ public partial class WorldView
             PlayBodyClip(!moving ? "swim_idle" : forward < 0 ? "swim_back" : "swim");
         else if (_airborne)
             PlayOnce("jump");
-        else if (_quitting && !moving)
+        else if ((_quitting || _sitting) && !moving)
             Sit();
         else if (_landLeft <= 0 || moving)
-            PlayBodyClip(!moving ? Idle(_bodyAnim, _attacking, _ownCombatIdle) : forward < 0 ? "back" : "run");
+        {
+            // Sideways only: the figure's strafe clip (anims.csv 13/14), else the run.
+            string side = strafe < 0 ? "strafe_left" : "strafe_right";
+            PlayBodyClip(!moving ? Idle(_bodyAnim, _attacking, _ownCombatIdle) : forward < 0 ? "back"
+                : forward == 0 && _bodyAnim?.HasAnimation(side) == true ? side : "run");
+        }
 
         // Position send (the event-driven shape adapted from OfflineDAoC's _send_position, GPL-3.0; the
         // rates are retail 1.127's): every 0.2 s while anything is changing, every 2 s standing still,
@@ -133,7 +140,11 @@ public partial class WorldView
         _posLeft -= (float)delta;
         ushort heading = HeadingFromYaw(_bodyYaw);
         (float rx, float ry, float rz) = ToRegion(_body.Position);
-        bool changed = moving || _airborne || _landingSpeed > 0
+        // What others see us doing (0xA9 state byte): swimming 0x04, in a jump 0x08, sitting 0x10; strafing left 0x40 or
+        // right 0x80. A change goes out at once.
+        byte state = (byte)((_swimming ? 0x04 : _jumping ? 0x08 : (_quitting || _sitting) && !moving ? 0x10 : 0)
+            | (strafe < 0 ? 0x40 : strafe > 0 ? 0x80 : 0));
+        bool changed = moving || _airborne || _landingSpeed > 0 || state != _stateSent
             || heading != _world.Position.Heading
             || Mathf.Abs(rx - _world.Position.X) > PositionEpsilon
             || Mathf.Abs(ry - _world.Position.Y) > PositionEpsilon
@@ -141,7 +152,7 @@ public partial class WorldView
 
         if (_posLeft <= 0f || _landingSpeed > 0 || (changed && !_sendingChanges))
         {
-            SendMove(moving ? (forward < 0 ? -MoveSpeed(forward) : MoveSpeed(forward)) : 0f);
+            SendMove(moving ? (forward < 0 ? -MoveSpeed(forward) : MoveSpeed(forward)) : 0f, state);
             _posLeft = changed ? MovingSendInterval : IdleSendInterval;
             _sendingChanges = changed;
         }
@@ -284,8 +295,12 @@ public partial class WorldView
 
     private const float SlowUnits = 85f;
 
-    private void SendMove(float speed)
+    private byte _stateSent;   // the state byte of our last 0xA9
+    private bool _sitting;     // the server sat us down (0xAD's sitting byte: /sit, the quit timer)
+
+    private void SendMove(float speed, byte state)
     {
+        _stateSent = state;
         (float rx, float ry, float rz) = ToRegion(_body.Position);
         ushort heading = HeadingFromYaw(_bodyYaw);
         // Reflect it locally at once so the overlay and keep-alive see the new position without
@@ -298,7 +313,7 @@ public partial class WorldView
         _landingSpeed = 0;
         if (_session is not null)
             _ = _session.MoveToAsync(rx, ry, rz, heading, speed, vertical, landed,
-                stateFlags: _swimming ? (byte)0x04 : _jumping ? (byte)0x08 : (byte)0);
+                stateFlags: state);
     }
 
     // The server moved us within the region (0x04). Take the position over at once — the next 0xA9

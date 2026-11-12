@@ -50,6 +50,7 @@ public partial class WorldView
         _bridge.StatusChanged += s =>
         {
             _vitals = s;
+            _sitting = s.IsSitting;
             if (_session is not null)
                 _session.HealthPercent = s.HealthPercent;
         };
