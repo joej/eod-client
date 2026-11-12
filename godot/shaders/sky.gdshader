@@ -3,7 +3,7 @@
 // DAoC's sky dome from zones/sky/sky_<name>.dat (via `mpk sky` → sky.csv): a canopy gradient from the
 // zenith through four bands to the horizon, separately for the east and west halves of the sky (dawn
 // glows east, dusk west), two scrolling cloud layers tinted and faded by their own banded gradient, and
-// the sun disk at the directional light. The band elevations and the cloud projection scale are not
+// the sun disk on its path (sun_dir; retail's light takes a flatter one). The band elevations and the cloud projection scale are not
 // confirmed from the client: the values below are guesses to tune by eye against retail screenshots.
 shader_type sky;
 
@@ -38,7 +38,8 @@ uniform bool has_clouds = false;
 
 uniform sampler2D sun_disk : source_color, filter_linear;
 uniform bool has_sun = false;
-uniform bool sun_up = true;         // false at night: the light is the moon's, with no disk
+uniform bool sun_up = true;         // false at night: below the horizon
+uniform vec3 sun_dir = vec3(0.0);   // toward the disk (its own path, not the light's); zero: at the light
 uniform vec4 sun_color : source_color = vec4(1.0);
 uniform float sun_size = 0.035;     // angular radius, radians (guess)
 
@@ -79,7 +80,7 @@ void sky() {
 	}
 
 	if (has_sun && sun_up) {
-		vec3 s = normalize(LIGHT0_DIRECTION);
+		vec3 s = length(sun_dir) > 0.5 ? normalize(sun_dir) : normalize(LIGHT0_DIRECTION);
 		float a = acos(clamp(dot(d, s), -1.0, 1.0));
 		if (a < sun_size) {
 			// Sample the disk texture across the sun's angular extent (white disk on black: additive).

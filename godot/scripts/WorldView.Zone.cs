@@ -377,6 +377,9 @@ public partial class WorldView
             mat.SetShaderParameter("has_sun", true);
             mat.SetShaderParameter("sun_color", SkyColour("sun.noon_color"));
         }
+        // The sun's path tilts by the sky file's ecliptic_angle (the third field of sky.csv's sun line; 15 or 30).
+        _skyEcliptic = kv.TryGetValue("sun", out string? sunLine) && sunLine.Split(' ') is { Length: >= 3 } sp
+            && Floats(sp[2]) is { Length: 1 } ecl ? ecl[0] : 0f;
         _environment.BackgroundMode = Godot.Environment.BGMode.Sky;
         _environment.Sky = new Sky { SkyMaterial = mat };
         _environment.AmbientLightSource = Godot.Environment.AmbientSource.Color;
@@ -396,6 +399,7 @@ public partial class WorldView
     private System.Collections.Generic.Dictionary<string, string>? _skyValues;
     private ShaderMaterial? _skyMaterial;
     private string _skyCondition = "clear";
+    private float _skyEcliptic;   // degrees: how far the sun's path leans from overhead
 
     private Color SkyColour(string key) => _skyValues is not null && _skyValues.TryGetValue(key, out string? v) && Floats(v) is { Length: >= 3 } f
         ? new Color(f[0], f[1], f[2], f.Length > 3 ? f[3] : 1f) : Colors.White;
@@ -437,10 +441,14 @@ public partial class WorldView
         _environment.FogLightColor = Col("fog");
         if (now is uint time)
         {
-            // Toward the sun or moon: east = +X, up = +Y, south = +Z (DAoC's y). The light shines along its -Z, away from it.
-            var (east, up, south) = DaocAssets.Zone.SkyCycle.Toward(time);
-            var toward = new Vector3(east, Mathf.Max(up, 0.05f), south).Normalized();
+            // East = +X, up = +Y, south = +Z (DAoC's y). The light, retail's, never lower than 45 degrees and still at night
+            // (the night's light colour comes from the same lights section); the disk on its own path, drawn while up.
+            // The light shines along its -Z, away from where it comes from.
+            var (east, up, south) = DaocAssets.Zone.SkyCycle.Light(time, _skyEcliptic);
+            var toward = new Vector3(east, up, south);
             _sun.Basis = Basis.LookingAt(-toward, Mathf.Abs(toward.Y) > 0.99f ? Vector3.Forward : Vector3.Up);
+            var (de, du, ds) = DaocAssets.Zone.SkyCycle.Disk(time, _skyEcliptic);
+            _skyMaterial.SetShaderParameter("sun_dir", new Vector3(de, du, ds));
             _skyMaterial.SetShaderParameter("sun_up", DaocAssets.Zone.SkyCycle.SunUp(time));
         }
     }

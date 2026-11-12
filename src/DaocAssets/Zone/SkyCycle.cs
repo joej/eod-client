@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The sky through the game day (W10). A sky file has four canopies, dawn, day, dusk and night, and the client blends
-// between them by the time of day (daoc-re RE/73: six time slots, dawn, -, day, -, dusk, night). The slots' hours
-// aren't known yet, so this is a stand-in around OpenDAoC's 6 AM / 6 PM day boundaries:
-//   night until 4:30; night → dawn to 6:00; dawn → day to 8:00; day until 16:30; day → dusk to 18:00;
+// between them by the time of day, linearly over 22.5 degrees of sun angle (daoc-re RE/73, RE/79):
+//   night until 4:30; night → dawn to 6:00; dawn → day to 7:30; day until 16:30; day → dusk to 18:00;
 //   dusk → night to 19:30; night.
-// The sun rises due east at 6 AM, is highest at noon (to the south) and sets due west at 6 PM; at night a moon
-// takes the same arc for the night light, without a disk.
+// The sun disk and the sun's light take different paths (RE/79): the disk rises due east at 6:00 and sets due west at
+// 18:00 on the sky file's tilted path; the light never drops below 45 degrees and holds still at night.
 
 namespace DaocAssets.Zone;
 
@@ -31,21 +30,49 @@ public static class SkyCycle
         return ("night", "night", 0);
     }
 
-    /// <summary>True from 6 AM to 6 PM, when the sun (not the moon) is up.</summary>
-    public static bool SunUp(uint millisOfDay) => millisOfDay % 86_400_000 is >= 21_600_000 and < 64_800_000;
+    /// <summary>
+    /// The sun's angle along its path, degrees: 15 per game hour from 270 at midnight, so 0 at 6:00 (rising), 90 at noon,
+    /// 180 at 18:00 (setting) and below the horizon from there to 6:00 (daoc-re RE/79: the built-in sun's
+    /// elevation_at_midnight). The moon is the same plus 180.
+    /// </summary>
+    public static float SunAngle(uint millisOfDay) => (millisOfDay % 86_400_000 / Hour * 15 + 270) % 360;
+
+    /// <summary>The sun is above the horizon (6:00 to 18:00).</summary>
+    public static bool SunUp(uint millisOfDay) => SunAngle(millisOfDay) < 180;
 
     /// <summary>
-    /// The direction toward the sun (by day) or moon (by night), as east, up, south (a unit vector): due east at 6
-    /// (AM or PM for the moon), highest at 12, due west at 18; the arc leans south, peaking at <paramref name="peak"/>
-    /// degrees above the horizon.
+    /// The direction toward the sun disk (east, up, south; unit length) on the sky file's tilted path (RE/79): x = cos θ,
+    /// sideways sin(ecliptic), up cos(ecliptic) sin θ, then normalised (the path as given isn't a unit circle). At noon it
+    /// stands 90 - ecliptic degrees up, leaning south (inferred: which side the lean takes isn't confirmed).
     /// </summary>
-    public static (float East, float Up, float South) Toward(uint millisOfDay, float peak = 60)
+    public static (float East, float Up, float South) Disk(uint millisOfDay, float eclipticDegrees) =>
+        OnPath(SunAngle(millisOfDay), eclipticDegrees);
+
+    /// <summary>
+    /// The angle of the sun's directional light, degrees from the eastern horizon over the top (RE/79): by day
+    /// 90 - (90 - θ) / 2, so 45 at 6:00, 90 at noon, 135 at 18:00 and never below 45 degrees up; at night held at 135 until
+    /// midnight, then at 45 until dawn.
+    /// </summary>
+    public static float LightAngle(uint millisOfDay)
     {
-        float h = millisOfDay % 86_400_000 / Hour;
-        float a = (h - 6) % 12 / 12 * MathF.PI;           // 0 at rise, π at set
-        if (a < 0) a += MathF.PI;
-        float tilt = peak * MathF.PI / 180;
-        float east = MathF.Cos(a), across = MathF.Sin(a);   // across: from the horizon to the top of the arc
-        return (east, across * MathF.Sin(tilt), across * MathF.Cos(tilt));
+        float theta = SunAngle(millisOfDay);
+        if (theta < 180)
+            return 90 - (90 - theta) / 2;
+        return theta < 270 ? 135 : 45;   // 18:00-24:00, then 0:00-6:00
+    }
+
+    /// <summary>
+    /// The direction toward the sun's light (east, up, south; unit length): <see cref="LightAngle"/> on the same tilted
+    /// path as the disk (inferred: the note gives the angle, not the plane).
+    /// </summary>
+    public static (float East, float Up, float South) Light(uint millisOfDay, float eclipticDegrees) =>
+        OnPath(LightAngle(millisOfDay), eclipticDegrees);
+
+    private static (float East, float Up, float South) OnPath(float angleDegrees, float eclipticDegrees)
+    {
+        float t = angleDegrees * MathF.PI / 180, e = eclipticDegrees * MathF.PI / 180;
+        float east = MathF.Cos(t), south = MathF.Sin(e), up = MathF.Cos(e) * MathF.Sin(t);
+        float n = MathF.Sqrt(east * east + south * south + up * up);
+        return (east / n, up / n, south / n);
     }
 }

@@ -4,7 +4,7 @@ using DaocAssets.Zone;
 
 namespace DaocAssets.Tests;
 
-/// <summary>The sky's canopy blend and sun path through the game day (stand-in hours; see SkyCycle).</summary>
+/// <summary>The sky's canopy blend and sun path through the game day (retail's hours and angles, daoc-re RE/79; see SkyCycle).</summary>
 public sealed class SkyCycleTests
 {
     private static uint At(float hour) => (uint)(hour * 3_600_000);
@@ -26,19 +26,35 @@ public sealed class SkyCycleTests
     }
 
     [Fact]
-    public void TheSunRisesEastPeaksSouthAndSetsWest()
+    public void TheSunDiskRisesEastStandsNinetyLessTheEclipticAtNoonAndSetsWest()
     {
-        var rise = SkyCycle.Toward(At(6));
-        var noon = SkyCycle.Toward(At(12));
-        var set = SkyCycle.Toward(At(18 - 0.001f));
-        Assert.Equal(1f, rise.East, 0.01f);
-        Assert.Equal(0f, rise.Up, 0.01f);
+        var rise = SkyCycle.Disk(At(6), 15);
+        var noon = SkyCycle.Disk(At(12), 15);
+        var set = SkyCycle.Disk(At(18), 15);
+        Assert.True(rise.East > 0.95f && MathF.Abs(rise.Up) < 0.01f);
+        Assert.True(set.East < -0.95f && MathF.Abs(set.Up) < 0.01f);
         Assert.Equal(0f, noon.East, 0.01f);
-        Assert.Equal(MathF.Sin(MathF.PI / 3), noon.Up, 0.01f);
+        Assert.Equal(75f, MathF.Asin(noon.Up) * 180 / MathF.PI, 0.1f);   // 90 - ecliptic
         Assert.True(noon.South > 0);
-        Assert.Equal(-1f, set.East, 0.01f);
+        Assert.True(SkyCycle.Disk(At(0), 15).Up < -0.9f);   // under the ground at midnight
         Assert.True(SkyCycle.SunUp(At(12)) && !SkyCycle.SunUp(At(18)) && !SkyCycle.SunUp(At(3)));
-        // The moon takes the same arc by night: high at midnight.
-        Assert.Equal(noon.Up, SkyCycle.Toward(At(0)).Up, 0.01f);
+    }
+
+    [Theory]
+    [InlineData(6, 45)]
+    [InlineData(9, 67.5)]
+    [InlineData(12, 90)]
+    [InlineData(15, 112.5)]
+    [InlineData(17.99, 134.9)]
+    [InlineData(18, 135)]
+    [InlineData(23.9, 135)]
+    [InlineData(0, 45)]
+    [InlineData(5.9, 45)]
+    public void TheSunlightNeverDropsBelowFortyFiveDegreesAndHoldsAtNight(float hour, float angle)
+    {
+        Assert.Equal(angle, SkyCycle.LightAngle(At(hour)), 0.1f);
+        var light = SkyCycle.Light(At(hour), 0);
+        Assert.Equal(MathF.Sin(angle * MathF.PI / 180), light.Up, 0.01f);
+        Assert.True(light.Up >= MathF.Sin(MathF.PI / 4) - 0.01f);
     }
 }
