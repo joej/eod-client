@@ -28,13 +28,16 @@ namespace DaocProtocol.Packets;
 /// of 0x20/0xA9. Add the zone's offsets to recover region-global; the zone is identified by
 /// <see cref="ZoneSkinId"/> (its low 8 bits here, 9th bit smuggled into <see cref="Flags"/>).
 /// </remarks>
-/// <param name="Speed">Packed: 0 when stationary; carries Z-velocity sign (bit 15) and bits.</param>
+/// <param name="Speed">Packed: bits 0–10 the speed in units/s, 0x800 moving backwards; bit 15 the Z speed's sign and
+/// bits 12–14 its high bits (see <see cref="ZSpeed"/>). 0 when stationary.</param>
 /// <param name="Heading">Low 12 bits = heading 0–4095; top nibble carries Z-speed bits when moving.</param>
 /// <param name="XOffsetInZone">Zone-local X.</param>
 /// <param name="YOffsetInZone">Zone-local Y.</param>
 /// <param name="Z">Absolute Z (a real height, not an offset).</param>
 /// <param name="ObjectId">The in-view entity's object id.</param>
-/// <param name="TargetId">Attack target oid; 0 = not attacking, 0xFFFF = moving-attacker sentinel.</param>
+/// <param name="TargetId">The object the NPC faces and follows (the client turns it toward that object every frame and walks
+/// it there while it has speed); OpenDAoC sends its attack target when close and standing, 0xFFFF (no object) when an
+/// attacker moves, 0 otherwise.</param>
 /// <param name="HealthPercent">0 for non-living objects.</param>
 /// <param name="Flags">bits 6–7 realm; 0x01 can't-target, 0x02 hide-name, 0x10 underwater, 0x20 flying.</param>
 /// <param name="ZoneSkinId">Low 8 bits of the zone's skin id (9th bit is in <see cref="Flags"/>).</param>
@@ -50,24 +53,56 @@ public sealed record ObjectUpdate(
     /// <summary>Realm from the flag byte: 0 none, 1 Albion, 2 Midgard, 3 Hibernia.</summary>
     public int Realm => (Flags >> 6) & 0x3;
 
+    /// <summary>Where the NPC is walking to, zone-local in <see cref="DestinationZoneSkin"/> (word 3, 5, 7). The client
+    /// walks it there between updates and stops it on arrival.</summary>
+    public ushort DestinationX { get; init; }
+    public ushort DestinationY { get; init; }
+    public ushort DestinationZ { get; init; }
+
+    /// <summary>Low 8 bits of the destination's zone skin (byte 23; its 9th bit is flag 0x08).</summary>
+    public byte DestinationZoneSkinId { get; init; }
+
+    /// <summary>A destination is sent: neither its x nor its y is 0 (the client's own test).</summary>
+    public bool HasDestination => DestinationX != 0 && DestinationY != 0;
+
+    /// <summary>The zone skin in full: byte 22 plus 256 when flag 0x04 is set.</summary>
+    public int ZoneSkin => ZoneSkinId | ((Flags & 0x04) << 6);
+
+    /// <summary>The destination's zone skin in full: byte 23 plus 256 when flag 0x08 is set.</summary>
+    public int DestinationZoneSkin => DestinationZoneSkinId | ((Flags & 0x08) << 5);
+
+    /// <summary>Speed in units per second along the heading, negative when moving backwards (bit 0x800).</summary>
+    public int UnitsPerSecond => (Speed & 0x800) != 0 ? -(Speed & 0x7FF) : Speed & 0x7FF;
+
+    /// <summary>Vertical speed in units per second: 7 bits (speed bits 12–14 above heading bits 12–15) × 4, negative when
+    /// speed bit 15 is set.</summary>
+    public int ZSpeed => ((((Speed >> 12) & 0x7) << 4) | (Heading >> 12)) * 4 * ((Speed & 0x8000) != 0 ? -1 : 1);
+
+    /// <summary>Flag 0x10: under water. Flag 0x20: flying. Either way the client leaves its height alone.</summary>
+    public bool Underwater => (Flags & 0x10) != 0;
+    public bool Flying => (Flags & 0x20) != 0;
+
     public static ObjectUpdate Parse(ReadOnlySpan<byte> payload)
     {
         var r = new PayloadReader(payload);
         ushort speed = r.U16BE();
         ushort heading = r.U16BE();
         ushort xOffset = r.U16BE();
-        r.Skip(2);              // xOffsetInTargetZone (move destination; 0 when not moving to one)
+        ushort destX = r.U16BE();
         ushort yOffset = r.U16BE();
-        r.Skip(2);              // yOffsetInTargetZone
+        ushort destY = r.U16BE();
         ushort z = r.U16BE();
-        r.Skip(2);              // zOffsetInTargetZone
+        ushort destZ = r.U16BE();
         ushort objectId = r.U16BE();
         ushort targetId = r.U16BE();
         byte health = r.U8();
         byte flags = r.U8();
         byte zoneSkin = r.U8();
-        // r.U8() targetZoneSkinId — ignored; we don't follow move destinations yet.
-        return new ObjectUpdate(speed, heading, xOffset, yOffset, z, objectId, targetId, health, flags, zoneSkin);
+        byte destZone = r.U8();
+        return new ObjectUpdate(speed, heading, xOffset, yOffset, z, objectId, targetId, health, flags, zoneSkin)
+        {
+            DestinationX = destX, DestinationY = destY, DestinationZ = destZ, DestinationZoneSkinId = destZone,
+        };
     }
 }
 
@@ -262,6 +297,12 @@ public sealed record PlayerPosition(float X, float Y, float Z, float Speed, floa
     public ushort HeadingOnly => (ushort)(Heading & 0x0FFF);
     public bool InCombat => (Health & 0x80) != 0;
     public byte HealthPercent => (byte)(Health & 0x7F);
+
+    /// <summary>Strafing sideways: state flag 0x40 left, 0x80 right (0x20 full speed).</summary>
+    public int Strafe => (StateFlags & 0x40) != 0 ? -1 : (StateFlags & 0x80) != 0 ? 1 : 0;
+
+    /// <summary>Action flag 0x40: the player was moved (teleported), so the client snaps it rather than keeping its own x/y.</summary>
+    public bool Teleported => (ActionFlags & 0x40) != 0;
 
     public static PlayerPosition Parse(ReadOnlySpan<byte> payload)
     {

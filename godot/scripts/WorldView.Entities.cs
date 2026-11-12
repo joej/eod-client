@@ -20,10 +20,11 @@ public partial class WorldView
     /// zone's region-coordinate offset to recover a region-global position. Falls back to the
     /// player's own zone when the skin byte matches nothing (the common case: everyone in one zone).
     /// </summary>
-    private Vector3 ZoneLocalToGodot(ushort xOffset, ushort yOffset, ushort z, byte zoneSkin)
+    private Vector3 ZoneLocalToGodot(ushort xOffset, ushort yOffset, ushort z, int zoneSkin)
     {
         ushort region = _world.Position.RegionId;
-        Zone zone = Zones.All.FirstOrDefault(zz => zz.RegionId == region && (zz.Id & 0xFF) == zoneSkin)
+        Zone zone = Zones.All.FirstOrDefault(zz => zz.RegionId == region && zz.Id == zoneSkin)
+            ?? Zones.All.FirstOrDefault(zz => zz.RegionId == region && (zz.Id & 0xFF) == (zoneSkin & 0xFF))
             ?? _world.Zone;
         return ToGodot(zone.X + xOffset, zone.Y + yOffset, z);
     }
@@ -50,13 +51,25 @@ public partial class WorldView
         // The server sends 0xA1 for our own character too; we drive that from input, so skip it.
         if (u.ObjectId == _world.Position.ObjectId || _worldObjects.ContainsKey(u.ObjectId) || _hiddenNpcs.Contains(u.ObjectId))
             return;
-        Vector3 pos = ZoneLocalToGodot(u.XOffsetInZone, u.YOffsetInZone, u.Z, u.ZoneSkinId);
+        Vector3 pos = ZoneLocalToGodot(u.XOffsetInZone, u.YOffsetInZone, u.Z, u.ZoneSkin);
         float yaw = YawFromHeading(u.HeadingOnly);
         if (_entities.TryGetValue(u.ObjectId, out Entity? e))
         {
             e.Health = u.HealthPercent;
-            e.TargetPosition = pos;
-            e.TargetYaw = yaw;
+            // Retail sets an NPC's position as sent (no blend), then moves it itself until the next update: along its
+            // heading at the sent speed, or straight to the sent destination, stopping there (daoc-re RE/77).
+            if (_motionLog)
+                LogMotion(u, e, pos);
+            SnapTo(e, pos);
+            e.MoveSpeed = e.Dead ? 0 : u.UnitsPerSecond;
+            e.ZSpeed = u.ZSpeed;
+            e.Destination = u.HasDestination && !e.Dead
+                ? ZoneLocalToGodot(u.DestinationX, u.DestinationY, u.DestinationZ, u.DestinationZoneSkin) : null;
+            e.Follow = u.TargetId;
+            // Flying (0x20) or underwater (0x10): its height is its own.
+            e.Grounded = e.GroundedAtSpawn && !u.Flying && !u.Underwater;
+            TurnTo(e, yaw, blend: true);   // NPCs always turn over 500 ms
+            e.LastUpdate = _seconds;
         }
         else
         {
@@ -100,8 +113,10 @@ public partial class WorldView
             // OpenDAoC's server has no terrain: a creature wandering over a hill keeps its spawn height and floats or
             // sinks (owner's goblin fishermen, Black Mtns. South, 2026-11-10). Unless it flies or swims, it stands on
             // the ground under where the server puts it (GroundEntities).
-            spawned.Grounded = !npc.Flying && !npc.Swimming;
+            spawned.Grounded = spawned.GroundedAtSpawn = !npc.Flying && !npc.Swimming;
             spawned.ProbedAt = new Vector3(float.NaN, 0, 0);
+            // Created already moving (along its heading; the destination comes with its first 0xA1).
+            spawned.MoveSpeed = (npc.Speed & 0x800) != 0 ? -(npc.Speed & 0x7FF) : npc.Speed & 0x7FF;
             SetQuestGlyph(spawned, npc.Quest);
             spawned.Name = npc.Name;
             NameNpc(spawned, npc);
@@ -186,11 +201,13 @@ public partial class WorldView
         AnimationPlayer? anim = null;
         Node3D? dressed = null;
         bool figured = false;
+        float figureScale = 1f;
         if (model != 0 && ((look is not null ? Figure(model, catacombs: true) : null) ?? Figure(model)) is { } figure)
         {
             // The server's model id is the client's monsters.csv row; mpk figures converted it to
             // models/model<id>.glb. Size 50 is normal; the table's own scale applies on top.
             figured = true;
+            figureScale = figure.Scale;
             var inst = (Node3D)figure.Template.Duplicate();
             float scale = figure.Scale * Mathf.Max(size, 1) / 50f;
             inst.Scale = new Vector3(scale, scale, scale);
@@ -229,17 +246,21 @@ public partial class WorldView
         if (pickable)
             AddPickShape(node, objectId, size);
         _entityRoot.AddChild(node);
-        var entity = new Entity { Node = node, TargetPosition = pos, TargetYaw = yaw, Player = anim, LastPosition = pos,
-            Figure = dressed, Model = model, Look = look ?? default };
+        var entity = new Entity { Node = node, ServerY = pos.Y, TargetYaw = yaw, Player = anim, LastUpdate = _seconds,
+            Figure = dressed, Model = model, Look = look ?? default, Strides = StridesOf(model, catacombs: look is not null),
+            SizeScale = figureScale * Mathf.Max(size, 1) / 50f };
         _entities[objectId] = entity;
         PlayClip(entity, "idle");
         return figured;
     }
 
     // A figure's clip, looping; a no-op for a capsule or a clip the figure lacks.
-    private static void PlayClip(Entity e, string clip)
+    private static void PlayClip(Entity e, string clip, float rate = 1f)
     {
-        if (e.Player is null || e.Clip == clip || !e.Player.HasAnimation(clip))
+        if (e.Player is null || !e.Player.HasAnimation(clip))
+            return;
+        e.Player.SpeedScale = rate;
+        if (e.Clip == clip)
             return;
         e.Player.GetAnimation(clip).LoopMode = Animation.LoopModeEnum.Linear;
         e.Player.Play(clip, customBlend: 0.2);
@@ -364,8 +385,25 @@ public partial class WorldView
             RequestPlayer(p.SessionId);   // not seen created yet: ask for its 0x4B, which places it
             return;
         }
-        e.TargetPosition = ToGodot(p.X, p.Y, p.Z);
-        e.TargetYaw = YawFromHeading(p.HeadingOnly);
+        // Retail: a moving player sent within 64 units (2D) of where we have it keeps our x/y and takes only the height;
+        // otherwise (standing, farther, or moved by the server: action flag 0x40) it is set where sent. Its heading
+        // turns over 500 ms only when its previous update came within 500 ms, else snaps (daoc-re RE/77).
+        Vector3 pos = ToGodot(p.X, p.Y, p.Z);
+        Vector3 here = e.Node.Position;
+        if (_motionLog && (e.MoveSpeed != 0 || p.Speed != 0))
+            GD.Print($"[motion] player \"{e.Name}\": off by {new Vector2(pos.X - here.X, pos.Z - here.Z).Length() / RegionMetresPerUnit:0} units " +
+                $"after {_seconds - e.LastUpdate:0.00} s (speed {e.MoveSpeed:0} -> {p.Speed:0}, strafe {p.Strafe}, grounded {(p.Heading & 0x1000) != 0}; " +
+                $"clip {(e.Clip.Length > 0 ? e.Clip : "-")} at {e.Player?.SpeedScale ?? 0:0.00}x)");
+        bool moving = p.Speed != 0 || p.Strafe != 0;
+        if (moving && !p.Teleported && new Vector2(pos.X - here.X, pos.Z - here.Z).Length() <= 64 * RegionMetresPerUnit)
+            e.ServerY = pos.Y;
+        else
+            SnapTo(e, pos);
+        TurnTo(e, YawFromHeading(p.HeadingOnly), blend: _seconds - e.LastUpdate <= 0.5);
+        e.MoveSpeed = e.Dead ? 0 : p.Speed;
+        e.Strafe = e.Dead ? 0 : p.Strafe;
+        e.Grounded = (p.Heading & 0x1000) != 0;   // heading bit 0x1000: standing on the ground
+        e.LastUpdate = _seconds;
         e.Health = p.HealthPercent;
         SetCombat(p.ObjectId, e, p.InCombat);
     }
@@ -378,7 +416,8 @@ public partial class WorldView
             RequestPlayer(h.SessionId);
             return;
         }
-        e.TargetYaw = YawFromHeading(h.HeadingOnly);
+        TurnTo(e, YawFromHeading(h.HeadingOnly), blend: _seconds - e.LastUpdate <= 0.5);
+        e.LastUpdate = _seconds;
         SetCombat(objectId, e, h.InCombat);
     }
 
@@ -616,9 +655,10 @@ public partial class WorldView
     private static Dictionary<int, float> ReadFigureScales(string path) =>
         ReadFigureTable(path).ToDictionary(kv => kv.Key, kv => kv.Value.Scale);
 
-    // The ground under each grounded NPC, probed in the physics frame (rays are only reliable there) whenever the server
-    // moves it: the first floor or terrain from a little above its reported height down; when there is none (it was
-    // sent under the ground), the terrain from high above. Without either (the zone not loaded yet), its own height.
+    // The ground under each grounded entity, probed in the physics frame (rays are only reliable there) wherever it now
+    // stands: the first floor or terrain from a little above it down; when there is none (it was sent under the
+    // ground), the terrain from high above. Without either (the zone not loaded yet), its own height. Retail probes
+    // every entity that moved, every frame (daoc-re RE/77 "Grounding").
     private void GroundEntities()
     {
         foreach (Entity e in _entities.Values)
@@ -628,21 +668,24 @@ public partial class WorldView
                 e.GroundY = null;
                 continue;
             }
-            Vector3 at = e.TargetPosition;
-            if (Mathf.Abs(at.X - e.ProbedAt.X) < 0.05f && Mathf.Abs(at.Z - e.ProbedAt.Z) < 0.05f && Mathf.Abs(at.Y - e.ProbedAt.Y) < 0.05f)
+            Vector3 at = e.Node.Position;
+            if (Mathf.Abs(at.X - e.ProbedAt.X) < 0.05f && Mathf.Abs(at.Z - e.ProbedAt.Z) < 0.05f && Mathf.Abs(e.ServerY - e.ProbedAt.Y) < 0.05f)
                 continue;
-            float? y = GroundRay(at + Vector3.Up * 3f, at + Vector3.Down * 40f, ~NotSolid)
-                       ?? GroundRay(new Vector3(at.X, at.Y + 80f, at.Z), at, TerrainLayer);
+            // From a little above the higher of where it stands and where the server puts it: a creature walking uphill
+            // has climbed above the server's height (OpenDAoC has no terrain), one sent onto a floor may be above us.
+            float top = Mathf.Max(float.IsNaN(e.ProbedAt.X) ? e.ServerY : at.Y, e.ServerY);
+            float? y = GroundRay(new Vector3(at.X, top + 3f, at.Z), new Vector3(at.X, top - 40f, at.Z), ~NotSolid)
+                       ?? GroundRay(new Vector3(at.X, top + 80f, at.Z), new Vector3(at.X, top - 40f, at.Z), TerrainLayer);
             if (y is null)
                 continue;   // nothing loaded under it yet: probe again next frame
             // Over water (a water surface above the ground): it swims, as creatures the server didn't flag do (water snakes
             // and eels were pulled 25 m down to the riverbed, 2026-11-10). Its own height, kept between the bed and the surface.
-            if (GroundRay(new Vector3(at.X, at.Y + 40f, at.Z), new Vector3(at.X, y.Value, at.Z), WaterLayer) is float water
+            if (GroundRay(new Vector3(at.X, top + 40f, at.Z), new Vector3(at.X, y.Value, at.Z), WaterLayer) is float water
                 && water > y.Value)
-                y = Mathf.Clamp(at.Y, y.Value, water);
-            if (float.IsNaN(e.ProbedAt.X) && Mathf.Abs(y.Value - at.Y) > 1f)
-                GD.Print($"[entity] \"{e.Name}\" stood on the ground: {(y.Value - at.Y) / RegionMetresPerUnit:+0;-0} units from the server's height");
-            (e.GroundY, e.ProbedAt) = (y, at);
+                y = Mathf.Clamp(e.ServerY, y.Value, water);
+            if (float.IsNaN(e.ProbedAt.X) && Mathf.Abs(y.Value - e.ServerY) > 1f)
+                GD.Print($"[entity] \"{e.Name}\" stood on the ground: {(y.Value - e.ServerY) / RegionMetresPerUnit:+0;-0} units from the server's height");
+            (e.GroundY, e.ProbedAt) = (y, new Vector3(at.X, e.ServerY, at.Z));
         }
     }
 
@@ -655,32 +698,172 @@ public partial class WorldView
         return hit.Count > 0 ? hit["position"].AsVector3().Y : null;
     }
 
-    // Ease each entity toward the last position/facing the server reported. The per-NPC update rate
-    // is low (~1 Hz in the capture), so without this they teleport; with it they glide. The rate is
-    // frame-rate independent (exponential smoothing). Yaw lerps the short way around the circle.
+    // An update's position, set as sent (retail doesn't blend positions); a grounded entity keeps its height until the
+    // next ground probe there.
+    private static void SnapTo(Entity e, Vector3 pos)
+    {
+        e.ServerY = pos.Y;
+        e.Node.Position = new Vector3(pos.X, e.Grounded && e.GroundY is not null ? e.Node.Position.Y : pos.Y, pos.Z);
+    }
+
+    // A new heading: turned to linearly over 500 ms the short way round, or at once.
+    private void TurnTo(Entity e, float yaw, bool blend)
+    {
+        e.TargetYaw = yaw;
+        if (blend)
+            (e.TurnFrom, e.TurnStart) = (e.Node.Rotation.Y, _seconds);
+        else
+        {
+            e.TurnStart = -1;
+            e.Node.Rotation = new Vector3(0, yaw, 0);
+        }
+    }
+
+    // How long without an update before the client stops moving an entity (retail deletes it then: 5 s for a player, 10 s
+    // for an NPC, daoc-re RE/77; OpenDAoC doesn't resend standing NPCs, so we only stop it).
+    private const double PlayerQuiet = 5, NpcQuiet = 10;
+
+    // Each frame, as retail does between updates (daoc-re RE/77 "Between updates"): an NPC with a destination faces it
+    // and walks there at its speed, stopping within max(16, speed / 10) units; one following an object faces it while
+    // more than 6 units away and walks to within 64 (inferred); anything else with speed moves along its heading
+    // (players also sideways at 110 units/s while strafing), flyers and swimmers up or down at their z speed. A grounded
+    // one then stands on the ground probed under it. Headings turn over 500 ms (TurnTo).
     private void InterpolateEntities(double delta)
     {
-        float t = Mathf.Min(1f, (float)delta * 8f);
-        foreach (Entity e in _entities.Values)
+        float dt = (float)delta;
+        foreach ((ushort id, Entity e) in _entities)
         {
             e.Age += delta;
-            Vector3 target = e.GroundY is float gy ? new Vector3(e.TargetPosition.X, gy, e.TargetPosition.Z) : e.TargetPosition;
-            e.Node.Position = e.Node.Position.Lerp(target, t);
+            Vector3 p = e.Node.Position;
             float yaw = e.Node.Rotation.Y;
-            e.Node.Rotation = new Vector3(0, yaw + Mathf.AngleDifference(yaw, e.TargetYaw) * t, 0);
-
-            // The clip follows how fast the figure is gliding (metres per second, smoothed). Retail runs a figure above OUR
-            // max speed (0xB6, read as units/s: normally 100, 2.5 m/s), for every figure, so the line rises with our speed
-            // buffs (daoc-re RE/82, correcting RE/77).
-            float runAbove = (_speedPercent > 0 ? _speedPercent : 100) * RegionMetresPerUnit;
-            if (e.Player is not null && delta > 0 && !e.Dead)
+            if (e.TurnStart >= 0)
             {
-                Vector3 step = e.Node.Position - e.LastPosition;
-                step.Y = 0;
-                e.Speed = Mathf.Lerp(e.Speed, step.Length() / (float)delta, Mathf.Min(1f, (float)delta * 4f));
-                e.LastPosition = e.Node.Position;
-                PlayClip(e, e.Speed > runAbove ? "run" : e.Speed > 0.4f ? "walk" : Idle(e.Player, e.InCombat, e.CombatIdle));
+                float f = Mathf.Min(1f, (float)((_seconds - e.TurnStart) / 0.5));
+                yaw = e.TurnFrom + Mathf.AngleDifference(e.TurnFrom, e.TargetYaw) * f;
+                if (f >= 1f)
+                    e.TurnStart = -1;
             }
+            if (_seconds - e.LastUpdate > (e.IsPlayer ? PlayerQuiet : NpcQuiet))
+                (e.MoveSpeed, e.Strafe, e.ZSpeed, e.Destination) = (0f, 0, 0f, null);
+
+            Vector3 start = p;
+            float speed = e.MoveSpeed * RegionMetresPerUnit;   // metres per second
+            if (e.Dead)
+            {
+                // lies where it fell
+            }
+            else if (e.Destination is Vector3 dest)
+            {
+                Vector3 to = dest - p;
+                to.Y = 0;
+                float dist = to.Length();
+                if (dist <= Mathf.Max(16f, Mathf.Abs(e.MoveSpeed) / 10f) * RegionMetresPerUnit || e.MoveSpeed == 0)
+                    (e.MoveSpeed, e.Destination) = (0f, null);   // arrived: it stands
+                else
+                {
+                    yaw = Mathf.Atan2(-to.X, -to.Z);   // pointed straight at it, every frame
+                    e.TurnStart = -1;
+                    float step = Mathf.Min(Mathf.Abs(speed) * dt, dist);
+                    p += to / dist * step;
+                    if (!e.Grounded)
+                        p.Y += (dest.Y - p.Y) * step / dist;   // a flyer reaches the height with the distance
+                }
+            }
+            else if (e.Follow is not 0 and not 0xFFFF && FollowedPosition(e.Follow) is Vector3 followed)
+            {
+                Vector3 to = followed - p;
+                to.Y = 0;
+                float dist = to.Length();
+                if (dist > 6 * RegionMetresPerUnit)
+                {
+                    yaw = Mathf.Atan2(-to.X, -to.Z);
+                    e.TurnStart = -1;
+                }
+                float room = dist - 64 * RegionMetresPerUnit;
+                if (speed > 0 && room > 0)
+                    p += to / dist * Mathf.Min(speed * dt, room);
+            }
+            else if (speed != 0 || e.Strafe != 0 || e.ZSpeed != 0 && !e.Grounded)
+            {
+                var forward = new Vector3(-Mathf.Sin(yaw), 0, -Mathf.Cos(yaw));
+                var right = new Vector3(Mathf.Cos(yaw), 0, -Mathf.Sin(yaw));
+                p += (forward * speed + right * (e.Strafe * StrafeUnits * RegionMetresPerUnit)) * dt;
+                if (!e.Grounded)
+                    p.Y += e.ZSpeed * RegionMetresPerUnit * dt;
+            }
+            if (e.Grounded && e.GroundY is float gy)
+                p.Y = gy;
+            else if (e.Grounded)
+                p.Y = e.ServerY;
+            e.Moved = new Vector2(p.X - start.X, p.Z - start.Z).LengthSquared() > 1e-8f;
+            e.Node.Position = p;
+            e.Node.Rotation = new Vector3(0, yaw, 0);
+            if (e.Player is not null && !e.Dead)
+                AnimateMotion(e);
         }
+    }
+
+    // --motion-log (dev): per update of a moving NPC, the 2D distance (units) between where our movement had it and where
+    // the server now puts it, and a summary every 20 updates. Small = our movement between updates matches the server's.
+    private bool _motionLog;
+    private readonly List<float> _motionErrors = new();
+
+    private void LogMotion(ObjectUpdate u, Entity e, Vector3 pos)
+    {
+        if (e.MoveSpeed == 0 && u.UnitsPerSecond == 0)
+            return;
+        float err = new Vector2(pos.X - e.Node.Position.X, pos.Z - e.Node.Position.Z).Length() / RegionMetresPerUnit;
+        _motionErrors.Add(err);
+        GD.Print($"[motion] #{u.ObjectId} \"{e.Name}\": off by {err:0} units after {_seconds - e.LastUpdate:0.00} s " +
+            $"(speed {e.MoveSpeed:0} -> {u.UnitsPerSecond}, destination {(e.Destination is null ? "none" : "set")}" +
+            $" -> {(u.HasDestination ? "set" : "none")}; clip {(e.Clip.Length > 0 ? e.Clip : "-")} at {e.Player?.SpeedScale ?? 0:0.00}x)");
+        if (_motionErrors.Count % 20 == 0)
+        {
+            var sorted = _motionErrors.Order().ToList();
+            GD.Print($"[motion] {sorted.Count} updates: median {sorted[sorted.Count / 2]:0} units, 90% {sorted[sorted.Count * 9 / 10]:0}, max {sorted[^1]:0}");
+        }
+    }
+
+    // Retail's sideways strafe speed, units per second (73 swimming).
+    private const float StrafeUnits = 110f;
+
+    private Vector3? FollowedPosition(ushort objectId) =>
+        objectId == _world.Position.ObjectId ? _body.Position
+        : _entities.TryGetValue(objectId, out Entity? f) ? f.Node.Position : null;
+
+    // The clip from the sent speed, played at the rate the figure's stride asks for (daoc-re RE/77, RE/83):
+    // rate = clamp(speed, lo, hi) / (size% x stride / 100). Run above OUR max speed (0xB6, normally 100 units/s), so the
+    // line rises with our speed buffs (RE/82, correcting RE/77); walk above 0; back below 0. Strafing plays walk at
+    // retail's strafe rate: our figures carry no strafe clips yet (anims.csv 11/12; ours).
+    private void AnimateMotion(Entity e)
+    {
+        float units = e.MoveSpeed, runAbove = _speedPercent > 0 ? _speedPercent : 100;
+        DaocAssets.Figures.Strides? s = e.Strides;
+        float Rate(float speed, float lo, float hi, int stride, float fallback) =>
+            Mathf.Clamp(speed, lo, hi) / (e.SizeScale * (stride > 0 ? stride : fallback));
+        if (!e.Moved && e.Strafe == 0)
+            PlayClip(e, Idle(e.Player, e.InCombat, e.CombatIdle));
+        else if (units > runAbove)
+            PlayClip(e, "run", Rate(units, 50, 300, s?.Run ?? 0, 150));
+        else if (units > 0)
+            PlayClip(e, "walk", Rate(units, 50, 99999, s?.Walk ?? 0, 75));
+        else if (units < 0)
+            PlayClip(e, e.Player!.HasAnimation("back") ? "back" : "walk", Rate(-units, 50, 99999, s?.Back ?? 0, 75));
+        else
+            PlayClip(e, "walk", Rate(80, 80, 80, s?.Strafe ?? 0, 75));
+    }
+
+    // models/strides.csv (mpk strides), read once: each model id's figure strides, classic and Catacombs.
+    private Dictionary<int, (DaocAssets.Figures.Strides? Classic, DaocAssets.Figures.Strides? Catacombs)>? _strideTable;
+
+    private DaocAssets.Figures.Strides? StridesOf(ushort model, bool catacombs)
+    {
+        if (_strideTable is null)
+        {
+            string path = (_libraryPath ?? "").PathJoin("models").PathJoin("strides.csv");
+            _strideTable = !string.IsNullOrEmpty(_libraryPath) && Godot.FileAccess.FileExists(path)
+                ? DaocAssets.Figures.FigureTable.ReadStrides(Godot.FileAccess.GetFileAsString(path)) : new();
+        }
+        return _strideTable.TryGetValue(model, out var row) ? (catacombs ? row.Catacombs ?? row.Classic : row.Classic ?? row.Catacombs) : null;
     }
 }

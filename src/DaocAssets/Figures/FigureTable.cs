@@ -41,4 +41,33 @@ public static class FigureTable
         }
         return rows;
     }
+
+    /// <summary>Header of strides.csv: per model id, the classic figure's strides, then the Catacombs figure's (empty
+    /// when it has none).</summary>
+    public const string StridesHeader = "id,run,walk,back,strafe,cata_run,cata_walk,cata_back,cata_strafe";
+
+    public static string StridesRow(int id, Strides? classic, Strides? cata)
+    {
+        static string Four(Strides? s) => s is null ? ",,," : FormattableString.Invariant($"{s.Run},{s.Walk},{s.Back},{s.Strafe}");
+        return $"{id},{Four(classic)},{Four(cata)}";
+    }
+
+    /// <summary>Reads strides.csv by model id: (classic, Catacombs), either null when not given.</summary>
+    public static Dictionary<int, (Strides? Classic, Strides? Catacombs)> ReadStrides(string csv)
+    {
+        var rows = new Dictionary<int, (Strides?, Strides?)>();
+        foreach (string raw in csv.Split('\n'))
+        {
+            string[] c = raw.Trim().Split(',');
+            if (c.Length < 9 || !int.TryParse(c[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int id))
+                continue;
+            Strides? Four(int at) => int.TryParse(c[at], NumberStyles.Integer, CultureInfo.InvariantCulture, out int run)
+                && int.TryParse(c[at + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int walk)
+                && int.TryParse(c[at + 2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int back)
+                && int.TryParse(c[at + 3], NumberStyles.Integer, CultureInfo.InvariantCulture, out int strafe)
+                ? new Strides(run, walk, back, strafe) : null;
+            rows[id] = (Four(1), Four(5));
+        }
+        return rows;
+    }
 }

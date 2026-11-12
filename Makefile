@@ -181,6 +181,14 @@ $(OBJECTS): $(INDEX) $(MODEL_SRC) $(A)/Figures/WorldObjects.cs $(CLI_SRC) $(X)/C
 	@mkdir -p $(@D)
 	$(MPK) objects --gamedata $(CLIENT)/gamedata.mpk --index $(INDEX) --library $(LIB)
 
+# --- strides: each model id's run/walk/back/strafe stride (monnifs.csv), for the clips' playback speed -----------
+STRIDES := $(LIB)/models/strides.csv
+.PHONY: strides
+strides: $(STRIDES)
+$(STRIDES): $(CLIENT)/gamedata.mpk $(A)/Figures/MonsterFigure.cs $(A)/Figures/FigureTable.cs $(CLI_SRC) $(X)/Cli.Figures.cs | $(TOOL)
+	@mkdir -p $(@D)
+	$(MPK) strides --gamedata $(CLIENT)/gamedata.mpk --out $@
+
 # --- loading screens: the pictures, tips, bar and font the client shows while it loads a region ----------
 LOADING := $(LIB)/loading/loading.csv
 .PHONY: loading
@@ -209,7 +217,7 @@ $(ICONS): $(wildcard $(CLIENT)/icons/*.bmp $(CLIENT)/icons/*.BMP $(CLIENT)/Icons
 
 # --- every zone ----------------------------------------------------------------------------------------
 .PHONY: zones check-zones
-zones: $(foreach z,$(ZONES) $(CITIES),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(OBJECTS) $(LOADING) $(MAPS) $(ICONS)
+zones: $(foreach z,$(ZONES) $(CITIES),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(OBJECTS) $(STRIDES) $(LOADING) $(MAPS) $(ICONS)
 
 $(ZONEDIR)/summary.md: $(foreach z,$(ZONES) $(CITIES),$(ZONEDIR)/zone$(z)/zonecheck.md)
 	@{ echo "# Zone check, every converted zone (outdoor and cities)"; echo; \

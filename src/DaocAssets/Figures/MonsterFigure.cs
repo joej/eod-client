@@ -27,6 +27,10 @@ public sealed record FigureSpec(int ModelId, string Name, string Nif, int Versio
     public IReadOnlyDictionary<string, string> Clips { get; init; } = new Dictionary<string, string>();
 }
 
+/// <summary>A figure's strides (monnifs.csv): how far it moves per loop of its run, walk, back and strafe clips, in
+/// units at size 100; 0 = none given.</summary>
+public sealed record Strides(int Run, int Walk, int Back, int Strafe);
+
 /// <summary>An effect the client attaches to a model (monsters.csv "Mon Effect"): the effect's NIF, the figure
 /// node or bone it hangs on, and the distance (region units) within which it is drawn.</summary>
 public sealed record MonsterEffect(string Nif, string Attach, int VisibleRange);
@@ -265,6 +269,26 @@ public sealed class MonsterTables
                 d.TryAdd(id, c);
         }
         return d;
+    }
+
+    // monnifs.csv "Stride" columns: Run, Walk, Back, Strafe (units the figure covers per loop of that clip at size 100).
+    private const int StrideColumn = 4;
+
+    /// <summary>
+    /// Server model id <paramref name="modelId"/>'s strides (monnifs.csv columns 4-7: run, walk, back, strafe), from
+    /// its classic figure's row (monsters.csv column 2) and its Catacombs figure's row ("Cata Nif"), or null where the
+    /// row is missing. A 0 stride means "use the default" (the client's 150 / 75 / 75 / 75).
+    /// </summary>
+    public (Strides? Classic, Strides? Catacombs) StridesOf(int modelId)
+    {
+        if (!_monsters.TryGetValue(modelId, out string[]? m))
+            return (null, null);
+        Strides? Row(int column) => column < m.Length && int.TryParse(m[column], out int row) && row > 0
+            && _monnifs.TryGetValue(row, out string[]? n) && n.Length >= StrideColumn + 4
+            ? new Strides(Num(n[StrideColumn]), Num(n[StrideColumn + 1]), Num(n[StrideColumn + 2]), Num(n[StrideColumn + 3]))
+            : null;
+        static int Num(string v) => int.TryParse(v.Trim(), out int x) && x > 0 ? x : 0;
+        return (Row(2), Row(CatacombsFigure.CataNifColumn));
     }
 
     /// <summary>Every model id in monsters.csv, in order.</summary>

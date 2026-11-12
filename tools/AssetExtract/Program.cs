@@ -77,6 +77,9 @@ internal static partial class Cli
         if (command == "objects")
             return ObjectsCmd(args);
 
+        if (command == "strides")
+            return StridesCmd(args);
+
         string inputPath = args[1];
         if (!File.Exists(inputPath))
         {
@@ -121,6 +124,7 @@ internal static partial class Cli
               mpk figure   <model-id> --gamedata gamedata.mpk --index index.json --library LIBDIR
               mpk figures  --gamedata gamedata.mpk --index index.json --library LIBDIR   (every model id: classic figures, and Catacombs versions)
               mpk objects  --gamedata gamedata.mpk --index index.json --library LIBDIR   (the models of the server's objects: carts, banners, items on the ground)
+              mpk strides  --gamedata gamedata.mpk --out FILE.csv   (each model id's run/walk/back/strafe strides, for the clips' playback speed)
               mpk cata     <model-id> --gamedata gamedata.mpk --index index.json --library LIBDIR   (its Catacombs figure)
               mpk zonedeps <dat<NNN>.mpk> --index index.json --var NAME
               mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR [--size W H]

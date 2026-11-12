@@ -72,6 +72,39 @@ public class WorldEntityPacketTests
     }
 
     [Fact]
+    public void AWalkingNpcsUpdateCarriesItsSpeedAndDestination()
+    {
+        // The first moving 0xA1 in the capture: 0046 04c4 309a 2f5e 7293 7231 09a2 096a 11eb 0000, 64 40 00 00.
+        // Speed 70 units/s forward toward (0x2F5E, 0x7231, 0x96A), in the same zone; the heading points there.
+        ObjectUpdate u = ParseAll(ObjectUpdate.Code, ObjectUpdate.Parse).First(x => x.Speed != 0);
+        Assert.Equal((70, 0), (u.UnitsPerSecond, u.ZSpeed));
+        Assert.True(u.HasDestination);
+        Assert.Equal((0x2F5E, 0x7231, 0x096A), (u.DestinationX, u.DestinationY, u.DestinationZ));
+        Assert.Equal((0, 0), (u.ZoneSkin, u.DestinationZoneSkin));
+        Assert.Equal(0x11EB, u.ObjectId);
+        Assert.Equal(0, u.TargetId);
+        // Heading 0x4C4 against the direction to the destination (dx -316, dy -98): within a degree or so.
+        (double dx, double dy) = World.Heading.ToDirection(u.HeadingOnly);
+        double angle = Math.Atan2(dy, dx) - Math.Atan2(u.DestinationY - u.YOffsetInZone, u.DestinationX - u.XOffsetInZone);
+        Assert.InRange(Math.Abs(Math.IEEERemainder(angle, 2 * Math.PI)), 0, 0.05);
+    }
+
+    [Fact]
+    public void ObjectUpdateSpeedBitsZSpeedAndNinthZoneBits()
+    {
+        // OpenDAoC's SendObjectUpdate: speed | 0x8000 when sinking, (zSpeed & 0x70) << 8 into the speed, (zSpeed & 0xF) << 12
+        // into the heading; flag 0x04 / 0x08 the 9th bit of the zone / destination zone. zSpeed 0x35 = 53 -> 212 units/s down.
+        byte[] payload = [0xB0, 0x64, 0x50, 0x00, 0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0, 7, 0, 0, 100, 0x0C | 0x20, 0x12, 0x13];
+        ObjectUpdate u = ObjectUpdate.Parse(payload);
+        Assert.Equal((0x64, 0x000, -212), (u.UnitsPerSecond, u.HeadingOnly, u.ZSpeed));
+        Assert.Equal((0x112, 0x113), (u.ZoneSkin, u.DestinationZoneSkin));
+        Assert.True(u.Flying);
+        Assert.False(u.Underwater);
+        Assert.Equal(-100, ObjectUpdate.Parse([0x08, 0x64, .. payload[2..]]).UnitsPerSecond);   // 0x800: backwards
+        Assert.False(ObjectUpdate.Parse([.. payload[..6], 0, 0, .. payload[8..]]).HasDestination);   // destination x 0
+    }
+
+    [Fact]
     public void ObjectUpdateRoundTripsThroughZoneOffsetsToRegionGlobal()
     {
         // The payoff of the zone-local encoding: add the zone's offset to recover a region-global

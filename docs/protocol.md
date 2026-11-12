@@ -448,6 +448,44 @@ The opcode is 0xD5 (0x7D ^ 168); the server's handler describes itself as "0x7C"
 nowhere. *Verified live 2026-11-11: before the request, a player standing 100 units away (Quitcheck, seen from Testjoe)
 never appeared; with it, it appears within a second.*
 
+## Others moving
+
+NPCs and other players get a position update now and then (an NPC about once a second while it walks, a running player
+every 0.2 s); the client moves them itself in between.
+
+```
+S→C 0xA1 ObjectUpdate  (24 bytes, u16 BE words; OpenDAoC PacketLib168.SendObjectUpdate)
+  w0  speed: bits 0-10 units/s, 0x800 backwards; bits 12-14 and 15 = z speed high bits and sign
+  w1  heading & 0xFFF; bits 12-15 = z speed low bits (z speed = 7 bits x 4 units/s)
+  w2 x, w3 destination x, w4 y, w5 destination y, w6 z, w7 destination z   (zone-local; no destination if its x or y is 0)
+  w8  object id
+  w9  object it faces and walks to (OpenDAoC: its attack target when standing in reach, 0xFFFF while chasing, else 0)
+  b20 health %   b21 flags (0x04 / 0x08 = 9th bit of the zone / destination zone, 0x10 underwater, 0x20 flying,
+                  0xC0 realm)   b22 zone   b23 destination zone
+```
+
+How our client moves them (retail's rules):
+- **Positions are set as sent**, not blended. A grounded one then stands on the floor or terrain under it.
+- **An NPC with a destination** faces it every frame and walks there at its speed. It stops within max(16, speed / 10)
+  units.
+- **An NPC with an object in w9** faces it and walks to within 64 units.
+- **Anything else with speed** moves along its heading. Flyers and swimmers also move up or down at their z speed.
+- **Headings** turn over 500 ms, the short way round.
+- **Players (0xA9):**
+  - A moving player sent within 64 units of where we have it keeps our x/y and takes only the new height.
+  - Its heading turns over 500 ms only when the previous update came within 500 ms; otherwise it snaps.
+  - It strafes sideways at 110 units/s (state flags 0x40 left, 0x80 right).
+  - Heading bit 0x1000 = standing on the ground.
+- **The clip comes from the sent speed:**
+  - run above your own max speed (0xB6, normally 100), walk above 0, back below 0;
+  - played at rate = clamp(speed) / (stride × size / 100), with the figure's strides from the client's monster tables
+    (`mpk strides`).
+
+*Measured live 2026-11-11 (Camelot Hills, `--motion-log`):*
+- Wandering NPCs walk at 70 units/s. Over 600 updates, where the client had moved them landed a median 10 units from
+  the server's next position (90%: 12). Standing in place instead would be 70-140 units off.
+- A running player (191 units/s) landed 4-10 units off.
+
 ## Groups
 
 ```

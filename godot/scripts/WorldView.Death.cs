@@ -127,11 +127,14 @@ public partial class WorldView
     private static void DropEntity(Entity e, bool dead)
     {
         e.Dead = dead;
+        if (dead)
+            (e.MoveSpeed, e.Destination, e.Strafe) = (0f, null, 0);   // the dead don't walk on
         if (e.Player is null)
             return;
         if (dead && e.Player.HasAnimation("death"))
         {
             e.Player.GetAnimation("death").LoopMode = Animation.LoopModeEnum.None;
+            e.Player.SpeedScale = 1f;
             e.Player.Play("death", customBlend: 0.1);
             e.Clip = "death";
         }

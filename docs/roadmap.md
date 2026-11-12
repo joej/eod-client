@@ -156,7 +156,9 @@ in.
   the stream — verified byte-for-byte against the 1.127e capture), 0xDA NPCCreate, 0x4B PlayerCreate,
   0xD9 ObjectCreate, 0xA2 RemoveObject, 0xE1 ObjectDelete. Each is a capsule, realm-tinted from its
   create packet, placed by converting zone-local 0xA1 coords to region-global via the zone offset.
-- ~~Interpolate between updates~~ so movement glides rather than teleporting (per-NPC updates are ~1 Hz).
+- ~~Interpolate between updates~~ so movement glides rather than teleporting (per-NPC updates are ~1 Hz). Since
+  2026-11-11 the client moves them itself between updates as retail does: to the 0xA1 destination at the sent speed,
+  with walk/run clips at the figure's stride rate (docs/protocol.md "Others moving").
 - **Done when:** standing in a populated zone, you see NPCs and any other players/bots move around in
   real time at roughly the right places. **Met** (Cotswold NPCs, live).
 

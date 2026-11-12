@@ -280,6 +280,8 @@ public partial class WorldView
         int drops = System.Array.IndexOf(args, "--drops");
         if (drops >= 0 && drops + 1 < args.Length && int.TryParse(args[drops + 1], out int n))
             (_dropAgain, _dropsLeft) = (_dropPending, n - 1);
+        // --motion-log: how far each NPC's own movement between updates lands from where the next update puts it.
+        _motionLog = args.Contains("--motion-log");
         // --walkto X Y: run to that region point (auto-run, as the player would); --shot-on-arrival saves a shot there.
         int walk = System.Array.IndexOf(args, "--walkto");
         if (walk >= 0 && walk + 2 < args.Length && float.TryParse(args[walk + 1], System.Globalization.CultureInfo.InvariantCulture, out float wx)

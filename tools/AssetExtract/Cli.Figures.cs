@@ -339,6 +339,32 @@ internal static partial class Cli
 
     // objects <gamedata.mpk>: every model a server object (0xD9) can name (WorldObjects: objects.csv → items.csv), converted
     // from the item folders into the library, and models/objects.csv "model,glb" for the client to place them.
+    // models/strides.csv: each model id's strides (monnifs.csv), classic and Catacombs figure, so the client plays walk, run
+    // and back clips at the rate the creature's speed asks for. Reads only gamedata.mpk.
+    private static int StridesCmd(string[] args)
+    {
+        string? gamedata = null, outPath = null;
+        for (int i = 1; i + 1 < args.Length; i += 2)
+            if (args[i] == "--gamedata") gamedata = args[i + 1];
+            else if (args[i] == "--out") outPath = args[i + 1];
+        if (gamedata is null || outPath is null) return Usage();
+        var tables = DaocAssets.Figures.MonsterTables.Read(gamedata);
+        var csv = new System.Text.StringBuilder(DaocAssets.Figures.FigureTable.StridesHeader + "\n");
+        int rows = 0;
+        foreach (int id in tables.ModelIds)
+        {
+            var (classic, cata) = tables.StridesOf(id);
+            if (classic is null && cata is null) continue;
+            csv.Append(DaocAssets.Figures.FigureTable.StridesRow(id, classic, cata)).Append('\n');
+            rows++;
+        }
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outPath))!);
+        File.WriteAllText(outPath + ".tmp", csv.ToString());
+        File.Move(outPath + ".tmp", outPath, overwrite: true);
+        Console.WriteLine($"strides: {rows} model ids -> {outPath}");
+        return 0;
+    }
+
     private static int ObjectsCmd(string[] args)
     {
         if (FigureOptions(args, 1) is not var (gamedata, indexPath, libDir)) return Usage();

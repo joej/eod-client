@@ -140,18 +140,29 @@ public partial class WorldView : Node3D
     private sealed class Entity
     {
         public required Node3D Node;
-        public Vector3 TargetPosition;
+        public float ServerY;         // the height the server last sent (Godot metres)
         public int Realm;             // 0 none (monsters), 1 Albion, 2 Midgard, 3 Hibernia
         public bool IsPlayer;
-        public bool Grounded;         // stands on the ground under TargetPosition, whatever height the server sends (NPCs)
+        public bool Grounded;         // stands on the ground under it, whatever height the server sends
+        public bool GroundedAtSpawn;  // its create said neither flying nor swimming (a 0xA1 flag may still lift it)
         public float? GroundY;        // that ground's height, probed for ProbedAt
         public Vector3 ProbedAt = new(float.NaN, 0, 0);
-        public float TargetYaw;
+        public float TargetYaw;       // the heading last sent; the figure turns to it over TurnFrom..TurnStart + 0.5 s
+        public float TurnFrom;
+        public double TurnStart = -1; // when that turn began (-1: none)
         public double Age;            // seconds since spawn, for a brief "is this real" grace period
         public AnimationPlayer? Player;   // a DAoC figure's clips (idle, walk, run), or null for a capsule
         public string Clip = "";
-        public Vector3 LastPosition;
-        public float Speed;           // smoothed metres per second, to pick the clip
+        // Between updates the client moves it itself (daoc-re RE/77 "Between updates"):
+        public float MoveSpeed;       // units/s along its heading as sent (negative: backwards); 0 once it arrives
+        public float ZSpeed;          // units/s up or down (a flying or swimming NPC without a destination)
+        public int Strafe;            // a player strafing: -1 left, 1 right (110 units/s sideways)
+        public Vector3? Destination;  // where an NPC walks to (0xA1); it stops on arrival
+        public ushort Follow;         // the object an NPC faces and walks to (0xA1 word 9; 0 / 0xFFFF none)
+        public double LastUpdate;     // when its last position update came (_seconds)
+        public bool Moved;            // it moved this frame (picks a moving clip)
+        public DaocAssets.Figures.Strides? Strides;   // its figure's strides (clip playback rate), null: defaults
+        public float SizeScale = 1f;  // its figure's size against 100 (the table's scale times the NPC's size / 50)
         public Node3D? Figure;        // a player's Catacombs figure, dressed by 0x15 (null otherwise)
         public ushort Model;
         public CharacterLook Look;
