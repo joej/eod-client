@@ -369,12 +369,18 @@ public partial class WorldView
         // behind in chase mode and right-drag turns the body, not the camera. (Adding _bodyYaw here
         // double-counted the body's rotation and skewed the camera off to the side.)
         _camPivot.Rotation = new Vector3(_camPitch, _camOrbit, 0);
+        if (_firstPerson)
+        {
+            // The eye: the camera at the pivot, no arm (see FirstPersonEye).
+            _camPivot.Position = new Vector3(0, FirstPersonEye(), 0);
+            _camArm.SpringLength = 0;
+            return;
+        }
         _camPivot.Position = PivotHeight + new Vector3(0, _camHeight, 0);
-        // Lerp the arm's TARGET length toward the zoom distance; the SpringArm shortens from this
-        // target on its own when it hits placed geometry. Floor the target at CamMin so even a wall
-        // the arm catches can't collapse the camera into the pivot (the "inside the capsule" bug).
-        float target = Mathf.Max(CamMin, _camDistance);
-        _camArm.SpringLength = Mathf.Lerp(_camArm.SpringLength, target, Mathf.Min(1f, (float)delta * 10f));
+        // The arm's TARGET length is the zoom distance, taken at once (retail: no zoom smoothing); the SpringArm
+        // shortens from it on its own when it hits placed geometry. Floored at CamMin so even a wall the arm catches
+        // can't collapse the camera into the pivot (the "inside the capsule" bug).
+        _camArm.SpringLength = Mathf.Max(CamMin, _camDistance);
     }
 
     // ----- Swimming (M8) -----
@@ -386,6 +392,7 @@ public partial class WorldView
     // byte (realm ability Mastery of Water would add to it; capped at 100); backwards or sideways x 0.85.
     // Not yet: diving (W51). The surfaces are the zone's water bodies (water.glb, on WaterLayer).
     private bool _swimming, _wading;
+    private float _swimSurface;   // the water surface while swimming (Godot y)
     private ushort _speedPercent = 100;
     private byte _waterSpeed;
     private const float SwimStart = 0.9f;     // feet this far under the surface: swimming
@@ -411,6 +418,7 @@ public partial class WorldView
         if (!_swimming)
             GD.Print($"[world] swimming (water {surface!.Value - floor:0.0} m deep, {SwimUnitsPerSecond:0} units/s)");
         _swimming = true;
+        _swimSurface = surface!.Value;
         float y = Mathf.Max(floor, surface!.Value - FloatDepth);
         // Falling in: the water takes it, no landing (and no fall damage).
         (_airborne, _jumping, _verticalSpeed, _landingSpeed) = (false, false, 0, 0);

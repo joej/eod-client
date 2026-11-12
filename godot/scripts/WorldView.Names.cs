@@ -129,6 +129,7 @@ public partial class WorldView
     {
         if (PlayerName.Length > 0)
             _ownNameplate = Nameplate(_body, HeadHeight(_body), PlayerName, "", OwnRealmPlayer, ClientSettings.NameKinds.Self);
+        ShowOwnBody();
     }
 
     // A plate over a head: the name, the role or guild in angle brackets under it. It keeps its kind (which
@@ -177,6 +178,7 @@ public partial class WorldView
                 StyleNameplate(e.Nameplate);
         if (_ownNameplate is not null)
             StyleNameplate(_ownNameplate);
+        ShowOwnBody();   // first person keeps your own plate hidden
     }
 
     private void ShowNames(bool on)

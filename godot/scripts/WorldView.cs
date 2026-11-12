@@ -548,7 +548,7 @@ public partial class WorldView : Node3D
         if (_bordersVisible)
             ShowZoneBorders(true);   // on before a region change: draw this region's at once
         _dev.AddToggle("Entities", true, on => _entityRoot.Visible = on);
-        _dev.AddToggle("Own character", true, on => _body.Visible = on);
+        _dev.AddToggle("Own character", true, on => { _ownCharacterShown = on; ShowOwnBody(); });
         _dev.AddToggle("Names", _namesVisible, ShowNames);
         _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);
         // Off by default: the server's speed check exempts GMs only, and kicks a player who sprints.
@@ -674,9 +674,9 @@ public partial class WorldView : Node3D
     private static string Keys(ControlAction a) =>
         KeyBindings.KeysFor(a) is { Length: > 0 } k ? string.Join("+", System.Linq.Enumerable.Select(k, OS.GetKeycodeString)) : "-";
 
-    // Zooms the chase camera by wheel notches: positive moves away, ×1/0.88 per notch.
-    private void Zoom(float notches) =>
-        _camDistance = Mathf.Clamp(_camDistance * Mathf.Pow(0.88f, -notches), CamMin, CamMax);
+    // Zooms the chase camera by wheel notches: positive moves away, 50 units a notch at once (retail). In past 50 units
+    // is first person; zooming out of first person comes back at 50 (WorldView.Camera).
+    private void Zoom(float notches) => ZoomTo(_camDistance + notches * ZoomStep);
 
     // Right mouse button toggles mouse-look; while held, relative motion turns the camera.
     // P saves a screenshot of the current view.
@@ -752,7 +752,7 @@ public partial class WorldView : Node3D
         }
         else if (@event is InputEventMouseButton { Pressed: true } wheel && _chase)
         {
-            // Mouse wheel zooms the chase camera (OfflineDAoC: ×0.88 per notch, clamped 1.25–12.5 m).
+            // Mouse wheel zooms the chase camera (retail: 50 units a notch, 50-500, first person in past 50).
             // Smooth-scrolling wheels report fractional notches in Factor (0 = a plain notch).
             float notches = wheel.Factor > 0 ? wheel.Factor : 1f;
             if (wheel.ButtonIndex == MouseButton.WheelUp)
@@ -762,9 +762,9 @@ public partial class WorldView : Node3D
         }
         // macOS trackpads and the Magic Mouse scroll with pan gestures, not wheel buttons; a pinch magnifies.
         else if (@event is InputEventPanGesture pan && _chase)
-            Zoom(pan.Delta.Y);
+            Zoom(pan.Delta.Y * TrackpadNotches);
         else if (@event is InputEventMagnifyGesture pinch && _chase && pinch.Factor > 0)
-            _camDistance = Mathf.Clamp(_camDistance / pinch.Factor, CamMin, CamMax);
+            ZoomTo(_firstPerson && pinch.Factor < 1 ? CamMin : _camDistance / pinch.Factor);
         else if (@event is InputEventMouseMotion mm && _lookActive)
         {
             _rightMoved += mm.Relative.Length();

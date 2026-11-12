@@ -231,6 +231,17 @@ public partial class WorldView
             };
         }
         _acceptDialogs = System.Array.IndexOf(args, "--accept-dialogs") >= 0;
+        // --zoom NOTCHES (repeatable) turns the mouse wheel that many notches (negative: in), 1 s apart from 2 s after
+        // entering: to check the zoom and first person without a mouse.
+        int zoomDelay = 2;
+        for (int zi = System.Array.IndexOf(args, "--zoom"); zi >= 0 && zi + 1 < args.Length;
+             zi = System.Array.IndexOf(args, "--zoom", zi + 2), zoomDelay++)
+            if (float.TryParse(args[zi + 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float notches))
+                GetTree().CreateTimer(zoomDelay).Timeout += () =>
+                {
+                    Zoom(notches);
+                    GD.Print($"[camera] zoomed {notches:+0;-0} notches: {(_firstPerson ? "first person" : $"{_camDistance / RegionMetresPerUnit:0} units")}");
+                };
         // --command TEXT (repeatable) sends each slash command in turn, 2 s apart from 2 s after entering: e.g.
         // a GM "/jump to X Y Z REGION" to set up a --campose/--shot check somewhere exact.
         int delay = 2;
