@@ -509,7 +509,13 @@ with its own sound, intro movie and pregame screens, then the better-looking ver
 - Interpret combat packets (attack/animation/damage/death) so fights are visible; send basic combat
   actions.
 - Parse inventory and equipment; show the character's items; equip/move within the 1.65 ruleset.
-- **Done when:** you can engage a mob, see the exchange and outcome, and manage what you're wearing.
+- **Emotes and postures** (owner, 2026-11-13): read 0xF9 and play the emote's clip once on the figure (`emotes.csv`
+  → `anims.csv`: 63 emote clips, per race, classic and Catacombs), then back to idle; ignored while the figure moves
+  faster than 32 units/s, rides, or is on your ignore list. Show other players' postures from 0xA9 (sitting, swimming,
+  dead; audit B3). Effect overlays wait for M12, face changes for morphs. Rows in `docs/ui-windows.md`,
+  "Emotes and postures".
+- **Done when:** you can engage a mob, see the exchange and outcome, and manage what you're wearing; another
+  player's /wave shows as a wave.
 
 ### M11 — Dungeons and cities
 *Go inside: the 299 zones that aren't heightmaps.*
