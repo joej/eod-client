@@ -12,18 +12,20 @@ RPG and FPS; darkageofcamelot.com's current page names RPG, FPS and "MMO Default
   Space jump, NumLock auto-run, Z dive, V sprint; mouse: left-drag pans the camera, right button looks
   where you run. That is the layout most players use today.
 
-## Retail's shipped presets (keyboard.dat, read by daoc-re 2026-11-06)
+## Retail's shipped presets (keyboard.dat, read by daoc-re 2026-11-06; corrected 2026-11-13)
+
+Every action and its three defaults: `docs/ui-windows.md`, "Keys".
 
 The player's own bindings (user.dat) come first; keyboard.dat's preset only fills actions left unbound.
 
 | Action | RPG | MMO | FPS |
 |---|---|---|---|
 | Forward / back | W / S | W / S | E / D |
-| Turn left / right | A / D | Num4 / Num6 | Num4 / Num6 |
+| Turn left / right | A / D | Left / Right (arrows, and keypad 4/6: the client forces NumLock off) | Left / Right (the same) |
 | Strafe left / right | Q / E | A / D | S / F |
 | Jump / up | Space | Space | Space |
 | Down (dive) | Z | Q | Z |
-| Walk (toggle) | Scroll Lock | K + a modifier (likely Shift) | K + a modifier |
+| Walk (held) | Scroll Lock | Shift+K | Shift+K |
 
 Speeds (daoc-re's capture, 2026-11-05): run 191 units/s; backward, strafe and swim 85; backward is sent as a
 negative speed with no flag. Walking's speed is still to be captured.

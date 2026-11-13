@@ -225,24 +225,104 @@ slash commands. Same columns.
 
 ### Keys
 
-Retail's Configure Keyboard has **86 actions** (`keyboard.dat`), with RPG, MMO and FPS presets. We can rebind **14**:
-forward, back, turn left/right, strafe left/right, jump, sprint, auto-run, attack mode, map, torch, reset camera, toggle
-interface. Others work on fixed keys of ours (Esc, Enter, F1–F10), on buttons only, or not at all. Retail's keys we
-know of and lack (docs/controls.md):
+Retail's Configure Keyboard (checked 2026-11-13): 90 binding slots, 78 named, 75 rows in 8 sections; # is the slot.
+Each slot holds one key plus modifiers (Shift, Alt, Ctrl) or a mouse button; second binds are their own slots
+(Forward2, Back2, Run Lock 2). Defaults are the RPG / MMO / FPS presets ("none" = explicitly unbound). Movement keys
+are read held and ignore modifiers; the rest need their exact modifiers. Not bindable: Escape, Enter, `/`, `'`, `]`,
+the number row (quickbars), Shift as a main key, F12. The client forces NumLock off, so keypad 4/6 are also Left/Right.
 
-| Retail action | Status | Waits on | Decision |
-|---|---|---|---|
-| Walk toggle (RPG Scroll Lock, MMO/FPS Shift+K) | ❌ | walk speed (W41) | |
-| Dive / down (Z, MMO Q) | ❌ | | |
-| Pan Camera (held) | ❌ (we pan with left-drag) | | |
-| Look Up / Look Down (12°/s; height in pan mode) | ❌ | | |
-| Camera Toggle | ❌ | | |
-| Target Enemy / Friend / Object / Loot (nearest, cycling within 1.5 s) | ❌ | | |
-| Consider | ❌ | | |
-| Sit / stand | ❌ (command window and `/sit` only) | | |
-| Face (F), Follow (Shift+F), Stick (Shift+V) | 🟡 buttons only (target and command windows), no keys | | |
-| Spells (K), Styles (L), Abilities (P) pages | 🟡 menu bar only | | |
-| The rest of the 86 | not listed yet: ask daoc-re for keyboard.dat's action names | | |
+Ours: 14 rebindable actions (Settings → Keyboard) with the four presets; other keys are fixed, several of them dev
+keys that sit on retail's (F1–F6, Tab, P).
+
+| # | Action | RPG | MMO | FPS | Held/press | What it does | Ours | Status | Decision |
+|---|---|---|---|---|---|---|---|---|---|
+| **Movement** | | | | | | | | | |
+| 0 | Forward | W | W | E | held | Move forward. | W / W / E, rebindable | ✅ | |
+| 20 | Forward2 | Left+Right Mouse | Up | Up | held | Second bind for Forward. | — | ❌ | |
+| 1 | Back | S | S | D | held | Move back; ends autorun. | S / S / D, rebindable | ✅ | |
+| 33 | Back2 | Down | Down | Down | held | Second bind for Back. | — | ❌ | |
+| 2 | Left | A | Left | Left | held | Turn left; slides instead while action 6 is held. | A, rebindable; MMO/FPS use keypad 4 only, not the arrows | 🟡 | |
+| 3 | Right | D | Right | Right | held | Turn right; slides instead while action 6 is held. | D, rebindable; MMO/FPS use keypad 6 only, not the arrows | 🟡 | |
+| 6 | (blank) | none | none | — | held | Blank name in the dialog. While held, Left/Right slide instead of turning (a strafe modifier). | — | ❌ | |
+| 8 | Slide Left | Q | A | S | held | Strafe left; ends autorun. | Q / A / S, rebindable | ✅ | |
+| 9 | Slide Right | E | D | F | held | Strafe right; ends autorun. | E / D / F, rebindable | ✅ | |
+| 4 | Jump/Up | Space | Space | Space | held | Jump, or swim/fly up. Mounted: dismount ("You try to dismount."). On a boat: says to type /disembark. 1 s lockout. | Space, rebindable (no dismount or boat rules) | ✅ | |
+| 5 | Down | Z | Q | Z | held | Swim/fly down. | — | ❌ | |
+| 57 | Sit | X | N | N | press | Sit / stand. | `/sit`, command window | 🟡 | |
+| 7 | Walk | Scroll Lock | Shift+K | Shift+K | held | Walk while held. | — | ❌ | |
+| 42 | Runlock | NumLock | T | Y | press | Autorun on/off. | NumLock in every preset (MMO T, FPS Y in retail) | 🟡 | |
+| 83 | Run Lock 2 | none | NumLock | NumLock | press | Second bind for Runlock. | — | ❌ | |
+| 66 | Sprint | V | F | G | press | Sprint on/off (the /sprint toggle). | V in every preset (MMO F, FPS G in retail) | 🟡 | |
+| 62 | Follow | Shift+F | Y | Shift+V | press | Follow the target. | button only | 🟡 | |
+| 63 | Stick | Shift+V | E | V | press | Stick to the target (close follow). | button only | 🟡 | |
+| 64 | Face | F | R | B | press | Turn to face the target. | button only | 🟡 | |
+| **Combat** | | | | | | | | | |
+| 68 | Right Hand Weapon | B | Shift+Q | Shift+W | press | Switch to the right-hand weapon. | — | ❌ | |
+| 69 | Two Handed Weapon | N | Shift+E | Shift+R | press | Switch to the two-handed weapon. | — | ❌ | |
+| 70 | Ranged Weapon | , | Shift+R | Shift+T | press | Switch to the ranged weapon. | — | ❌ | |
+| 27 | Combat Mode | backtick | X | C | press | Attack mode on/off. | H in every preset (ours) | 🟡 | |
+| **Targeting** | | | | | | | | | |
+| 43 | Consider | F6 | none | none | press | Consider (con) the target. Without one: "You must select a target to Consider!" | — (F6 is our travel window) | ❌ | |
+| 72 | Nearest Loot | F7 | H | - | press | Target the nearest lootable object ("No lootable object in range."). | — | ❌ | |
+| 26 | Target Object | F8 | Shift+H | Shift+- | press | Target the nearest object ("No object target in range."). | — | ❌ | |
+| 24 | Target Enemy | Tab | Tab | Tab | press | Target the nearest enemy ("No enemy target in range."). | — (Tab is our free-fly camera) | ❌ | |
+| 25 | Target Friend | Ctrl+Tab | Ctrl+Tab | backtick | press | Target the nearest friendly ("No friendly target in range."). | — | ❌ | |
+| 35 | Last Attacker | Shift+Tab | Shift+Tab | Shift+Tab | press | Target your last attacker ("Your last attacker is not in range." / "…not visible."). | — | ❌ | |
+| 44 | Ground Target | F5 | C | Alt+A | press | Ground-target placement on/off (inferred, not traced). | — | ❌ | |
+| 45 | Target Group1 | F1 | none | none | press | Target group member 1. | — (F1 is our dev panels) | ❌ | |
+| 46 | Target Group2 | F2 | none | none | press | Target group member 2. | — (F2 is our render mode) | ❌ | |
+| 47 | Target Group3 | F3 | none | none | press | Target group member 3. | — (F3 is our view distance) | ❌ | |
+| 48 | Target Group4 | F4 | none | none | press | Target group member 4. | — (F4 is our packet log) | ❌ | |
+| 49 | Target Group5 | Shift+F1 | none | none | press | Target group member 5. | — | ❌ | |
+| 50 | Target Group6 | Shift+F2 | none | none | press | Target group member 6. | — | ❌ | |
+| 51 | Target Group7 | Shift+F3 | none | none | press | Target group member 7. | — | ❌ | |
+| 52 | Target Group8 | Shift+F4 | none | none | press | Target group member 8. | — | ❌ | |
+| **Interaction** | | | | | | | | | |
+| 11 | Open | none | Shift+Space | Shift+Space | press | Interact with what is picked at the pointer: a door, object or figure. | — | ❌ | |
+| 38 | Destroy | Shift+D | Shift+D | Shift+D | press | Destroy the selected backpack item, after "Do you really wish to destroy this item?". | — | ❌ | |
+| 34 | Use Item | U | U | U | press | Use the selected item (primary use). | — | ❌ | |
+| 71 | Use Item Secondary | Shift+U | Shift+U | Shift+U | press | Use the selected item (secondary use). | — | ❌ | |
+| 65 | Craft | Shift+C | Shift+C | Shift+C | press | Craft with the selected backpack item ("You must select an item in your backpack!"). | — | ❌ | |
+| 21 | Get | G | G | = | press | Get: pick up the target or nearby item. | — | ❌ | |
+| 29 | Sell | Shift+S | Shift+S | Shift+S | press | Sell the selected backpack item to the open merchant. 1 s lockout ("You must wait one more second to interact again!"). | — | ❌ | |
+| **Camera** | | | | | | | | | |
+| 14 | Reset Camera | Num 5 | Z | X | held | Reset the camera behind the character. | Home (2001 manual); classic layout D | 🟡 | |
+| 61 | Pan Camera | none | none | none | held | Pan: orbit the camera around the character without turning it. | — | ❌ | |
+| 86 | Camera Toggle | F11 | F11 | F11 | press | Cycles the camera mode: first person, third-person orbit, mode 2, first person again. Does nothing in the death camera. | — | ❌ | |
+| 18 | Mouse | none | none | none | press | Lock or unlock mouselook (same as user.dat mouselooklock; captures the cursor). | — | ❌ | |
+| 39 | Mouse Look Toggle | Right Mouse | Right Mouse | Right Mouse | held | Mouselook while held. If "mouselook on by default" is set, holding it turns mouselook off instead. | right-drag turns and re-aligns, fixed | 🟡 | |
+| 78 | Mouse Pan | Left Mouse | Left Mouse | Left Mouse | held | Pan the camera while held; also mouselook unless "mouselook on by default" is set. | left-drag pans, fixed | 🟡 | |
+| 12 | Look up | Ins | none | none | held | Tilt the camera up. | — | ❌ | |
+| 13 | Look Down | Del | none | none | held | Tilt the camera down. | — | ❌ | |
+| **Chat** | | | | | | | | | |
+| 53 | PageUp | PgUp | PgUp | PgUp | press | Page the chat window up. | — | ❌ | |
+| 54 | PageDown | PgDn | PgDn | PgDn | press | Page the chat window down. | — | ❌ | |
+| 36 | Reply | R | Alt+R | Alt+R | press | Start a reply: puts "send <last sender> " (or "advice <name> ") on the chat line. Pressing again within 1 s steps back to older senders (3 kept). With none: "You cannot reply until you receive a message." | — | ❌ | |
+| 37 | ChatLog | Ctrl+L | Ctrl+L | Ctrl+L | press | Chat logging to file on/off (inferred). | — | ❌ | |
+| **Show** | | | | | | | | | |
+| 31 | Inventory | I | B | Ctrl+B | press | Character window, Inventory page; press again to close. | menu bar button | 🟡 | |
+| 30 | Stats | C | Ctrl+C | Ctrl+C | press | Character window, Stats page; again to close. | menu bar button | 🟡 | |
+| 32 | Group | O | Ctrl+G | Ctrl+G | press | Character window, Group page; again to close. | menu bar button | 🟡 | |
+| 28 | Show Spells | K | Ctrl+S | Ctrl+S | press | Character window, Spells page; again to close. | menu bar button | 🟡 | |
+| 40 | Show Skills | P | Ctrl+D | Ctrl+D | press | Character window, Skills page; again to close. | menu bar button | 🟡 | |
+| 41 | Show Combat | L | Ctrl+A | Ctrl+A | press | Character window, Combat page; again to close. | menu bar button | 🟡 | |
+| **Misc** | | | | | | | | | |
+| 22 | Torch | T | Shift+Y | Shift+Y | press | Torch on/off. | T in every preset (MMO/FPS Shift+Y in retail) | 🟡 | |
+| 19 | Toggle Names | Alt+N | Alt+N | Alt+N | press | Overhead names on/off (inferred). | — | ❌ | |
+| 10 | Help | Alt+F1 | Alt+F1 | Alt+F1 | press | Open the Help window. | — | ❌ | |
+| 58 | Perf. Meter | Alt+P | Alt+P | Alt+P | press | Performance meter: off, mode 1, mode 2, off. | meters always on | 🟡 | |
+| 59 | Compass | Alt+C | Alt+C | Alt+C | press | Compass on/off. | Settings / Interface Elements only | 🟡 | |
+| 60 | Information/Delve | Shift+I | Shift+I | Shift+I | press | Delve the selected thing. | — | ❌ | |
+| 67 | Command Window | ; | Alt+K | Alt+K | press | Command window on/off. | Interface Elements only | 🟡 | |
+| 79 | Map Window | M | M | M | press | Map window on/off. | M | ✅ | |
+| 81 | Realm War Map | Shift+M | Shift+M | Shift+M | press | Realm war map. | — | ❌ | |
+| 82 | Quest Journal | J | J | J | press | Quest journal. | — | ❌ | |
+| 80 | Toggle Interface | Alt+Z | Alt+Z | Alt+Z | press | Hide/show the whole interface. | F12 (retail refuses F12 as a bind) | 🟡 | |
+| 85 | Take Screenshot | Num - | Num - | Num - | press | Screenshot ("Taking Screenshot!"). | P (ours, saves to private/) | 🟡 | |
+
+Hidden in the dialog: Chat (23), PageUpSys (55, Shift+PgUp), PageDownSys (56, Shift+PgDn), Show Character Info (84).
+Retail's preset buttons also set four options (Ctrl and Alt as modifiers only, Forward breaks autorun, modifiers stop
+movement): MMO turns Ctrl-as-modifier on, all three turn the others to Alt on, Forward-breaks-autorun on.
 
 ## Emotes and postures: retail vs ours
 
