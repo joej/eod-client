@@ -244,6 +244,24 @@ know of and lack (docs/controls.md):
 | Spells (K), Styles (L), Abilities (P) pages | 🟡 menu bar only | | |
 | The rest of the 86 | not listed yet: ask daoc-re for keyboard.dat's action names | | |
 
+## Emotes and postures: retail vs ours
+
+Checked 2026-11-13. Same columns as the settings tables above.
+
+| Retail behaviour | Ours | Status | Waits on | Decision |
+|---|---|---|---|---|
+| `/wave`, `/bow`, `&<emote>` … sent to the server as commands | typed commands go to the server | ✅ | | |
+| The emote's chat line ("You wave…") comes from the server | shown in chat | ✅ | | |
+| 0xF9 emote animation: the figure plays its `emotes.csv` clip once (99 emotes, clip per model), then idles | 0xF9 not read; no figure moves | ❌ | | |
+| Emote ignored while the figure moves faster than 32 units/s, rides, or is on your ignore list | — | ❌ | 0xF9 | |
+| Spell-effect overlay on some emotes (Frenzy, Dragon Roar, Level Up, Pray, Bind, Spellcraft) | — | ❌ | spell effects (M12) | |
+| Smile / Angry change the face for 4 s | — | ❌ | figures with morphs | |
+| Horse emotes (`&horse halt\|nod\|graze\|…`), whistle sound | — | ❌ | mounts | |
+| Siege engines: emotes 200 / 201 play the load and fire frames | — | ❌ | siege | |
+| Your own sit: sit down, sitting, stand up clips; moving stands you up | sits on `/sit` and the quit timer; shown to others (0xA9) | ✅ | | |
+| Other players' postures from 0xA9: sitting, swimming, dead, riding, climbing | flags read, not shown (audit B3) | ❌ | | |
+| Emote picker window (`emoticon_window`) | — | ❌ | | |
+
 ## Chat: what to test
 
 M6 counted chat done when a /say went out and replies came back. What retail chat does, to check one by one
