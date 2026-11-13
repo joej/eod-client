@@ -383,7 +383,8 @@ with its own sound, intro movie and pregame screens, then the better-looking ver
   Camelot City gate (owner, Eodarms), death by falls and release to the bind point (Quitcheck), plus
   swimming and the region loading screen.
 
-### M9 — Vitals, targeting, interaction — and solid world
+### M9 — Vitals, targeting, interaction — and solid world ✅
+**Done** 2026-11-13 · shot 2026-11-13_26_master-visur-targeted-and-talking
 *The HUD, the basics of "doing things," and a world you can't walk through.*
 - Parse health/mana/endurance, level/XP, and the stat/update packets into a HUD.
 - Target an entity; basic interact (talk to NPC, open a merchant/dialog) — read-only first.
