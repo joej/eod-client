@@ -107,11 +107,14 @@ them), saved per character.
 ## Our client today
 
 Presets RPG (default), MMO, FPS and classic (the 2001 layout), chosen in Settings → Keyboard (login screen or F10 in game), with your own keys kept over the layout as retail keeps user.dat's (click a key, press the new one; Backspace: no key; a key taken from another action leaves it).
-Backing up and strafing at 85 of 191 (scaled with the server's speed), backward sent negative; V sprint
-(`/sprint`); NumLock auto-run (forward or back stops it); left-drag pans the camera round the character, a click
+Every preset's default keys are retail's (2026-11-13; docs/ui-windows.md "Keys"): sprint V / F / G (`/sprint`),
+auto-run NumLock / T or NumLock / Y (forward or back stops it), attack mode backtick / X / C, torch T / Shift+Y /
+Shift+Y, reset camera Num 5 / Z / X, hide the interface Alt+Z, and the arrows (and keypad 4/6) turn in MMO and FPS;
+the classic layout takes RPG's. Keys with modifiers need exactly those modifiers; movement keys ignore them.
+Backing up and strafing at 85 of 191 (scaled with the server's speed), backward sent negative; left-drag pans the camera round the character, a click
 inspects, right-drag turns and re-aligns; mouse wheel zoom, 50 units a notch, and
 first person past 50 (your body and name hidden; zooming out comes back at 50); a camera home per character, as retail's: `/setcamera` saves the
-distance, height, angle and tilt, `/resetcamera` sets retail's 240 / 10 / 0 / 0, Home (classic: D) returns to it, and
+distance, height, angle and tilt, `/resetcamera` sets retail's 240 / 10 / 0 / 0, the Reset Camera key returns to it, and
 entering the world starts there (a character without one starts at 500 units, height 10, level);
-H attack mode (retail: F6 or A by layout, W34); Tab free-fly camera (ours); Enter or `/` to chat. No walk
-toggle, auto-run, consider or targeting keys yet.
+Tab free-fly camera (ours, and retail's Target Enemy); Enter or `/` to chat. No walk, consider or targeting keys
+yet.

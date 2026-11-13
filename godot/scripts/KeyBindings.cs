@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Which keys and mouse buttons drive which actions, by preset (docs/controls.md): retail's RPG (the default:
-// W/S, A/D turn, Q/E strafe), MMO (A/D strafe, keypad turns) and FPS (E/D, S/F strafe), and the 2001 manual's
-// classic layout (arrows, right/left mouse button forward/back). Sprint V and auto-run NumLock in all.
+// Which keys and mouse buttons drive which actions, by preset (docs/controls.md; docs/ui-windows.md "Keys"): retail's
+// RPG (the default: W/S, A/D turn, Q/E strafe), MMO (A/D strafe, arrows turn) and FPS (E/D, S/F strafe, arrows turn),
+// and the 2001 manual's classic layout (arrows, right/left mouse button forward/back), which takes RPG's other keys.
+// A key may carry modifiers (Godot's KeyModifierMask bits, e.g. Shift+Y): movement keys are held and ignore them,
+// the others need exactly their modifiers (retail's rule).
 
 using System.Collections.Generic;
 using System.Linq;
@@ -23,38 +25,42 @@ public static class KeyBindings
 
     private static (Key[] Keys, MouseButton[] Buttons) K(params Key[] keys) => (keys, []);
 
-    private static Dictionary<ControlAction, (Key[] Keys, MouseButton[] Buttons)> Layout(Key forward, Key back, Key turnLeft,
-        Key turnRight, Key strafeLeft, Key strafeRight, Key jump) => new()
+    /// <summary>Movement actions are read while held and ignore modifiers; the rest are presses with exact modifiers.</summary>
+    public static bool IsHeldAction(ControlAction a) => a <= ControlAction.Jump;
+
+    private static Key Shift(Key k) => k | (Key)KeyModifierMask.MaskShift;
+    private static Key Alt(Key k) => k | (Key)KeyModifierMask.MaskAlt;
+
+    // One preset: movement, then retail's defaults for the other actions (keyboard.dat, daoc-re 2026-11-13).
+    private static Dictionary<ControlAction, (Key[] Keys, MouseButton[] Buttons)> Layout(Key forward, Key back, Key[] turnLeft,
+        Key[] turnRight, Key strafeLeft, Key strafeRight, Key[] runlock, Key sprint, Key combat, Key torch, Key resetCamera) => new()
     {
         [ControlAction.Forward] = K(forward), [ControlAction.Back] = K(back),
         [ControlAction.TurnLeft] = K(turnLeft), [ControlAction.TurnRight] = K(turnRight),
         [ControlAction.StrafeLeft] = K(strafeLeft), [ControlAction.StrafeRight] = K(strafeRight),
-        [ControlAction.Jump] = K(jump), [ControlAction.Sprint] = K(Key.V), [ControlAction.AutoRun] = K(Key.Numlock),
-        // Retail's attack key is open (W34); H is ours (F6, the 2001 default, opens our travel window).
-        [ControlAction.AttackMode] = K(Key.H),
-        // The map window: M, free in every preset (retail's map key is unconfirmed).
-        [ControlAction.Map] = K(Key.M),
-        // The torch: T in the 2001 manual (docs/controls.md); a light the player carries.
-        [ControlAction.Torch] = K(Key.T),
-        // Reset Camera: Home, the 2001 manual's alternative key (its default, D, is the classic layout's below).
-        [ControlAction.ResetCamera] = K(Key.Home),
-        // Toggle Interface: F12, ours (retail has the action; its default key isn't known).
-        [ControlAction.ToggleInterface] = K(Key.F12),
+        [ControlAction.Jump] = K(Key.Space), [ControlAction.Sprint] = K(sprint), [ControlAction.AutoRun] = K(runlock),
+        [ControlAction.AttackMode] = K(combat), [ControlAction.Map] = K(Key.M), [ControlAction.Torch] = K(torch),
+        [ControlAction.ResetCamera] = K(resetCamera), [ControlAction.ToggleInterface] = K(Alt(Key.Z)),
     };
+
+    // Turning in MMO/FPS: the arrows; retail forces NumLock off, so keypad 4/6 turn too.
+    private static readonly Key[] TurnL = [Key.Left, Key.Kp4], TurnR = [Key.Right, Key.Kp6];
 
     private static readonly Dictionary<string, Dictionary<ControlAction, (Key[] Keys, MouseButton[] Buttons)>> Tables = new()
     {
-        ["rpg"] = Layout(Key.W, Key.S, Key.A, Key.D, Key.Q, Key.E, Key.Space),
-        ["mmo"] = Layout(Key.W, Key.S, Key.Kp4, Key.Kp6, Key.A, Key.D, Key.Space),
-        ["fps"] = Layout(Key.E, Key.D, Key.Kp4, Key.Kp6, Key.S, Key.F, Key.Space),
-        // 2001 manual: arrows, and the mouse buttons walk (right forward, left back).
-        ["classic"] = Layout(Key.Up, Key.Down, Key.Left, Key.Right, Key.Q, Key.W, Key.A),
+        ["rpg"] = Layout(Key.W, Key.S, [Key.A], [Key.D], Key.Q, Key.E, [Key.Numlock], Key.V, Key.Quoteleft, Key.T, Key.Kp5),
+        // MMO and FPS: Runlock is T / Y with NumLock as the second bind (Run Lock 2).
+        ["mmo"] = Layout(Key.W, Key.S, TurnL, TurnR, Key.A, Key.D, [Key.T, Key.Numlock], Key.F, Key.X, Shift(Key.Y), Key.Z),
+        ["fps"] = Layout(Key.E, Key.D, TurnL, TurnR, Key.S, Key.F, [Key.Y, Key.Numlock], Key.G, Key.C, Shift(Key.Y), Key.X),
+        // 2001 manual: arrows, and the mouse buttons walk (right forward, left back); the rest as RPG.
+        ["classic"] = Layout(Key.Up, Key.Down, [Key.Left], [Key.Right], Key.Q, Key.W, [Key.Numlock], Key.V, Key.Quoteleft, Key.T, Key.Kp5),
     };
 
     static KeyBindings()
     {
         Tables["classic"][ControlAction.Forward] = ([Key.Up], [MouseButton.Right]);
         Tables["classic"][ControlAction.Back] = ([Key.Down], [MouseButton.Left]);
+        Tables["classic"][ControlAction.Jump] = K(Key.A);
         Tables["classic"][ControlAction.ResetCamera] = ([Key.D, Key.Home], []);
     }
 
@@ -116,7 +122,7 @@ public static class KeyBindings
         var (_, buttons) = Table[action];
         Key[] keys = KeysFor(action);
         foreach (Key k in keys)
-            if (Input.IsKeyPressed(k))
+            if (Input.IsKeyPressed(k & (Key)KeyModifierMask.CodeMask))
                 return true;
         foreach (MouseButton b in buttons)
             if (Input.IsMouseButtonPressed(b))
@@ -126,7 +132,7 @@ public static class KeyBindings
 
     /// <summary>True when <paramref name="e"/> is a fresh press (not a repeat) of a key bound to <paramref name="action"/>.</summary>
     public static bool Pressed(InputEvent e, ControlAction action) =>
-        e is InputEventKey { Pressed: true, Echo: false } k && System.Array.IndexOf(KeysFor(action), k.Keycode) >= 0;
+        e is InputEventKey { Pressed: true, Echo: false } k && System.Array.IndexOf(KeysFor(action), k.GetKeycodeWithModifiers()) >= 0;
 
     /// <summary>Whether the mouse button moves the character in this preset (classic: right forward, left back),
     /// so a click with it isn't also an inspect or a camera pan.</summary>

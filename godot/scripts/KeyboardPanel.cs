@@ -72,12 +72,18 @@ public partial class KeyboardPanel : VBoxContainer
     {
         if (_waiting is not { } action || @event is not InputEventKey { Pressed: true, Echo: false } k)
             return;
+        // A modifier on its own waits for the key it modifies (movement keys ignore modifiers, so take them bare).
+        if (k.Keycode is Key.Shift or Key.Alt or Key.Ctrl or Key.Meta)
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         GetViewport().SetInputAsHandled();
         _waiting = null;
         if (k.Keycode == Key.Backspace)
             KeyBindings.Bind(action, Key.None);
         else if (k.Keycode != Key.Escape)
-            KeyBindings.Bind(action, k.Keycode);
+            KeyBindings.Bind(action, KeyBindings.IsHeldAction(action) ? k.Keycode : k.GetKeycodeWithModifiers());
         Refresh();
     }
 

@@ -672,7 +672,7 @@ public partial class WorldView : Node3D
 
     // An action's keys for the help line ("-" when it has none), from the current layout and the player's own keys.
     private static string Keys(ControlAction a) =>
-        KeyBindings.KeysFor(a) is { Length: > 0 } k ? string.Join("+", System.Linq.Enumerable.Select(k, OS.GetKeycodeString)) : "-";
+        KeyBindings.KeysFor(a) is { Length: > 0 } k ? string.Join(" or ", System.Linq.Enumerable.Select(k, OS.GetKeycodeString)) : "-";
 
     // Zooms the chase camera by wheel notches: positive moves away, 50 units a notch at once (retail). In past 50 units
     // is first person; zooming out of first person comes back at 50 (WorldView.Camera).

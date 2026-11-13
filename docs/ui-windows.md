@@ -241,8 +241,8 @@ keys that sit on retail's (F1–F6, Tab, P).
 | 20 | Forward2 | Left+Right Mouse | Up | Up | held | Second bind for Forward. | — | ❌ | |
 | 1 | Back | S | S | D | held | Move back; ends autorun. | S / S / D, rebindable | ✅ | |
 | 33 | Back2 | Down | Down | Down | held | Second bind for Back. | — | ❌ | |
-| 2 | Left | A | Left | Left | held | Turn left; slides instead while action 6 is held. | A, rebindable; MMO/FPS use keypad 4 only, not the arrows | 🟡 | |
-| 3 | Right | D | Right | Right | held | Turn right; slides instead while action 6 is held. | D, rebindable; MMO/FPS use keypad 6 only, not the arrows | 🟡 | |
+| 2 | Left | A | Left | Left | held | Turn left; slides instead while action 6 is held. | A / Left / Left (and keypad 4), rebindable; no strafe modifier | ✅ | |
+| 3 | Right | D | Right | Right | held | Turn right; slides instead while action 6 is held. | D / Right / Right (and keypad 6), rebindable; no strafe modifier | ✅ | |
 | 6 | (blank) | none | none | — | held | Blank name in the dialog. While held, Left/Right slide instead of turning (a strafe modifier). | — | ❌ | |
 | 8 | Slide Left | Q | A | S | held | Strafe left; ends autorun. | Q / A / S, rebindable | ✅ | |
 | 9 | Slide Right | E | D | F | held | Strafe right; ends autorun. | E / D / F, rebindable | ✅ | |
@@ -250,9 +250,9 @@ keys that sit on retail's (F1–F6, Tab, P).
 | 5 | Down | Z | Q | Z | held | Swim/fly down. | — | ❌ | |
 | 57 | Sit | X | N | N | press | Sit / stand. | `/sit`, command window | 🟡 | |
 | 7 | Walk | Scroll Lock | Shift+K | Shift+K | held | Walk while held. | — | ❌ | |
-| 42 | Runlock | NumLock | T | Y | press | Autorun on/off. | NumLock in every preset (MMO T, FPS Y in retail) | 🟡 | |
-| 83 | Run Lock 2 | none | NumLock | NumLock | press | Second bind for Runlock. | — | ❌ | |
-| 66 | Sprint | V | F | G | press | Sprint on/off (the /sprint toggle). | V in every preset (MMO F, FPS G in retail) | 🟡 | |
+| 42 | Runlock | NumLock | T | Y | press | Autorun on/off. | NumLock / T / Y, rebindable | ✅ | |
+| 83 | Run Lock 2 | none | NumLock | NumLock | press | Second bind for Runlock. | NumLock in MMO/FPS (a second key on Runlock, not its own slot) | ✅ | |
+| 66 | Sprint | V | F | G | press | Sprint on/off (the /sprint toggle). | V / F / G, rebindable | ✅ | |
 | 62 | Follow | Shift+F | Y | Shift+V | press | Follow the target. | button only | 🟡 | |
 | 63 | Stick | Shift+V | E | V | press | Stick to the target (close follow). | button only | 🟡 | |
 | 64 | Face | F | R | B | press | Turn to face the target. | button only | 🟡 | |
@@ -260,7 +260,7 @@ keys that sit on retail's (F1–F6, Tab, P).
 | 68 | Right Hand Weapon | B | Shift+Q | Shift+W | press | Switch to the right-hand weapon. | — | ❌ | |
 | 69 | Two Handed Weapon | N | Shift+E | Shift+R | press | Switch to the two-handed weapon. | — | ❌ | |
 | 70 | Ranged Weapon | , | Shift+R | Shift+T | press | Switch to the ranged weapon. | — | ❌ | |
-| 27 | Combat Mode | backtick | X | C | press | Attack mode on/off. | H in every preset (ours) | 🟡 | |
+| 27 | Combat Mode | backtick | X | C | press | Attack mode on/off. | backtick / X / C, rebindable | ✅ | |
 | **Targeting** | | | | | | | | | |
 | 43 | Consider | F6 | none | none | press | Consider (con) the target. Without one: "You must select a target to Consider!" | — (F6 is our travel window) | ❌ | |
 | 72 | Nearest Loot | F7 | H | - | press | Target the nearest lootable object ("No lootable object in range."). | — | ❌ | |
@@ -286,7 +286,7 @@ keys that sit on retail's (F1–F6, Tab, P).
 | 21 | Get | G | G | = | press | Get: pick up the target or nearby item. | — | ❌ | |
 | 29 | Sell | Shift+S | Shift+S | Shift+S | press | Sell the selected backpack item to the open merchant. 1 s lockout ("You must wait one more second to interact again!"). | — | ❌ | |
 | **Camera** | | | | | | | | | |
-| 14 | Reset Camera | Num 5 | Z | X | held | Reset the camera behind the character. | Home (2001 manual); classic layout D | 🟡 | |
+| 14 | Reset Camera | Num 5 | Z | X | held | Reset the camera behind the character. | Num 5 / Z / X, rebindable; classic layout D or Home | ✅ | |
 | 61 | Pan Camera | none | none | none | held | Pan: orbit the camera around the character without turning it. | — | ❌ | |
 | 86 | Camera Toggle | F11 | F11 | F11 | press | Cycles the camera mode: first person, third-person orbit, mode 2, first person again. Does nothing in the death camera. | — | ❌ | |
 | 18 | Mouse | none | none | none | press | Lock or unlock mouselook (same as user.dat mouselooklock; captures the cursor). | — | ❌ | |
@@ -307,7 +307,7 @@ keys that sit on retail's (F1–F6, Tab, P).
 | 40 | Show Skills | P | Ctrl+D | Ctrl+D | press | Character window, Skills page; again to close. | menu bar button | 🟡 | |
 | 41 | Show Combat | L | Ctrl+A | Ctrl+A | press | Character window, Combat page; again to close. | menu bar button | 🟡 | |
 | **Misc** | | | | | | | | | |
-| 22 | Torch | T | Shift+Y | Shift+Y | press | Torch on/off. | T in every preset (MMO/FPS Shift+Y in retail) | 🟡 | |
+| 22 | Torch | T | Shift+Y | Shift+Y | press | Torch on/off. | T / Shift+Y / Shift+Y, rebindable | ✅ | |
 | 19 | Toggle Names | Alt+N | Alt+N | Alt+N | press | Overhead names on/off (inferred). | — | ❌ | |
 | 10 | Help | Alt+F1 | Alt+F1 | Alt+F1 | press | Open the Help window. | — | ❌ | |
 | 58 | Perf. Meter | Alt+P | Alt+P | Alt+P | press | Performance meter: off, mode 1, mode 2, off. | meters always on | 🟡 | |
@@ -317,7 +317,7 @@ keys that sit on retail's (F1–F6, Tab, P).
 | 79 | Map Window | M | M | M | press | Map window on/off. | M | ✅ | |
 | 81 | Realm War Map | Shift+M | Shift+M | Shift+M | press | Realm war map. | — | ❌ | |
 | 82 | Quest Journal | J | J | J | press | Quest journal. | — | ❌ | |
-| 80 | Toggle Interface | Alt+Z | Alt+Z | Alt+Z | press | Hide/show the whole interface. | F12 (retail refuses F12 as a bind) | 🟡 | |
+| 80 | Toggle Interface | Alt+Z | Alt+Z | Alt+Z | press | Hide/show the whole interface. | Alt+Z (Option+Z on a Mac), rebindable | ✅ | |
 | 85 | Take Screenshot | Num - | Num - | Num - | press | Screenshot ("Taking Screenshot!"). | P (ours, saves to private/) | 🟡 | |
 
 Hidden in the dialog: Chat (23), PageUpSys (55, Shift+PgUp), PageDownSys (56, Shift+PgDn), Show Character Info (84).
