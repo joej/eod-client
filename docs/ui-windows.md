@@ -73,7 +73,7 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 | Window | Shows / does | Server data | Ours | Milestone |
 |---|---|---|---|---|
 | `main_menu_window` | Quit, options, keys, help, interface elements | None | Settings dialog (ours), Quit | M9 |
-| `options_window` | Game options | None (client settings) | Settings dialog: display, game names, sprint | M9 |
+| `options_window` | Game options | None (client settings) | Settings dialog; row by row in "Game Options: retail's rows vs ours" below | M9 |
 | `key_config` | Key bindings (FPS / MMO / RPG presets) | None | Key bindings panel | M9 |
 | `interface_elements_window` | Switches every optional window on or off | None | Built 2026-11-13 (`WorldView.Elements`, our style): retail's 350 × 475 switchboard, its five groups and buttons; lit when on; the windows not built yet greyed. Main menu → INTERFACE ELEMENTS | M9 ✓ |
 | `command_window` | Buttons for /afk, /bind, /face, /follow, /pray, /release, /sprint, /stick, sit, attack… | Commands go out as 0xAF `&…` | Built 2026-11-13: 135 × 216, retail's two columns; each button sends the typed command or does the client's own (follow, stick, face, clock, compass, map, quit, keyboard); KEEPS, FRIENDS, HELP, JOURNAL greyed. Hidden until Interface Elements → Command | M9 ✓ |
@@ -162,6 +162,87 @@ shows it, even if not yet the retail window), **—** (nothing yet).
   skill and spell lists arrive).
 - **M10's:** inventory and paper doll, character sheet, spells and styles, merchant, effect icons.
 - **Built-in windows need our own layout** on retail's art; the XML loader covers the rest.
+
+## Game Options: retail's rows vs ours
+
+Retail's Game Options window (main menu → IN-GAME OPTIONS) row by row, against our Settings dialog (checked
+2026-11-13). Status: ✅ built, 🟡 partly, ❌ not built. **Decision** is the owner's: *build*, *ignore*, or
+*done* (checked off). Values in quotes are the ones retail's window shows.
+
+| Retail option | Values | Ours | Status | Waits on | Decision |
+|---|---|---|---|---|---|
+| Names | "Colored" / White | Settings → Game → Names | ✅ | | |
+| Display Names: Monsters/NPCs, Gravestones, Players, Your Name, Groupmates, Guildmates, Enemy Players | on/off each | Settings → Game, all seven; groupmates and guildmates count as players until groups and guilds are shown on names | ✅ | | |
+| Sound Effects Volume | "1" … | — | ❌ | audio (M12) | |
+| Music Volume | | — | ❌ | audio (M12) | |
+| Ambient Sounds Volume | | — | ❌ | audio (M12) | |
+| Ambient Music Volume | | — | ❌ | audio (M12) | |
+| Spell Effects | "All" … | — | ❌ | spell effects (M12) | |
+| Terrain Clip Plane | Near / "Far" | view distance on the F3 key and in settings.cfg, not in the dialog | 🟡 | | |
+| Figure Clip Plane | "Near" … | — (figures drawn as far as the server sends them) | ❌ | | |
+| Shadows | "Nearest 5" … | sun shadows on/off as a dev layer; figures cast none | 🟡 | figure shadows | |
+| Snapback | "Off" / on | — (rules known: off by default, `/snapback on` = 2.5 s) | ❌ | | |
+| Show Facial Morphs | "All" … | — (no face morphs) | ❌ | figures with morphs | |
+| Tooltip Transparency | "Off" … | — (Godot's default tooltip) | ❌ | | |
+| Tooltip Delay | "No Delay" … | — | ❌ | | |
+| Quickbars | One / Two (Alt) / Three (Ctrl) | three bars, each shown or hidden on its own; no "how many" choice | 🟡 | | |
+| Spell Effect Icons: Width, Height, Oldest First | "10" × "4", on | — | ❌ | the effect icons window (M10) | |
+
+Ours only (not in retail's window): Display tab (window mode and size, frame rate, terrain look, interface size,
+field of view), Game tab (compass, clock, summary style, floating XP window), Keyboard tab (retail has a separate
+Configure Keyboard window).
+
+### Other retail settings, outside the Game Options window
+
+What retail keeps elsewhere: login-menu options and `user.dat` (per install), the character's ini (per character),
+slash commands. Same columns.
+
+| Retail setting | Where retail keeps it | Values | Ours | Status | Waits on | Decision |
+|---|---|---|---|---|---|---|
+| Mouse | login menu, `user.dat [game]` | On / Off | — | ❌ | | |
+| Mouselook Up (invert) | login menu, `user.dat [game]` | Default / Inverted / Off | — (no invert choice) | ❌ | | |
+| Mouselook Sensitivity | login menu, `user.dat [game]` | 1–5 = ×0.5 … ×1.5, default 3 | — (fixed) | ❌ | | |
+| Mouselook lock | `user.dat [main] mouselooklock` | keep mouselook on, cursor captured | — | ❌ | | |
+| Snapback | `user.dat [performance]`, `/snapback on\|off` | off / 4.5 / 2.5 / 1.0 s, default off | — | ❌ | | |
+| Water | `user.dat [water]` | Reflective / Classic / Shrouded Isles; reflection quality High/Medium/Low; update Often/Occasional/Seldom | one look of our own (audit B6) | 🟡 | | |
+| Atlantis terrain | graphics option | on / off | Settings → Display → Terrain | ✅ | | |
+| Screen size, window mode | `user.dat` | | Settings → Display | ✅ | | |
+| UI scale | `user.dat`, top-left-corner drag; no options control | 1.0–4.0 | Settings → Display → Interface size, and the drag | ✅ | | |
+| Disable the UI-scale drag | `user.dat DisableLmbUiScaling` (1.130) | on / off | — | ❌ | | |
+| Spell effects shown | `user.dat [main] EffectsFlag`, also sent to the server (0xDC) | all / mine / none / mine + group | — | ❌ | spell effects (M12) | |
+| Classic icons | `user.dat [main] ClassicIcons` | on / off | — | ❌ | | |
+| Name colours | character ini `[NameOptions] Coloring`, `/colornames` | con colours / white | Settings → Game → Names | ✅ | | |
+| Name visibility | character ini `[NameOptions] Visibility` | the seven Display Names bits | Settings → Game | ✅ | | |
+| Face morphs | `/showmorphs all\|self\|none` | | — | ❌ | figures with morphs | |
+| Camera home | character ini `[Camera]`, `/setcamera`, `/resetcamera` | distance, height, angle, tilt | per character in our settings | ✅ | | |
+| Camera mode, Camera Toggle key | `user.dat [main] cameramode` | first person / third / no camera (inferred) | first person by zoom only, no key | 🟡 | | |
+| Window layout | character ini `[Panels]` (place, alpha, font alpha), defaults from `default.ini` by resolution | | places and alpha per install, not per character; no font alpha; defaults ours (audit B12) | 🟡 | | |
+| Chat tabs | character ini `[Chat]`, chat options window | channels, filters, colours per tab | retail's two default tabs, fixed | 🟡 | chat options window | |
+| Quickbars | character ini `Hotkey_i=` | | ours per character; no import of a retail ini | 🟡 | | |
+| Quickbar keys | `/qbind` | a slot to a key | — | ❌ | | |
+| Macros | character ini `[Macros]`, `/macro` | 100 macros | — | ❌ | | |
+| Target ring | none: retail has no ring, the target's name plate turns white | | our ring, always on | 🟡 | | |
+
+### Keys
+
+Retail's Configure Keyboard has **86 actions** (`keyboard.dat`), with RPG, MMO and FPS presets. We can rebind **14**:
+forward, back, turn left/right, strafe left/right, jump, sprint, auto-run, attack mode, map, torch, reset camera, toggle
+interface. Others work on fixed keys of ours (Esc, Enter, F1–F10), on buttons only, or not at all. Retail's keys we
+know of and lack (docs/controls.md):
+
+| Retail action | Status | Waits on | Decision |
+|---|---|---|---|
+| Walk toggle (RPG Scroll Lock, MMO/FPS Shift+K) | ❌ | walk speed (W41) | |
+| Dive / down (Z, MMO Q) | ❌ | | |
+| Pan Camera (held) | ❌ (we pan with left-drag) | | |
+| Look Up / Look Down (12°/s; height in pan mode) | ❌ | | |
+| Camera Toggle | ❌ | | |
+| Target Enemy / Friend / Object / Loot (nearest, cycling within 1.5 s) | ❌ | | |
+| Consider | ❌ | | |
+| Sit / stand | ❌ (command window and `/sit` only) | | |
+| Face (F), Follow (Shift+F), Stick (Shift+V) | 🟡 buttons only (target and command windows), no keys | | |
+| Spells (K), Styles (L), Abilities (P) pages | 🟡 menu bar only | | |
+| The rest of the 86 | not listed yet: ask daoc-re for keyboard.dat's action names | | |
 
 ## Chat: what to test
 
