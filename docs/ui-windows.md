@@ -75,16 +75,16 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 | `main_menu_window` | Quit, options, keys, help, interface elements | None | Settings dialog (ours), Quit | M9 |
 | `options_window` | Game options | None (client settings) | Settings dialog: display, game names, sprint | M9 |
 | `key_config` | Key bindings (FPS / MMO / RPG presets) | None | Key bindings panel | M9 |
-| `interface_elements_window` | Switches every optional window on or off | None | — | M9 |
-| `command_window` | Buttons for /afk, /bind, /face, /follow, /pray, /release, /sprint, /stick, sit, attack… | Commands go out as 0xAF `&…` | The commands work typed; no window | M9 |
-| `help_window` | Help text | 0xF7 HelpWindow | — | M9 |
+| `interface_elements_window` | Switches every optional window on or off | None | Built 2026-11-13 (`WorldView.Elements`, our style): retail's 350 × 475 switchboard, its five groups and buttons; lit when on; the windows not built yet greyed. Main menu → INTERFACE ELEMENTS | M9 ✓ |
+| `command_window` | Buttons for /afk, /bind, /face, /follow, /pray, /release, /sprint, /stick, sit, attack… | Commands go out as 0xAF `&…` | Built 2026-11-13: 135 × 216, retail's two columns; each button sends the typed command or does the client's own (follow, stick, face, clock, compass, map, quit, keyboard); KEEPS, FRIENDS, HELP, JOURNAL greyed. Hidden until Interface Elements → Command | M9 ✓ |
+| `help_window` | Help text | 0xF7 HelpWindow | — OpenDAoC sends 0xF7 only for the starter help and a house's rent reminder; the text is the install's own help topics (index, then the topic's file), not traced | later |
 
 ### Talking to the world (M9)
 
 | Window | Shows / does | Server data | Ours | Milestone |
 |---|---|---|---|---|
 | `interact_window` | An NPC's words with clickable [keywords] | 0xAF (popup types) | Shown (our NPC window), keywords whisper back | M9 ✓ |
-| `info_window` | A text window from the server | 0xC4 DetailWindow (custom text) | — | M9 |
+| `info_window` | A text window from the server | 0xC4 DetailWindow (custom text) | Shown for any 0xC4 (items' descriptions since 2026-11-11, and the server's own text windows) | M9 ✓ |
 | `release_window` | Release to bind / city / house after death | 0xF3, 0xAE | Shown (our death panel: Release) | M8 ✓ |
 | `map_window` | Zone and region maps | None | Shown (our map window, M) | M9 ✓ |
 | `value_chooser` | Pick a quantity (buy, split a stack) | None | — | M10 |

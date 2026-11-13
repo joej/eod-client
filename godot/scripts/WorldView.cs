@@ -504,6 +504,7 @@ public partial class WorldView : Node3D
         BuildStatsPanel(overlay);
         BuildItemWindows(overlay);
         BuildDialog(overlay);
+        BuildElementWindows(overlay);
         _builtScale = UiScale;
         ScaleChatAndNpc(_builtScale / ChatDesignScale);
         NameSelf();
@@ -828,6 +829,10 @@ public partial class WorldView : Node3D
         else if (KeyBindings.Pressed(@event, ControlAction.Map) && !ChatInputActive)
         {
             ToggleMap();
+        }
+        else if (KeyBindings.Pressed(@event, ControlAction.ToggleInterface) && !ChatInputActive)
+        {
+            ToggleInterface();
         }
         else if (KeyBindings.Pressed(@event, ControlAction.ResetCamera) && !ChatInputActive && _chase)
         {

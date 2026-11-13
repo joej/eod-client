@@ -12,7 +12,7 @@ namespace EodClient;
 
 public enum ControlAction
 {
-    Forward, Back, TurnLeft, TurnRight, StrafeLeft, StrafeRight, Jump, Sprint, AutoRun, AttackMode, Map, Torch, ResetCamera,
+    Forward, Back, TurnLeft, TurnRight, StrafeLeft, StrafeRight, Jump, Sprint, AutoRun, AttackMode, Map, Torch, ResetCamera, ToggleInterface,
 }
 
 public static class KeyBindings
@@ -38,6 +38,8 @@ public static class KeyBindings
         [ControlAction.Torch] = K(Key.T),
         // Reset Camera: Home, the 2001 manual's alternative key (its default, D, is the classic layout's below).
         [ControlAction.ResetCamera] = K(Key.Home),
+        // Toggle Interface: F12, ours (retail has the action; its default key isn't known).
+        [ControlAction.ToggleInterface] = K(Key.F12),
     };
 
     private static readonly Dictionary<string, Dictionary<ControlAction, (Key[] Keys, MouseButton[] Buttons)>> Tables = new()
@@ -80,7 +82,7 @@ public static class KeyBindings
         ControlAction.StrafeLeft => "Strafe left", ControlAction.StrafeRight => "Strafe right",
         ControlAction.Jump => "Jump", ControlAction.Sprint => "Sprint", ControlAction.AutoRun => "Auto-run",
         ControlAction.AttackMode => "Attack mode", ControlAction.Map => "Map", ControlAction.Torch => "Torch",
-        ControlAction.ResetCamera => "Reset camera", _ => a.ToString(),
+        ControlAction.ResetCamera => "Reset camera", ControlAction.ToggleInterface => "Toggle interface", _ => a.ToString(),
     };
 
     /// <summary>The keys that trigger <paramref name="action"/>: the player's own, else the preset's.</summary>

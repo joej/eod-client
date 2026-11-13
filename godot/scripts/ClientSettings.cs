@@ -257,6 +257,22 @@ public static class ClientSettings
 
     public static void SaveWindowPosition(string window, Vector2 position) => SaveIn("windows", window, position);
 
+    /// <summary>A game window's opacity (0.01-1), as the player set it from the window's right-click menu, or null: its
+    /// default (retail's default.ini: 68%, the clock 38%, the chat tabs 58% / 38%).</summary>
+    public static float? WindowAlpha(string window)
+    {
+        ConfigFile cfg = Load();
+        return cfg.HasSectionKey("window_alpha", window) ? (float)cfg.GetValue("window_alpha", window).AsDouble() : null;
+    }
+
+    public static void SaveWindowAlpha(string window, float alpha) => SaveIn("window_alpha", window, alpha);
+
+    /// <summary>Whether an optional window is shown (Interface Elements, the command window's buttons).</summary>
+    public static bool WindowShown(string window, bool byDefault) =>
+        Load().GetValue("window_shown", window, byDefault).AsBool();
+
+    public static void SaveWindowShown(string window, bool shown) => SaveIn("window_shown", window, shown);
+
     /// <summary>What a character's quickbar slot holds ("bar.page.slot", 1-based), or "": see WorldView.Quickbar.</summary>
     public static string QuickbarSlot(string character, string key) =>
         Load().GetValue($"quickbar {character}", key, "").AsString();

@@ -110,12 +110,7 @@ public partial class WorldView
         _chatMode = t.Channel;   // the mode starts as the front tab's default channel
         for (int i = 0; i < _chatTabButtons.Count; i++)
             _chatTabButtons[i].AddThemeColorOverride("font_color", i == tab ? Colors.White : new Color(0.6f, 0.62f, 0.66f));
-        _chatWindow?.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = new Color(0.06f, 0.07f, 0.09f, t.Opacity), BorderColor = new Color(0.55f, 0.85f, 1f, 0.35f),
-            BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
-            CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3, CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3,
-        });
+        _chatWindow?.AlphaFrom($"chat_{t.Name}", t.Opacity);   // each tab its own (retail: per chat window line)
         _chatScrolledUp = false;
         RenderChat();
         UpdateChatPrompt();

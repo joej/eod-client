@@ -78,7 +78,7 @@ public partial class WorldView
         ];
         foreach (MeterDot m in _meters)
             _menuBar.AddChild(m);
-        _menuBar.Visible = _session is not null;
+        _menuBar.Visible = _session is not null && _showMenuBar;
         overlay.AddChild(_menuBar);
 
         // The main menu: hidden until MENU; at the top, centred, as retail's default.ini (481, 0 at 1024 x 768).
@@ -88,7 +88,7 @@ public partial class WorldView
         _mainMenu.Arrow("✕", new Vector2(204, 2), new Vector2(18, 14), () => _mainMenu.Visible = false);
         (string Text, float Y, System.Action? Pressed)[] items =
         [
-            ("HELP", 65, null), ("INTERFACE ELEMENTS", 94, null),
+            ("HELP", 65, null), ("INTERFACE ELEMENTS", 94, () => ShowElements(!_elementsOpen)),
             ("IN-GAME OPTIONS", 123, () => SettingsDialog.Open(this, 0)),
             ("CONFIGURE KEYBOARD", 152, () => SettingsDialog.Open(this, 1)),
             ("QUIT", 200, MenuQuit),

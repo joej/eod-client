@@ -153,7 +153,7 @@ public partial class WorldView
         Dim(_inviteButton, !(ours && t!.IsPlayer));
         Dim(_assistButton, !ours);
         // Retail keeps the target window open, empty without a target; we hide it then (less clutter).
-        _targetWindow.Visible = t is not null && _session is not null;
+        _targetWindow.Visible = t is not null && _session is not null && _showTargetWindow;
     }
 
     private void FaceTarget()
@@ -227,6 +227,9 @@ public partial class WorldView
         private Vector2? _home;                                      // where the player put it (skin pixels), or null: the default;
                                                                      // a negative coordinate counts from the right or bottom edge
         public bool DragAnywhere;                                    // dragged by any free spot, not just the top edge
+        private readonly StyleBoxFlat _style;
+        private string _alphaKey;                                    // whose opacity: the window's, or (chat) its front tab's
+        private float _defaultAlpha;
         public System.Action<int>? Wheel;                            // the mouse wheel over it: -1 up, +1 down
         private Vector2? _dragFrom;
 
@@ -238,12 +241,15 @@ public partial class WorldView
             (_key, _scale, _defaultAt) = (key, scale, defaultAt);
             Size = skinSize * scale;
             MouseFilter = MouseFilterEnum.Stop;
-            AddThemeStyleboxOverride("panel", new StyleBoxFlat
+            _style = new StyleBoxFlat
             {
-                BgColor = new Color(0.06f, 0.07f, 0.09f, 0.78f), BorderColor = new Color(0.55f, 0.85f, 1f, 0.35f),
+                BgColor = new Color(0.06f, 0.07f, 0.09f, 0.68f), BorderColor = new Color(0.55f, 0.85f, 1f, 0.35f),
                 BorderWidthLeft = 1, BorderWidthTop = 1, BorderWidthRight = 1, BorderWidthBottom = 1,
                 CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3, CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3,
-            });
+            };
+            AddThemeStyleboxOverride("panel", _style);
+            (_alphaKey, _defaultAlpha) = (key, key == "clock" ? 0.38f : 0.68f);   // retail's default.ini
+            ApplyAlpha();
             _home = ClientSettings.WindowPosition(key);
             Ready += () =>
             {
@@ -333,8 +339,47 @@ public partial class WorldView
             return l;
         }
 
+        /// <summary>Whose opacity the window shows (saved under <paramref name="key"/>) and its default: the chat window
+        /// switches it with the front tab.</summary>
+        public void AlphaFrom(string key, float byDefault)
+        {
+            (_alphaKey, _defaultAlpha) = (key, byDefault);
+            ApplyAlpha();
+        }
+
+        private void ApplyAlpha() =>
+            _style.BgColor = _style.BgColor with { A = ClientSettings.WindowAlpha(_alphaKey) ?? _defaultAlpha };
+
+        // Right-click on the window itself: its opacity (retail's window context menu has the window alpha, 1-100%).
+        private void AlphaMenu(Vector2 at)
+        {
+            var menu = new PopupMenu();
+            float now = ClientSettings.WindowAlpha(_alphaKey) ?? _defaultAlpha;
+            menu.AddItem("Window opacity", 0);
+            menu.SetItemDisabled(0, true);
+            foreach (int percent in new[] { 100, 85, 68, 50, 38, 25, 10 })
+            {
+                menu.AddRadioCheckItem($"{percent}%", percent);
+                menu.SetItemChecked(menu.ItemCount - 1, Mathf.Abs(now * 100 - percent) < 0.5f);
+            }
+            menu.IdPressed += id =>
+            {
+                ClientSettings.SaveWindowAlpha(_alphaKey, id / 100f);
+                ApplyAlpha();
+            };
+            menu.PopupHide += () => menu.QueueFree();
+            AddChild(menu);
+            menu.Popup(new Rect2I((Vector2I)(GetScreenPosition() + at), Vector2I.Zero));
+        }
+
         public override void _GuiInput(InputEvent e)
         {
+            if (e is InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Right } right)
+            {
+                AlphaMenu(right.Position);
+                AcceptEvent();
+                return;
+            }
             if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } wheel && Wheel is not null)
             {
                 Wheel(wheel.ButtonIndex == MouseButton.WheelUp ? -1 : 1);

@@ -94,6 +94,13 @@ public partial class WorldView
     private bool OverHud(Vector2 at) =>
         _bars.Any(b => b.Window.Visible && b.Window.GetGlobalRect().HasPoint(at))
         || (_chatWindow?.Visible == true && _chatWindow.GetGlobalRect().HasPoint(at))
+        || (_elementsWindow?.Visible == true && _elementsWindow.GetGlobalRect().HasPoint(at))
+        || (_commandWindow?.Visible == true && _commandWindow.GetGlobalRect().HasPoint(at))
+        || (_menuBar?.Visible == true && _menuBar.GetGlobalRect().HasPoint(at))
+        || (_mainMenu?.Visible == true && _mainMenu.GetGlobalRect().HasPoint(at))
+        || (_clockWindow?.Visible == true && _clockWindow.GetGlobalRect().HasPoint(at))
+        || (_compassWindow?.Visible == true && _compassWindow.GetGlobalRect().HasPoint(at))
+        || (_xpWindow?.Visible == true && _xpWindow.GetGlobalRect().HasPoint(at))
         || (_summary?.Visible == true && _summary.GetGlobalRect().HasPoint(at))
         || (_statsPanel?.Visible == true && _statsPanel.GetGlobalRect().HasPoint(at))
         || ItemWindowsHave(at)

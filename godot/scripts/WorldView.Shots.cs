@@ -172,6 +172,13 @@ public partial class WorldView
         // --torch lights the character's torch on entering (to check its look).
         if (System.Array.IndexOf(args, "--torch") >= 0)
             GetTree().CreateTimer(1).Timeout += () => SetTorch(true);
+        // --elements opens Interface Elements and the command window (to see them in a --shot).
+        if (System.Array.IndexOf(args, "--elements") >= 0)
+            GetTree().CreateTimer(1).Timeout += () =>
+            {
+                _showCommand = true;
+                ShowElements(true);
+            };
         // --main-menu opens the menu bar's MENU (to see it in a --shot).
         if (System.Array.IndexOf(args, "--main-menu") >= 0)
             GetTree().CreateTimer(1).Timeout += ToggleMainMenu;
