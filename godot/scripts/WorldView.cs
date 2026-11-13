@@ -422,7 +422,8 @@ public partial class WorldView : Node3D
         foreach (Node n in _body.GetChildren())
             if (n is CollisionObject3D co)
                 _camArm.AddExcludedObject(co.GetRid());
-        _camera = new Camera3D { Far = 8000f, Fov = ClientSettings.FieldOfView };
+        // Retail's camera: the field of view is across (Fov keeps the width), near 4 units.
+        _camera = new Camera3D { Far = 8000f, Fov = ClientSettings.FieldOfView, KeepAspect = Camera3D.KeepAspectEnum.Width, Near = 4 * RegionMetresPerUnit };
         ClientSettings.Changed += OnSettingsChanged;
         _camArm.AddChild(_camera);
         // The SpringArm extends the camera along the pivot's +Z, so to sit BEHIND a body that faces

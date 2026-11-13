@@ -2,10 +2,12 @@
 //
 // WorldView: walls (roadmap M9, solid world). The models' collision volumes ("collidee", "collider", "collision"
 // nodes, exported as eodcollide_ meshes) are bodies on the wall layer, never drawn. Each horizontal step of the
-// character is cast as an upright capsule against them: it stops at a wall and slides along it, as at a zone's edge
-// walls (WorldView.Bounds). The capsule starts 0.45 m above the feet, so kerbs and stair steps are left to the
-// ground-following step-up (Ground), and a surface that faces up enough to stand on (a ramp) doesn't block.
-// Not yet: retail's own player size and rules (open question W55); creatures and other players don't block.
+// character is cast against them as retail's player box (daoc-re RE/72, W55): 28 x 28 units wide, turning with the
+// character's facing, 48 units tall, from 0.8 to 2.0 m above the feet. It stops at a wall and slides along it with
+// v - 1.02 (v.n) n on the normal's horizontal part, as at a zone's edge walls (WorldView.Bounds). Anything under 0.8 m
+// never touches the box: kerbs, steps and low rocks are the ground-following's (Ground). A surface that faces up enough
+// to stand on (a ramp) doesn't block (ours). Creatures and other players don't block.
+// Retail's rule is for outdoor zones; cities and dungeons use another system, not traced.
 
 using Godot;
 
@@ -13,10 +15,11 @@ namespace EodClient;
 
 public partial class WorldView
 {
-    private const float WallRadius = 0.35f;        // metres
-    private const float WallClearance = 0.45f;     // capsule bottom above the feet
-    private const float WallHeight = 1.4f;         // capsule height (Godot's: end to end)
-    private CapsuleShape3D? _wallShape;
+    private const float WallHalfWidth = 14 * RegionMetresPerUnit;   // 28 x 28 units
+    private const float WallClearance = 0.8f;                       // the box's bottom above the feet (32 units)
+    private const float WallHeight = 48 * RegionMetresPerUnit;      // 1.2 m
+    private const float SlideFactor = 1.02f;                        // retail's slide: v - 1.02 (v.n) n
+    private BoxShape3D? _wallShape;
     private double _wallLogAt;
 
     // Where a step from `from` to `to` ends against the walls: the whole step, as far as the first wall then along it,
@@ -27,7 +30,8 @@ public partial class WorldView
         motion.Y = 0;
         if (motion.LengthSquared() < 1e-8f)
             return to;
-        _wallShape ??= new CapsuleShape3D { Radius = WallRadius, Height = WallHeight };
+        _wallShape ??= new BoxShape3D { Size = new Vector3(2 * WallHalfWidth, WallHeight, 2 * WallHalfWidth) };
+        var facing = new Basis(Vector3.Up, _bodyYaw);
         var query = new PhysicsShapeQueryParameters3D
         {
             Shape = _wallShape, CollisionMask = WallLayer, Margin = 0.02f,
@@ -36,7 +40,7 @@ public partial class WorldView
         Vector3 at = from, lift = new(0, WallClearance + WallHeight / 2, 0);
         for (int pass = 0; pass < 3 && motion.LengthSquared() > 1e-8f; pass++)
         {
-            query.Transform = new Transform3D(Basis.Identity, at + lift);
+            query.Transform = new Transform3D(facing, at + lift);
             query.Motion = motion;
             float[] cast = space.CastMotion(query);
             if (cast.Length < 2 || cast[0] >= 1f)
@@ -44,8 +48,8 @@ public partial class WorldView
                 at += motion;
                 break;
             }
-            // The wall's normal where the capsule would touch it.
-            query.Transform = new Transform3D(Basis.Identity, at + lift + motion * cast[1]);
+            // The wall's normal where the box would touch it.
+            query.Transform = new Transform3D(facing, at + lift + motion * cast[1]);
             query.Motion = Vector3.Zero;
             Godot.Collections.Dictionary rest = space.GetRestInfo(query);
             Vector3 normal;
@@ -54,7 +58,7 @@ public partial class WorldView
             else
             {
                 // No resting contact at the touching point (it sits just inside the cast's margin): the contact
-                // pairs (a point on the capsule, then one on the wall) give the normal, pointing back at us.
+                // pairs (a point on the box, then one on the wall) give the normal, pointing back at us.
                 query.Margin = 0.06f;
                 Godot.Collections.Array<Vector3> pts = space.CollideShape(query, 4);
                 query.Margin = 0.02f;
@@ -62,6 +66,11 @@ public partial class WorldView
                 if (normal.Dot(motion) > 0)
                     normal = -normal;
                 normal = normal.LengthSquared() > 1e-8f ? normal.Normalized() : -motion.Normalized();
+            }
+            if (normal.Dot(motion) >= 0)
+            {
+                at += motion;   // moving away from it (the turning box can start against a wall): only contacts you move into count
+                break;
             }
             if (normal.Y >= MinFloorNormal)
             {
@@ -74,12 +83,12 @@ public partial class WorldView
                 break;
             normal = normal.Normalized();
             Vector3 rest_ = motion * (1 - cast[0]);
-            motion = rest_ - normal * rest_.Dot(normal);   // slide: keep the part along the wall
+            motion = rest_ - normal * (SlideFactor * rest_.Dot(normal));   // slide along the wall, a little off it
             if (_seconds >= _wallLogAt)
             {
                 _wallLogAt = _seconds + 2;
-                // What it touches: the capsule where it stopped, a little grown (it rests just off the wall).
-                query.Transform = new Transform3D(Basis.Identity, at + lift);
+                // What it touches: the box where it stopped, a little grown (it rests just off the wall).
+                query.Transform = new Transform3D(facing, at + lift);
                 query.Margin = 0.1f;
                 var hits = space.IntersectShape(query, 1);
                 query.Margin = 0.02f;

@@ -82,15 +82,30 @@ public static class ClientSettings
             ? new Vector2I(w, h) : null;
     }
 
-    public const float MinFieldOfView = 50, MaxFieldOfView = 110;
+    public const float MinFieldOfView = 60, MaxFieldOfView = 130, RetailFieldOfView = 79.6f;
 
-    /// <summary>The camera's vertical field of view in degrees (retail has a Field of View option;
-    /// its range and default are open question W29).</summary>
+    /// <summary>The camera's HORIZONTAL field of view in degrees; the vertical follows the window's shape, so a wider
+    /// window sees the same width and less height. Retail has no such option: its camera is fixed at 79.6 degrees across
+    /// (daoc-re RE/72, W29), our default; the slider is ours. A vertical angle saved before (field_of_view) is read as
+    /// the same width on a 16:9 window, so a player's chosen view doesn't change.</summary>
     public static float FieldOfView
     {
-        get => System.Math.Clamp((float)Load().GetValue("graphics", "field_of_view", 70f).AsDouble(), MinFieldOfView, MaxFieldOfView);
-        set => Save("field_of_view", value);
+        get
+        {
+            ConfigFile cfg = Load();
+            float across = cfg.HasSectionKey("graphics", "field_of_view_across")
+                ? (float)cfg.GetValue("graphics", "field_of_view_across").AsDouble()
+                : cfg.HasSectionKey("graphics", "field_of_view")
+                    ? AcrossFromVertical((float)cfg.GetValue("graphics", "field_of_view").AsDouble(), 16f / 9f)
+                    : RetailFieldOfView;
+            return System.Math.Clamp(across, MinFieldOfView, MaxFieldOfView);
+        }
+        set => Save("field_of_view_across", value);
     }
+
+    /// <summary>The angle across for a vertical one on a window of the given width / height.</summary>
+    public static float AcrossFromVertical(float verticalDegrees, float aspect) =>
+        (float)(2 * System.Math.Atan(System.Math.Tan(verticalDegrees * System.Math.PI / 360) * aspect) * 180 / System.Math.PI);
 
     /// <summary>Raised when a setting changes; <c>display</c> is true when the window mode did.</summary>
     public static event System.Action<bool>? Changed;

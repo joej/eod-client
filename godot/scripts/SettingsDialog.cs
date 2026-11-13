@@ -168,15 +168,15 @@ public partial class SettingsDialog : AcceptDialog
         uiRow.AddChild(auto);
         grid.AddChild(uiRow);
 
-        grid.AddChild(new Label { Text = "Field of view" });
+        grid.AddChild(new Label { Text = "Field of view (across)", TooltipText = "Retail's is fixed at 79.6°" });
         var fovRow = new HBoxContainer();
         var fov = new HSlider
         {
-            MinValue = ClientSettings.MinFieldOfView, MaxValue = ClientSettings.MaxFieldOfView, Step = 1,
-            Value = ClientSettings.FieldOfView, CustomMinimumSize = new Vector2(200, 0),
+            MinValue = ClientSettings.MinFieldOfView, MaxValue = ClientSettings.MaxFieldOfView, Step = 0.1,
+            Value = ClientSettings.FieldOfView, CustomMinimumSize = new Vector2(200, 0),   // 79.6 until moved
             SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
         };
-        var fovValue = new Label { Text = $"{ClientSettings.FieldOfView:0}°", CustomMinimumSize = new Vector2(48, 0) };
+        var fovValue = new Label { Text = $"{ClientSettings.FieldOfView:0.#}°", CustomMinimumSize = new Vector2(48, 0) };
         fov.ValueChanged += value =>
         {
             ClientSettings.FieldOfView = (float)value;
