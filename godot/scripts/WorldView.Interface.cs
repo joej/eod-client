@@ -26,11 +26,12 @@ public partial class WorldView
         if (_summary is not null && IsInstanceValid(_summary) && _summary.GetParent() is CanvasLayer overlay)
         {
             // Rebuilt at the new size; each window keeps its remembered place (stored in skin pixels).
-            foreach (Node old in new Node?[] { _summary, _targetWindow, _compassWindow, _xpWindow, _menuBar, _mainMenu, _clockWindow, _statsPanel, _miniInfo, _infoWindow, _dialogWindow }
+            foreach (Node old in new Node?[] { _chatWindow, _summary, _targetWindow, _compassWindow, _xpWindow, _menuBar, _mainMenu, _clockWindow, _statsPanel, _miniInfo, _infoWindow, _dialogWindow }
                          .Concat(_bars.Select(b => (Node)b.Window)).OfType<Node>())
                 old.QueueFree();
             _bars.Clear();
             _compassWindow = null;
+            BuildChatWindow(overlay);
             BuildHud(overlay);
             BuildQuickbars(overlay);
             BuildCompass(overlay);
@@ -48,13 +49,7 @@ public partial class WorldView
     {
         int font = Mathf.RoundToInt(16 * k);
         foreach (string f in new[] { "normal_font_size", "bold_font_size", "italics_font_size", "mono_font_size" })
-        {
-            _chatLog.AddThemeFontSizeOverride(f, font);
             _npcText.AddThemeFontSizeOverride(f, font);
-        }
-        (_chatLog.OffsetLeft, _chatLog.OffsetRight, _chatLog.OffsetTop, _chatLog.OffsetBottom) = (16 * k, 520 * k, -236 * k, -52 * k);
-        _chatInput.AddThemeFontSizeOverride("font_size", font);
-        (_chatInput.OffsetLeft, _chatInput.OffsetRight, _chatInput.OffsetTop, _chatInput.OffsetBottom) = (16 * k, 520 * k, -16 * k - 28 * k, -16 * k);
         _npcWindow.CustomMinimumSize = new Vector2(440 * k, 0);
         _npcText.CustomMinimumSize = new Vector2(400 * k, 0);
         _npcWindow.Position = new Vector2(-220 * k, 270 * k);

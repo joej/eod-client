@@ -93,6 +93,7 @@ public partial class WorldView
     // Whether a screen point is over one of the game windows (so the world doesn't also take the click).
     private bool OverHud(Vector2 at) =>
         _bars.Any(b => b.Window.Visible && b.Window.GetGlobalRect().HasPoint(at))
+        || (_chatWindow?.Visible == true && _chatWindow.GetGlobalRect().HasPoint(at))
         || (_summary?.Visible == true && _summary.GetGlobalRect().HasPoint(at))
         || (_statsPanel?.Visible == true && _statsPanel.GetGlobalRect().HasPoint(at))
         || ItemWindowsHave(at)

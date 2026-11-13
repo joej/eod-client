@@ -12,57 +12,17 @@ namespace EodClient;
 
 public partial class WorldView
 {
-    // The chat log sits in the lower-left; the input is a thin bar beneath it. Both are anchored to
-    // the bottom so they follow the window as it resizes. BBCode is on so each line can be coloured
-    // by its chat type without any per-glyph work.
-    private void BuildChatUi(CanvasLayer overlay)
-    {
-        _chatLog = new RichTextLabel
-        {
-            BbcodeEnabled = true,
-            ScrollFollowing = true,
-            // Don't steal clicks/keys from the 3D view; only the input line is interactive.
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-            FocusMode = Control.FocusModeEnum.None,
-            AnchorLeft = 0f,
-            AnchorRight = 0f,
-            AnchorTop = 1f,
-            AnchorBottom = 1f,
-            OffsetLeft = 16,
-            OffsetRight = 520,
-            OffsetTop = -236,
-            OffsetBottom = -52,
-        };
-        overlay.AddChild(_chatLog);
-
-        _chatInput = new LineEdit
-        {
-            // Well inside one packet (CommandRequest.MaxLength) even with the longest command in front.
-            MaxLength = 512,
-            PlaceholderText = "Enter to chat (says by default), or type / for a command (/who, /gu …)",
-            AnchorLeft = 0f,
-            AnchorRight = 0f,
-            AnchorTop = 1f,
-            AnchorBottom = 1f,
-            OffsetLeft = 16,
-            OffsetRight = 520,
-            OffsetTop = -44,
-            OffsetBottom = -16,
-        };
-        _chatInput.TextSubmitted += OnChatSubmitted;
-        overlay.AddChild(_chatInput);
-    }
-
     // ----- Chat (M6) -----
 
-    // A 0xAF Message arrived. Show the real chat/system lines; drop the UI-control types
-    // (SocialInterface structured strings, the centred ScreenCenter banner) that aren't text.
+    // A 0xAF Message arrived: to its chat line (by retail's type rules), the middle of the screen, the NPC's window.
     private void OnChatReceived(ChatMessage msg)
     {
         _chatReceived++;
         GD.Print($"[chat {(byte)msg.Type:X2}{(msg.Popup ? " popup" : "")}] {msg.Text}");   // the log keeps what the player read
-        if (msg.IsPlayerVisibleChat)
-            AppendChat(msg.Text, ChatColor(msg.Type));
+        if (ChatRules.ShownAs(msg) is ChatType shown)
+            AddChatLine(msg.Text, shown, null);
+        if (ChatRules.Centre(msg) is CentreSize size)
+            ShowCentreText(msg.Text, size);
         // An NPC's words to the player: its window, where [keywords] can be clicked.
         if (msg.Popup)
         {
@@ -82,6 +42,7 @@ public partial class WorldView
     // input, so WASD and mouse-look went dead with no obvious way back.
     private async void OnChatSubmitted(string text)
     {
+        string raw = text;   // "/g " with its trailing space switches the chat mode (ChatRules.Typed)
         string line = text.Trim();
         _chatInput.Clear();
         _chatInput.ReleaseFocus();
@@ -117,12 +78,18 @@ public partial class WorldView
             UseSkillByName(line.Split(' ', 2) is [_, string name] ? name.Trim() : "");
             return;
         }
+        (string? send, ChatMode mode) = ChatRules.Typed(raw, _chatMode, TargetName());
+        if (mode != _chatMode)
+            GD.Print($"[chat] mode {_chatMode} -> {mode}");
+        _chatMode = mode;
+        UpdateChatPrompt();
+        // The same command again within 250 ms is dropped (retail).
+        if (send is null || (send == _lastChatSent && _seconds - _lastChatSentAt < 0.25))
+            return;
+        (_lastChatSent, _lastChatSentAt) = (send, _seconds);
         try
         {
-            if (line.StartsWith('/'))
-                await _session.SendCommandAsync(line);
-            else
-                await _session.SayAsync(line);
+            await _session.SendCommandAsync(send);
         }
         catch (System.Exception e)
         {
@@ -130,41 +97,7 @@ public partial class WorldView
         }
     }
 
-    private void AppendChat(string text, Color color)
-    {
-        // Cap the backlog so a long session doesn't grow the label without bound.
-        if (_chatLines >= ChatMaxLines)
-        {
-            _chatLog.Clear();
-            _chatLines = 0;
-        }
-        _chatLog.PushColor(color);
-        _chatLog.AddText(text);
-        _chatLog.Pop();
-        _chatLog.Newline();
-        _chatLines++;
-    }
-
-    // Colour by channel/category, roughly as DAoC's default chat colours read: say white, tells and
-    // group/guild channels their own hues, system/important yellow-ish, combat/spell muted.
-    private static Color ChatColor(ChatType type) => type switch
-    {
-        ChatType.Say => new Color(0.95f, 0.95f, 0.95f),
-        ChatType.Send => new Color(0.7f, 0.7f, 1.0f),
-        ChatType.Group => new Color(0.5f, 0.85f, 0.95f),
-        ChatType.Guild => new Color(0.5f, 0.95f, 0.5f),
-        ChatType.Officer => new Color(0.4f, 0.8f, 0.4f),
-        ChatType.Alliance => new Color(0.6f, 0.9f, 0.7f),
-        ChatType.Broadcast => new Color(0.95f, 0.75f, 0.4f),
-        ChatType.Emote => new Color(0.85f, 0.7f, 0.95f),
-        ChatType.Trade or ChatType.LookingForGroup => new Color(0.9f, 0.85f, 0.5f),
-        ChatType.Help or ChatType.Advise => new Color(0.6f, 0.85f, 0.9f),
-        ChatType.Important or ChatType.Staff => new Color(1.0f, 0.85f, 0.3f),
-        ChatType.Spell or ChatType.SpellExpires or ChatType.SpellPulse or ChatType.SpellResisted
-            => new Color(0.7f, 0.75f, 0.85f),
-        ChatType.Loot or ChatType.Items or ChatType.Merchant => new Color(0.8f, 0.8f, 0.6f),
-        ChatType.YourDeath or ChatType.OthersDeath or ChatType.Damaged or ChatType.YouHit
-            or ChatType.OthersCombat => new Color(0.9f, 0.6f, 0.55f),
-        _ => new Color(0.75f, 0.78f, 0.72f),  // Unspecified/System and the rest: muted grey-green
-    };
+    // A line of the client's own (a local command's reply, a notice): shown on every tab, in its own colour (ours: retail's
+    // own lines' type isn't traced).
+    private void AppendChat(string text, Color color) => AddChatLine(text, null, color);
 }

@@ -242,6 +242,19 @@ public partial class WorldView
                     Zoom(notches);
                     GD.Print($"[camera] zoomed {notches:+0;-0} notches: {(_firstPerson ? "first person" : $"{_camDistance / RegionMetresPerUnit:0} units")}");
                 };
+        // --type TEXT (repeatable) types a line into the chat box and presses Enter, 2 s apart from 3 s after entering: the
+        // chat rules (mode switches, %t) as a player meets them.
+        int typeDelay = 3;
+        for (int ti = System.Array.IndexOf(args, "--type"); ti >= 0 && ti + 1 < args.Length;
+             ti = System.Array.IndexOf(args, "--type", ti + 2), typeDelay += 2)
+        {
+            string typed = args[ti + 1];
+            GetTree().CreateTimer(typeDelay).Timeout += () =>
+            {
+                GD.Print($"[world] dev typed: \"{typed}\"");
+                OnChatSubmitted(typed);
+            };
+        }
         // --command TEXT (repeatable) sends each slash command in turn, 2 s apart from 2 s after entering: e.g.
         // a GM "/jump to X Y Z REGION" to set up a --campose/--shot check somewhere exact.
         int delay = 2;

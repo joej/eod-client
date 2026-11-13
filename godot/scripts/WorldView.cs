@@ -88,8 +88,6 @@ public partial class WorldView : Node3D
     // game hotkeys (P, Tab, mouse-look) are suppressed so typing never drives the character.
     private RichTextLabel _chatLog = null!;
     private LineEdit _chatInput = null!;
-    private const int ChatMaxLines = 200;
-    private int _chatLines;
     private bool ChatInputActive => _chatInput is not null && _chatInput.HasFocus();
     // Chase rig (adapted from OfflineDAoC's SpringArm3D camera, GPL-3.0; see
     // docs/offlinedaoc-asset-pipeline.md): a pivot at shoulder height on the body carries a
@@ -493,7 +491,7 @@ public partial class WorldView : Node3D
         var travel = new Button { Text = "Travel (F6)", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
         travel.Pressed += () => OpenTravel();
         _dev.AddToStatus(travel);
-        BuildChatUi(overlay);
+        BuildChatWindow(overlay);
         BuildNpcWindow(overlay);
         BuildDeathPanel(overlay);
         BuildMapWindow(overlay);
@@ -551,7 +549,7 @@ public partial class WorldView : Node3D
         _dev.AddToggle("Entities", true, on => _entityRoot.Visible = on);
         _dev.AddToggle("Own character", true, on => { _ownCharacterShown = on; ShowOwnBody(); });
         _dev.AddToggle("Names", _namesVisible, ShowNames);
-        _dev.AddToggle("Chat", true, on => _chatLog.Visible = _chatInput.Visible = on);
+        _dev.AddToggle("Chat", true, on => { if (_chatWindow is not null) _chatWindow.Visible = on; });
         // Off by default: the server's speed check exempts GMs only, and kicks a player who sprints.
         _dev.AddToggle("Shift fast move ×4 (GM only)", ClientSettings.Sprint, on => ClientSettings.Sprint = on);
         if (PacketLogging is var (getLog, setLog))
@@ -1006,6 +1004,7 @@ public partial class WorldView : Node3D
         UpdateStatsPanel();
         UpdateSkyTime();
         UpdateLamps(delta);
+        UpdateChat();
         _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)
         {
