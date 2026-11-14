@@ -772,6 +772,46 @@ and back at the character screen; quit then moving after 5 s calls it off (no 0x
 a second quit after that works; a quit sent while running is refused at once. An immediate new login
 after a quit is accepted.
 
+## Where OpenDAoC and the retail client disagree
+
+Some server packets are written by OpenDAoC differently from how the retail 1.127/1.130 client reads them. The rule
+for our client: **read each packet as the retail client does** (fixes are planned on the server side), and tolerate
+what the server sends today where that costs nothing. This table maps each known difference to our code; it is static
+knowledge, not yet checked live, unless the last column says so. Updated 2026-11-14.
+
+**Short packets.** The retail client reads into a buffer it never clears, so a packet shorter than its layout reads
+leftovers rather than failing. Ours never reads past the end: `PayloadReader` throws, and `NetworkBridge` drops the
+whole packet and logs `failed to parse`. Parsers that know a writer may stop early read what is there (0x4B's
+strings). Next: where a whole dropped packet would hide something visible, give missing trailing fields defaults
+instead.
+
+| Packet | Retail client | OpenDAoC today | Ours | Status |
+|---|---|---|---|---|
+| 0xE1 object delete | Removes **players only**; the second u16 isn't read | Also sent for despawned NPCs and objects | Removes any entity (`NetworkBridge` → `ObjectRemoved`) | Different on purpose: against OpenDAoC an NPC would otherwise stay until a timeout. Revisit when the server sends 0xA2 for those |
+| 0xA2 remove object | Type 0 = removed with the death effect, 1 = any non-player, 2 = a player | As intended | Type parsed (`RemoveObject.ObjectType`), unused: every type just removes | Missing: the death effect for type 0 |
+| 0x4B player create, mounted | Horse block 5 bytes: horse id, barding, barding colour (u8), saddle, saddle colour | 6 bytes, so the saddle fields arrive shifted | Horse block not read (we stop after the title strings) | Not affected yet. Read it as 5 bytes when mounts are built |
+| 0x70 group icons | The u16 is a **spell id**; the icon comes from the spell table | Writes the effect's `Icon` (a spell's icon id; abilities a fixed icon id) | Reads it as an icon id (`GroupMemberUpdate`, `WorldView.Group` → `IconKind.Icon`) | Matches the server, not retail. Check live with a buff on a group member; read spell ids once the server sends them |
+| 0x88 pet icons | The u16 is a spell id | As 0x70 | Not handled | Not built |
+| 0x02 inventory, house vault (window 4) | Caption "House Vault %u" from bytes 2–3 as one big-endian u16 | Byte 2 carries the cloak/helm bits, so the number is wrong | Windows above 2 are ignored (`Inventory.Apply`) | Not built. Read bytes 2–3 as the vault number for window 4 |
+| 0xAF types 0xCA/0xCB | Centre-screen text, also added to chat as Say | Used for system messages | Centre text and chat (`ChatRules.Centre`, `WorldView.ChatWindow`) | ✅ matches retail |
+| 0x4C visual effect | Sub-codes 1–8 and 0xB–0xF; 9 ignored | Sends 9 for "free level" | Only kind 7 (quest glyph) used; others ignored | ✅ (9 ignored as retail) |
+| 0xC5 friends list | Replaces the whole online-friends list (up to 40 names) | Sent with one name when a friend logs in or is added | Not handled | Not built. Replace, as retail |
+| 0xC6 friend | One name; flag 1 adds it ("Your friend %s just entered the game."), 0 removes it ("…just left the game.") | Flag 0 also for `/friend remove` | Not handled | Not built |
+| 0x61 keep component interact | Health %, levels shown +1, type bits; guild name in a fixed 32-byte field, then a flag at +0x27 (non-zero: siege-tower window, zero: keep window) | Variable-length name; the packet ends early | Not handled | Not built (RvR) |
+| 0x62 keep claim | Levels shown +1 | Raw levels, one too high | Not handled | Not built |
+| 0x6C/0x6D keep components | Flag bit 0 broken, bit 1 climbable, bit 2 (tower) raised; 0x6D health 0xC7 = unchanged | A raised tower sent as 0x06, which reads as climbable | Not handled | Not built |
+| 0xDB model change | For NPCs, byte 5 bit 0 = torch | Always 0 | Not handled | Not built |
+| 0x8D model type change | Applied to the player's own character only | Sent to everyone in range | Not handled | Not built. Apply to self only |
+| 0xD2 garden | Byte 5 bit 0 = house occupied | 0x80 / 0x00 | Not handled | Not built (housing) |
+| 0xE3 siege animation | Sets the target's health % from byte +0x19 | 0 during Loading | Not handled | Not built |
+| 0x7B trainer, champion type 2 | Kind 3 = spell id, 2 = style id, others icon id | Icons for all kinds; link bytes 0 | Not handled | Not built |
+| 0x17/0x1F merchant, market | Item names at most 47 bytes; a longer one drops the page | No limit | Not handled | Not built (merchant window, M10): keep the page, truncate the name |
+
+Client features the server could use later: NPC create (0xDA) flags2 0x40 (face and hair from a number, not the
+name) and 0x20 (a water mob, not targetable from above the water), which our `NpcCreate.Flags2` doesn't read yet;
+0xEE object data update (name, guild, last name in place); an "@@" prefix on player chat lines, which `ChatRules`
+already reads to find the sender; war-map relic bits.
+
 ## Code map
 
 | Topic | Code | Tests |
