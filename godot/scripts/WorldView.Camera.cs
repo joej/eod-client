@@ -5,7 +5,7 @@
 //   /setcamera       saves the current distance, height, angle and tilt as home
 //   /resetcamera     sets home to 240 / height 10 / angle 0 / tilt 0, and applies it
 //   Reset Camera key applies home (Home; D in the classic layout)
-// Home is applied on entering the world and when the free-fly camera (Tab) comes back. A character that never saved one
+// Home is applied on entering the world and when the free-fly camera (F9) comes back. A character that never saved one
 // starts at 500 / 10 / 0 / 0 (retail's new-character home; inferred by daoc-re), unless an older, shared /setcamera
 // was saved (ClientSettings.CameraHomeOf).
 //

@@ -85,7 +85,7 @@ public partial class WorldView : Node3D
     // ----- Chat (M6) -----
     // A scrolling log of incoming/outgoing lines and a text input. The input only grabs keys while
     // it has focus (ChatInputActive); otherwise Enter focuses it. While focused, movement and the
-    // game hotkeys (P, Tab, mouse-look) are suppressed so typing never drives the character.
+    // game hotkeys (Tab, F9, mouse-look) are suppressed so typing never drives the character.
     private RichTextLabel _chatLog = null!;
     private LineEdit _chatInput = null!;
     private bool ChatInputActive => _chatInput is not null && _chatInput.HasFocus();
@@ -142,6 +142,8 @@ public partial class WorldView : Node3D
         public float ServerY;         // the height the server last sent (Godot metres)
         public int Realm;             // 0 none (monsters), 1 Albion, 2 Midgard, 3 Hibernia
         public bool IsPlayer;
+        public bool Peaceful;         // an NPC the server flags as not attackable (0xDA flags 0x10)
+        public bool Pickable = true;  // false: the server says it can't be targeted (a marker or effect, e.g. a teleporter's ring)
         public bool Grounded;         // stands on the ground under it, whatever height the server sends
         public bool GroundedAtSpawn;  // its create said neither flying nor swimming (a 0xA1 flag may still lift it)
         public float? GroundY;        // that ground's height, probed for ProbedAt
@@ -230,7 +232,7 @@ public partial class WorldView : Node3D
     /// </summary>
     public string AssetsNote { get; set; } = "";
 
-    /// <summary>Reads and switches the packet log (F4); set by CharacterScreen, which owns it.</summary>
+    /// <summary>Reads and switches the packet log (Ctrl+F12); set by CharacterScreen, which owns it.</summary>
     public (Func<bool> Get, Action<bool> Set)? PacketLogging { get; set; }
     private Action? _togglePacketLog;
 
@@ -396,7 +398,7 @@ public partial class WorldView : Node3D
 
         // Chase rig: pivot at shoulder height on the body → SpringArm3D → camera. The arm pulls the
         // camera in off terrain/walls/scenery (mask below) so it never clips into the ground — the
-        // thing the old fixed-offset camera got wrong. Tab detaches it to a free-fly debug camera
+        // thing the old fixed-offset camera got wrong. F9 detaches it to a free-fly debug camera
         // (handy: the spawn is often inside a large structure — Eodarms starts at Prydwen Keep).
         ApplyCameraHome(CameraHomeNow);
         _camPivot = new Node3D { Position = PivotHeight };
@@ -488,7 +490,7 @@ public partial class WorldView : Node3D
         var settings = new Button { Text = "Settings (F10)", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
         settings.Pressed += () => SettingsDialog.Open(this);
         _dev.AddToStatus(settings);
-        var travel = new Button { Text = "Travel (F6)", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+        var travel = new Button { Text = "Travel (Shift+F9)", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
         travel.Pressed += () => OpenTravel();
         _dev.AddToStatus(travel);
         BuildChatWindow(overlay);
@@ -521,7 +523,7 @@ public partial class WorldView : Node3D
     // Layer switches for the dev overlay. Hidden fixtures/terrain are also left out of inspect picks.
     private void BuildDevToggles(ZoneParts first)
     {
-        _nextViewDistance = _dev.AddChoice("F3 view", [.. ClientSettings.ViewDistances.Select(v => v.Label)],
+        _nextViewDistance = _dev.AddChoice("Alt+F12 view", [.. ClientSettings.ViewDistances.Select(v => v.Label)],
             _viewSetting, i => { _viewSetting = i; ClientSettings.ViewDistance = i; ApplyViewDistance(i); });
         _dev.AddToggle("Sun shadows", ClientSettings.SunShadows, on =>
         {
@@ -554,7 +556,7 @@ public partial class WorldView : Node3D
         // Off by default: the server's speed check exempts GMs only, and kicks a player who sprints.
         _dev.AddToggle("Shift fast move ×4 (GM only)", ClientSettings.Sprint, on => ClientSettings.Sprint = on);
         if (PacketLogging is var (getLog, setLog))
-            _togglePacketLog = _dev.AddToggle("F4 packet log", getLog(), setLog);
+            _togglePacketLog = _dev.AddToggle("Ctrl+F12 packet log", getLog(), setLog);
         _dev.AddInfo($"{first.Placed} fixtures · {first.TexturedModels} textured models · {first.WaterBodies} water\n" +
             $"{first.TexturedSurfaces} textured surfaces" + (first.Terrain is null ? " · flat ground" : "")
             + (_streaming ? " · neighbouring zones stream in" : ""));
@@ -709,7 +711,7 @@ public partial class WorldView : Node3D
         {
             if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
                 _chatInput.ReleaseFocus();
-            return;   // typing: don't drive the camera or trigger P/Tab while the box has focus
+            return;   // typing: don't drive the camera or trigger hotkeys while the box has focus
         }
         if (QuickbarKey(@event))
         {
@@ -790,29 +792,35 @@ public partial class WorldView : Node3D
                 _camPitch = Mathf.Clamp(_camPitch - mm.Relative.Y * PitchPerPixel * 3, -1.5f, 1.5f);
             }
         }
-        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.P })
+        // Our own keys sit where retail binds nothing in any preset (F9, F10, F12; F12 can't be bound there), so the
+        // targeting keys keep retail's: Num - (retail's screenshot key; Ctrl+F9 without a keypad), F9 free-fly camera,
+        // Shift+F9 travel, F10 settings, F12 dev panels, Shift+F12 render mode, Alt+F12 view distance, Ctrl+F12 packet log.
+        else if (DevKey(@event, Key.KpSubtract) || DevKey(@event, Ctrl(Key.F9)))
         {
             _ = SaveScreenshot();
         }
-        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Tab })
+        else if (DevKey(@event, Key.F9))
         {
             SetChase(!_chase);
         }
-        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F1 })
+        else if (DevKey(@event, Key.F12))
         {
             _dev.PanelsVisible = !_dev.PanelsVisible;
         }
-        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F3 })
+        else if (DevKey(@event, Alt(Key.F12)))
         {
             _nextViewDistance?.Invoke();
         }
-        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F10 })
+        else if (DevKey(@event, Key.F10))
         {
             SettingsDialog.Open(this);
         }
-        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F6 } && !ChatInputActive)
+        else if (DevKey(@event, Shift(Key.F9)))
         {
             OpenTravel();
+        }
+        else if (TargetKey(@event))
+        {
         }
         else if (KeyBindings.Pressed(@event, ControlAction.AutoRun) && !ChatInputActive && _chase)
         {
@@ -849,11 +857,11 @@ public partial class WorldView : Node3D
             // that draws or sheathes the weapons.
             _ = SendAttack(!_attacking);
         }
-        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F4 })
+        else if (DevKey(@event, Ctrl(Key.F12)))
         {
             _togglePacketLog?.Invoke();
         }
-        else if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F2 })
+        else if (DevKey(@event, Shift(Key.F12)))
         {
             _dev.CycleRenderMode();
         }
@@ -929,12 +937,20 @@ public partial class WorldView : Node3D
     // Switches between the chase rig and a free-fly debug camera by reparenting the one Camera3D:
     // under the spring arm for chase (so the arm drives it), or directly under WorldView for free-fly
     // (so UpdateDebugCamera can set its global transform). Reparent keeps the camera where it is.
+    // A fresh press of exactly this key and these modifiers.
+    private static bool DevKey(InputEvent e, Key key) =>
+        e is InputEventKey { Pressed: true, Echo: false } k && k.GetKeycodeWithModifiers() == key;
+
+    private static Key Shift(Key k) => k | (Key)KeyModifierMask.MaskShift;
+    private static Key Alt(Key k) => k | (Key)KeyModifierMask.MaskAlt;
+    private static Key Ctrl(Key k) => k | (Key)KeyModifierMask.MaskCtrl;
+
     private void SetChase(bool chase)
     {
         if (chase == _chase)
             return;
         _chase = chase;
-        GD.Print($"[world] camera {(chase ? "follows the character" : "flies free (Tab)")}");
+        GD.Print($"[world] camera {(chase ? "follows the character" : "flies free (F9)")}");
         Transform3D worldXform = _camera.GlobalTransform;
         _camera.GetParent().RemoveChild(_camera);
         if (chase)
@@ -1046,7 +1062,7 @@ public partial class WorldView : Node3D
             _button.Disabled = false;
         }
 
-        // The status text is for reading, not animation: rebuilt 4 times a second, and not while F1 hides it.
+        // The status text is for reading, not animation: rebuilt 4 times a second, and not while F12 hides it.
         if (!_dev.PanelsVisible || _seconds < _nextStatus)
             return;
         _nextStatus = _seconds + 0.25;
@@ -1063,8 +1079,8 @@ public partial class WorldView : Node3D
             (_chase
                 ? $"move: {Keys(ControlAction.Forward)}/{Keys(ControlAction.Back)} walk, {Keys(ControlAction.TurnLeft)}/{Keys(ControlAction.TurnRight)} or right-drag turn, " +
                   $"{Keys(ControlAction.StrafeLeft)}/{Keys(ControlAction.StrafeRight)} strafe, {Keys(ControlAction.Jump)} jump, {Keys(ControlAction.Sprint)} sprint, " +
-                  $"{Keys(ControlAction.AutoRun)} auto-run, wheel zoom, left-drag pan   ·   {Keys(ControlAction.AttackMode)} attack   ·   Tab free-fly, P shot"
-                : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   Tab chase, P screenshot")
-            + $"\nF1 panels · F2 render mode · F3 view distance · left-click inspect (Esc clears) · {Keys(ControlAction.Map)} map";
+                  $"{Keys(ControlAction.AutoRun)} auto-run, wheel zoom, left-drag pan   ·   {Keys(ControlAction.AttackMode)} attack   ·   {Keys(ControlAction.TargetEnemy)} enemy, {Keys(ControlAction.TargetFriend)} friend   ·   F9 free-fly, Num - shot"
+                : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   F9 chase, Num - screenshot")
+            + $"\nF12 panels · Shift+F12 render mode · Alt+F12 view distance · Ctrl+F12 packet log · Shift+F9 travel · left-click inspect (Esc clears) · {Keys(ControlAction.Map)} map";
     }
 }

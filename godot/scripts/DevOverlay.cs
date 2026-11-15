@@ -40,7 +40,7 @@ public partial class DevOverlay : CanvasLayer
     /// <summary>The status readout (top left). WorldView rewrites it every frame.</summary>
     public string Status { set => _status.Text = value; }
 
-    /// <summary>Hidden panels still exist; F1 just stops drawing them.</summary>
+    /// <summary>Hidden panels still exist; F12 just stops drawing them.</summary>
     public bool PanelsVisible
     {
         get => _root.Visible;
@@ -201,7 +201,7 @@ public partial class DevOverlay : CanvasLayer
     }
 
     private void ShowRenderMode() =>
-        _renderButton.Text = $"F2 render: {RenderModes[_renderMode].ToString().ToLowerInvariant()}";
+        _renderButton.Text = $"Shift+F12 render: {RenderModes[_renderMode].ToString().ToLowerInvariant()}";
 
     // A titled panel: dark translucent box, accent title in small caps, content below.
     private VBoxContainer Panel(string title, out PanelContainer panel)

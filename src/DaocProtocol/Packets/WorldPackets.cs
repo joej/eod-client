@@ -321,8 +321,18 @@ public static class TargetRequest
 {
     public const byte Code = 0xB0;
 
-    public static byte[] Payload(ushort objectId) =>
-        new PayloadWriter().U16BE(objectId).U16BE(objectId == 0 ? (ushort)0 : (ushort)0xE000).ToArray();
+    public const ushort Examine = 0x8000, InView = 0x4000, InView2 = 0x2000, AttackMode = 0x0001;
+
+    /// <summary>The flags as the retail client sets them (daoc-re RE/76): <paramref name="examine"/> for a mouse click, a
+    /// group key or Consider (the server then sends the examine text; a Target Enemy/Friend key leaves it off), both in-view
+    /// bits when the target is in line of sight (OpenDAoC says "Target is not in view." otherwise), and the attack-mode
+    /// bit. A cleared target sends four zeros.</summary>
+    public static byte[] Payload(ushort objectId, bool examine = true, bool inView = true, bool attacking = false)
+    {
+        ushort flags = objectId == 0 ? (ushort)0
+            : (ushort)((examine ? Examine : 0) | (inView ? InView | InView2 : 0) | (attacking ? AttackMode : 0));
+        return new PayloadWriter().U16BE(objectId).U16BE(flags).ToArray();
+    }
 }
 
 /// <summary>

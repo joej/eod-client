@@ -178,7 +178,7 @@ Retail's Game Options window (main menu → IN-GAME OPTIONS) row by row, against
 | Ambient Sounds Volume | | — | ❌ | audio (M12) | |
 | Ambient Music Volume | | — | ❌ | audio (M12) | |
 | Spell Effects | "All" … | — | ❌ | spell effects (M12) | |
-| Terrain Clip Plane | Near / "Far" | view distance on the F3 key and in settings.cfg, not in the dialog | 🟡 | | |
+| Terrain Clip Plane | Near / "Far" | view distance on Alt+F12 and in settings.cfg, not in the dialog | 🟡 | | |
 | Figure Clip Plane | "Near" … | — (figures drawn as far as the server sends them) | ❌ | | |
 | Shadows | "Nearest 5" … | sun shadows on/off as a dev layer; figures cast none | 🟡 | figure shadows | |
 | Snapback | "Off" / on | — (rules known: off by default, `/snapback on` = 2.5 s) | ❌ | | |
@@ -231,8 +231,10 @@ Each slot holds one key plus modifiers (Shift, Alt, Ctrl) or a mouse button; sec
 are read held and ignore modifiers; the rest need their exact modifiers. Not bindable: Escape, Enter, `/`, `'`, `]`,
 the number row (quickbars), Shift as a main key, F12. The client forces NumLock off, so keypad 4/6 are also Left/Right.
 
-Ours: 14 rebindable actions (Settings → Keyboard) with the four presets; other keys are fixed, several of them dev
-keys that sit on retail's (F1–F6, Tab, P).
+Ours: 25 rebindable actions (Settings → Keyboard) with the four presets; other keys are fixed. Our dev keys sit where
+no preset binds anything (2026-11-15): F9 free-fly camera, Shift+F9 travel, Ctrl+F9 screenshot (Num - is retail's),
+F10 settings, F12 dev panels, Shift+F12 render mode, Alt+F12 view distance, Ctrl+F12 packet log. F11 is still our
+fullscreen key, retail's Camera Toggle: it moves when Camera Toggle is built.
 
 | # | Action | RPG | MMO | FPS | Held/press | What it does | Ours | Status | Decision |
 |---|---|---|---|---|---|---|---|---|---|
@@ -262,21 +264,21 @@ keys that sit on retail's (F1–F6, Tab, P).
 | 70 | Ranged Weapon | , | Shift+R | Shift+T | press | Switch to the ranged weapon. | — | ❌ | |
 | 27 | Combat Mode | backtick | X | C | press | Attack mode on/off. | backtick / X / C, rebindable | ✅ | |
 | **Targeting** | | | | | | | | | |
-| 43 | Consider | F6 | none | none | press | Consider (con) the target. Without one: "You must select a target to Consider!" | — (F6 is our travel window) | ❌ | |
+| 43 | Consider | F6 | none | none | press | Consider (con) the target. Without one: "You must select a target to Consider!" | F6 / none / none, rebindable | ✅ | |
 | 72 | Nearest Loot | F7 | H | - | press | Target the nearest lootable object ("No lootable object in range."). | — | ❌ | |
 | 26 | Target Object | F8 | Shift+H | Shift+- | press | Target the nearest object ("No object target in range."). | — | ❌ | |
-| 24 | Target Enemy | Tab | Tab | Tab | press | Target the nearest enemy ("No enemy target in range."). | — (Tab is our free-fly camera) | ❌ | |
-| 25 | Target Friend | Ctrl+Tab | Ctrl+Tab | backtick | press | Target the nearest friendly ("No friendly target in range."). | — | ❌ | |
-| 35 | Last Attacker | Shift+Tab | Shift+Tab | Shift+Tab | press | Target your last attacker ("Your last attacker is not in range." / "…not visible."). | — | ❌ | |
+| 24 | Target Enemy | Tab | Tab | Tab | press | Target the nearest enemy ("No enemy target in range."). | Tab, rebindable: 1200 units, line of sight, again within 1.5 s for the next; skips NPCs flagged peaceful (ours) | ✅ | |
+| 25 | Target Friend | Ctrl+Tab | Ctrl+Tab | backtick | press | Target the nearest friendly ("No friendly target in range."). | Ctrl+Tab / Ctrl+Tab / backtick, rebindable: 1500 units, you first | ✅ | |
+| 35 | Last Attacker | Shift+Tab | Shift+Tab | Shift+Tab | press | Target your last attacker ("Your last attacker is not in range." / "…not visible."). | — (waits for the attack packets) | ❌ | |
 | 44 | Ground Target | F5 | C | Alt+A | press | Ground-target placement on/off (inferred, not traced). | — | ❌ | |
-| 45 | Target Group1 | F1 | none | none | press | Target group member 1. | — (F1 is our dev panels) | ❌ | |
-| 46 | Target Group2 | F2 | none | none | press | Target group member 2. | — (F2 is our render mode) | ❌ | |
-| 47 | Target Group3 | F3 | none | none | press | Target group member 3. | — (F3 is our view distance) | ❌ | |
-| 48 | Target Group4 | F4 | none | none | press | Target group member 4. | — (F4 is our packet log) | ❌ | |
-| 49 | Target Group5 | Shift+F1 | none | none | press | Target group member 5. | — | ❌ | |
-| 50 | Target Group6 | Shift+F2 | none | none | press | Target group member 6. | — | ❌ | |
-| 51 | Target Group7 | Shift+F3 | none | none | press | Target group member 7. | — | ❌ | |
-| 52 | Target Group8 | Shift+F4 | none | none | press | Target group member 8. | — | ❌ | |
+| 45 | Target Group1 | F1 | none | none | press | Target group member 1. | F1 / none / none, rebindable | ✅ | |
+| 46 | Target Group2 | F2 | none | none | press | Target group member 2. | F2 / none / none, rebindable | ✅ | |
+| 47 | Target Group3 | F3 | none | none | press | Target group member 3. | F3 / none / none, rebindable | ✅ | |
+| 48 | Target Group4 | F4 | none | none | press | Target group member 4. | F4 / none / none, rebindable | ✅ | |
+| 49 | Target Group5 | Shift+F1 | none | none | press | Target group member 5. | Shift+F1 / none / none, rebindable | ✅ | |
+| 50 | Target Group6 | Shift+F2 | none | none | press | Target group member 6. | Shift+F2 / none / none, rebindable | ✅ | |
+| 51 | Target Group7 | Shift+F3 | none | none | press | Target group member 7. | Shift+F3 / none / none, rebindable | ✅ | |
+| 52 | Target Group8 | Shift+F4 | none | none | press | Target group member 8. | Shift+F4 / none / none, rebindable | ✅ | |
 | **Interaction** | | | | | | | | | |
 | 11 | Open | none | Shift+Space | Shift+Space | press | Interact with what is picked at the pointer: a door, object or figure. | — | ❌ | |
 | 38 | Destroy | Shift+D | Shift+D | Shift+D | press | Destroy the selected backpack item, after "Do you really wish to destroy this item?". | — | ❌ | |
@@ -318,7 +320,7 @@ keys that sit on retail's (F1–F6, Tab, P).
 | 81 | Realm War Map | Shift+M | Shift+M | Shift+M | press | Realm war map. | — | ❌ | |
 | 82 | Quest Journal | J | J | J | press | Quest journal. | — | ❌ | |
 | 80 | Toggle Interface | Alt+Z | Alt+Z | Alt+Z | press | Hide/show the whole interface. | Alt+Z (Option+Z on a Mac), rebindable | ✅ | |
-| 85 | Take Screenshot | Num - | Num - | Num - | press | Screenshot ("Taking Screenshot!"). | P (ours, saves to private/) | 🟡 | |
+| 85 | Take Screenshot | Num - | Num - | Num - | press | Screenshot ("Taking Screenshot!"). | Num - (and Ctrl+F9), saves to private/ | ✅ | |
 
 Hidden in the dialog: Chat (23), PageUpSys (55, Shift+PgUp), PageDownSys (56, Shift+PgDn), Show Character Info (84).
 Retail's preset buttons also set four options (Ctrl and Alt as modifiers only, Forward breaks autorun, modifiers stop

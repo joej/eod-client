@@ -426,6 +426,12 @@ C→S 0xB0 PlayerTarget        u16 BE object id, u16 BE flags (retail: e0 00 = e
 C→S 0x7A ObjectInteract      u32 BE player x, u32 BE player y (whole units), u16 BE session, u16 BE object id
 ```
 
+0xB0's flags: 0x8000 examine (a click, a group-member key or Consider; Target Enemy and Target Friend leave it off),
+0x4000 and 0x2000 the target in line of sight, 0x0001 attack mode. OpenDAoC sends the examine text only with 0x8000,
+and "Target is not in view." when neither sight bit is set. The client sends 0xB0 only when the target changes; Consider
+sends the same target again with 0x8000. Checked live 2026-11-15: Tab sends `60 00` and the server says nothing; F6
+then gets "You target [X]." and the examine line.
+
 The server answers a target with chat type 0x1E "You target [X]." and "You examine X. It is friendly
 towards you." An interact (a right-click; retail targets first) needs the player within 192 units
 (OpenDAoC `INTERACT_DISTANCE`), else "X is too far away!". An NPC's words to the player come as chat

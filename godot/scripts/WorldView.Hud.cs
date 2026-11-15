@@ -132,7 +132,8 @@ public partial class WorldView
         }
         bool has = _target != 0 && _entities.TryGetValue(_target, out _);
         Entity? t = has ? _entities[_target] : null;
-        string name = t is null ? "" : t.Name.Length > 0 ? t.Name : $"#{_target}";
+        bool self = _target != 0 && _target == SelfId;   // Target Friend or our own group key: we aren't an entity
+        string name = self ? PlayerName : t is null ? "" : t.Name.Length > 0 ? t.Name : $"#{_target}";
         _summaryTarget.Text = name;
         _floatTargetName.Text = name;
         if (t is not null)
@@ -144,8 +145,14 @@ public partial class WorldView
             _summaryTarget.AddThemeColorOverride("font_color", text);
             _floatTargetName.AddThemeColorOverride("font_color", text);
         }
-        _targetBar.Set(t?.Dead == true ? 0 : t?.Health ?? -1);
-        _floatTargetBar.Set(t?.Dead == true ? 0 : t?.Health ?? -1);
+        else if (self)
+        {
+            _summaryTarget.AddThemeColorOverride("font_color", Colors.White);
+            _floatTargetName.AddThemeColorOverride("font_color", Colors.White);
+        }
+        int health = self ? (_session?.IsDead == true ? 0 : _session?.HealthPercent ?? -1) : t?.Dead == true ? 0 : t?.Health ?? -1;
+        _targetBar.Set(health);
+        _floatTargetBar.Set(health);
         // Retail's buttons are always live (float_target_window.xml has no rules); ours dim where the server would refuse:
         // INVITE only a player of your realm; ASSIST anyone of your realm, players and friendly NPCs (a guard: its target),
         // not monsters or enemies (OpenDAoC's /assist: "We cannot assist npc's or players of an enemy realm").
@@ -153,7 +160,7 @@ public partial class WorldView
         Dim(_inviteButton, !(ours && t!.IsPlayer));
         Dim(_assistButton, !ours);
         // Retail keeps the target window open, empty without a target; we hide it then (less clutter).
-        _targetWindow.Visible = t is not null && _session is not null && _showTargetWindow;
+        _targetWindow.Visible = (t is not null || self) && _session is not null && _showTargetWindow;
     }
 
     private void FaceTarget()

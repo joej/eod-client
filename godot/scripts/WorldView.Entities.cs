@@ -119,6 +119,7 @@ public partial class WorldView
             spawned.MoveSpeed = (npc.Speed & 0x800) != 0 ? -(npc.Speed & 0x7FF) : npc.Speed & 0x7FF;
             SetQuestGlyph(spawned, npc.Quest);
             spawned.Name = npc.Name;
+            spawned.Peaceful = npc.Peaceful;
             NameNpc(spawned, npc);
         }
         if (!drawn)
@@ -320,7 +321,7 @@ public partial class WorldView
         _entityRoot.AddChild(node);
         var entity = new Entity { Node = node, ServerY = pos.Y, TargetYaw = yaw, Player = anim, LastUpdate = _seconds,
             Figure = dressed, Model = model, Look = look ?? default, Strides = StridesOf(model, catacombs: look is not null),
-            SizeScale = figureScale * Mathf.Max(size, 1) / 50f };
+            SizeScale = figureScale * Mathf.Max(size, 1) / 50f, Pickable = pickable };
         _entities[objectId] = entity;
         PlayClip(entity, "idle");
         return figured;
@@ -382,7 +383,7 @@ public partial class WorldView
     // fig3 figure number per Catacombs model id (catacombs.csv column 4), read once.
     private Dictionary<int, int>? _cataFig3;
 
-    // The travel window (F6): pick a zone, and the GM jump takes us there. The landing spot where the
+    // The travel window (Shift+F9): pick a zone, and the GM jump takes us there. The landing spot where the
     // converter wrote one, else the zone's middle at height 0: outdoors the character is then under the
     // terrain and is put on top of it (Ground), so no height needs knowing in advance.
     private TravelDialog OpenTravel() => TravelDialog.Open(this, ZonesDir, zone =>

@@ -123,7 +123,7 @@ Eodarms walks across real, textured Camelot Hills terrain, follows slopes up and
 camera behind — and the server accepts the self-driven position (no link-death, no rubber-band kick).
 - ~~Replace the free-fly debug camera with a **chase camera** on the player.~~ `SpringArm3D` chase
   camera seated behind the body, colliding with terrain and scenery so it rides above slopes and
-  pulls in off walls; Tab toggles the old free-fly debug camera.
+  pulls in off walls; F9 (Tab until 2026-11-15) toggles the old free-fly debug camera.
 - ~~Feed keyboard/mouse input into the player's position/heading and let the **existing 0xA9 sender**
   transmit it.~~ `ClientSession.MoveToAsync` + event-driven send (~10 Hz moving, ~1 Hz idle) on top
   of the keep-alive; WASD/mouse drive position and heading.
@@ -288,7 +288,7 @@ archive describe more than terrain and objects, and we draw none of it yet:
   day; cloud layers; sun) and the client draws clear daytime: a sky shader with the canopy gradient, two
   scrolling cloud layers and the sun disk, the file's light, and fog from SECTOR.DAT `[fog]` (clip = view
   distance, amount = fogged share measured back from it: Camelot Hills fogs 340–400 m). **View distance
-  is a player setting** (`ClientSettings`, saved in `user://settings.cfg`; F3 or the dev overlay for now):
+  is a player setting** (`ClientSettings`, saved in `user://settings.cfg`; Alt+F12 or the dev overlay for now):
   classic (the zone's own, the default), ×1.5, ×2, ×4, with the fog scaled to match; a long view
   outgrows the single loaded zone until M8 streams its neighbours. Still to do:
   canopy band elevations and the east/west rule (guessed; W10), `[forest]` fog regions (266 zones),
@@ -508,6 +508,8 @@ with its own sound, intro movie and pregame screens, then the better-looking ver
 *The game reads as the game.*
 - Interpret combat packets (attack/animation/damage/death) so fights are visible; send basic combat
   actions.
+  Targeting keys done 2026-11-15, as retail's: Target Enemy (Tab), Target Friend, Consider and the group keys, with
+  our dev keys moved off retail's onto F9/F12. Last Attacker waits for the attack packets.
 - Parse inventory and equipment; show the character's items; equip/move within the 1.65 ruleset.
 - **Emotes and postures** (owner, 2026-11-13): read 0xF9 and play the emote's clip once on the figure (`emotes.csv`
   → `anims.csv`: 63 emote clips, per race, classic and Catacombs), then back to idle; ignored while the figure moves

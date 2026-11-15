@@ -15,6 +15,8 @@ namespace EodClient;
 public enum ControlAction
 {
     Forward, Back, TurnLeft, TurnRight, StrafeLeft, StrafeRight, Jump, Sprint, AutoRun, AttackMode, Map, Torch, ResetCamera, ToggleInterface,
+    TargetEnemy, TargetFriend, Consider, TargetGroup1, TargetGroup2, TargetGroup3, TargetGroup4, TargetGroup5, TargetGroup6,
+    TargetGroup7, TargetGroup8,
 }
 
 public static class KeyBindings
@@ -30,10 +32,12 @@ public static class KeyBindings
 
     private static Key Shift(Key k) => k | (Key)KeyModifierMask.MaskShift;
     private static Key Alt(Key k) => k | (Key)KeyModifierMask.MaskAlt;
+    private static Key Ctrl(Key k) => k | (Key)KeyModifierMask.MaskCtrl;
 
     // One preset: movement, then retail's defaults for the other actions (keyboard.dat, daoc-re 2026-11-13).
     private static Dictionary<ControlAction, (Key[] Keys, MouseButton[] Buttons)> Layout(Key forward, Key back, Key[] turnLeft,
-        Key[] turnRight, Key strafeLeft, Key strafeRight, Key[] runlock, Key sprint, Key combat, Key torch, Key resetCamera) => new()
+        Key[] turnRight, Key strafeLeft, Key strafeRight, Key[] runlock, Key sprint, Key combat, Key torch, Key resetCamera,
+        Key targetFriend, bool rpgTargets) => new()
     {
         [ControlAction.Forward] = K(forward), [ControlAction.Back] = K(back),
         [ControlAction.TurnLeft] = K(turnLeft), [ControlAction.TurnRight] = K(turnRight),
@@ -41,6 +45,13 @@ public static class KeyBindings
         [ControlAction.Jump] = K(Key.Space), [ControlAction.Sprint] = K(sprint), [ControlAction.AutoRun] = K(runlock),
         [ControlAction.AttackMode] = K(combat), [ControlAction.Map] = K(Key.M), [ControlAction.Torch] = K(torch),
         [ControlAction.ResetCamera] = K(resetCamera), [ControlAction.ToggleInterface] = K(Alt(Key.Z)),
+        // Targeting: Tab in every preset; Consider and the group keys only in RPG (MMO and FPS leave them unbound).
+        [ControlAction.TargetEnemy] = K(Key.Tab), [ControlAction.TargetFriend] = K(targetFriend),
+        [ControlAction.Consider] = rpgTargets ? K(Key.F6) : K(),
+        [ControlAction.TargetGroup1] = rpgTargets ? K(Key.F1) : K(), [ControlAction.TargetGroup2] = rpgTargets ? K(Key.F2) : K(),
+        [ControlAction.TargetGroup3] = rpgTargets ? K(Key.F3) : K(), [ControlAction.TargetGroup4] = rpgTargets ? K(Key.F4) : K(),
+        [ControlAction.TargetGroup5] = rpgTargets ? K(Shift(Key.F1)) : K(), [ControlAction.TargetGroup6] = rpgTargets ? K(Shift(Key.F2)) : K(),
+        [ControlAction.TargetGroup7] = rpgTargets ? K(Shift(Key.F3)) : K(), [ControlAction.TargetGroup8] = rpgTargets ? K(Shift(Key.F4)) : K(),
     };
 
     // Turning in MMO/FPS: the arrows; retail forces NumLock off, so keypad 4/6 turn too.
@@ -48,12 +59,13 @@ public static class KeyBindings
 
     private static readonly Dictionary<string, Dictionary<ControlAction, (Key[] Keys, MouseButton[] Buttons)>> Tables = new()
     {
-        ["rpg"] = Layout(Key.W, Key.S, [Key.A], [Key.D], Key.Q, Key.E, [Key.Numlock], Key.V, Key.Quoteleft, Key.T, Key.Kp5),
+        ["rpg"] = Layout(Key.W, Key.S, [Key.A], [Key.D], Key.Q, Key.E, [Key.Numlock], Key.V, Key.Quoteleft, Key.T, Key.Kp5, Ctrl(Key.Tab), true),
         // MMO and FPS: Runlock is T / Y with NumLock as the second bind (Run Lock 2).
-        ["mmo"] = Layout(Key.W, Key.S, TurnL, TurnR, Key.A, Key.D, [Key.T, Key.Numlock], Key.F, Key.X, Shift(Key.Y), Key.Z),
-        ["fps"] = Layout(Key.E, Key.D, TurnL, TurnR, Key.S, Key.F, [Key.Y, Key.Numlock], Key.G, Key.C, Shift(Key.Y), Key.X),
+        ["mmo"] = Layout(Key.W, Key.S, TurnL, TurnR, Key.A, Key.D, [Key.T, Key.Numlock], Key.F, Key.X, Shift(Key.Y), Key.Z, Ctrl(Key.Tab), false),
+        ["fps"] = Layout(Key.E, Key.D, TurnL, TurnR, Key.S, Key.F, [Key.Y, Key.Numlock], Key.G, Key.C, Shift(Key.Y), Key.X, Key.Quoteleft, false),
         // 2001 manual: arrows, and the mouse buttons walk (right forward, left back); the rest as RPG.
-        ["classic"] = Layout(Key.Up, Key.Down, [Key.Left], [Key.Right], Key.Q, Key.W, [Key.Numlock], Key.V, Key.Quoteleft, Key.T, Key.Kp5),
+        ["classic"] = Layout(Key.Up, Key.Down, [Key.Left], [Key.Right], Key.Q, Key.W, [Key.Numlock], Key.V, Key.Quoteleft, Key.T, Key.Kp5,
+            Ctrl(Key.Tab), true),
     };
 
     static KeyBindings()
@@ -88,7 +100,11 @@ public static class KeyBindings
         ControlAction.StrafeLeft => "Strafe left", ControlAction.StrafeRight => "Strafe right",
         ControlAction.Jump => "Jump", ControlAction.Sprint => "Sprint", ControlAction.AutoRun => "Auto-run",
         ControlAction.AttackMode => "Attack mode", ControlAction.Map => "Map", ControlAction.Torch => "Torch",
-        ControlAction.ResetCamera => "Reset camera", ControlAction.ToggleInterface => "Toggle interface", _ => a.ToString(),
+        ControlAction.ResetCamera => "Reset camera", ControlAction.ToggleInterface => "Toggle interface",
+        ControlAction.TargetEnemy => "Target enemy", ControlAction.TargetFriend => "Target friend",
+        ControlAction.Consider => "Consider",
+        >= ControlAction.TargetGroup1 and <= ControlAction.TargetGroup8 => $"Target group {a - ControlAction.TargetGroup1 + 1}",
+        _ => a.ToString(),
     };
 
     /// <summary>The keys that trigger <paramref name="action"/>: the player's own, else the preset's.</summary>

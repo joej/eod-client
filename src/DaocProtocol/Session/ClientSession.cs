@@ -598,12 +598,15 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         return connection.SendAsync(CreatePlayerRequest.Code, CreatePlayerRequest.Payload(sessionId), cancellationToken);
     }
 
-    /// <summary>Selects <paramref name="objectId"/> (0 clears the target): C->S 0xB0. The server answers in chat.</summary>
-    public Task SetTargetAsync(ushort objectId, CancellationToken cancellationToken = default)
+    /// <summary>Selects <paramref name="objectId"/> (0 clears the target): C->S 0xB0 with the flags of
+    /// <see cref="TargetRequest.Payload"/>. Examined, the server answers in chat. Sending the same target again with
+    /// <paramref name="examine"/> is a Consider.</summary>
+    public Task SetTargetAsync(ushort objectId, bool examine = true, bool inView = true, bool attacking = false,
+        CancellationToken cancellationToken = default)
     {
         Require(SessionState.InWorld);
         TargetId = objectId;
-        return connection.SendAsync(TargetRequest.Code, TargetRequest.Payload(objectId), cancellationToken);
+        return connection.SendAsync(TargetRequest.Code, TargetRequest.Payload(objectId, examine, inView, attacking), cancellationToken);
     }
 
     /// <summary>
@@ -616,7 +619,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         if (World is not WorldPosition world)
             return;
         if (TargetId != objectId)
-            await SetTargetAsync(objectId, cancellationToken).ConfigureAwait(false);
+            await SetTargetAsync(objectId, cancellationToken: cancellationToken).ConfigureAwait(false);
         await connection.SendAsync(InteractRequest.Code,
             InteractRequest.Payload(world.Position.X, world.Position.Y, connection.SessionId, objectId), cancellationToken).ConfigureAwait(false);
     }

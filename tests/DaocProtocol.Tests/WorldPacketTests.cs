@@ -24,6 +24,23 @@ public class WorldPacketTests
         Assert.Equal(191f * percent / 100, speed.UnitsPerSecond);
     }
 
+    [Theory]
+    // A click as retail 1.127 sends it (e0 00); a Target Enemy key (no examine); out of sight; in attack mode.
+    [InlineData(true, true, false, 0xE0, 0x00)]
+    [InlineData(false, true, false, 0x60, 0x00)]
+    [InlineData(true, false, false, 0x80, 0x00)]
+    [InlineData(false, true, true, 0x60, 0x01)]
+    public void ATargetCarriesRetailsFlags(bool examine, bool inView, bool attacking, byte high, byte low)
+    {
+        Assert.Equal(new byte[] { 0x12, 0x34, high, low }, TargetRequest.Payload(0x1234, examine, inView, attacking));
+    }
+
+    [Fact]
+    public void ClearingTheTargetSendsFourZeros()
+    {
+        Assert.Equal(new byte[4], TargetRequest.Payload(0, examine: true, inView: true, attacking: true));
+    }
+
     [Fact]
     public void AnObjectCreateRequestCarriesTheIdAsTheServerReadsIt()
     {

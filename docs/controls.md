@@ -116,5 +116,7 @@ inspects, right-drag turns and re-aligns; mouse wheel zoom, 50 units a notch, an
 first person past 50 (your body and name hidden; zooming out comes back at 50); a camera home per character, as retail's: `/setcamera` saves the
 distance, height, angle and tilt, `/resetcamera` sets retail's 240 / 10 / 0 / 0, the Reset Camera key returns to it, and
 entering the world starts there (a character without one starts at 500 units, height 10, level);
-Tab free-fly camera (ours, and retail's Target Enemy); Enter or `/` to chat. No walk, consider or targeting keys
-yet.
+Enter or `/` to chat. Targeting keys as retail's (2026-11-15): Target Enemy Tab (nearest within 1200 units in line of
+sight; again within 1.5 s for the next farther), Target Friend Ctrl+Tab / Ctrl+Tab / backtick (within 1500, you
+first), and in RPG Consider F6 and the group members F1-F4, Shift+F1-F4. Our own keys sit where retail binds nothing:
+F9 free-fly camera, F12 dev panels (the rest are in `docs/ui-windows.md`, "Keys"). No walk or last-attacker key yet.

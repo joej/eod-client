@@ -41,7 +41,7 @@ public partial class CharacterScreen : Control
     private OptionButton _realm = null!;
     private CheckBox _hexLog = null!;
     private CheckBox _logPackets = null!;
-    // One log for every connection; off unless --packets or the checkbox (F4 in the world).
+    // One log for every connection; off unless --packets or the checkbox (Ctrl+F12 in the world).
     private readonly PacketLog _packetLog = new(line => GD.Print(line)) { Enabled = false };
     private Button _connect = null!;
     private Button _enter = null!;

@@ -262,6 +262,30 @@ public partial class WorldView
                 OnChatSubmitted(typed);
             };
         }
+        // --press KEY (repeatable; Godot key names with modifiers, e.g. Tab, Ctrl+Tab, Shift+F1) presses each key in turn
+        // through the normal input path, 1 s apart from 6 s after entering (--press-at SECONDS moves the start): to check
+        // key handling, such as the targeting keys, headless.
+        int pa = System.Array.IndexOf(args, "--press-at");
+        double pressAt = pa >= 0 && pa + 1 < args.Length && double.TryParse(args[pa + 1], System.Globalization.CultureInfo.InvariantCulture, out double pAt) ? pAt : 6.0;
+        for (int pi = System.Array.IndexOf(args, "--press"); pi >= 0 && pi + 1 < args.Length;
+             pi = System.Array.IndexOf(args, "--press", pi + 2), pressAt += 1)
+        {
+            Key key = OS.FindKeycodeFromString(args[pi + 1]);
+            GetTree().CreateTimer(pressAt).Timeout += () =>
+            {
+                GD.Print($"[world] dev pressed: {OS.GetKeycodeString(key)}");
+                var down = new InputEventKey
+                {
+                    Keycode = key & (Key)KeyModifierMask.CodeMask, Pressed = true,
+                    ShiftPressed = (key & (Key)KeyModifierMask.MaskShift) != 0, AltPressed = (key & (Key)KeyModifierMask.MaskAlt) != 0,
+                    CtrlPressed = (key & (Key)KeyModifierMask.MaskCtrl) != 0,
+                };
+                Input.ParseInputEvent(down);
+                var up = (InputEventKey)down.Duplicate();
+                up.Pressed = false;
+                Input.ParseInputEvent(up);
+            };
+        }
         // --command TEXT (repeatable) sends each slash command in turn, 2 s apart from 2 s after entering: e.g.
         // a GM "/jump to X Y Z REGION" to set up a --campose/--shot check somewhere exact.
         int delay = 2;

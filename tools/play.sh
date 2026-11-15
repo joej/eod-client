@@ -28,7 +28,7 @@
 #                   shows whichever zone the server puts it in.
 #   --window WxH    window size in pixels, e.g. 1600x900 (the client remembers it; --window max
 #                   goes back to a maximized window; F11 is fullscreen)
-#   --packets       print every packet's code and size in the terminal (F4 in the world switches it)
+#   --packets       print every packet's code and size in the terminal (Ctrl+F12 in the world switches it)
 #   --fresh         re-index the install and reconvert everything, even if nothing changed
 #
 # Everything it writes from your client install goes under private/, which git ignores. It is the

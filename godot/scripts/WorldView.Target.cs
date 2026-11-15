@@ -101,7 +101,8 @@ public partial class WorldView
         return GetWorld3D().DirectSpaceState.IntersectRay(wall).Count > 0 ? null : id;
     }
 
-    private void SetTarget(ushort id)
+    // examine: a click, a group key or Consider (the server sends the examine text); Target Enemy/Friend pick without it.
+    private void SetTarget(ushort id, bool examine = true)
     {
         if (id == _target)
             return;
@@ -115,7 +116,17 @@ public partial class WorldView
         if (id != 0)
             CloseMiniInfo();
         if (_session is not null)
-            _ = Send(() => _session.SetTargetAsync(id), "target");
+            SendTarget(id, examine);
+    }
+
+    // C->S 0xB0 for the current target, with retail's flags: line of sight and attack mode.
+    private void SendTarget(ushort id, bool examine)
+    {
+        if (_session is null)
+            return;
+        bool inView = id == 0 || id == SelfId || !_entities.TryGetValue(id, out Entity? e) || InSight(e);
+        bool attacking = _attacking;
+        _ = Send(() => _session.SetTargetAsync(id, examine, inView, attacking), "target");
     }
 
     private void Interact(ushort id)

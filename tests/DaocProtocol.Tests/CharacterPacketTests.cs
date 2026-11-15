@@ -122,6 +122,12 @@ public class CharacterPacketTests
         Assert.Equal(flying, new NpcCreate(1, 0, 0, 0, 0, 0, 100, 50, 1, (byte)flags, "n", "").Flying);
 
     [Theory]
+    [InlineData(0x40 | 0x10, true)]   // GameNPC.eFlags.PEACE, with a realm
+    [InlineData(0x20 | 0x04, false)]  // flying with a torch
+    public void AnNpcFlagged0x10IsPeaceful(int flags, bool peaceful) =>
+        Assert.Equal(peaceful, new NpcCreate(1, 0, 0, 0, 0, 0, 100, 50, 1, (byte)flags, "n", "").Peaceful);
+
+    [Theory]
     [InlineData(0x00, 4)]
     [InlineData(0x10, 0)]
     [InlineData(0x40, 3)]

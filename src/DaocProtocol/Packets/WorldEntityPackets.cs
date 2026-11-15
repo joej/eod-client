@@ -82,6 +82,9 @@ public sealed record ObjectUpdate(
     public bool Underwater => (Flags & 0x10) != 0;
     public bool Flying => (Flags & 0x20) != 0;
 
+    /// <summary>Flags 0x10: a peaceful NPC, one that can't be attacked (PacketLib1124.SendNPCCreate: GameNPC.eFlags.PEACE).</summary>
+    public bool Peaceful => (Flags & 0x10) != 0;
+
     public static ObjectUpdate Parse(ReadOnlySpan<byte> payload)
     {
         var r = new PayloadReader(payload);
@@ -131,6 +134,9 @@ public sealed record NpcCreate(
     /// <summary>Flags 0x20: the NPC flies (PacketLib1124.SendNPCCreate: GameNPC.eFlags.FLYING), so its height is its own,
     /// not the ground's.</summary>
     public bool Flying => (Flags & 0x20) != 0;
+
+    /// <summary>Flags 0x10: a peaceful NPC, one that can't be attacked (PacketLib1124.SendNPCCreate: GameNPC.eFlags.PEACE).</summary>
+    public bool Peaceful => (Flags & 0x10) != 0;
 
     /// <summary>The second flags byte (PacketLib1124.SendNPCCreate): 0x01 can't be targeted, 0x02 name
     /// hidden, 0x04 stealthed, 0x08/0x10 quest available/finishable, 0x80 a pet.</summary>

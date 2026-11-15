@@ -57,7 +57,14 @@ public partial class KeyboardPanel : VBoxContainer
             _keys[action] = key;
             grid.AddChild(key);
         }
-        AddChild(grid);
+        // 25 actions: the list scrolls, so the dialog keeps its size.
+        var scroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(0, 360), HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        scroll.AddChild(grid);
+        AddChild(scroll);
         AddChild(new Label
         {
             Text = "Click a key, then press the new one. Backspace: no key. Esc: keep it. A key taken from another action " +
