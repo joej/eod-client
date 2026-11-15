@@ -7,6 +7,7 @@
 //       [--port 10300] [--realm albion|midgard|hibernia]
 //       [--create <Name> | --delete <slot> | --enter <slot> [--goto <zone>] [--stay <seconds>]]
 //       [--idle <seconds> [--no-keepalive]] [--log | --hex] [--quit-checks]
+//       [--cmd "<text>"]... [--probe-hookpoints <keepId> <componentId>]
 //
 // --realm is used when the account has no realm yet (or may use all realms); default albion.
 // --create makes a level 1 Briton Armsman (Albion only) in the first free slot; --delete removes
@@ -20,6 +21,12 @@
 // --quit-checks (with --enter, on a player account: GMs have no quit timer) runs the Godot client's
 // quit path four ways: quit and wait; quit and move (the quit is called off); quit again;
 // quit while running. It prints the server's chat lines and sitting state as they arrive.
+// --cmd (repeatable, with --enter) sends a slash command after entering (and after --goto) and prints the chat
+// and system lines that arrive in the next 2 s. "/jump to X Y Z REGION" goes through the session's jump, so the
+// client follows the move (the server would otherwise be sent the old position). --probe-hookpoints (with --enter)
+// asks a keep component for its free hookpoints (C→S 0x6F response 1 → S→C 0x65), then selects each of those and
+// of ids 0-37, 65, 97 and 129 (response 2 → 0x65, then the store 0x63) and prints one line per hookpoint: its items
+// and prices, or "no reply" after 3 s. Requests are 1.1 s apart (the retail client allows one interact a second).
 // The password is read from DAOC_PASSWORD so it stays out of command lines and shell history.
 // Exit codes: 0 login granted, 2 login denied, 1 any other failure.
 
@@ -48,6 +55,14 @@ string? Value(string name)
     Environment.Exit(1);
     return null;
 }
+string Value2(int i)
+{
+    if (i + 1 < args.Length)
+        return args[i + 1];
+    Console.Error.WriteLine($"{args[i]} needs a value.\n{Usage}");
+    Environment.Exit(1);
+    return "";
+}
 int? Int(string name)
 {
     if (Value(name) is not string v)
@@ -75,6 +90,19 @@ int? deleteSlot = Int("--delete");
 int? enterSlot = Int("--enter");
 int? gotoZone = Int("--goto");
 int staySeconds = Int("--stay") ?? 10;
+var commands = new List<string>();
+for (int ci = Array.IndexOf(args, "--cmd"); ci >= 0; ci = Array.IndexOf(args, "--cmd", ci + 1))
+    commands.Add(Value2(ci));
+(ushort Keep, ushort Component)? probe = null;
+if (Array.IndexOf(args, "--probe-hookpoints") is int pi and >= 0)
+{
+    if (pi + 2 >= args.Length || !ushort.TryParse(args[pi + 1], out ushort pk) || !ushort.TryParse(args[pi + 2], out ushort pc))
+    {
+        Console.Error.WriteLine($"--probe-hookpoints needs a keep id and a component id.\n{Usage}");
+        return 1;
+    }
+    probe = (pk, pc);
+}
 int idleSeconds = Int("--idle") ?? 0;
 bool keepAliveOn = !args.Contains("--no-keepalive");
 string? password = Environment.GetEnvironmentVariable("DAOC_PASSWORD");
@@ -150,6 +178,10 @@ try
             PositionAndObjectId m = moved.Position;
             Console.WriteLine($"jumped: region {m.RegionId}, zone {moved.Zone.Id} ({moved.Zone.Name}), x {m.X} y {m.Y} z {m.Z}");
         }
+        foreach (string command in commands)
+            await Command(command);
+        if (probe is { } hp)
+            await ProbeHookpoints(hp.Keep, hp.Component);
         if (quitChecks)
             await QuitChecks(realm, enter);
         else
@@ -312,6 +344,103 @@ async Task QuitChecks(Realm realm, int slot)
     }
 }
 
+// --cmd: a slash command, then 2 s of the server's chat and system lines. "/jump to X Y Z REGION" uses JumpAsync.
+async Task Command(string command)
+{
+    string[] words = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    if (words.Length == 6 && words[0] == "/jump" && words[1] == "to"
+        && float.TryParse(words[2], System.Globalization.CultureInfo.InvariantCulture, out float jx)
+        && float.TryParse(words[3], System.Globalization.CultureInfo.InvariantCulture, out float jy)
+        && float.TryParse(words[4], System.Globalization.CultureInfo.InvariantCulture, out float jz)
+        && ushort.TryParse(words[5], out ushort jregion))
+    {
+        Note($"> {command}");
+        WorldPosition moved = await session.JumpAsync(jregion, jx, jy, jz);
+        PositionAndObjectId m = moved.Position;
+        Note($"jumped: region {m.RegionId}, zone {moved.Zone.Id} ({moved.Zone.Name}), x {m.X} y {m.Y} z {m.Z}");
+    }
+    else
+    {
+        Note($"> {command}");
+        await session.SendCommandAsync(command);
+    }
+    await Collect(TimeSpan.FromSeconds(2), _ => false);
+}
+
+// Reads for up to `wait`, printing chat and system lines, until `done` accepts a packet (returned) or time runs out (null).
+async Task<ServerPacket?> Collect(TimeSpan wait, Func<ServerPacket, bool> done)
+{
+    using var stop = new CancellationTokenSource(wait);
+    try
+    {
+        while (true)
+        {
+            ServerPacket packet = await connection.ReceiveAsync(stop.Token);
+            if (packet.Code == ChatMessage.Code)
+            {
+                ChatMessage m = ChatMessage.Parse(packet.Payload);
+                Note($"  chat {m.Type}: {m.Text}");
+            }
+            if (done(packet))
+                return packet;
+        }
+    }
+    catch (OperationCanceledException) when (stop.IsCancellationRequested)
+    {
+        return null;
+    }
+}
+
+// --probe-hookpoints: the component's free hookpoints (0x6F response 1 → 0x65), then each hookpoint's store
+// (response 2 → 0x65, 0x63), 1.1 s apart.
+async Task ProbeHookpoints(ushort keep, ushort component)
+{
+    Step($"hookpoints of keep {keep}, component {component}");
+    long lastSent = 0;
+    async Task Send(ushort response, ushort index)
+    {
+        long wait = lastSent + 1100 - clock.ElapsedMilliseconds;
+        if (wait > 0)
+            await Task.Delay((int)wait);
+        await connection.SendAsync(KeepComponentInteract.Code, KeepComponentInteract.Payload(keep, component, response, index));
+        lastSent = clock.ElapsedMilliseconds;
+    }
+
+    await Send(KeepComponentInteract.ShowHookpoints, 0);
+    IReadOnlyList<byte> free = [];
+    if (await Collect(TimeSpan.FromSeconds(3), p => p.Code == KeepHookpoints.Code) is { } listed)
+    {
+        KeepHookpoints h = KeepHookpoints.Parse(listed.Payload);
+        free = h.Free;
+        Note($"0x65: keep {h.KeepId}, component {h.ComponentId}, {h.Free.Count} free, selected {h.Selected}: " +
+             string.Join(" ", h.Free));
+    }
+    else
+        Note("0x65: no reply");
+
+    IEnumerable<int> fixedIds = Enumerable.Range(0, 38).Concat([65, 97, 129]);
+    foreach (int id in free.Select(b => (int)b).Union(fixedIds).Order())
+    {
+        await Send(KeepComponentInteract.SelectHookpoint, (ushort)id);
+        string? cleared = null;
+        ServerPacket? store = await Collect(TimeSpan.FromSeconds(3), p =>
+        {
+            if (p.Code == KeepHookpoints.Code)
+                cleared = $"0x65 selected {KeepHookpoints.Parse(p.Payload).Selected}";
+            return p.Code == HookpointStore.Code;
+        });
+        if (store is null)
+        {
+            Note($"hookpoint {id} (0x{id:X2}){(free.Contains((byte)id) ? " [free]" : "")}: no reply{(cleared is null ? "" : $" ({cleared})")}");
+            continue;
+        }
+        HookpointStore s = HookpointStore.Parse(store.Payload);
+        Note($"hookpoint {id} (0x{id:X2}){(free.Contains((byte)id) ? " [free]" : "")}: 0x63 says hookpoint {s.HookpointId}, " +
+             $"{s.Items.Count} item(s)" + (s.Items.Count == 0 ? "" : ": " +
+             string.Join(", ", s.Items.Select(i => $"{i.Name} {i.Price}"))));
+    }
+}
+
 void Step(string what) => Console.WriteLine($"\n[{clock.Elapsed.TotalSeconds,6:0.0}] === {what}");
 void Note(string what) => Console.WriteLine($"[{clock.Elapsed.TotalSeconds,6:0.0}]     {what}");
 
@@ -348,5 +477,5 @@ static void Print(Realm realm, CharacterOverview overview)
 
 partial class Program
 {
-    private const string Usage = "usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--create <Name> | --delete <slot> | --enter <slot> [--goto <zone>] [--stay <seconds>]] [--idle <seconds> [--no-keepalive]] [--log | --hex] [--quit-checks]";
+    private const string Usage = "usage: DAOC_PASSWORD=... DaocCli <host> <account> [--port 10300] [--realm albion|midgard|hibernia] [--create <Name> | --delete <slot> | --enter <slot> [--goto <zone>] [--stay <seconds>]] [--idle <seconds> [--no-keepalive]] [--log | --hex] [--quit-checks] [--cmd \"<text>\"]... [--probe-hookpoints <keepId> <componentId>]";
 }
