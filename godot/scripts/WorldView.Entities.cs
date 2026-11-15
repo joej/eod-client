@@ -164,6 +164,78 @@ public partial class WorldView
         catch (System.Exception e) { GD.Print($"[entity] {objectId}: create request failed: {e.Message}"); }
     }
 
+    // A near NPC removed "with the death effect" (0xA2 type 0) stays as a corpse (daoc-re 2026-11-14): it lies in its
+    // Death clip (started now if no 0xAE came), stops moving, any hover height settles to the ground over 1 s, and it
+    // is dropped after CorpseSeconds. It is no longer reached by its id: a later 0xA2 can't remove it, and a new NPC
+    // with the same id is a new figure beside it. Players, NPCs beyond 4000 units (retail's model unload) and objects
+    // go at once. Not done: the death sound (sound set slot 4; no audio yet). What retail does when the 20 s end
+    // (fade, sink or removal) isn't known; we just remove it. The nameplate goes with the id (ours).
+    private const double CorpseSeconds = 20;
+    private const float CorpseMaxUnits = 4000;
+    private readonly List<Corpse> _corpses = new();
+
+    private sealed class Corpse
+    {
+        public required Entity Entity;
+        public double Until;          // _seconds when it is dropped
+        public float FromY, ToY;      // hover settle: height at the start and the ground under it
+        public double Settled;        // _seconds the settle began
+    }
+
+    private void OnObjectRemoved(ushort objectId, ushort type)
+    {
+        if (type == RemoveObject.WithDeathEffect && _entities.TryGetValue(objectId, out Entity? dying) && !dying.IsPlayer
+            && dying.Node.Position.DistanceTo(_body.Position) <= CorpseMaxUnits * RegionMetresPerUnit)
+        {
+            _entities.Remove(objectId);
+            if (!dying.Dead)
+                DropEntity(dying, true);
+            if (dying.Nameplate is not null && IsInstanceValid(dying.Nameplate))
+                dying.Nameplate.Visible = false;
+            float y = dying.Node.Position.Y;
+            _corpses.Add(new Corpse
+            {
+                Entity = dying, Until = _seconds + CorpseSeconds, FromY = y, ToY = dying.GroundY ?? float.NaN, Settled = _seconds,
+            });
+        }
+        OnObjectRemoved(objectId);
+    }
+
+    // Corpses settle to the ground over their first second and go when their time is up.
+    private void UpdateCorpses()
+    {
+        for (int i = _corpses.Count - 1; i >= 0; i--)
+        {
+            Corpse c = _corpses[i];
+            if (!IsInstanceValid(c.Entity.Node) || _seconds >= c.Until)
+            {
+                if (IsInstanceValid(c.Entity.Node))
+                    c.Entity.Node.QueueFree();
+                _corpses.RemoveAt(i);
+                continue;
+            }
+            if (float.IsNaN(c.ToY))
+                continue;   // a flyer's ground is probed in the next physics frame (ProbeCorpses)
+            float f = Mathf.Min(1f, (float)(_seconds - c.Settled));
+            Vector3 p = c.Entity.Node.Position;
+            c.Entity.Node.Position = new Vector3(p.X, c.FromY + (c.ToY - c.FromY) * f, p.Z);
+        }
+    }
+
+    // A corpse that wasn't standing on the ground (a flyer, a swimmer) is grounded once: the floor or terrain under it,
+    // probed in the physics frame like GroundEntities; with none found it stays where it is.
+    private void ProbeCorpses()
+    {
+        foreach (Corpse c in _corpses)
+        {
+            if (!float.IsNaN(c.ToY) || !IsInstanceValid(c.Entity.Node))
+                continue;
+            Vector3 at = c.Entity.Node.Position;
+            c.ToY = GroundRay(new Vector3(at.X, at.Y + 3f, at.Z), new Vector3(at.X, at.Y - 400f, at.Z), ~NotSolid) ?? at.Y;
+            (c.FromY, c.Settled) = (at.Y, _seconds);
+        }
+    }
+
     private void OnObjectRemoved(ushort objectId)
     {
         _objectsRequested.Remove(objectId);

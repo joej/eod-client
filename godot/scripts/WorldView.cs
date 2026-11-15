@@ -450,7 +450,7 @@ public partial class WorldView : Node3D
             (_speedPercent, _waterSpeed) = (speed.Percent, speed.WaterSpeed);
             GD.Print($"[world] max speed {speed.Percent}% ({speed.UnitsPerSecond:0} units/s)");
         };
-        _bridge.ObjectRemoved += OnObjectRemoved;
+        _bridge.ObjectRemoved += OnObjectRemoved;   // (id, type): type 0 may leave a corpse
         _bridge.ObjectSpawned += OnWorldObject;
         _bridge.ChatReceived += OnChatReceived;
         SubscribeDeath();
@@ -965,6 +965,7 @@ public partial class WorldView : Node3D
         WalkToTarget();
         FollowStep();
         GroundEntities();
+        ProbeCorpses();
         UpdatePlayer(delta);
         if (_chase)
             CheckJumpPoints();
@@ -1032,6 +1033,7 @@ public partial class WorldView : Node3D
             _bridge.Dispatch(packet);
         _packets = _bridge.PacketCount;
         InterpolateEntities(delta);
+        UpdateCorpses();
         UpdateDeathPanel();
         UpdateBorderLabels();
         UpdateMap();

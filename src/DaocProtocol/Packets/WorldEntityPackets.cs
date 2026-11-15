@@ -258,10 +258,13 @@ public sealed record ObjectCreate(
 /// <summary>
 /// 0xA2 RemoveObject (PacketLib168.SendObjectRemove): an entity leaves view. 4-byte payload.
 /// </summary>
-/// <param name="ObjectType">2 = player, 1 = living NPC, 0 = dead NPC/other.</param>
+/// <param name="ObjectType">OpenDAoC writes 2 for a player, 1 for a living NPC, 0 for a dead NPC or an object. The retail
+/// client reads 0 as "remove with the death effect" (a near NPC stays as a corpse), 1 as "remove a non-player now",
+/// 2 as "remove a player now" (docs/protocol.md "Where OpenDAoC and the retail client disagree").</param>
 public sealed record RemoveObject(ushort ObjectId, ushort ObjectType)
 {
     public const byte Code = 0xA2;
+    public const ushort WithDeathEffect = 0, NonPlayer = 1, Player = 2;
 
     public static RemoveObject Parse(ReadOnlySpan<byte> payload)
     {

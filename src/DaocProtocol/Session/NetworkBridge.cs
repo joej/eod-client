@@ -54,8 +54,10 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
     /// <summary>A static world object entered view (0xD9 ObjectCreate).</summary>
     public event Action<ObjectCreate>? ObjectSpawned;
 
-    /// <summary>An entity left view (0xA2 RemoveObject) or was destroyed (0xE1 ObjectDelete).</summary>
-    public event Action<ushort>? ObjectRemoved;
+    /// <summary>An entity left view (0xA2 RemoveObject) or was destroyed (0xE1 ObjectDelete): its object id and the 0xA2
+    /// type (<see cref="RemoveObject.WithDeathEffect"/>, <see cref="RemoveObject.NonPlayer"/>, <see cref="RemoveObject.Player"/>).
+    /// 0xE1 comes as NonPlayer: remove at once.</summary>
+    public event Action<ushort, ushort>? ObjectRemoved;
 
     /// <summary>A chat or system message arrived (0xAF Message), for the on-screen chat log.</summary>
     public event Action<ChatMessage>? ChatReceived;
@@ -233,10 +235,11 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
                     EquipmentChanged?.Invoke(EquipmentUpdate.Parse(packet.Payload));
                     break;
                 case RemoveObject.Code:
-                    ObjectRemoved?.Invoke(RemoveObject.Parse(packet.Payload).ObjectId);
+                    RemoveObject removed = RemoveObject.Parse(packet.Payload);
+                    ObjectRemoved?.Invoke(removed.ObjectId, removed.ObjectType);
                     break;
                 case ObjectDelete.Code:
-                    ObjectRemoved?.Invoke(ObjectDelete.Parse(packet.Payload).ObjectId);
+                    ObjectRemoved?.Invoke(ObjectDelete.Parse(packet.Payload).ObjectId, RemoveObject.NonPlayer);
                     break;
                 case ChatMessage.Code:
                     ChatReceived?.Invoke(ChatMessage.Parse(packet.Payload));

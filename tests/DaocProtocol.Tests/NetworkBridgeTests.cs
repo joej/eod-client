@@ -50,6 +50,29 @@ public class NetworkBridgeTests
         Assert.Equal(2, bridge.PacketCount);
     }
 
+    [Theory]
+    [InlineData(new byte[] { 0x01, 0x2C, 0x00, 0x00 }, 300, RemoveObject.WithDeathEffect)]
+    [InlineData(new byte[] { 0x01, 0x2C, 0x00, 0x01 }, 300, RemoveObject.NonPlayer)]
+    [InlineData(new byte[] { 0x01, 0x2C, 0x00, 0x02 }, 300, RemoveObject.Player)]
+    public void ARemovalCarriesItsType(byte[] payload, int id, ushort type)
+    {
+        var bridge = new NetworkBridge();
+        (ushort Id, ushort Type)? removed = null;
+        bridge.ObjectRemoved += (i, t) => removed = (i, t);
+        bridge.Dispatch(new ServerPacket(RemoveObject.Code, payload));
+        Assert.Equal(((ushort)id, type), removed);
+    }
+
+    [Fact]
+    public void AnObjectDeleteRemovesAtOnce()
+    {
+        var bridge = new NetworkBridge();
+        (ushort Id, ushort Type)? removed = null;
+        bridge.ObjectRemoved += (i, t) => removed = (i, t);
+        bridge.Dispatch(new ServerPacket(ObjectDelete.Code, [0x01, 0x2C, 0x00, 0x01]));
+        Assert.Equal(((ushort)300, RemoveObject.NonPlayer), removed);
+    }
+
     [Fact]
     public void AQuitReplyIsHandedOver()
     {

@@ -302,6 +302,19 @@ public partial class WorldView
                     (uint)x, (uint)y, model, 50, 1, 0x40, $"npc {model}", "") { Flags2 = flags2, Flags3 = flags3 });
             }
         }
+        // --corpse SECONDS: that long after entering, the --npc creatures are removed as the server removes a dead NPC
+        // (0xA2 type 0), so they lie as corpses; the corpse count is logged then, and 1, 10, 19 and 21 s later.
+        int corpseArg = System.Array.IndexOf(args, "--corpse");
+        if (npcArg >= 0 && corpseArg >= 0 && corpseArg + 1 < args.Length && double.TryParse(args[corpseArg + 1],
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double corpseAt))
+            GetTree().CreateTimer(corpseAt).Timeout += () =>
+            {
+                for (ushort id = 60000; _entities.ContainsKey(id); id++)
+                    OnObjectRemoved(id, DaocProtocol.Packets.RemoveObject.WithDeathEffect);
+                foreach (double after in new[] { 0.0, 1, 10, 19, 21 })
+                    GetTree().CreateTimer(after).Timeout += () =>
+                        GD.Print($"[corpse] +{after:0} s: {_corpses.Count} corpses, entities 60000+: {_entities.Keys.Count(k => k >= 60000)}");
+            };
         // --drop METRES lifts the character that far once the world is up, to check falling and landing.
         int drop = System.Array.IndexOf(args, "--drop");
         if (drop >= 0 && drop + 1 < args.Length && float.TryParse(args[drop + 1], System.Globalization.NumberStyles.Float,
