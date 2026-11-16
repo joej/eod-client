@@ -200,36 +200,45 @@ public sealed class AssetIndex
     }
 
     /// <summary>
-    /// The patch files of model <paramref name="name"/> (as <see cref="Read(string, IReadOnlyList{string}?)"/> finds it):
-    /// <c>&lt;stem&gt;_p00.nif</c>, <c>_p01</c>, … in the same folder (loose, or packed beside it), stopping at the first
-    /// number that is missing, at most 10, as the retail client probes them (see NifFile.Patches).
+    /// The patch files of model <paramref name="name"/> (as <see cref="Read(string, IReadOnlyList{string}?)"/> finds it),
+    /// as the retail client probes them (see NifFile.Patches): beside a packed model <c>&lt;stem&gt;_p00.npk</c>,
+    /// <c>_p01</c>, … each holding <c>&lt;stem&gt;_pNN.nif</c>; beside a loose one <c>&lt;stem&gt;_pNN.nif</c>. At most 10,
+    /// stopping at the first file that is missing. A patch archive without that member (five capital-city ones hold
+    /// only "statue.nif") does nothing, and the probe goes on.
     /// </summary>
     public IReadOnlyList<byte[]> ReadPatches(string name, IReadOnlyList<string>? folders)
     {
-        if (Locate(name, folders) is not { } model)
+        if (Locate(name, folders) is not { } model || FolderOf(model) is not string dir || !Directory.Exists(dir))
             return [];
-        string? dir = FolderOf(model);
         string stem = Path.GetFileNameWithoutExtension(KeyFromAny(name));
         var patches = new List<byte[]>();
         for (int n = 0; n < 10; n++)
         {
-            string key = KeyFromAny($"{stem}_p{n:00}.nif");
-            AssetLocation? beside = Copies(key).Cast<AssetLocation?>()
-                .FirstOrDefault(l => string.Equals(FolderOf(l!.Value), dir, StringComparison.OrdinalIgnoreCase));
-            if (beside is not { } loc || ReadAt(loc) is not byte[] bytes)
+            string patch = $"{stem}_p{n:00}";
+            if (FileIn(dir, patch + (model.InArchive ? ".npk" : ".nif")) is not string path)
                 break;
-            patches.Add(bytes);
+            if (!model.InArchive)
+                patches.Add(InstallFiles.ReadAllBytes(path));
+            else
+            {
+                using MpkArchive mpk = MpkArchive.Open(path);
+                if (mpk.TryGetEntry(patch + ".nif", out MpkEntry e))
+                    patches.Add(mpk.Extract(e));
+            }
         }
         return patches;
     }
 
-    private IEnumerable<AssetLocation> Copies(string key)
+    // A file in a folder by name, any case (the install mixes "Nifs" and "NIFS", ".NIF" and ".nif").
+    private readonly Dictionary<string, Dictionary<string, string>> _folders = new(StringComparer.OrdinalIgnoreCase);
+
+    private string? FileIn(string dir, string fileName)
     {
-        if (_byName.TryGetValue(key, out AssetLocation main))
-            yield return main;
-        if (_others.TryGetValue(key, out var list))
-            foreach (AssetLocation l in list)
-                yield return l;
+        if (!_folders.TryGetValue(dir, out Dictionary<string, string>? files))
+            _folders[dir] = files = Directory.EnumerateFiles(dir)
+                .GroupBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        return files.GetValueOrDefault(fileName);
     }
 
     private static string? FolderOf(AssetLocation loc) => Path.GetDirectoryName(loc.Archive ?? loc.LoosePath);

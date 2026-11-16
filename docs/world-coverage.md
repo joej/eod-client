@@ -106,7 +106,10 @@ is listed for information. Rerun it when the converter starts or stops reading a
 First run (2026-11-16): 25,837 loose files and 55,126 archive members; 8,305 and 25,419 opened. Of the 250 groups never
 or partly opened, 195 are explained, 36 partly opened, and 19 were sent to daoc-re to place (snow maps, ambient
 bird/butterfly models, `.ifl`/`.uvw` files, skin bump and gloss maps, and five city patch archives whose model is named
-`statue.nif` rather than `<piece>_p00.nif`).
+`statue.nif` rather than `<piece>_p00.nif`). daoc-re placed them the same day: most are named by data (csv rows, texture names inside
+models), not by the client's code, so "never opened" doesn't mean unused. That showed the capitals reading the shared
+copy of a texture whose name the city's own folder also has (open question W63). After their answers: 222 groups
+explained, 28 partly opened, none to review.
 
 ## Reader robustness
 

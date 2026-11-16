@@ -64,3 +64,23 @@ zones/terraintex/*.db	Windows thumbnail cache
 tutorial/zones/zone#/dat#.mpk : *.csv	the zone's csv archive holds the same files and is read first, as the client does (ZoneArchive)
 zones/terraintex/*.tga	grass placement maps (grassmap, grassmapB, grassmapW; M13 grass)
 zones/terraintex/*.pcx	a grass placement map (grassmap.pcx; M13 grass)
+# Placed by daoc-re, 2026-11-16 (private/inbox/2026-11-16-unplaced-files-from-daoc-re.md): most are named by data (csv/ini
+# rows, texture names inside models), not by the client's code.
+zones/zone#/nifs/*_p#.npk : *.nif	five city patch archives holding only statue.nif: the client looks for <piece>_p00.nif, so they do nothing (retail packaging errors; AssetIndex.ReadPatches skips them)
+zones/zone#/dat#.mpk : *.tga	snowmap.tga: a zone's snow layer on the terrain, blend not traced (open question W62)
+zones/zone#/dat#.mpk : *.bmp	zone 202's shadow.bmp: the client reads only shadow.pcx, so that zone has no ground shading
+zones/textures/*.nif	amb_* models: named by nothing (leftovers)
+zones/textures/*.dds	grass_*.dds: the regions' grass, named by zones.dat (M13); amb_textures.dds: named by nothing
+figures/skins/skin#.mpk : *.tga	bump and gloss maps: rows in skins.csv, but no use in rendering found
+*.dat	gf*.dat: default graphics settings per graphics-card class; keyboard/main/menu/paths/user.dat: settings; login/eula.dat: the login screen; color/darkness.dat: named by nothing; unins000.dat: the installer
+localdata.mpk : *.dat	an unused copy of loading.dat; the client reads gamedata.mpk's (as we do)
+zones/nifs/*.ifl	named by nothing (leftover)
+zones/nifs/*.uvw	a 3ds Max leftover
+zones/sky/*.bmp	the sun's textures, named with their extension by the sky files; we take sundisk by name and so read sundisk.tga, and the sun's flare and glow aren't built (open question W62)
+items/*.npk : *.nif	item models in items.csv and objects.csv (housing trophies, market stalls) that no object we convert uses yet
+items/pskins/pskin#.mpk : *.nif	an item model kept in a player-skin archive (the candle hat); where the client finds it isn't traced
+tutorial/zones/nifs/*.tga	pennant textures named by the keep models; a same-named identical copy in pregame/ is read instead (open question W63)
+tutorial/zones/terraintex/*.dds	boulder2, cmine_floor: named by the tutorial terrain and mine dungeon pieces; same-named copies elsewhere are read (open question W63)
+anims/*.dds	grysmoke.dds: named by effect and building models; same-named copies elsewhere are read (open question W63)
+zones/*.bmp	d00.bmp: a texture of the aegcliffpiece models; the zones/Nifs copy is read (open question W63)
+zones/*.dds	d01.dds: a texture named by 136 models and skin archives (open question W63)
