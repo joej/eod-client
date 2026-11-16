@@ -215,4 +215,47 @@ public sealed class AssetLibraryTests : IDisposable
         Assert.Equal("rug", File.ReadAllText(shared.GatherTexture("wolf_black.tga")!));
         Assert.Equal("wolf skin", File.ReadAllText(figures.GatherTexture("wolf_black.tga", refresh: true)!));
     }
+
+    // W63: a model takes its textures from its own folder first, then zones/Nifs, as the client does; zones/Dnifs is no
+    // fallback. A capital's piece (zones/zone026/nifs) and the city's own copy of a texture go in the zone's scope.
+    private void Put(string rel, byte[] data)
+    {
+        string path = Path.Combine(_client, rel);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, data);
+    }
+
+    [LiveFact(Bowsprit)]
+    public void AModelTakesItsOwnFoldersTextureFirstThenZonesNifs()
+    {
+        byte[] nif = File.ReadAllBytes(BowspritFixture());   // names PSbeamLt_grey.dds
+        Put("zones/zone026/nifs/citything.nif", nif);
+        Put("zones/Nifs/sharedthing.nif", nif);
+        Put("zones/zone026/nifs/PSbeamLt_grey.dds", "city"u8.ToArray());
+        Put("zones/Nifs/PSbeamLt_grey.dds", "shared"u8.ToArray());
+        Put("zones/Dnifs/PSbeamLt_grey.dds", "dungeon"u8.ToArray());
+        var library = new AssetLibrary(AssetIndex.Build(_client), _lib);
+
+        ModelResult city = library.GetModel("citything.nif");
+        Assert.Equal("zone026/citything.glb", library.ManifestName(city.GlbPath!));
+        Assert.Equal("city", File.ReadAllText(Path.Combine(_lib, "textures", "zone026", "psbeamlt_grey.dds")));
+
+        ModelResult shared = library.GetModel("sharedthing.nif");
+        Assert.Equal("sharedthing.glb", library.ManifestName(shared.GlbPath!));
+        Assert.Equal("shared", File.ReadAllText(Path.Combine(_lib, "textures", "psbeamlt_grey.dds")));
+    }
+
+    [LiveFact(Bowsprit)]
+    public void WithoutItsOwnCopyACityModelFallsBackToZonesNifs()
+    {
+        Put("zones/zone026/nifs/citything.nif", File.ReadAllBytes(BowspritFixture()));
+        Put("zones/Dnifs/PSbeamLt_grey.dds", "dungeon"u8.ToArray());   // a dungeon's copy: never the fallback
+        Put("zones/Nifs/PSbeamLt_grey.dds", "shared"u8.ToArray());
+        var library = new AssetLibrary(AssetIndex.Build(_client), _lib);
+
+        ModelResult city = library.GetModel("citything.nif");
+        Assert.Equal(AssetOrigin.Converted, city.Origin);
+        string[] copies = Directory.GetFiles(Path.Combine(_lib, "textures"), "psbeamlt_grey.dds", SearchOption.AllDirectories);
+        Assert.Equal("shared", File.ReadAllText(Assert.Single(copies)));
+    }
 }

@@ -108,7 +108,8 @@ or partly opened, 195 are explained, 36 partly opened, and 19 were sent to daoc-
 bird/butterfly models, `.ifl`/`.uvw` files, skin bump and gloss maps, and five city patch archives whose model is named
 `statue.nif` rather than `<piece>_p00.nif`). daoc-re placed them the same day: most are named by data (csv rows, texture names inside
 models), not by the client's code, so "never opened" doesn't mean unused. That showed the capitals reading the shared
-copy of a texture whose name the city's own folder also has (open question W63). After their answers: 222 groups
+copy of a texture whose name the city's own folder also has (open question W63; fixed the same day: 107 city
+textures now come from the city's folder). After their answers: 222 groups
 explained, 28 partly opened, none to review.
 
 ## Reader robustness

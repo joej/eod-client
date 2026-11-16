@@ -137,7 +137,7 @@ public sealed class AssetIndex
 
     /// <summary>
     /// Where <paramref name="name"/> is, preferring a copy under one of <paramref name="folders"/> (paths
-    /// relative to the install, e.g. "figures/"); without one there, the default place (zone files first).
+    /// relative to the install, e.g. "figures/", tried in order); without one there, the default place (zone files first).
     /// The install reuses names across folders for different files: a creature skin in figures/skins/*.mpk
     /// and a housing trophy's loose texture of the same name, or the giant figure and a zone's giant statue.
     /// </summary>
@@ -146,13 +146,29 @@ public sealed class AssetIndex
         string key = KeyFromAny(name);
         if (!_byName.TryGetValue(key, out AssetLocation main))
             return null;
-        if (folders is null || folders.Count == 0 || Under(main, folders))
+        if (folders is null || folders.Count == 0)
             return main;
-        if (_others.TryGetValue(key, out var list))
-            foreach (AssetLocation l in list)
-                if (Under(l, folders))
+        // The folders in order (the client looks in a model's own folder, then zones/Nifs): the first that has a copy.
+        _others.TryGetValue(key, out var list);
+        foreach (string folder in folders)
+        {
+            if (Under(main, [folder]))
+                return main;
+            foreach (AssetLocation l in list ?? [])
+                if (Under(l, [folder]))
                     return l;
+        }
         return main;
+    }
+
+    /// <summary>The folder holding <paramref name="loc"/> (its archive's, if packed), relative to the install, with '/'
+    /// and a trailing '/': "zones/zone026/nifs/".</summary>
+    public string RelativeFolder(AssetLocation loc)
+    {
+        string path = (loc.LoosePath ?? loc.Archive ?? "").Replace('\\', '/');
+        string root = Root.Replace('\\', '/').TrimEnd('/') + "/";
+        string rel = path.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? path[root.Length..] : path;
+        return rel[..(rel.LastIndexOf('/') + 1)];
     }
 
     /// <summary>True when the preferred copy is the default one (so a converted copy can be shared).</summary>

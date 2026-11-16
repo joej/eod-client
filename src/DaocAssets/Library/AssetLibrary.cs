@@ -49,6 +49,19 @@ public sealed class AssetLibrary
     public AssetLibrary Scoped(string scope, params string[] folders) =>
         new(_index, _root) { _scope = scope, _prefer = folders };
 
+    // The view a model converts in. A model in a zone's own folder (zones/zoneNNN/nifs: the capitals' pieces, zone-local
+    // pieces) takes its textures from that folder first, then zones/Nifs, as the client does (daoc-re, 2026-11-16: a
+    // model's own folder, then the global zones/Nifs; W63), in the zone's scope (models/zoneNNN/, textures/zoneNNN/).
+    private AssetLibrary ForModel(string nifName)
+    {
+        if (_scope is not null || _index.Locate(nifName, null) is not { } loc)
+            return this;
+        string folder = _index.RelativeFolder(loc);
+        var zone = System.Text.RegularExpressions.Regex.Match(folder, "^zones/(zone[0-9]+)/nifs/$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return zone.Success ? Scoped(zone.Groups[1].Value.ToLowerInvariant(), folder, "zones/Nifs/") : this;
+    }
+
     // Where a converted model or texture of this name goes: the shared folder, or the scope's own when the
     // scope's file differs from the default one (a byte-identical copy elsewhere still shares).
     private string Folder(string shared, string name, bool texture)
@@ -113,6 +126,8 @@ public sealed class AssetLibrary
     /// again (the Makefile asks for this when the converter changed).</remarks>
     public ModelResult GetModel(string nifName, bool reconvert = false)
     {
+        if (ForModel(nifName) is { } own && !ReferenceEquals(own, this))
+            return own.GetModel(nifName, reconvert);
         string stem = Path.GetFileNameWithoutExtension(BareName(nifName));
         string glbName = stem + ".glb";
 
@@ -121,9 +136,11 @@ public sealed class AssetLibrary
             return new ModelResult(overridePath, AssetOrigin.Override);
 
         string models = Folder(_models, nifName, texture: false);
-        string glbPath = Path.Combine(models, glbName);
-        if (!reconvert && File.Exists(glbPath))
-            return new ModelResult(OnDiskName(glbPath), AssetOrigin.Converted);
+        string scoped = _scope is null ? models : Path.Combine(_models, _scope);
+        if (!reconvert)
+            foreach (string dir in new[] { scoped, models }.Distinct())
+                if (File.Exists(Path.Combine(dir, glbName)))
+                    return new ModelResult(OnDiskName(Path.Combine(dir, glbName)), AssetOrigin.Converted);
 
         byte[]? nifBytes = _index.Read(nifName, _prefer);
         if (nifBytes is null)
@@ -133,13 +150,19 @@ public sealed class AssetLibrary
         {
             // With its patch files merged in (<name>_p00.nif, … beside it), as the client loads it.
             NifModel model = NifFile.Read(nifBytes, _index.ReadPatches(nifName, _prefer));
-            Directory.CreateDirectory(models);
             // Textures first, the glb last: a glb on disk means its model converted completely.
             // Base textures and the extra layers (dark and detail maps) the client binds by name.
+            // A model one of whose textures is the scope's own copy goes in the scope's folder too: the client takes a
+            // model's textures from its scope's folder first only for a model stored there (W63: a city's pieces).
+            bool scopedTexture = false;
+            string scopeTextures = _scope is null ? "" : Path.GetFullPath(Path.Combine(_textures, _scope));
             foreach (NifMesh mesh in model.Meshes)
                 foreach (string? texture in new[] { mesh.TextureFile, mesh.DarkTextureFile, mesh.DetailTextureFile, mesh.DecalTextureFile, mesh.GlowTextureFile })
-                    if (!string.IsNullOrEmpty(texture))
-                        GatherTexture(texture!, reconvert);
+                    if (!string.IsNullOrEmpty(texture) && GatherTexture(texture!, reconvert) is string got && _scope is not null
+                        && string.Equals(Path.GetDirectoryName(Path.GetFullPath(got)), scopeTextures, StringComparison.OrdinalIgnoreCase))
+                        scopedTexture = true;
+            string glbPath = Path.Combine(scopedTexture ? scoped : models, glbName);
+            Directory.CreateDirectory(Path.GetDirectoryName(glbPath)!);
             WriteAtomically(glbPath, tmp => GltfExporter.SaveGlb(model, tmp));
             return new ModelResult(glbPath, AssetOrigin.Converted);
         }
