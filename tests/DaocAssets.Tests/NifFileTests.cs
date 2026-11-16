@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using System.Buffers.Binary;
+using System.Numerics;
 using System.Security.Cryptography;
 using DaocAssets.Nif;
 using SharpGLTF.Schema2;
@@ -738,5 +739,75 @@ public sealed class NifFileTests
         Assert.InRange(posed.Min(v => v.Z), -1f, 1f);
         // Without the figure read, the same file still has its skin (it is self-contained), so it keeps joints.
         Assert.Equal(54, NifFile.Read(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "live-nif", "zombie-41012.nif"))).Joints.Count);
+    }
+
+    // Patch files (NifFile.Patches): the client merges <name>_p00.nif, … into the model as it loads it.
+    private static byte[] LiveNif(string name) => File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "live-nif", name));
+
+    private static (int All, int Collision, int Drawn) Triangles(NifModel m) =>
+        (m.Meshes.Sum(x => x.Triangles.Length), m.Meshes.Where(x => x.Collision).Sum(x => x.Triangles.Length),
+         m.Meshes.Where(x => !x.Helper).Sum(x => x.Triangles.Length));
+
+    // Tir na Nog's tir02: "__patch_collidee" replaces the base's wall "collider mtn02" (29 triangles) with its own (45).
+    [LiveFact("live-nif/tir02.nif", "live-nif/tir02_p00.nif")]
+    public void APatchReplacesTheBasesNodeOfTheSameName()
+    {
+        byte[] model = LiveNif("tir02.nif"), patch = LiveNif("tir02_p00.nif");
+        NifPatchEffect e = Assert.Single(NifFile.DescribePatches(model, [patch]));
+        Assert.Equal(("__patch_collidee", "collidee"), (e.Kind, Assert.Single(e.Targets)));
+        Assert.Equal(["collider mtn02"], e.Replaced);
+        Assert.Empty(e.Added);
+        Assert.Equal((2134, 358, 1761), Triangles(NifFile.Read(model)));
+        NifModel merged = NifFile.Read(model, [patch]);
+        Assert.Equal((2150, 374, 1761), Triangles(merged));
+        NifMesh wall = Assert.Single(merged.Meshes, m => m.Name.StartsWith("p00_", StringComparison.Ordinal));
+        Assert.True(wall.Collision && wall.Helper);
+        Assert.Equal(45, wall.Triangles.Length);
+    }
+
+    // Camelot's cam23 (4.2.1) and its 10.1 patch: "__patch_Exterior" adds FootFixes, drawn and textured, inside the piece.
+    [LiveFact("live-nif/cam23.nif", "live-nif/cam23_p00.nif")]
+    public void APatchInTheOtherFormatAddsDrawnPiecesWhereTheTargetIs()
+    {
+        byte[] model = LiveNif("cam23.nif"), patch = LiveNif("cam23_p00.nif");
+        NifPatchEffect e = Assert.Single(NifFile.DescribePatches(model, [patch]));
+        Assert.Equal(["FootFixes"], e.Added);
+        NifModel plain = NifFile.Read(model), merged = NifFile.Read(model, [patch]);
+        Assert.Equal((11134, 1309, 9755), Triangles(plain));
+        Assert.Equal((11249, 1309, 9870), Triangles(merged));
+        NifMesh[] added = merged.Meshes.Where(m => m.Name.StartsWith("p00_", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(4, added.Length);
+        Assert.All(added, m => Assert.False(m.Helper || m.Collision || m.TextureFile is null));
+        // Placed on the piece: within 50 units (1.25 m; the wall-foot stones stick out up to 9) of the base's bounds. In the
+        // patch file's own frame (its __patch_Exterior node) they would be about 600 units off.
+        Vector3[] all = plain.Meshes.SelectMany(m => m.Vertices).ToArray();
+        Vector3 min = all.Aggregate(Vector3.Min) - new Vector3(50), max = all.Aggregate(Vector3.Max) + new Vector3(50);
+        Assert.All(added.SelectMany(m => m.Vertices), v => Assert.True(v == Vector3.Clamp(v, min, max), $"{v} outside {min}..{max}"));
+    }
+
+    // Jordheim's jord30: the patch adds one small wall under collidee; its 40,000-triangle hall lies outside the
+    // "__patch_collidee" node, so the client never uses it.
+    [LiveFact("live-nif/jord30.nif", "live-nif/jord30_p00.nif")]
+    public void OnlyThePatchNodesChildrenAreUsed()
+    {
+        byte[] model = LiveNif("jord30.nif"), patch = LiveNif("jord30_p00.nif");
+        Assert.True(NifFile.Read(patch).Meshes.Sum(m => m.Triangles.Length) > 40000);
+        Assert.Equal((13502, 5285, 8177), Triangles(NifFile.Read(model)));
+        Assert.Equal((13504, 5287, 8177), Triangles(NifFile.Read(model, [patch])));
+    }
+
+    // A frontier outpost tower's six patches, in order: _p05 patches the door002 that _p00 adds, _p04 the
+    // !collidee_static that _p01 adds.
+    [LiveFact("live-nif/2-outpost_tower.nif", "live-nif/2-outpost_tower_p00.nif", "live-nif/2-outpost_tower_p05.nif")]
+    public void ALaterPatchCanTargetWhatAnEarlierOneAdded()
+    {
+        byte[][] patches = Enumerable.Range(0, 6).Select(n => LiveNif($"2-outpost_tower_p{n:00}.nif")).ToArray();
+        IReadOnlyList<NifPatchEffect> effects = NifFile.DescribePatches(LiveNif("2-outpost_tower.nif"), patches);
+        Assert.Equal(["collisionswitch", "collidee", "!collidee_undamaged", "!collidee_damaged", "!collidee_static", "door002"],
+            effects.Select(e => Assert.Single(e.Targets)));
+        Assert.Equal(["collidee"], effects[5].Replaced);
+        Assert.Equal(["collider_exploit_fix01"], effects[4].Added);
+        // Without the earlier patches, the later ones find nothing to patch.
+        Assert.EndsWith("(missing)", Assert.Single(Assert.Single(NifFile.DescribePatches(LiveNif("2-outpost_tower.nif"), [patches[5]])).Targets));
     }
 }

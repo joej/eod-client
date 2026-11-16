@@ -113,7 +113,7 @@ public sealed record NifMesh
         (VertexColors is null ? "" : ", vertex colours") +
         (BaseColor is { } c ? $", rgba({c.X:0.##},{c.Y:0.##},{c.Z:0.##},{c.W:0.##})" : "") +
         (Alpha == SurfaceAlpha.Opaque ? "" : $", {Alpha.ToString().ToLowerInvariant()} {AlphaCutoff:0.###}") +
-        (DoubleSided ? ", two-sided" : "") + (Helper ? ", helper" : "") + (Skin is null ? "" : ", skinned") +
+        (DoubleSided ? ", two-sided" : "") + (Helper ? ", helper" : "") + (Collision ? ", collision" : "") + (Skin is null ? "" : ", skinned") +
         (MorphTargets is null ? "" : $", {MorphTargets.Length} morphs (codes {string.Join(" ", MorphCodes ?? [])})");
 }
 

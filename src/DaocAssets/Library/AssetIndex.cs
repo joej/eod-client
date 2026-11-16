@@ -47,6 +47,9 @@ public sealed class AssetIndex
     public string Root { get; }
     public int Count => _byName.Count;
 
+    /// <summary>Every indexed file name (lower case, bare).</summary>
+    public IEnumerable<string> Names => _byName.Keys;
+
     private AssetIndex(string root, Dictionary<string, AssetLocation> byName, Dictionary<string, List<AssetLocation>>? others = null)
     {
         Root = root;
@@ -195,6 +198,41 @@ public sealed class AssetIndex
         }
         return null;
     }
+
+    /// <summary>
+    /// The patch files of model <paramref name="name"/> (as <see cref="Read(string, IReadOnlyList{string}?)"/> finds it):
+    /// <c>&lt;stem&gt;_p00.nif</c>, <c>_p01</c>, … in the same folder (loose, or packed beside it), stopping at the first
+    /// number that is missing, at most 10, as the retail client probes them (see NifFile.Patches).
+    /// </summary>
+    public IReadOnlyList<byte[]> ReadPatches(string name, IReadOnlyList<string>? folders)
+    {
+        if (Locate(name, folders) is not { } model)
+            return [];
+        string? dir = FolderOf(model);
+        string stem = Path.GetFileNameWithoutExtension(KeyFromAny(name));
+        var patches = new List<byte[]>();
+        for (int n = 0; n < 10; n++)
+        {
+            string key = KeyFromAny($"{stem}_p{n:00}.nif");
+            AssetLocation? beside = Copies(key).Cast<AssetLocation?>()
+                .FirstOrDefault(l => string.Equals(FolderOf(l!.Value), dir, StringComparison.OrdinalIgnoreCase));
+            if (beside is not { } loc || ReadAt(loc) is not byte[] bytes)
+                break;
+            patches.Add(bytes);
+        }
+        return patches;
+    }
+
+    private IEnumerable<AssetLocation> Copies(string key)
+    {
+        if (_byName.TryGetValue(key, out AssetLocation main))
+            yield return main;
+        if (_others.TryGetValue(key, out var list))
+            foreach (AssetLocation l in list)
+                yield return l;
+    }
+
+    private static string? FolderOf(AssetLocation loc) => Path.GetDirectoryName(loc.Archive ?? loc.LoosePath);
 
     /// <summary>Where <paramref name="name"/> is in the install, or null if not indexed.</summary>
     public AssetLocation? Locate(string name) =>

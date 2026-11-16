@@ -131,7 +131,8 @@ public sealed class AssetLibrary
 
         try
         {
-            NifModel model = NifFile.Read(nifBytes);
+            // With its patch files merged in (<name>_p00.nif, … beside it), as the client loads it.
+            NifModel model = NifFile.Read(nifBytes, _index.ReadPatches(nifName, _prefer));
             Directory.CreateDirectory(models);
             // Textures first, the glb last: a glb on disk means its model converted completely.
             // Base textures and the extra layers (dark and detail maps) the client binds by name.

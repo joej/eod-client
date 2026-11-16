@@ -11,7 +11,15 @@ internal static partial class Cli
         byte[] bytes = File.ReadAllBytes(nifPath);
         try
         {
-            NifModel model = NifFile.Read(bytes);
+            // Its patch files beside it (<stem>_p00.nif, …, stopping at the first gap), merged as the client does.
+            var patches = new List<byte[]>();
+            string stem = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(nifPath))!, Path.GetFileNameWithoutExtension(nifPath));
+            for (int n = 0; n < 10 && File.Exists($"{stem}_p{n:00}.nif"); n++)
+                patches.Add(File.ReadAllBytes($"{stem}_p{n:00}.nif"));
+            foreach ((NifPatchEffect e, int n) in NifFile.DescribePatches(bytes, patches).Select((e, n) => (e, n)))
+                Console.WriteLine($"patch _p{n:00}: {e.Kind} into {string.Join("; ", e.Targets)}; replaces [{string.Join(", ", e.Replaced)}]" +
+                    $", adds [{string.Join(", ", e.Added)}]{(e.Error is null ? "" : " " + e.Error)}");
+            NifModel model = NifFile.Read(bytes, patches);
             Console.WriteLine($"NIF {model.Version}: {model.Meshes.Count} mesh(es), {model.Joints.Count} joint(s)");
             foreach (NifMesh m in model.Meshes)
                 Console.WriteLine($"  {m.ShapeName,-28} {m}" + (m.SkinJoints is { } sj ? $" ({sj.Length} bones)" : ""));
@@ -38,7 +46,7 @@ internal static partial class Cli
             if (Environment.GetEnvironmentVariable("NIFINFO_SKINS") == "1")
                 foreach (string line in NifFile.SkinReport(bytes))
                     Console.WriteLine("  " + line);
-            if (NifFile.BindPoseError(bytes) is { } err)
+            if (model.Version.A >= 10 && NifFile.BindPoseError(bytes) is { } err)
                 Console.WriteLine($"Bind-pose check: max difference {err:G4} (near 0 = skeleton in bind pose)");
             return 0;
         }

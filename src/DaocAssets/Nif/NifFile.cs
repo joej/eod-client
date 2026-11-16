@@ -128,7 +128,11 @@ public static partial class NifFile
     // its type string (bodies aren't self-sized), parse the NiNode/NiTriShape transforms and refs,
     // walk from the scene root composing transforms, and bake them into the geometry each shape
     // points at. Verified against a 57-node/118-shape keep.
-    private static NifModel ReadNetImmerse4x(ReadOnlySpan<byte> bytes, NifVersion version, int blockCount, bool figure = false)
+    private static NifModel ReadNetImmerse4x(ReadOnlySpan<byte> bytes, NifVersion version, int blockCount, bool figure = false) =>
+        Build4x(bytes, version, Parse4x(bytes, version, blockCount), figure);
+
+    // The blocks of a 4.x file, with the ones we model parsed (nodes, shapes, properties, source textures).
+    private static Block[] Parse4x(ReadOnlySpan<byte> bytes, NifVersion version, int blockCount)
     {
         Block[] blocks = IndexBlocks4x(bytes, blockCount);
 
@@ -215,6 +219,14 @@ public static partial class NifFile
             }
         }
 
+        return blocks;
+    }
+
+    // The model from a 4.x file's parsed blocks. `detached`: nodes a patch took out of the tree (NifFile.Patches), which
+    // the fallback below must not add back.
+    private static NifModel Build4x(ReadOnlySpan<byte> bytes, NifVersion version, Block[] blocks, bool figure = false,
+        IEnumerable<int>? detached = null)
+    {
         // Walk from the scene root (block 0) composing transforms; bake each shape's world transform
         // into the geometry it references.
         var meshes = new List<NifMesh>();
@@ -233,6 +245,8 @@ public static partial class NifFile
         // transforms, which drew a second, shifted copy of Prydwen Keep's far model through the near
         // one (walls cutting through the inner keep, stairs into a wall).
         HashSet<int> inHierarchy = Descendants(blocks, 0);
+        foreach (int d in detached ?? [])
+            inHierarchy.UnionWith(Descendants(blocks, d));
         for (int i = 0; i < blocks.Length; i++)
         {
             Block b = blocks[i];

@@ -48,6 +48,12 @@ public static partial class NifFile
         if (!g.Complete)
             throw new NifFormatException(
                 $"10.1 NIF stops at {g.StopType ?? "an undecoded block"} ({g.StopReason ?? g.Result.ToString()}); not supported.");
+        return BuildGamebryo(g, version);
+    }
+
+    // The model from a completely decoded 10.1 file.
+    private static NifModel BuildGamebryo(Gb10File g, NifVersion version)
+    {
         Gb10Block[] blocks = g.Blocks!;
         var b = new Gb10Builder(blocks);
         foreach (int root in g.Roots.Length > 0 ? g.Roots : [0])
@@ -222,7 +228,7 @@ public static partial class NifFile
         // NiRangeLODData the child whose near extent is smallest, otherwise (screen-size LOD, or no
         // data) child 0, the highest detail. A billboard node is walked like a plain node: it keeps
         // its stored orientation instead of turning to the camera.
-        private int[] NearLevel(Gb10Block lod)
+        internal int[] NearLevel(Gb10Block lod)
         {
             if (lod.Children.Length <= 1)
                 return lod.Children;
