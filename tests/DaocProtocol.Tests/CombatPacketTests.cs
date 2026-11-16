@@ -9,7 +9,7 @@ namespace DaocProtocol.Tests;
 /// Attack mode (0x74 both ways) and how other players show it (bit 0x80 of the health byte in S→C 0xA9 and
 /// 0xBA). The recorded 1.127e session has two S→C 0x74 and no S→C 0xA9 / 0xBA (it was alone in the world),
 /// so those two are built here in OpenDAoC's field order (CreateOutPak1127 in PlayerPositionUpdateHandler
-/// and PlayerHeadingUpdateHandler).
+/// and PlayerHeadingUpdateHandler). Also the swings (S→C 0xBC).
 /// </summary>
 public class CombatPacketTests
 {
@@ -89,5 +89,36 @@ public class CombatPacketTests
         Assert.True(h.InCombat);
         payload[10] = 100;
         Assert.False(PlayerHeading.Parse(payload).InCombat);
+    }
+
+    // 0xBC: hand-built in OpenDAoC's writer layout (PacketLib186.SendCombatAnimation); the recording has none.
+    [Fact]
+    public void ACombatAnimationReadsTheStyleLittleEndian()
+    {
+        byte[] payload =
+        [
+            0x41, 0x67, 0x2A, 0x93,   // attacker 0x4167, defender 0x2A93
+            0x00, 0x03, 0x00, 0x3B,   // weapon model 3, shield model 59
+            0x9A, 0x00,               // style 154, little-endian
+            0x00, 0x0B, 0x37, 0x00,   // time 0, styled hit, defender at 55 %, one zero byte
+        ];
+        CombatAnimation c = CombatAnimation.Parse(payload);
+        Assert.Equal(new CombatAnimation(0x4167, 0x2A93, 3, 59, 154, 0, CombatAnimation.StyledHit, 55), c);
+        Assert.Equal(payload, c.ToBytes());
+        Assert.True(c.Swings);
+        Assert.True(c.IsHit);
+        Assert.Equal(154, c.StyleId);
+    }
+
+    [Theory]
+    // A bleed (no attacker), a trap or area hit (0x14), a parry, a bow shot (its code isn't a style).
+    [InlineData(0, 0, 0x0A, false, true, 0)]
+    [InlineData(0x4167, 0, 0x14, false, true, 0)]
+    [InlineData(0x4167, 0, 1, true, false, 0)]
+    [InlineData(0x4167, 0x3E83, 0x0A, true, true, 0)]
+    public void WhatTheClientShows(int attacker, int style, int result, bool swings, bool hit, int styleId)
+    {
+        var c = new CombatAnimation((ushort)attacker, 0x2A93, 0, 0, (ushort)style, 0, (byte)result, 80);
+        Assert.Equal((swings, hit, styleId), (c.Swings, c.IsHit, (int)c.StyleId));
     }
 }

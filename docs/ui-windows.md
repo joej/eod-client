@@ -231,7 +231,7 @@ Each slot holds one key plus modifiers (Shift, Alt, Ctrl) or a mouse button; sec
 are read held and ignore modifiers; the rest need their exact modifiers. Not bindable: Escape, Enter, `/`, `'`, `]`,
 the number row (quickbars), Shift as a main key, F12. The client forces NumLock off, so keypad 4/6 are also Left/Right.
 
-Ours: 25 rebindable actions (Settings → Keyboard) with the four presets; other keys are fixed. Our dev keys sit where
+Ours: 26 rebindable actions (Settings → Keyboard) with the four presets; other keys are fixed. Our dev keys sit where
 no preset binds anything (2026-11-15): F9 free-fly camera, Shift+F9 travel, Ctrl+F9 screenshot (Num - is retail's),
 F10 settings, F12 dev panels, Shift+F12 render mode, Alt+F12 view distance, Ctrl+F12 packet log. F11 is still our
 fullscreen key, retail's Camera Toggle: it moves when Camera Toggle is built.
@@ -269,7 +269,7 @@ fullscreen key, retail's Camera Toggle: it moves when Camera Toggle is built.
 | 26 | Target Object | F8 | Shift+H | Shift+- | press | Target the nearest object ("No object target in range."). | — | ❌ | |
 | 24 | Target Enemy | Tab | Tab | Tab | press | Target the nearest enemy ("No enemy target in range."). | Tab, rebindable: 1200 units, line of sight, again within 1.5 s for the next; skips NPCs flagged peaceful (ours) | ✅ | |
 | 25 | Target Friend | Ctrl+Tab | Ctrl+Tab | backtick | press | Target the nearest friendly ("No friendly target in range."). | Ctrl+Tab / Ctrl+Tab / backtick, rebindable: 1500 units, you first | ✅ | |
-| 35 | Last Attacker | Shift+Tab | Shift+Tab | Shift+Tab | press | Target your last attacker ("Your last attacker is not in range." / "…not visible."). | — (waits for the attack packets) | ❌ | |
+| 35 | Last Attacker | Shift+Tab | Shift+Tab | Shift+Tab | press | Target your last attacker ("Your last attacker is not in range." / "…not visible."). | Shift+Tab, rebindable: whoever last attacked you (0xBC), while the server still shows it | ✅ | |
 | 44 | Ground Target | F5 | C | Alt+A | press | Ground-target placement on/off (inferred, not traced). | — | ❌ | |
 | 45 | Target Group1 | F1 | none | none | press | Target group member 1. | F1 / none / none, rebindable | ✅ | |
 | 46 | Target Group2 | F2 | none | none | press | Target group member 2. | F2 / none / none, rebindable | ✅ | |

@@ -250,25 +250,32 @@ public static class FigureLook
     /// 6 crossbow, 13 hand to hand, 14 scythe, anything else (and no weapon) the one-hand "combat_idle". The
     /// figures carry these clips from canims.csv (mpk figures).
     /// </summary>
-    public static string CombatIdle(string gearPath, System.Collections.Generic.IReadOnlyList<WornItem> worn, byte activeWeapons)
-    {
-        (byte? right, byte? left) = WornSlot.Active(activeWeapons);
-        int stance = 0;
-        if (Json(Items, gearPath) is { } gear)
-            foreach (byte? slot in new[] { right, left })
-                if (slot is { } sl && worn.FirstOrDefault(w => w.Slot == sl) is { Model: > 0 } item
-                    && gear.GetProperty("items").TryGetProperty(item.Model.ToString(System.Globalization.CultureInfo.InvariantCulture), out var entry)
-                    && !entry.GetProperty("shield").GetBoolean())
-                {
-                    stance = entry.GetProperty("stance").GetInt32();
-                    break;
-                }
-        return stance switch
+    public static string CombatIdle(string gearPath, System.Collections.Generic.IReadOnlyList<WornItem> worn, byte activeWeapons) =>
+        ActiveStance(gearPath, worn, activeWeapons) switch
         {
             2 => "combat_idle_2h", 3 => "combat_idle_pole", 4 => "combat_idle_staff", 5 => "combat_idle_bow",
             6 => "combat_idle_xbow", 13 => "combat_idle_h2h", 14 => "combat_idle_scy", _ => "combat_idle",
         };
+
+    /// <summary>The "Combat Stance" of the weapon in use (see <see cref="CombatIdle"/>), 0 with none.</summary>
+    public static int ActiveStance(string gearPath, System.Collections.Generic.IReadOnlyList<WornItem> worn, byte activeWeapons)
+    {
+        (byte? right, byte? left) = WornSlot.Active(activeWeapons);
+        foreach (byte? slot in new[] { right, left })
+            if (slot is { } sl && worn.FirstOrDefault(w => w.Slot == sl) is { Model: > 0 } item
+                && GearEntry(gearPath, item.Model) is { } entry && !entry.GetProperty("shield").GetBoolean())
+                return entry.GetProperty("stance").GetInt32();
+        return 0;
     }
+
+    /// <summary>The "Combat Stance" of item model <paramref name="model"/> (0: unknown, a shield, or no weapon).</summary>
+    public static int Stance(string gearPath, int model) =>
+        GearEntry(gearPath, model) is { } entry && !entry.GetProperty("shield").GetBoolean() ? entry.GetProperty("stance").GetInt32() : 0;
+
+    private static System.Text.Json.JsonElement? GearEntry(string gearPath, int model) =>
+        model > 0 && Json(Items, gearPath) is { } gear
+            && gear.GetProperty("items").TryGetProperty(model.ToString(System.Globalization.CultureInfo.InvariantCulture), out var entry)
+            ? entry : null;
 
     private static Node3D? ItemModel(string modelsDir, string nif, string[] dirs)
     {

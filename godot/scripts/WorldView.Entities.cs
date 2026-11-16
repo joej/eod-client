@@ -974,8 +974,8 @@ public partial class WorldView
     private void AnimateMotion(Entity e)
     {
         AnimationPlayer player = e.Player!;
-        if (_seconds < e.HoldUntil && !e.Moved)
-            return;   // landing
+        if (_seconds < e.HoldUntil && (!e.Moved || e.HoldMoving))
+            return;   // landing, a swing or a hit reaction
         string Has(params string[] clips) => clips.FirstOrDefault(c => player.HasAnimation(c)) ?? clips[^1];
         switch (e.Posture)
         {

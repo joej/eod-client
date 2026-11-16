@@ -119,4 +119,4 @@ entering the world starts there (a character without one starts at 500 units, he
 Enter or `/` to chat. Targeting keys as retail's (2026-11-15): Target Enemy Tab (nearest within 1200 units in line of
 sight; again within 1.5 s for the next farther), Target Friend Ctrl+Tab / Ctrl+Tab / backtick (within 1500, you
 first), and in RPG Consider F6 and the group members F1-F4, Shift+F1-F4. Our own keys sit where retail binds nothing:
-F9 free-fly camera, F12 dev panels (the rest are in `docs/ui-windows.md`, "Keys"). No walk or last-attacker key yet.
+F9 free-fly camera, F12 dev panels (the rest are in `docs/ui-windows.md`, "Keys"). Last Attacker Shift+Tab (2026-11-16). No walk key yet.

@@ -177,7 +177,8 @@ public partial class WorldView : Node3D
         public Color NameColor = new(0.92f, 0.90f, 0.82f);   // con or realm colour, as its nameplate
         public bool Dead;            // died (0xAE) and not yet revived: lies in its Death clip
         public PlayerPosture Posture; // a player's posture from its 0xA9 / 0xBA state byte (sit, swim, jump, climb, ...)
-        public double HoldUntil;      // a one-off clip (land) plays until then unless it moves
+        public double HoldUntil;      // a one-off clip (land, a swing) plays until then unless it moves
+        public bool HoldMoving;       // ...or even then (the run flinch)
         public Label3D? Nameplate;    // its name (and role or guild) over its head
     }
 
@@ -456,6 +457,7 @@ public partial class WorldView : Node3D
         _bridge.ObjectSpawned += OnWorldObject;
         _bridge.ChatReceived += OnChatReceived;
         SubscribeDeath();
+        _bridge.CombatAnimated += OnCombatAnimated;
         SubscribeCharacter();
         SubscribeStats();
         _bridge.PingReplied += OnPingReplied;
@@ -601,6 +603,7 @@ public partial class WorldView : Node3D
     {
         if (_bodyAnim is null || _bodyClip == clip || !_bodyAnim.HasAnimation(clip))
             return;
+        _holdMoving = false;
         _bodyAnim.GetAnimation(clip).LoopMode = Animation.LoopModeEnum.None;
         _bodyAnim.Play(clip, customBlend: 0.1);
         _bodyClip = clip;

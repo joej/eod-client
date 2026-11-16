@@ -71,6 +71,7 @@ public partial class WorldView
         _body.Rotation = new Vector3(0, _bodyYaw, 0);
 
         bool moving = forward != 0f || strafe != 0f;
+        _runningForward = forward > 0;   // a hit then flinches with the run flinch (WorldView.Combat)
         // Sitting out the quit timer: walking or strafing stands up and calls the quit off. The server
         // decides on a change of X/Y (OpenDAoC PlayerMovementComponent.UpdatePosition → OnPlayerMove),
         // so a jump in place or a turn doesn't cancel, here or there.
@@ -125,7 +126,7 @@ public partial class WorldView
             PlayOnce("jump");
         else if ((_quitting || _sitting) && !moving)
             Sit();
-        else if (_landLeft <= 0 || moving)
+        else if (_landLeft <= 0 || (moving && !_holdMoving))
         {
             // Sideways only: the figure's strafe clip (anims.csv 13/14), else the run.
             string side = strafe < 0 ? "strafe_left" : "strafe_right";

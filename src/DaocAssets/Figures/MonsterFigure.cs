@@ -73,6 +73,20 @@ public sealed class MonsterTables
         ("combat_idle_pole", 8), ("combat_idle_bow", 9), ("combat_idle_staff", 16), ("combat_idle_xbow", 23),
         ("combat_idle_h2h", 106), ("combat_idle_scy", 115)];
 
+    // canims.csv slots (column = slot + 2) that 0xBC plays, as clips named "c<slot>" (daoc-re RE/75): the swings by weapon
+    // stance (one-handed 0-2, two-handed 8-10, polearm 11-13, staff 18-20, left hand 25-27, dual 28-30, thrust 57-59,
+    // flexible 91-93, flail 94-96, whip 97-99, claws 105-107, scythe 114-116), Flinch (3), and the defender's parries,
+    // evades and blocks (31-41, flexible/flail/whip parries 100-103). Styles (42-140) aren't carried yet.
+    // A creature (classic figure) carries the one-handed swings and the reactions only: its weapon, if any, has no
+    // other clips in its set, and the client falls back to slot 0 as retail does.
+    internal static readonly int[] CombatSlots = [0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 18, 19, 20, 25, 26, 27, 28, 29, 30,
+        31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 57, 58, 59, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103,
+        105, 106, 107, 114, 115, 116];
+    internal static readonly int[] CreatureCombatSlots = [0, 1, 2, 3, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41];
+
+    // anims.csv slot 76 (column 78) "Run Flinch": the flinch of a defender on the run.
+    private const int RunFlinchColumn = 78;
+
     private MonsterTables(Dictionary<int, string[]> monsters, Dictionary<int, string[]> monnifs, Dictionary<int, string> skins,
         Dictionary<int, string[]> anims, Dictionary<int, string[]> animnifs) =>
         (_monsters, _monnifs, _skins, _anims, _animnifs) = (monsters, monnifs, skins, anims, animnifs);
@@ -218,7 +232,8 @@ public sealed class MonsterTables
             : null;
 
     // The figure's animation set (monnifs column 3) -> a clip id per action -> its .kfa file.
-    // (combat: also its combat idles from canims.csv, same set id.)
+    // (combat, a Catacombs figure: also its combat idles from canims.csv, same set id, and every swing; a creature only the
+    // one-handed swings and the reactions.)
     private Dictionary<string, string> ClipsOf(string[] monnif) => ClipsOf(monnif, combat: false);
 
     private Dictionary<string, string> ClipsOf(string[] monnif, bool combat)
@@ -236,6 +251,7 @@ public sealed class MonsterTables
         if (_anims.TryGetValue(set, out string[]? a))
         {
             Add(a, ClipColumns);
+            Add(a, [("run_flinch", RunFlinchColumn)]);
             // In water: each base clip's "Swim Alt" (animnifs.csv column 14), e.g. the human idle 329 -> 1739
             // "Underwater Swim Idle", run 381 -> 1847 "Atlantis Swim", backward 332 -> 1854 "Swim backwards".
             foreach ((string clip, int col) in SwimColumns)
@@ -244,8 +260,12 @@ public sealed class MonsterTables
                     && _animnifs.TryGetValue(swimId, out string[]? kfa) && kfa.Length > 2 && kfa[2].Trim().Length > 0)
                     clips[clip] = kfa[2].Trim();
         }
-        if (combat && _canims.TryGetValue(set, out string[]? c))
-            Add(c, CombatColumns);
+        if (_canims.TryGetValue(set, out string[]? c))
+        {
+            if (combat)
+                Add(c, CombatColumns);
+            Add(c, (combat ? CombatSlots : CreatureCombatSlots).Select(slot => ($"c{slot}", slot + 2)).ToArray());
+        }
         return clips;
     }
 

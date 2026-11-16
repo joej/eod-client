@@ -86,6 +86,34 @@ public sealed class CatacombsFigureTests
     }
 
     [Fact]
+    public void AFigureCarriesTheCombatClipsTheCombatPacketPlaysBySlot()
+    {
+        // canims.csv set 233 (slot = column - 2): Att Med 0, Flinch 3, Att 2H Med 8, Parry 1H H 32, Block H 41,
+        // Style 1HC 1 42 (not carried); anims.csv slot 76 (column 78) Run Flinch.
+        var anims = Enumerable.Repeat("", 79).ToArray();
+        (anims[0], anims[1], anims[10], anims[78]) = ("233", "Cata Briton Male", "2630", "2700");
+        var canims = Enumerable.Repeat("", 45).ToArray();
+        (canims[0], canims[1], canims[2], canims[5], canims[10], canims[34], canims[43], canims[44])
+            = ("233", "Cata Briton Male", "384", "385", "354", "439", "447", "423");
+        const string animnifs = "id\nID,name,file\n2630,Idle,Cat_I_H.kfa\n2700,Run flinch,Cat_RunFlinch.kfa\n384,Att,a_h_1s_med.kfa\n"
+                + "385,Flinch,flinch.kfa\n354,Att 2H,a_h_2h_med.kfa\n439,Parry,parry_h.kfa\n447,Block,block_h.kfa\n423,Style,style.kfa";
+        MonsterTables tables = Tables("x,,0\nID,name,Walk\n" + string.Join(',', anims), animnifs)
+            .WithCombatClips("x,,0\nID,name,Att Med\n" + string.Join(',', canims));
+        var shared = new Dictionary<string, string>
+        {
+            ["idle"] = "Cat_I_H.kfa", ["run_flinch"] = "Cat_RunFlinch.kfa", ["c0"] = "a_h_1s_med.kfa", ["c3"] = "flinch.kfa",
+            ["c32"] = "parry_h.kfa", ["c41"] = "block_h.kfa",
+        };
+        // A Catacombs figure (a player's race) carries every weapon's swings; a creature only the one-handed ones.
+        Assert.Equal(new Dictionary<string, string>(shared) { ["c8"] = "a_h_2h_med.kfa" }, tables.ResolveCatacombs(32)!.Clips);
+        MonsterTables creature = MonsterTables.Parse("x,,NIF\nID,name,#\n40,Creature,582" + new string(',', 9),
+                "x,,NIF\nID,Textual Name,Name\n582,Creature,bri_m,233", "x\nID,name,Skin",
+                "x,,0\nID,name,Walk\n" + string.Join(',', anims), animnifs)
+            .WithCombatClips("x,,0\nID,name,Att Med\n" + string.Join(',', canims));
+        Assert.Equal(shared, creature.Resolve(40)!.Clips);
+    }
+
+    [Fact]
     public void ACatacombsFigureCarriesItsSitClips()
     {
         // anims.csv: Sit Down (column 21) and Sit Idle (22), played while the quit timer runs; Stand Up (23) isn't used.

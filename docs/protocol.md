@@ -749,6 +749,39 @@ low 3 bits.
 *Verified live (2026-11-05):* our own 0x74 on and off. Other players' bit is from the server's writer,
 not yet seen with a second player.
 
+## Combat
+
+**S→C 0xBC CombatAnimation** (`PacketLib186.SendCombatAnimation`), 14 bytes, one per swing to everyone in view:
+
+```
+u16 BE attacker id       0: none (a bleed), or out of range / unseen by the defender
+u16 BE defender id
+u16 BE weapon model      the attacker's (an objects.csv id); 0 for creatures and spells
+u16 BE shield model      the defender's; the retail client doesn't read it
+u16 LE style             a style id 1-15999, or a code: 0x3E81 left hand, 0x3E82 both hands (dual wield),
+                         0x3E80 / 0x3E86 ranged prepare, 0x3E83 / 0x3E87 ranged shoot
+u8 time                  ranged only, 100 ms units (the arrow's flight)
+u8 result                0 miss, 1 parry, 2 block, 3 evade, 4 fumble, 0x0A hit, 0x0B styled hit;
+                         0x14 a hit with no swing (traps, area abilities, siege)
+u8 defender health %
+u8 0
+```
+
+The style is the one little-endian field. What the client draws from it:
+
+- **The attacker's swing:** none without an attacker or for 0x14. Our own swing shows only when the defender is our current target.
+- **The swing's clip:** the attacker's weapon picks a set of three swings, and the client chooses one of the three at random. A style plays its own clip instead.
+- **The defender's reaction, about 400 ms later:**
+  - a parry, block or evade, chosen by the defender's own weapon;
+  - a flinch on a hit (0x0A and up).
+- **Health:** the defender's health % refreshes its target window.
+- **Being hit with no target:** the attacker becomes your target.
+- **Death** comes from the death packets, not from 0xBC.
+
+*Verified live (2026-11-16):* a level 20 Armsman against a putrid zombie: our sword (weapon model 3) and the zombie's bare swings
+(model 0), results 0 miss, 1 parry, 3 evade and 0x0A hit, style 0, and the defender's health falling with each hit (83% to
+15%). A player must face its target: otherwise the server answers "The putrid zombie is not in view!" and sends no 0xBC.
+
 ## Logging out
 
 Closing the socket while "playing" makes the character link-dead: it stays in the world for 60 s
@@ -826,7 +859,7 @@ already reads to find the sender; war-map relic bits.
 | Login | `Packets/LoginPackets.cs` | `LoginPacketTests` |
 | Character screen | `Packets/CharacterPackets.cs` | `CharacterPacketTests`, `CharacterCreateTests` |
 | World, keep-alive, server moves, logout | `Packets/WorldPackets.cs`, `World/Zones.cs` | `WorldPacketTests` |
-| Attack mode, other players' moves | `Packets/CombatPackets.cs`, `Packets/WorldEntityPackets.cs` | `CombatPacketTests` |
+| Attack mode, swings, other players' moves | `Packets/CombatPackets.cs`, `Packets/WorldEntityPackets.cs` | `CombatPacketTests` |
 | Groups, dialogs | `Packets/GroupPackets.cs`, `World/GroupState.cs` | `GroupPacketTests` |
 | Item, spell and style details | `Packets/DetailPackets.cs`, `World/ItemInfo.cs`, `World/DelveText.cs`, `World/DelveCache.cs` | `DetailPacketTests`, `DelveTests` |
 | Session flow | `Session/ClientSession.cs`, `Net/DaocConnection.cs` | `ClientSessionTests` (against a fake server replaying recorded replies) |

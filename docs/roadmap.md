@@ -509,7 +509,10 @@ with its own sound, intro movie and pregame screens, then the better-looking ver
 - Interpret combat packets (attack/animation/damage/death) so fights are visible; send basic combat
   actions.
   Targeting keys done 2026-11-15, as retail's: Target Enemy (Tab), Target Friend, Consider and the group keys, with
-  our dev keys moved off retail's onto F9/F12. Last Attacker waits for the attack packets.
+  our dev keys moved off retail's onto F9/F12.
+  Swings and hit reactions done 2026-11-16 (0xBC): the attacker's swing for its weapon, the defender's parry, block, evade
+  or flinch 400 ms later, the target's health, and Last Attacker (Shift+Tab). Still to come: style and ranged clips, hit
+  sounds.
 - Parse inventory and equipment; show the character's items; equip/move within the 1.65 ruleset.
 - **Emotes and postures** (owner, 2026-11-13): read 0xF9 and play the emote's clip once on the figure (`emotes.csv`
   → `anims.csv`: 63 emote clips, per race, classic and Catacombs), then back to idle; ignored while the figure moves

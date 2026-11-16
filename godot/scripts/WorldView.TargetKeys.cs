@@ -4,8 +4,8 @@
 // 43, 45-52): Target Enemy (Tab) and Target Friend (Ctrl+Tab in RPG/MMO, backtick in FPS) pick the nearest candidate in
 // line of sight within a horizontal range, and the same key again within 1.5 s steps to the next farther one; Consider
 // (F6 in RPG) asks the server to examine the target again; the group keys (F1-F4, Shift+F1-F4 in RPG) target that member.
-// Not here yet: Last Attacker (Shift+Tab) waits for the attack packets, Target Object and Nearest Loot for pickable
-// ground objects.
+// Last Attacker (Shift+Tab) is in WorldView.Combat. Not here yet: Target Object and Nearest Loot (they wait for pickable
+// ground objects).
 
 using System.Collections.Generic;
 using DaocProtocol.Packets;
@@ -34,6 +34,8 @@ public partial class WorldView
             TargetNearest(ControlAction.TargetFriend);
         else if (KeyBindings.Pressed(e, ControlAction.Consider))
             Consider();
+        else if (KeyBindings.Pressed(e, ControlAction.LastAttacker))
+            TargetLastAttacker();
         else
         {
             for (ControlAction a = ControlAction.TargetGroup1; a <= ControlAction.TargetGroup8; a++)

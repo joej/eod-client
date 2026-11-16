@@ -108,6 +108,9 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
     /// <summary>The skills and spell lines as last sent in full.</summary>
     public SkillBook Skills { get; } = new();
 
+    /// <summary>A swing or a hit (0xBC): who attacked whom, with what, and how it went.</summary>
+    public event Action<CombatAnimation>? CombatAnimated;
+
     /// <summary>A player died (0xAE): us or one in view.</summary>
     public event Action<PlayerDied>? PlayerDied;
 
@@ -274,6 +277,9 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
                     break;
                 case DaocProtocol.Packets.PlayerRevived.Code:
                     PlayerRevived?.Invoke(DaocProtocol.Packets.PlayerRevived.Parse(packet.Payload));
+                    break;
+                case CombatAnimation.Code:
+                    CombatAnimated?.Invoke(CombatAnimation.Parse(packet.Payload));
                     break;
                 case TimerWindow.Code:
                     TimerChanged?.Invoke(TimerWindow.Parse(packet.Payload));
