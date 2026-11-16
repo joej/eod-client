@@ -56,7 +56,7 @@ internal static partial class Cli
                      ("ui/fonts/minionpro-bold.ttf", "minionpro-bold.ttf") })
             if (FindInstallFile(client, from) is string file)
             {
-                File.Copy(file, Path.Combine(outDir, to), overwrite: true);
+                DaocAssets.InstallFiles.Copy(file, Path.Combine(outDir, to), overwrite: true);
                 copied++;
             }
             else

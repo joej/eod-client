@@ -65,7 +65,7 @@ public static class ZoneExport
             }
             // Its fixed coloured lights (torches, fires, lamps), coloured and sized by the install's LIGHTDEF.CSV.
             if (zone.Text("lights.csv") is string lightRows && ZoneLights.FindDefinitions(zoneDatMpk) is string defs)
-                lights = ZoneLights.Parse(lightRows, ZoneLights.ParseDefinitions(File.ReadAllText(defs, Encoding.Latin1)), offsetX, offsetY);
+                lights = ZoneLights.Parse(lightRows, ZoneLights.ParseDefinitions(DaocAssets.InstallFiles.ReadAllText(defs, Encoding.Latin1)), offsetX, offsetY);
             if (zone.Text("zonejump.csv") is string csv)
             {
                 jumpPoints = ZoneJumps.Parse(csv, offsetX, offsetY);

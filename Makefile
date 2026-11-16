@@ -230,6 +230,18 @@ check-zones: zones
 	@! grep -q '^| [0-9].*: [1-9][0-9]* error(s)' $(ZONEDIR)/summary.md || \
 	  { grep '^| [0-9].*: [1-9][0-9]* error(s)' $(ZONEDIR)/summary.md >&2; echo "zone checks found errors" >&2; exit 1; }
 
+# --- usage: install files a full conversion never opens ----------------------------------------------
+# Converts everything again into a scratch library and zones folder with every read logged (DAOC_FILE_LOG,
+# InstallFiles), then lists the install against the log: what is never opened, grouped, each group either
+# explained in tools/usage-known.txt or listed for review. Slow (a full conversion); the scratch folder is removed.
+USAGE := $(BUILD)/usage
+.PHONY: usage
+usage: | $(TOOL)
+	rm -rf $(USAGE) && mkdir -p $(USAGE)
+	DAOC_FILE_LOG=$(abspath $(USAGE))/opened.tsv $(MAKE) zones LIB=$(USAGE)/library ZONEDIR=$(USAGE)/zones > $(USAGE)/make.log
+	$(MPK) usage "$(CLIENT)" --log $(USAGE)/opened.tsv --known tools/usage-known.txt --out $(PRIV)/audit/usage.md
+	rm -rf $(USAGE)/library $(USAGE)/zones
+
 # --- cleaning ----------------------------------------------------------------------------------------
 .PHONY: clean clean-library help list
 clean-zone%:

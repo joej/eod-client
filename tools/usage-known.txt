@@ -1,0 +1,66 @@
+# Install files a full conversion never opens, by group (mpk usage, make usage): "pattern<TAB>why".
+# A pattern is a group as the report prints it (lower case, digit runs as #), * for any characters. Explain a group here
+# only once it is understood: what it is, and the milestone that will use it or why it never matters. See
+# docs/world-coverage.md ("Outside the zones") for most of these.
+*lod#.mpk : *	distant-terrain textures: our terrain uses the near tiles throughout (docs/world-coverage.md)
+*.nhd	rain and snow cover grids per model, not walk heights (docs/world-coverage.md; M12 weather)
+*zone#/*.dat	a zone's ambient sound regions (docs/sound.md; M12)
+sounds/*	sound effects and music (docs/sound.md; M12)
+tutorial/sounds/*	the tutorial's sounds (docs/sound.md; M12)
+effects/*	spell and other effect models and textures (M12)
+frontiers/*	New Frontiers RvR zones, keeps and towers: not converted yet (docs/world-coverage.md, "further out")
+phousing/*	housing zones and house models: not converted yet (docs/world-coverage.md, "further out")
+zones/dnifs/*	dungeon pieces and their textures (roadmap M11, dungeons)
+zones/zone#/dat#.mpk : *.chunk	a dungeon's piece list (M11)
+zones/zone#/dat#.mpk : *.place	a dungeon's piece placements (M11)
+zones/zone#/dat#.mpk : *.prop	a dungeon's props (M11)
+zones/zone#/dat#.mpk : *.water	a dungeon's water planes (M11)
+ui/*	the interface's XML layouts and art: the HUD is built in code from them by hand, not converted (M9 UI direction)
+pregame/*	the login and character-creation screens' art (character screen, later)
+data/*	interface skins and login art (M9 UI direction, character screen)
+*.dll	the Windows client's own libraries
+*.exe	the Windows client, launchers and patcher
+*.dll	the Windows client's own libraries
+*.pdb	launcher debug symbols
+*.xml	launcher library documentation (at the install's top level)
+*.config	launcher settings
+*.manifest	launcher manifest
+*.zip	a launcher download
+*.bat	a launcher script
+*.cfg	patcher and test-client settings
+*.url	web links
+*.bin	the client's binary data (camelot.bin, camtest.bin)
+*.myp	patcher manifests
+*.asi	the sound library's MP3 decoder
+miles/*	the sound library's plug-ins (M12 is our own audio)
+*.pdf	the user manual
+*.rtf	terms of service
+*.html	the help page
+*.log	logs
+logs/*	launcher and patcher logs
+notes/*	patch notes
+patcher/*	the patcher's splash screen
+movie/*	intro movies (Bink) and their player
+*.txt	server rule texts shown by the launchers
+*.ini	retail's default settings per screen size (our client has its own settings)
+light/*	legacy palette and translucency tables, not referenced by the client (docs/world-coverage.md)
+charman/*	the random name generator and old character-creation texts (docs/world-coverage.md; character screen)
+shaders/*	a shader a model material can name (docs/world-coverage.md; M13)
+stylemap/*	weapon swing trails, blob shadow, ground-target ring, a cloak template (docs/world-coverage.md; M10)
+water/*	the shader water's parts (docs/world-coverage.md)
+zones/trees/*	SpeedTree trees and treemap.csv (open question W5; M13)
+zones/textures/grass*	the regions' grass (docs/world-coverage.md; M13)
+zones/textures/*.csv	the regions' grass tables (docs/world-coverage.md; M13)
+fonts/*	retail's bitmap fonts; our interface uses its own (M9)
+icons/*.cur	mouse cursors
+icons/classic/*	the old icon set (user.dat ClassicIcons; docs/world-coverage.md)
+tutorial/zones/zone#/lod#.mpk : *	distant-terrain textures (as lod#.mpk above)
+zones/zone#/csv#.mpk : *.water	a dungeon's water planes (M11)
+zones/zone#/csv#.mpk (unreadable archive)	csv archives our reader rejects (docs/world-coverage.md, "Reader robustness")
+zones/zone#/dat#.mpk : *.log	developer leftovers (portals.log)
+zones/zone#/dat#.mpk : *.old	developer leftovers (fixtures.old, nifs.old)
+zones/zone#/dat#.mpk : *.xls	developer leftovers (city.xls)
+zones/terraintex/*.db	Windows thumbnail cache
+tutorial/zones/zone#/dat#.mpk : *.csv	the zone's csv archive holds the same files and is read first, as the client does (ZoneArchive)
+zones/terraintex/*.tga	grass placement maps (grassmap, grassmapB, grassmapW; M13 grass)
+zones/terraintex/*.pcx	a grass placement map (grassmap.pcx; M13 grass)

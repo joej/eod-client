@@ -23,17 +23,17 @@ internal static partial class Cli
         Dictionary<int, string> sheets = DaocAssets.Ui.IconSheets.Index(Directory.EnumerateFiles(source));
         Directory.CreateDirectory(outDir);
         foreach (string sheet in sheets.Values)
-            File.Copy(Path.Combine(source, sheet), Path.Combine(outDir, sheet.ToLowerInvariant()), overwrite: true);
+            DaocAssets.InstallFiles.Copy(Path.Combine(source, sheet), Path.Combine(outDir, sheet.ToLowerInvariant()), overwrite: true);
         // The border frames laid over some icons (icons.csv borderId) and the style marks over those (wgsm_0: 13 cells
         // of 10 x 10, daoc-re RE/68).
         foreach (string extra in new[] { "brdr_0.bmp", "wgsm_0.bmp" })
             if (Directory.EnumerateFiles(source).FirstOrDefault(f => Path.GetFileName(f).Equals(extra, StringComparison.OrdinalIgnoreCase)) is string file)
-                File.Copy(file, Path.Combine(outDir, extra), overwrite: true);
+                DaocAssets.InstallFiles.Copy(file, Path.Combine(outDir, extra), overwrite: true);
         // The compass strip (ui/atlantis/compass.bmp, the stock skin's: 512 x 32 for 360°, daoc-re RE/74).
         string? ui = Directory.EnumerateDirectories(client).FirstOrDefault(d => Path.GetFileName(d).Equals("ui", StringComparison.OrdinalIgnoreCase));
         string? skin = ui is null ? null : Directory.EnumerateDirectories(ui).FirstOrDefault(d => Path.GetFileName(d).Equals("atlantis", StringComparison.OrdinalIgnoreCase));
         if (skin is not null && Directory.EnumerateFiles(skin).FirstOrDefault(f => Path.GetFileName(f).Equals("compass.bmp", StringComparison.OrdinalIgnoreCase)) is string compass)
-            File.Copy(compass, Path.Combine(outDir, "compass.bmp"), overwrite: true);
+            DaocAssets.InstallFiles.Copy(compass, Path.Combine(outDir, "compass.bmp"), overwrite: true);
         // From the server's number to a picture: icons.csv, spells.csv, styles.csv, objects.csv (DaocAssets.Ui.IconTable).
         if (FindInstallFile(client, "gamedata.mpk") is not string gamedata)
         {
@@ -43,10 +43,10 @@ internal static partial class Cli
         using (var mpk = DaocAssets.Mpk.MpkArchive.Open(gamedata))
             foreach (string table in new[] { "icons.csv", "spells.csv", "styles.csv", "objects.csv" })
                 File.WriteAllBytes(Path.Combine(outDir, table), mpk.Extract(table));
-        var lookup = DaocAssets.Ui.IconTable.Parse(File.ReadAllText(Path.Combine(outDir, "icons.csv"), System.Text.Encoding.Latin1),
-            File.ReadAllText(Path.Combine(outDir, "spells.csv"), System.Text.Encoding.Latin1),
-            File.ReadAllText(Path.Combine(outDir, "styles.csv"), System.Text.Encoding.Latin1),
-            File.ReadAllText(Path.Combine(outDir, "objects.csv"), System.Text.Encoding.Latin1));
+        var lookup = DaocAssets.Ui.IconTable.Parse(DaocAssets.InstallFiles.ReadAllText(Path.Combine(outDir, "icons.csv"), System.Text.Encoding.Latin1),
+            DaocAssets.InstallFiles.ReadAllText(Path.Combine(outDir, "spells.csv"), System.Text.Encoding.Latin1),
+            DaocAssets.InstallFiles.ReadAllText(Path.Combine(outDir, "styles.csv"), System.Text.Encoding.Latin1),
+            DaocAssets.InstallFiles.ReadAllText(Path.Combine(outDir, "objects.csv"), System.Text.Encoding.Latin1));
         Console.WriteLine($"icons: {sheets.Count} sheets (icons {string.Join(", ", sheets.Keys.Order().Select(k => $"{k}–{k + 99}"))}); " +
                           $"{lookup.Count} icon ids, {lookup.ItemCount} item models");
         return sheets.Count > 0 ? 0 : 2;

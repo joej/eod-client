@@ -32,12 +32,12 @@ internal static partial class Cli
         string animNode = Path.Combine(install, "figures", "animnode.dat");
         if (File.Exists(animNode))
         {
-            string[] boneNames = File.ReadAllLines(animNode, System.Text.Encoding.Latin1).Select(l => l.Trim()).ToArray();
+            string[] boneNames = DaocAssets.InstallFiles.ReadAllLines(animNode, System.Text.Encoding.Latin1).Select(l => l.Trim()).ToArray();
             foreach ((string clip, string kfa) in spec.Clips)
             {
                 string? path = Directory.EnumerateFiles(Path.Combine(install, "anims"))
                     .FirstOrDefault(f => string.Equals(Path.GetFileName(f), kfa, StringComparison.OrdinalIgnoreCase));
-                try { if (path is not null) clips[clip] = KfaClip.Read(File.ReadAllBytes(path), boneNames); }
+                try { if (path is not null) clips[clip] = KfaClip.Read(DaocAssets.InstallFiles.ReadAllBytes(path), boneNames); }
                 catch (NifFormatException e) { Console.Error.WriteLine($"  clip {clip} ({kfa}): {e.Message}"); }
             }
         }
@@ -63,7 +63,7 @@ internal static partial class Cli
         string install = Path.GetDirectoryName(Path.GetFullPath(gamedata))!;
         string animNode = Path.Combine(install, "figures", "animnode.dat");
         string[] boneNames = File.Exists(animNode)
-            ? File.ReadAllLines(animNode, System.Text.Encoding.Latin1).Select(l => l.Trim()).ToArray() : [];
+            ? DaocAssets.InstallFiles.ReadAllLines(animNode, System.Text.Encoding.Latin1).Select(l => l.Trim()).ToArray() : [];
         var animFiles = Directory.Exists(Path.Combine(install, "anims"))
             ? Directory.EnumerateFiles(Path.Combine(install, "anims")).ToDictionary(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -92,7 +92,7 @@ internal static partial class Cli
             {
                 if (!clipCache.TryGetValue(kfa, out KfaClip? k))
                 {
-                    try { k = animFiles.TryGetValue(kfa, out string? path) ? KfaClip.Read(File.ReadAllBytes(path), boneNames) : null; }
+                    try { k = animFiles.TryGetValue(kfa, out string? path) ? KfaClip.Read(DaocAssets.InstallFiles.ReadAllBytes(path), boneNames) : null; }
                     catch (NifFormatException) { k = null; }
                     clipCache[kfa] = k;
                 }

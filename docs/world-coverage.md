@@ -93,6 +93,21 @@ From `SECTOR.DAT` (375 zones have one) and the data archives. Numbers are zones 
 | `Tutorial/` | the tutorial, region 27 (`zones.dat` `tutorial=1`): zones 27-29 with their own models, textures and `sounds.dat`; the client loads them from here (zone 27 also has an older copy in `zones/`) | **read** (2026-11-08): nine same-name files differ from `zones/Nifs`, so they convert into the library's `tutorial` scope |
 | `Newtowns/zones/Nifs` | seven replacement zone models (border keeps, the Camelot wall, a teleporter, a demon portal); when the folder exists the client loads a zone model from it first, by name (`docs/sound.md`) | **read** (2026-11-08): the index prefers it |
 
+## Files the converter never opens
+
+The tables above start from files we know about. `make usage` checks the other way round (added 2026-11-16, after the
+model patch files, `<name>_p00.nif`, turned out to be read by nothing: the client finds them by name, so no reference
+leads to them). It converts everything again with every read logged (`DAOC_FILE_LOG`, `InstallFiles`), then lists the
+whole install, archive members included, against the log (`mpk usage`, report in `private/audit/usage.md`). What was
+never opened is grouped by folder and extension. A group nothing at all is opened from must be explained in
+`tools/usage-known.txt` (what it is, and the milestone that will use it or why it never matters); a group partly opened
+is listed for information. Rerun it when the converter starts or stops reading a kind of file.
+
+First run (2026-11-16): 25,837 loose files and 55,126 archive members; 8,305 and 25,419 opened. Of the 250 groups never
+or partly opened, 195 are explained, 36 partly opened, and 19 were sent to daoc-re to place (snow maps, ambient
+bird/butterfly models, `.ifl`/`.uvw` files, skin bump and gloss maps, and five city patch archives whose model is named
+`statue.nif` rather than `<piece>_p00.nif`).
+
 ## Reader robustness
 
 Two zone archives fail in our MPK reader: one is truncated, and one has a duplicate member name

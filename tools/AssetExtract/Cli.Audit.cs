@@ -25,7 +25,7 @@ internal static partial class Cli
             string folder = rel.Contains(Path.DirectorySeparatorChar) ? rel[..rel.IndexOf(Path.DirectorySeparatorChar)] : "(root)";
             if (Path.GetExtension(path).ToLowerInvariant() is ".nif" or ".kfa")
             {
-                Survey(audit, folder, rel, () => File.ReadAllBytes(path));
+                Survey(audit, folder, rel, () => DaocAssets.InstallFiles.ReadAllBytes(path));
             }
             else
             {

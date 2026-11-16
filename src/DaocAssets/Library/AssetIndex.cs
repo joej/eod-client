@@ -174,7 +174,7 @@ public sealed class AssetIndex
     private static byte[]? ReadAt(AssetLocation loc)
     {
         if (loc.LoosePath is not null)
-            return File.Exists(loc.LoosePath) ? File.ReadAllBytes(loc.LoosePath) : null;
+            return File.Exists(loc.LoosePath) ? DaocAssets.InstallFiles.ReadAllBytes(loc.LoosePath) : null;
         if (loc.Archive is not null && loc.Member is not null && File.Exists(loc.Archive))
         {
             using MpkArchive mpk = MpkArchive.Open(loc.Archive);
@@ -190,7 +190,7 @@ public sealed class AssetIndex
         if (!_byName.TryGetValue(KeyFromAny(name), out AssetLocation loc))
             return null;
         if (loc.LoosePath is not null)
-            return File.Exists(loc.LoosePath) ? File.ReadAllBytes(loc.LoosePath) : null;
+            return File.Exists(loc.LoosePath) ? DaocAssets.InstallFiles.ReadAllBytes(loc.LoosePath) : null;
         if (loc.Archive is not null && loc.Member is not null && File.Exists(loc.Archive))
         {
             using MpkArchive mpk = MpkArchive.Open(loc.Archive);
@@ -296,7 +296,7 @@ public sealed class AssetIndex
 
     public static AssetIndex Load(string path)
     {
-        IndexDto dto = JsonSerializer.Deserialize<IndexDto>(File.ReadAllText(path), JsonOpts)
+        IndexDto dto = JsonSerializer.Deserialize<IndexDto>(DaocAssets.InstallFiles.ReadAllText(path), JsonOpts)
             ?? throw new InvalidDataException($"Empty or invalid index: {path}");
         var map = dto.Entries.ToDictionary(
             kv => kv.Key,

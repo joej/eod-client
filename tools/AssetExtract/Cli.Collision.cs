@@ -21,7 +21,7 @@ internal static partial class Cli
         // Placements per model, across all zones.
         var placed = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (string csv in Directory.EnumerateFiles(zonesDir, "zone.csv", SearchOption.AllDirectories))
-            foreach (string line in File.ReadLines(csv).Skip(1))
+            foreach (string line in DaocAssets.InstallFiles.ReadLines(csv).Skip(1))
             {
                 string glb = line.Split(',')[0];
                 string stem = Path.GetFileNameWithoutExtension(glb[(glb.LastIndexOf('/') + 1)..]);

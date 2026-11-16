@@ -234,7 +234,7 @@ internal static partial class Cli
                     if (!File.Exists(dest) || new FileInfo(dest).Length != new FileInfo(file).Length)
                     {
                         Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-                        File.Copy(file, dest, overwrite: true);
+                        DaocAssets.InstallFiles.Copy(file, dest, overwrite: true);
                     }
                     break;
                 }
@@ -311,7 +311,7 @@ internal static partial class Cli
         DaocAssets.Zone.ZoneTerrain? terrain;
         using (var dat = DaocAssets.Mpk.MpkArchive.Open(datMpk))
             terrain = DaocAssets.Zone.ZoneLayout.IsCity(dat) ? null : DaocAssets.Zone.ZoneTerrain.Read(datMpk, zoneSize.X, zoneSize.Y);
-        var placements = DaocAssets.Zone.ZoneCheck.ReadManifest(File.ReadAllText(Path.Combine(zoneDir, "zone.csv")));
+        var placements = DaocAssets.Zone.ZoneCheck.ReadManifest(DaocAssets.InstallFiles.ReadAllText(Path.Combine(zoneDir, "zone.csv")));
         var cache = new Dictionary<string, DaocAssets.Zone.ModelBounds?>(StringComparer.OrdinalIgnoreCase);
         DaocAssets.Zone.ModelBounds? Bounds(string glb)
         {
@@ -324,7 +324,7 @@ internal static partial class Cli
             terrain is null ? null : (x, y) => terrain.HeightAt(x - offX, y - offY), Bounds,
             offX, offY, zoneSize.X * 8192, zoneSize.Y * 8192);
         if (knownPath is not null)
-            report = DaocAssets.Zone.ZoneCheck.ApplyKnown(report, DaocAssets.Zone.ZoneCheck.ReadKnown(File.ReadAllText(knownPath)));
+            report = DaocAssets.Zone.ZoneCheck.ApplyKnown(report, DaocAssets.Zone.ZoneCheck.ReadKnown(DaocAssets.InstallFiles.ReadAllText(knownPath)));
         Console.WriteLine($"Zone check: {report.Summary()}");
         if (outPath is not null)
         {

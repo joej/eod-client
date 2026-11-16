@@ -48,7 +48,7 @@ public sealed class TextureResolver
     /// <summary>Texture file names referenced by a .nif model (deduplicated, case-insensitive).</summary>
     public static IReadOnlyList<string> TextureNames(string nifPath)
     {
-        NifModel model = NifFile.Read(File.ReadAllBytes(nifPath));
+        NifModel model = NifFile.Read(DaocAssets.InstallFiles.ReadAllBytes(nifPath));
         var names = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (NifMesh mesh in model.Meshes)
@@ -72,7 +72,7 @@ public sealed class TextureResolver
         // differs in case, and on a case-sensitive file system only the real name is found again.
         if (LooseByName.TryGetValue(bare.ToLowerInvariant(), out string? loose))
         {
-            File.Copy(loose, Path.Combine(outDir, Path.GetFileName(loose)), overwrite: true);
+            DaocAssets.InstallFiles.Copy(loose, Path.Combine(outDir, Path.GetFileName(loose)), overwrite: true);
             return new TextureResult(bare, TextureSource.Loose, loose);
         }
 

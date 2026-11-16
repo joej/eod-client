@@ -22,7 +22,7 @@ internal sealed class CataConverter : IDisposable
         string install = Path.GetDirectoryName(Path.GetFullPath(gamedata))!;
         _fig3 = Path.Combine(install, "figures", "fig3");
         string animNode = Path.Combine(install, "figures", "animnode.dat");
-        _boneNames = File.Exists(animNode) ? File.ReadAllLines(animNode, System.Text.Encoding.Latin1).Select(l => l.Trim()).ToArray() : [];
+        _boneNames = File.Exists(animNode) ? DaocAssets.InstallFiles.ReadAllLines(animNode, System.Text.Encoding.Latin1).Select(l => l.Trim()).ToArray() : [];
         _animFiles = Directory.Exists(Path.Combine(install, "anims"))
             ? Directory.EnumerateFiles(Path.Combine(install, "anims")).ToDictionary(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -68,7 +68,7 @@ internal sealed class CataConverter : IDisposable
             {
                 if (!_clips.TryGetValue(kfa, out KfaClip? k))
                 {
-                    try { k = _animFiles.TryGetValue(kfa, out string? path) ? KfaClip.Read(File.ReadAllBytes(path), _boneNames) : null; }
+                    try { k = _animFiles.TryGetValue(kfa, out string? path) ? KfaClip.Read(DaocAssets.InstallFiles.ReadAllBytes(path), _boneNames) : null; }
                     catch (NifFormatException) { k = null; }
                     _clips[kfa] = k;
                 }
@@ -103,9 +103,9 @@ internal sealed class CataConverter : IDisposable
         var rows = new SortedDictionary<int, string>();
         var entries = new SortedDictionary<int, System.Text.Json.Nodes.JsonNode?>();
         if (merge && File.Exists(csvPath))
-            foreach (string line in File.ReadAllLines(csvPath).Skip(1))
+            foreach (string line in DaocAssets.InstallFiles.ReadAllLines(csvPath).Skip(1))
                 if (int.TryParse(line.Split(',')[0], out int id)) rows[id] = line;
-        if (merge && File.Exists(jsonPath) && System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(jsonPath)) is System.Text.Json.Nodes.JsonObject old)
+        if (merge && File.Exists(jsonPath) && System.Text.Json.Nodes.JsonNode.Parse(DaocAssets.InstallFiles.ReadAllText(jsonPath)) is System.Text.Json.Nodes.JsonObject old)
             foreach (var kv in old)
                 if (int.TryParse(kv.Key, out int id)) entries[id] = kv.Value?.DeepClone();
         foreach ((int id, DaocAssets.Figures.CataSpec spec) in models)

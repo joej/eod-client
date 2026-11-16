@@ -8,14 +8,14 @@ internal static partial class Cli
     // skinned or not, helper), the skeleton, and for skinned 10.1 files the bind-pose check.
     private static int NifInfo(string nifPath)
     {
-        byte[] bytes = File.ReadAllBytes(nifPath);
+        byte[] bytes = DaocAssets.InstallFiles.ReadAllBytes(nifPath);
         try
         {
             // Its patch files beside it (<stem>_p00.nif, …, stopping at the first gap), merged as the client does.
             var patches = new List<byte[]>();
             string stem = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(nifPath))!, Path.GetFileNameWithoutExtension(nifPath));
             for (int n = 0; n < 10 && File.Exists($"{stem}_p{n:00}.nif"); n++)
-                patches.Add(File.ReadAllBytes($"{stem}_p{n:00}.nif"));
+                patches.Add(DaocAssets.InstallFiles.ReadAllBytes($"{stem}_p{n:00}.nif"));
             foreach ((NifPatchEffect e, int n) in NifFile.DescribePatches(bytes, patches).Select((e, n) => (e, n)))
                 Console.WriteLine($"patch _p{n:00}: {e.Kind} into {string.Join("; ", e.Targets)}; replaces [{string.Join(", ", e.Replaced)}]" +
                     $", adds [{string.Join(", ", e.Added)}]{(e.Error is null ? "" : " " + e.Error)}");
@@ -66,13 +66,13 @@ internal static partial class Cli
 
         try
         {
-            NifModel model = NifFile.Read(File.ReadAllBytes(nifPath));
+            NifModel model = NifFile.Read(DaocAssets.InstallFiles.ReadAllBytes(nifPath));
             GltfExporter.SaveGlb(model, outPath);
             int verts = model.Meshes.Sum(m => m.Vertices.Length);
             int tris = model.Meshes.Sum(m => m.Triangles.Length);
             Console.WriteLine($"Converted NIF {model.Version}: {model.Meshes.Count} mesh(es), " +
                 $"{verts} verts, {tris} tris -> {Path.GetFullPath(outPath)}");
-            WarnDropped(File.ReadAllBytes(nifPath));
+            WarnDropped(DaocAssets.InstallFiles.ReadAllBytes(nifPath));
             return 0;
         }
         catch (NifFormatException e)

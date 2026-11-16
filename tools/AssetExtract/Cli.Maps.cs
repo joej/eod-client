@@ -21,10 +21,10 @@ internal static partial class Cli
         int copied = 0;
         foreach (string file in Directory.EnumerateFiles(source))
         {
-            File.Copy(file, Path.Combine(outDir, Path.GetFileName(file).ToLowerInvariant()), overwrite: true);
+            DaocAssets.InstallFiles.Copy(file, Path.Combine(outDir, Path.GetFileName(file).ToLowerInvariant()), overwrite: true);
             copied++;
         }
-        var layout = DaocAssets.Zone.MapLayout.Parse(System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(regions)));
+        var layout = DaocAssets.Zone.MapLayout.Parse(System.Text.Encoding.Latin1.GetString(DaocAssets.InstallFiles.ReadAllBytes(regions)));
         Console.WriteLine($"maps: {copied} files; {layout.Count} region maps placing {layout.Sum(m => m.Zones.Count)} zones");
         return 0;
     }

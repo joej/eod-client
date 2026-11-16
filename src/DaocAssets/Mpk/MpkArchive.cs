@@ -49,6 +49,7 @@ public sealed class MpkArchive : IDisposable
     private readonly SafeFileHandleHolder? _file;
     private readonly byte[]? _data;
     private readonly long _dataStart;
+    private string? _path;   // the archive file, for InstallFiles' log
 
     private MpkArchive(MpkEntry[] entries, long dataStart, SafeFileHandleHolder? file, byte[]? data)
     {
@@ -99,8 +100,9 @@ public sealed class MpkArchive : IDisposable
             ReadExact(handle, dirComp, dirPos, "directory");
             MpkEntry[] entries = ParseDirectory(dirComp, dirCrc, count, length - dataStart);
 
-            var archive = new MpkArchive(entries, dataStart, new SafeFileHandleHolder(handle), data: null);
+            var archive = new MpkArchive(entries, dataStart, new SafeFileHandleHolder(handle), data: null) { _path = path };
             handle = null!; // ownership transferred
+            InstallFiles.Note(path);
             return archive;
         }
         finally
@@ -134,6 +136,8 @@ public sealed class MpkArchive : IDisposable
     public byte[] Extract(MpkEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
+        if (_path is not null)
+            InstallFiles.Note(_path, entry.Name);
         byte[] comp = new byte[entry.CompressedSize];
         long start = _dataStart + entry.CompressedOffset;
         if (_data is not null)
