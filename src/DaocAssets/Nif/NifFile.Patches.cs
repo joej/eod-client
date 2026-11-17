@@ -265,22 +265,22 @@ public static partial class NifFile
         public Dictionary<int, State> States(int? root, State parent)
         {
             var states = new Dictionary<int, State>();
-            void Visit(int i, State above)
+            void Visit(int i, State above, string aboveName)
             {
                 if (i < 0 || i >= Count || states.ContainsKey(i) || !IsNode(i))
                     return;
                 string name = Name(i);
-                var s = new State(Local(i) * above.World, above.Helper || IsHelperNodeName(name) || IsHidden(Flags(i)),
+                var s = new State(Local(i) * above.World, above.Helper || IsHelperNodeName(name) || IsHidden(Flags(i)) || IsDungeonHelper(aboveName, name),
                     above.Numbered || IsNumberedHelperName(name), above.Collision || IsCollisionName(name));
                 states[i] = s;
                 int[] children = Type(i) != "NiLODNode" ? Children(i)
                     : _b4 is not null ? SelectLodChildren(_b4, _b4[i]) : new Gb10Builder(_g!.Blocks!).NearLevel(_g.Blocks[i]!);
                 foreach (int c in children)
-                    Visit(c, s);
+                    Visit(c, s, name);
             }
             State top = root is null ? new State(Matrix4x4.Identity, false, false, false) : parent;
             foreach (int r in root is int one ? [one] : Roots)
-                Visit(r, top);
+                Visit(r, top, "");
             return states;
         }
 

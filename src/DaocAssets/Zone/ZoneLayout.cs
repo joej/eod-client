@@ -125,9 +125,12 @@ public sealed class ZoneLayout
     /// <summary>Where a capital city's pieces go, in region coordinates (they are turned 180°): see <see cref="ParseCity"/>.</summary>
     public static readonly (float X, float Y, float Z) CityOrigin = (32000, 32000, 8000);
 
-    /// <summary>The layout in a zone's data archive: <c>city.csv</c> for a city, else <c>nifs.csv</c> + <c>fixtures.csv</c>.</summary>
+    /// <summary>The layout in a zone's data archive: <c>city.csv</c> for a city, a dungeon's rooms and props
+    /// (<see cref="DungeonLayout"/>), else <c>nifs.csv</c> + <c>fixtures.csv</c>.</summary>
     public static ZoneLayout Read(Mpk.MpkArchive dat, int offsetX, int offsetY)
     {
+        if (DungeonLayout.IsDungeon(dat))
+            return DungeonLayout.Read(dat).ToZoneLayout();
         if (dat.TryGetEntry("city.csv", out Mpk.MpkEntry city))
             return ParseCity(System.Text.Encoding.Latin1.GetString(dat.Extract(city)), offsetX, offsetY);
         return Parse(Member(dat, "nifs.csv"), Member(dat, "fixtures.csv"), offsetX, offsetY);
@@ -138,7 +141,7 @@ public sealed class ZoneLayout
     /// from the csv archive when it has them (they must come from one archive: the fixtures index the model list).
     /// </summary>
     public static ZoneLayout Read(ZoneArchive zone, int offsetX, int offsetY) =>
-        IsCity(zone.Dat) ? Read(zone.Dat, offsetX, offsetY) : Read(zone.SourceOf("nifs.csv", "fixtures.csv"), offsetX, offsetY);
+        IsCity(zone.Dat) || DungeonLayout.IsDungeon(zone.Dat) ? Read(zone.Dat, offsetX, offsetY) : Read(zone.SourceOf("nifs.csv", "fixtures.csv"), offsetX, offsetY);
 
     /// <summary>True for a capital city's archive (it has <c>city.csv</c>).</summary>
     public static bool IsCity(Mpk.MpkArchive dat) => dat.TryGetEntry("city.csv", out _);

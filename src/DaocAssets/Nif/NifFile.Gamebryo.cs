@@ -211,7 +211,9 @@ public static partial class NifFile
                 int nodeStencil = Find(b.Props, "NiStencilProperty", stencil);
                 int nodeVertexColor = Find(b.Props, "NiVertexColorProperty", vertexColor);
                 foreach (int child in b.Type == "NiLODNode" ? NearLevel(b) : b.Children)
-                    Walk(child, joint, world, underHelper, nodeAlpha, nodeStencil, underNumbered, nodeVertexColor, underCollision);
+                    Walk(child, joint, world,
+                        underHelper || (child >= 0 && child < blocks.Length && IsDungeonHelper(b.Name, blocks[child].Name)),
+                        nodeAlpha, nodeStencil, underNumbered, nodeVertexColor, underCollision);
                 if (parentJoint < 0)
                     BindSkins();
             }

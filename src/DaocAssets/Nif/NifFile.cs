@@ -348,7 +348,9 @@ public static partial class NifFile
             int nodeStencil = FindProperty(blocks, b.Props, "NiStencilProperty", stencil);
             int nodeVertexColor = FindProperty(blocks, b.Props, "NiVertexColorProperty", vertexColor);
             foreach (int child in children)
-                Walk4x(bytes, blocks, child, w, seen, meshes, underHelper, nodeAlpha, nodeStencil, underNumbered,
+                Walk4x(bytes, blocks, child, w, seen, meshes,
+                    underHelper || (child >= 0 && child < blocks.Length && IsDungeonHelper(b.Name, blocks[child].Name)),
+                    nodeAlpha, nodeStencil, underNumbered,
                     nodeVertexColor, skeleton, joint, collision: underCollision);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
@@ -423,6 +425,20 @@ public static partial class NifFile
                 return true;
         return false;
     }
+
+    // A dungeon piece's nodes under "dungswitch" (daoc-re's dungeon note, 2026-11-10): "Bounding" is the room's volume for
+    // finding which room a point is in, "Attachpoints" holds marker points, and "portal01"… are the polygons joining two
+    // rooms; the client hides the first two. The portal polygons are a room's doorway quads (untextured placeholder
+    // colours), read for room links and not drawn (inferred: the note lists no drawing use). "Visible", "Collidee",
+    // "pickee", "waterproxy" and the doors and climbs are handled as anywhere else.
+    internal static bool IsDungeonHelper(string parent, string name) =>
+        string.Equals(parent, "dungswitch", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(name)
+        && (name.Equals("bounding", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("attachpoints", StringComparison.OrdinalIgnoreCase)
+            || DungeonPortal.IsMatch(name));
+
+    private static readonly System.Text.RegularExpressions.Regex DungeonPortal = new(
+        "^portal[0-9]+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     // NiAVObject flags bit 0 = Hidden: Gamebryo app-culls the node and its subtree, so the client
     // never draws it. The likely source of the placeholder-coloured (purple/aqua) shapes that the

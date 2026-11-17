@@ -9,7 +9,9 @@
 #                           (zone8 and zone008 are the same zone; several at once: make zone0 zone208)
 #   make check-zone208      ... and fail if its zone check has errors
 #   make clean-zone208      delete zone 208's converted files (its models stay in the shared library)
-#   make zones              every outdoor zone and capital city, plus private/zones/summary.md
+#   make zone221            convert dungeon 221 (Muire Tomb): its rooms and props, sky/fog, zone check, dungeon check
+#   make dungeons           every dungeon
+#   make zones              every outdoor zone, capital city and dungeon, plus private/zones/summary.md
 #                           and the figures (make figures: every model id, classic and Catacombs)
 #                           and the region loading screens (make loading) and maps (make maps)
 #   make check-zones        ... and fail if any zone check has errors
@@ -77,10 +79,12 @@ $(shell mkdir -p $(BUILD); [ "$$(cat $(CLIENT_FILE) 2>/dev/null)" = "$(CLIENT)" 
 -include $(BUILD)/zones.mk
 # Only the zones asked for get their model lists read (and made, on first use).
 ifneq ($(filter zones check-zones,$(MAKECMDGOALS)),)
-WANT := $(ZONES) $(CITIES)
+WANT := $(ZONES) $(CITIES) $(DUNGEONS)
+else ifneq ($(filter dungeons,$(MAKECMDGOALS)),)
+WANT := $(DUNGEONS)
 else
 # zone8, zone08 and zone008 all mean zone 008.
-WANT := $(filter $(ZONES) $(CITIES),$(shell printf '%s\n' $(patsubst check-zone%,%,$(patsubst zone%,%,$(NEEDS_INSTALL))) \
+WANT := $(filter $(ZONES) $(CITIES) $(DUNGEONS),$(shell printf '%s\n' $(patsubst check-zone%,%,$(patsubst zone%,%,$(NEEDS_INSTALL))) \
           | grep -E '^[0-9]+$$' | while read -r n; do printf '%03d ' $$(expr $$n + 0); done))
 endif
 -include $(foreach z,$(WANT),$(ZONEDIR)/zone$(z)/models.mk)
@@ -126,7 +130,8 @@ $(ZONEDIR)/zone$(1)/terrain.glb: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $$(zone$(1)_T
 	@mkdir -p $$(@D)
 	$(MPK) terrain $$(zone$(1)_DAT) $$(zone$(1)_POS) $$(zone$(1)_EDGES) --index $(INDEX) --library $(LIB) --out $$@
 
-$(ZONEDIR)/zone$(1)/zone.csv: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(ZONE_SRC) $$(addprefix $(MADE)/,$$(zone$(1)_MODELS)) | $(TOOL)
+$(ZONEDIR)/zone$(1)/zone.csv: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(ZONE_SRC) $(if $(filter dungeon,$(zone$(1)_KIND)),$(MODEL_SRC)) \
+	  $$(addprefix $(MADE)/,$$(zone$(1)_MODELS)) | $(TOOL)
 	@mkdir -p $$(@D)
 	$(MPK) zone $$(zone$(1)_DAT) $$(zone$(1)_POS) --index $(INDEX) --library $(LIB) --out $$(@D)
 
@@ -139,6 +144,11 @@ $(ZONEDIR)/zone$(1)/sky.csv: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(ZONE_S
 	@mkdir -p $$(@D)
 	$(MPK) sky $$(zone$(1)_DAT) --index $(INDEX) --library $(LIB) --out $$(@D)
 
+# A dungeon's rooms placed as the client places them: do the doorways of each portals.csv link meet (mpk dungeoncheck)?
+$(ZONEDIR)/zone$(1)/dungeoncheck.md: $(ZONEDIR)/zone$(1)/zone.csv | $(TOOL)
+	@$(MPK) dungeoncheck $$(zone$(1)_DAT) --index $(INDEX) --out $$@.tmp >/dev/null && mv $$@.tmp $$@
+	@echo "zone $(1) $$(zone$(1)_NAME): $$$$(sed -n 3p $$@)"
+
 # The report is kept whatever it finds (exit 1 = errors found); check-zone<N> is what fails on them.
 $(ZONEDIR)/zone$(1)/zonecheck.md: $(ZONEDIR)/zone$(1)/zone.csv $(KNOWN) $(ZONE_SRC) | $(TOOL)
 	@$(MPK) zonecheck $$(zone$(1)_DAT) --zone $$(@D) --library $(LIB) $$(zone$(1)_POS) --known $(KNOWN) --out $$@.tmp >/dev/null; \
@@ -146,8 +156,10 @@ $(ZONEDIR)/zone$(1)/zonecheck.md: $(ZONEDIR)/zone$(1)/zone.csv $(KNOWN) $(ZONE_S
 	@echo "zone $(1) $$(zone$(1)_NAME): $$$$(sed -n 3p $$@)"
 
 .PHONY: zone$(1) check-zone$(1)
-# A capital city is all models: no terrain, and no water in its SECTOR.DAT.
-zone$(1): $(addprefix $(ZONEDIR)/zone$(1)/,$(if $(filter city,$(zone$(1)_KIND)),zone.csv sky.csv zonecheck.md,terrain.glb zone.csv water.done sky.csv zonecheck.md))
+# A capital city is all models: no terrain, and no water in its SECTOR.DAT. A dungeon is its rooms and props (its
+# water planes: not yet, M11).
+zone$(1): $(addprefix $(ZONEDIR)/zone$(1)/,$(if $(filter city,$(zone$(1)_KIND)),zone.csv sky.csv zonecheck.md,$(if \
+	$(filter dungeon,$(zone$(1)_KIND)),zone.csv sky.csv zonecheck.md dungeoncheck.md,terrain.glb zone.csv water.done sky.csv zonecheck.md)))
 
 ifneq ($(2),$(1))
 .PHONY: zone$(2) check-zone$(2)
@@ -216,13 +228,16 @@ $(ICONS): $(wildcard $(CLIENT)/icons/*.bmp $(CLIENT)/icons/*.BMP $(CLIENT)/Icons
 	@touch $@
 
 # --- every zone ----------------------------------------------------------------------------------------
-.PHONY: zones check-zones
-zones: $(foreach z,$(ZONES) $(CITIES),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(OBJECTS) $(STRIDES) $(LOADING) $(MAPS) $(ICONS)
+.PHONY: dungeons
+dungeons: $(foreach z,$(DUNGEONS),zone$(z))
 
-$(ZONEDIR)/summary.md: $(foreach z,$(ZONES) $(CITIES),$(ZONEDIR)/zone$(z)/zonecheck.md)
-	@{ echo "# Zone check, every converted zone (outdoor and cities)"; echo; \
+.PHONY: zones check-zones
+zones: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(OBJECTS) $(STRIDES) $(LOADING) $(MAPS) $(ICONS)
+
+$(ZONEDIR)/summary.md: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),$(ZONEDIR)/zone$(z)/zonecheck.md)
+	@{ echo "# Zone check, every converted zone (outdoor, cities and dungeons)"; echo; \
 	   echo "| Zone | Name | Result |"; echo "|---:|---|---|"; \
-	   $(foreach z,$(sort $(ZONES) $(CITIES)),echo "| $(z) | $(zone$(z)_NAME) | $$(sed -n 3p $(ZONEDIR)/zone$(z)/zonecheck.md) |";) \
+	   $(foreach z,$(sort $(ZONES) $(CITIES) $(DUNGEONS)),echo "| $(z) | $(zone$(z)_NAME) | $$(sed -n 3p $(ZONEDIR)/zone$(z)/zonecheck.md) |";) \
 	 } > $@.tmp && mv $@.tmp $@
 	@echo "summary -> $@ ($$(grep -c ': [1-9][0-9]* error(s)' $@) zone(s) with errors)"
 
@@ -250,9 +265,9 @@ clean-zone%:
 # One line per zone in the install, in zone order: outdoor zones and cities with their state (not
 # converted, or the zone check's result), then the kinds we don't convert yet (dungeons: roadmap M11).
 list:
-	@$(foreach z,$(sort $(ZONES) $(CITIES) $(OTHERS)),r=$$(sed -n 3p $(ZONEDIR)/zone$(z)/zonecheck.md 2>/dev/null); \
+	@$(foreach z,$(sort $(ZONES) $(CITIES) $(DUNGEONS) $(OTHERS)),r=$$(sed -n 3p $(ZONEDIR)/zone$(z)/zonecheck.md 2>/dev/null); \
 	  k="$(zone$(z)_KIND)"; if [ "$$k" = outdoor ]; then s="$${r:-not converted}"; \
-	  elif [ "$$k" = city ]; then s="city: $${r:-not converted}"; else s="$$k: not convertible yet"; fi; \
+	  elif [ "$$k" = city ] || [ "$$k" = dungeon ]; then s="$$k: $${r:-not converted}"; else s="$$k: not convertible yet"; fi; \
 	  printf '%4d  %-30s %s\n' $$(expr $(z) + 0) "$(zone$(z)_NAME)" "$$s";)
 
 clean-library:

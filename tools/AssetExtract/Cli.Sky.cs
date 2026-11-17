@@ -66,13 +66,21 @@ internal static partial class Cli
             sky = SkyDefinition.Parse(System.Text.Encoding.Latin1.GetString(skies.Extract(e)));
         }
         IniFile sector;
+        bool dungeon;
         // SECTOR.DAT as the client reads it: the csv archive's copy first (DaocAssets.Zone.ZoneArchive).
         using (var zone = DaocAssets.Zone.ZoneArchive.Open(datMpk))
+        {
             sector = IniFile.Parse(zone.Text("SECTOR.DAT") ?? "");
+            dungeon = DaocAssets.Zone.DungeonLayout.IsDungeon(zone.Dat);
+        }
 
         static string C(System.Numerics.Vector4 c) => FormattableString.Invariant($"{c.X:0.###} {c.Y:0.###} {c.Z:0.###} {c.W:0.###}");
         static string C3(System.Numerics.Vector3 c) => FormattableString.Invariant($"{c.X:0.###} {c.Y:0.###} {c.Z:0.###} 1");
         var lines = new List<string> { "key,value", $"sky,{name}" };
+        // A dungeon has no outdoor sky, and its fog is black (daoc-re's dungeon note and its 2026-11-11 correction); the
+        // sky file still gives the lights. Its own sky model (SECTOR.DAT [sky] skynif, zones 049 and 092) isn't drawn yet.
+        if (dungeon)
+            lines.Add("kind,dungeon");
         // The client's defaults when a key is missing: clip 640, amount 0 (W17 note).
         lines.Add(FormattableString.Invariant($"fog.clip,{sector.Float("fog", "clip") ?? 640}"));
         lines.Add(FormattableString.Invariant($"fog.amount,{sector.Float("fog", "amount") ?? 0}"));

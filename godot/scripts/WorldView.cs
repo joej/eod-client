@@ -530,7 +530,7 @@ public partial class WorldView : Node3D
         _dev.AddToggle("Sun shadows", ClientSettings.SunShadows, on =>
         {
             ClientSettings.SunShadows = on;
-            _sun.ShadowEnabled = on;
+            _sun.ShadowEnabled = on && !_inDungeon;
         });
         _dev.AddToggle("Terrain", true, on =>
         {

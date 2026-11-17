@@ -18,6 +18,8 @@ public sealed partial class ZoneAudit
     {
         "nifs.csv", "fixtures.csv", "terrain.pcx", "offset.pcx", "sector.dat", "bound.csv", "lights.csv",
         "shadow.pcx",
+        // A dungeon (DungeonLayout, DungeonCheck) and its piece and texture swaps (ModelProxy, TextureProxy).
+        "dungeon.chunk", "dungeon.place", "dungeon.prop", "portals.csv", "nifproxy.csv", "texproxy.csv",
     };
 
     /// <summary>SECTOR.DAT keys the converter reads today, as "section.key" (normalised). Keep in step
@@ -43,6 +45,10 @@ public sealed partial class ZoneAudit
                 [17] = "3D Axis Y", [18] = "3D Axis Z",
             },
             ["nifs.csv"] = new Dictionary<int, string> { [0] = "NIF #", [1] = "label", [2] = "model file" },
+            // DungeonCheck: which two rooms a portal joins (the 4th column is not read by the client either).
+            ["portals.csv"] = new Dictionary<int, string> { [0] = "room A", [1] = "portal number in room A", [2] = "room B" },
+            ["nifproxy.csv"] = new Dictionary<int, string> { [0] = "piece", [1] = "piece loaded instead" },
+            ["texproxy.csv"] = new Dictionary<int, string> { [0] = "texture", [1] = "texture used instead" },
             // ZoneJumps: the doorway line, its floor and top, and the server zone point it uses.
             ["zonejump.csv"] = new Dictionary<int, string>
             {

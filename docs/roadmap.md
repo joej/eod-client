@@ -537,6 +537,14 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
   A dungeon's `nifproxy.csv` swaps pieces (zones 060/423: 26 `STONE*` → `ALTSTONE*`; 079: 35 `Oceanus*` →
   `Alt_Oceanus*`, whose originals aren't in the install) before they load: `AssetLibrary.Dungeon(scope, dat)`
   applies both tables; `mpk model <piece> --dungeon datNNN.mpk` converts one. All 87 swapped pieces convert.
+- *Built 2026-11-17:* every dungeon is assembled from its rooms and props (`DungeonLayout`; `make zoneNNN`,
+  `make dungeons`, and `make zones` includes them): 280 dungeons, 13,832 rooms, every zone check clean. Rooms hang
+  under the capitals' 180° node at height 16000, each turned by its angle (measured: clockwise, the opposite of a
+  fixture's 3D Angle). Checked two ways: the doorways of 26,763 of 27,782 `portals.csv` links meet within 64 units
+  (`mpk dungeoncheck`), and the floors hold the server's NPCs (392 of 392 in Coruscating Mine, 313 of 318 in Muire Tomb,
+  369 of 370 in zone 060; the mirror image holds 5, 105 and 26). A piece's room volume, attach points and doorway
+  polygons aren't drawn. No sky and black fog (W64). Not yet: water, the `[dungeonfix]` lighting, the sky model,
+  doors, animated nodes, and five pieces the NIF reader can't read (one of them a Darkness Falls tunnel).
 - **Done when:** you can enter a dungeon from its zone jump and walk it, rendered from its pieces.
 
 ### M12 — Atmosphere: effects, sound and music

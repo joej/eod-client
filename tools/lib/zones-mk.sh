@@ -6,7 +6,8 @@
 #
 #   ZONES += 208          outdoor (a heightmap): converted
 #   CITIES += 026         a capital city (city.csv: pieces in city coordinates, no terrain): converted
-#   OTHERS += 019         a dungeon, a "skycity" or other: listed, not converted yet (roadmap M11)
+#   DUNGEONS += 221       a dungeon (dungeon.chunk + dungeon.place: rooms, no terrain): converted (roadmap M11)
+#   OTHERS += 019         a "skycity" or other: listed, not converted yet (roadmap M11)
 #   zone208_NAME := Cursed Forest
 #   zone208_KIND := outdoor | city | dungeon | skycity | other
 #   zone208_DAT := /path/to/zones/zone208/dat208.mpk
@@ -37,7 +38,7 @@ grep -v '^#' "$tsv" | while IFS=$'\t' read -r zone region ox oy w h name; do
     if grep -q 'terrain\.pcx' <<<"$members"; then kind=outdoor; echo "ZONES += $n"; printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$n" "$region" "$ox" "$oy" "$w" "$h" "$dat" >> "$outdoor"
     elif grep -q 'city\.csv' <<<"$members"; then kind=city; echo "CITIES += $n"
     elif grep -q 'skycity\.' <<<"$members"; then kind=skycity; echo "OTHERS += $n"
-    elif grep -q 'dungeon\.' <<<"$members"; then kind=dungeon; echo "OTHERS += $n"
+    elif grep -q 'dungeon\.place' <<<"$members"; then kind=dungeon; echo "DUNGEONS += $n"
     else kind=other; echo "OTHERS += $n"
     fi
     echo "zone${n}_KIND := $kind"

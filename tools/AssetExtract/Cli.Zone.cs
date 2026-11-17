@@ -307,10 +307,11 @@ internal static partial class Cli
         string? outPath = o["--out"], knownPath = o["--known"];
         (int X, int Y) zoneSize = o.ZoneSize;
 
-        // A capital city has no terrain (it is all models): checked without ground.
+        // A capital city or a dungeon has no terrain (it is all models): checked without ground.
         DaocAssets.Zone.ZoneTerrain? terrain;
         using (var dat = DaocAssets.Mpk.MpkArchive.Open(datMpk))
-            terrain = DaocAssets.Zone.ZoneLayout.IsCity(dat) ? null : DaocAssets.Zone.ZoneTerrain.Read(datMpk, zoneSize.X, zoneSize.Y);
+            terrain = DaocAssets.Zone.ZoneLayout.IsCity(dat) || DaocAssets.Zone.DungeonLayout.IsDungeon(dat)
+                ? null : DaocAssets.Zone.ZoneTerrain.Read(datMpk, zoneSize.X, zoneSize.Y);
         var placements = DaocAssets.Zone.ZoneCheck.ReadManifest(DaocAssets.InstallFiles.ReadAllText(Path.Combine(zoneDir, "zone.csv")));
         var cache = new Dictionary<string, DaocAssets.Zone.ModelBounds?>(StringComparer.OrdinalIgnoreCase);
         DaocAssets.Zone.ModelBounds? Bounds(string glb)
@@ -332,5 +333,75 @@ internal static partial class Cli
             Console.WriteLine($"  report -> {Path.GetFullPath(outPath)}");
         }
         return report.Errors > 0 ? 1 : 0;
+    }
+
+    // mpk dungeoncheck <dat<NNN>.mpk> --index INDEX [--out FILE.md]: places the dungeon's rooms (DungeonLayout) and
+    // measures how far apart the two doorways of each portals.csv link land (DungeonCheck).
+    private static int DungeonCheckCmd(string[] args)
+    {
+        if (args.Length < 2) return Usage();
+        string datMpk = args[1];
+        if (Options.Parse(args, 2, ["--index", "--out", "--points"]) is not { } o || o["--index"] is not { } indexPath)
+            return Usage();
+        var index = AssetIndex.Load(indexPath);
+        DaocAssets.Zone.DungeonLayout layout;
+        string portalsCsv;
+        using (var dat = DaocAssets.Mpk.MpkArchive.Open(datMpk))
+        {
+            if (!DaocAssets.Zone.DungeonLayout.IsDungeon(dat))
+            {
+                Console.Error.WriteLine($"{datMpk}: not a dungeon (no dungeon.chunk / dungeon.place)");
+                return 2;
+            }
+            layout = DaocAssets.Zone.DungeonLayout.Read(dat);
+            portalsCsv = dat.TryGetEntry("portals.csv", out var e) ? System.Text.Encoding.Latin1.GetString(dat.Extract(e)) : "";
+        }
+        ModelProxy proxy = ModelProxy.FromZoneArchive(datMpk);
+        var models = new Dictionary<string, DaocAssets.Nif.NifModel?>(StringComparer.OrdinalIgnoreCase);
+        DaocAssets.Nif.NifModel? Model(string piece)
+        {
+            if (models.TryGetValue(piece, out var found)) return found;
+            byte[]? bytes = index.Read(proxy.Apply(piece));
+            DaocAssets.Nif.NifModel? model = null;
+            if (bytes is not null)
+            {
+                try { model = DaocAssets.Nif.NifFile.Read(bytes); }
+                catch (Exception ex) when (ex is DaocAssets.Nif.NifFormatException or InvalidDataException or IndexOutOfRangeException) { }
+            }
+            return models[piece] = model;
+        }
+        IReadOnlyDictionary<string, System.Numerics.Vector3>? Portals(string piece) =>
+            Model(piece) is { } m ? DaocAssets.Zone.DungeonCheck.PortalNodes(m.NodeWorlds) : null;
+        var links = DaocAssets.Zone.DungeonCheck.Check(layout, DaocAssets.Zone.DungeonCheck.ParsePortals(portalsCsv), Portals);
+        var measured = links.Where(l => l.Gap is not null).Select(l => l.Gap!.Value).OrderBy(g => g).ToList();
+        int met = measured.Count(g => g <= 2), near = measured.Count(g => g > 2 && g <= 64);
+        string summary = $"{layout.Rooms.Count} rooms, {layout.Props.Count} props, {links.Count} portal links: " +
+            $"{met} meet (<= 2 units), {near} within 64, {measured.Count - met - near} apart, {links.Count - measured.Count} unmeasured" +
+            (measured.Count > 0 ? $"; median {measured[measured.Count / 2]:0.#}, max {measured[^1]:0.#}" : "") +
+            (layout.Skipped.Count > 0 ? $"; {layout.Skipped.Count} row(s) skipped" : "");
+        // --points FILE: "x,y,z" rows in region coordinates (the server's NPCs): how many stand on a floor.
+        if (o["--points"] is { } pointsPath)
+        {
+            var points = File.ReadAllLines(pointsPath).Select(l => l.Split([',', '\t'])).Where(c => c.Length >= 3)
+                .Select(c => new System.Numerics.Vector3(float.Parse(c[0], CultureInfo.InvariantCulture),
+                    float.Parse(c[1], CultureInfo.InvariantCulture), float.Parse(c[2], CultureInfo.InvariantCulture))).ToList();
+            (int on, int all) = DaocAssets.Zone.DungeonCheck.Floors(layout, points, piece => Model(piece) is { } m
+                ? m.Meshes.Where(x => !x.Helper || x.Collision)
+                    .SelectMany(x => x.Triangles.Select(t => (x.Vertices[t.A], x.Vertices[t.B], x.Vertices[t.C]))).ToList()
+                : null);
+            summary += $"; {on} of {all} points stand on a floor";
+        }
+        Console.WriteLine($"Dungeon check: {summary}");
+        if (o["--out"] is { } outPath)
+        {
+            var sb = new System.Text.StringBuilder($"# Dungeon check: {Path.GetFileName(datMpk)}\n\n{summary}\n\n");
+            foreach (var l in links.Where(l => l.Gap is null or > 2).OrderByDescending(l => l.Gap ?? float.MaxValue))
+                sb.Append($"- room {l.RoomA} ({layout.Rooms.FirstOrDefault(r => r.Id == l.RoomA).Piece}) portal{l.Portal:00} -> room {l.RoomB}: " +
+                    (l.Gap is float g ? $"{g:0.#} units apart\n" : "not measured\n"));
+            foreach (string s in layout.Skipped)
+                sb.Append($"- skipped: {s}\n");
+            File.WriteAllText(outPath, sb.ToString());
+        }
+        return 0;
     }
 }

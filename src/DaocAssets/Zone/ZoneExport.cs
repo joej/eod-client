@@ -52,8 +52,10 @@ public static class ZoneExport
         List<ZoneLight> lights = [];
         Pcx? shadow = null;
         // The zone's files as the client reads them: its csv archive first, then its dat archive (ZoneArchive).
+        bool dungeon;
         using (ZoneArchive zone = ZoneArchive.Open(zoneDatMpk))
         {
+            dungeon = DungeonLayout.IsDungeon(zone.Dat);
             // A tree cluster ("Elm1CL5.nif") is no file: its trees go in its place (TreeClusters).
             ZoneLayout fixtures = ZoneLayout.Read(zone, offsetX, offsetY);
             layout = (clusters ?? TreeClusters.None).Expand(fixtures);
@@ -69,7 +71,7 @@ public static class ZoneExport
             if (zone.Text("zonejump.csv") is string csv)
             {
                 jumpPoints = ZoneJumps.Parse(csv, offsetX, offsetY);
-                if (ZoneLayout.IsCity(zone.Dat))
+                if (ZoneLayout.IsCity(zone.Dat) || dungeon)
                     landing = CityLanding(csv, offsetX, offsetY);
             }
         }
@@ -112,15 +114,24 @@ public static class ZoneExport
             return z;
         }
 
+        // A dungeon's pieces load through its nifproxy.csv and texproxy.csv (AssetLibrary.Dungeon), in its own scope.
+        if (dungeon)
+            library = library.Dungeon(DungeonScope(zoneDatMpk), zoneDatMpk);
+
         // Ensure each distinct model is in the library (converted once, or an override); the library
         // also gathers each model's textures. Lookups are index-backed — no install scan.
         var glbByNif = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         int converted = 0, missingModel = 0, failed = 0;
         var failures = new List<string>();
 
+        string scoped = dungeon ? DungeonScope(zoneDatMpk) + "/" : "";
         foreach (string nif in layout.Models)
         {
             ModelResult r = library.GetModel(nif);
+            // A piece renamed by the dungeon's own tables is stored in its scope, which the Makefile's per-model steps
+            // (mpk model, no tables) don't make: this step remakes it, so a converter change reaches it too.
+            if (dungeon && r.GlbPath is not null && library.ManifestName(r.GlbPath).StartsWith(scoped, StringComparison.OrdinalIgnoreCase))
+                r = library.GetModel(nif, reconvert: true);
             if (r.Origin == AssetOrigin.Failed)
             {
                 failed++;
@@ -170,11 +181,17 @@ public static class ZoneExport
     public static IReadOnlyList<string> ModelNames(string zoneDatMpk, TreeClusters? clusters = null)
     {
         ZoneLayout layout;
+        ModelProxy proxy = ModelProxy.Empty;
         using (ZoneArchive zone = ZoneArchive.Open(zoneDatMpk))
+        {
             layout = (clusters ?? TreeClusters.None).Expand(ZoneLayout.Read(zone, 0, 0));
+            // A dungeon's pieces are loaded under their nifproxy.csv names (zone 079's originals aren't in the install).
+            if (DungeonLayout.IsDungeon(zone.Dat))
+                proxy = ModelProxy.FromZoneArchive(zoneDatMpk);
+        }
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var names = new List<string>();
-        foreach (string nif in layout.Models)
+        foreach (string nif in layout.Models.Select(proxy.Apply))
         {
             string bare = nif[(nif.LastIndexOfAny(['/', '\\']) + 1)..];
             if (seen.Add(bare))
@@ -190,8 +207,13 @@ public static class ZoneExport
         return Encoding.Latin1.GetString(mpk.Extract(entry));
     }
 
+    /// <summary>The library scope a dungeon's renamed pieces and textures are stored in: "zone" and the archive's digits
+    /// (dat060.mpk: zone060), as <c>mpk model --dungeon</c> names it.</summary>
+    public static string DungeonScope(string zoneDatMpk) =>
+        "zone" + new string(Path.GetFileNameWithoutExtension(zoneDatMpk).Where(char.IsAsciiDigit).ToArray());
+
     /// <summary>
-    /// A landing spot in a capital city: its first gate. <c>ZONEJUMP.csv</c> rows are "id, target,
+    /// A landing spot in a capital city or a dungeon: its first doorway. <c>ZONEJUMP.csv</c> rows are "id, target,
     /// x1, y1, x2, y2, z1, z2, zone": a doorway line (zone-local, the same frame the city's NPCs
     /// confirm for its pieces; see ZoneLayout.ParseCity) from floor (z1) to top (z2) that
     /// leads out of the city. The spot is the doorway's middle, 1 m above its floor (so a ray looking

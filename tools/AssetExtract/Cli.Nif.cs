@@ -185,7 +185,7 @@ internal static partial class Cli
         var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir);
         // A dungeon's piece, as its fixtures load: its dat<NNN>.mpk's nifproxy.csv and texproxy.csv applied.
         AssetLibrary view = o["--dungeon"] is { } dat
-            ? library.Dungeon("zone" + new string(Path.GetFileNameWithoutExtension(dat).Where(char.IsAsciiDigit).ToArray()), dat)
+            ? library.Dungeon(ZoneExport.DungeonScope(dat), dat)
             : library;
         ModelResult r = view.GetModel(name, reconvert: true);
         switch (r.Origin)

@@ -41,6 +41,9 @@ internal static partial class Cli
         if (command == "zonecheck")
             return ZoneCheckCmd(args);
 
+        if (command == "dungeoncheck")
+            return DungeonCheckCmd(args);
+
         if (command == "water")
             return WaterCmd(args);
 
@@ -138,6 +141,7 @@ internal static partial class Cli
               mpk audit    <client-dir> --out FILE.md
               mpk worldaudit <client-dir> --out FILE.md
               mpk zonecheck <dat<NNN>.mpk> --zone DIR --library LIBDIR --offset X Y [--size W H] [--known FILE] [--out FILE.md]
+              mpk dungeoncheck <dat<NNN>.mpk> --index INDEX [--out FILE.md]   (a dungeon's rooms placed: do the doorways of each portals.csv link meet?)
               mpk water    <dat<NNN>.mpk> --offset X Y --out DIR [--size W H] [--index index.json --library LIBDIR]
               mpk sky      <dat<NNN>.mpk> --out DIR [--name albion] [--skympk <zones/sky/sky.mpk>] [--index index.json --library LIBDIR]
               mpk loading  <client-dir> --out DIR   (region loading screens: pictures, tips, bar, font)

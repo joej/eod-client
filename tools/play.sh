@@ -113,7 +113,7 @@ find_godot() {
 ZONES="$PRIV/zones"
 TSV="$REPO/src/DaocProtocol/World/zones.tsv"
 
-# The outdoor zones in this install, one per line: number, name, region, converted or not (from the
+# The zones in this install, one per line: number, name, region, converted or not (from the
 # Makefile's zone table and each zone's check), whose name contains $1 (any case) if given.
 zone_list() {
     need CLIENT "DAoC client folder (holds game.dll and zones/)"
@@ -125,7 +125,7 @@ zone_list() {
             if (f != "" && index(tolower(name), f) == 0) next
             if (rest ~ /not convertible/) { sub(/:/, ",", rest); state = rest }
             else {
-                kind = ""; if (rest ~ /^city: /) { kind = "city, "; rest = substr(rest, 7) }
+                kind = ""; if (rest ~ /^(city|dungeon): /) { colon = index(rest, ":"); kind = substr(rest, 1, colon - 1) ", "; rest = substr(rest, colon + 2) }
                 state = kind (rest ~ /^not converted/ ? "not converted" : "converted")
                 if (rest ~ /[1-9][0-9]* error/) { match(rest, /[0-9]+ error/); state = state ", " substr(rest, RSTART, RLENGTH) "s in its check" }
             }
@@ -183,7 +183,7 @@ do_assets() {
             || die "zone $GOTO: conversion failed or its zone check found errors (see $ZONES/zone$n/zonecheck.md)"
     else
         # The character may be saved in any zone, and the server can move it to any other.
-        step "assets: every outdoor zone from $CLIENT (about 2 minutes the first time)"
+        step "assets: every outdoor zone, city and dungeon from $CLIENT (about 5 minutes the first time)"
         make -C "$REPO" -j"$jobs" CLIENT="$CLIENT" zones \
             || die "conversion failed (see the make output above)"
         echo "zone check results: $ZONES/summary.md"

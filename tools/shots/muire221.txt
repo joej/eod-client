@@ -1,0 +1,8 @@
+# Fixed camera poses in Muire Tomb (zone 221, a dungeon) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 221
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# The first dungeon assembled from its rooms (roadmap M11): rooms meet at their doorways, floors under the NPCs.
+entrance      31067 29372 16560   180 -10   # inside the first doorway (the landing), looking into the tomb
+hall-west     27808 31998 15330    90  -8   # where the server stands NPCs, west end
+hall-mid      31055 34233 15840     0  -8   # middle
+deep-east     35267 34988 14850   270  -8   # east end, the lowest rooms

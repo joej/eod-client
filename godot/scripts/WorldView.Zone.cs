@@ -380,8 +380,23 @@ public partial class WorldView
         // The sun's path tilts by the sky file's ecliptic_angle (the third field of sky.csv's sun line; 15 or 30).
         _skyEcliptic = kv.TryGetValue("sun", out string? sunLine) && sunLine.Split(' ') is { Length: >= 3 } sp
             && Floats(sp[2]) is { Length: 1 } ecl ? ecl[0] : 0f;
-        _environment.BackgroundMode = Godot.Environment.BGMode.Sky;
-        _environment.Sky = new Sky { SkyMaterial = mat };
+        // A dungeon (sky.csv "kind,dungeon"): no sky, black beyond the rooms and black fog (daoc-re's dungeon note, corrected
+        // 2026-11-11). Its lights still come from the sky file; the sun casts no shadows there, as retail's fixed-function
+        // lights don't, or the rooms' ceilings would put every floor in the dark (ours: retail's dungeon lighting is the
+        // default material fix-up, not built yet).
+        _inDungeon = kv.GetValueOrDefault("kind") == "dungeon";
+        if (_inDungeon)
+        {
+            _environment.BackgroundMode = Godot.Environment.BGMode.Color;
+            _environment.BackgroundColor = Colors.Black;
+            _environment.Sky = null;
+        }
+        else
+        {
+            _environment.BackgroundMode = Godot.Environment.BGMode.Sky;
+            _environment.Sky = new Sky { SkyMaterial = mat };
+        }
+        _sun.ShadowEnabled = ClientSettings.SunShadows && !_inDungeon;
         _environment.AmbientLightSource = Godot.Environment.AmbientSource.Color;
         ApplySkyTime();
 
@@ -398,6 +413,7 @@ public partial class WorldView
 
     private System.Collections.Generic.Dictionary<string, string>? _skyValues;
     private ShaderMaterial? _skyMaterial;
+    private bool _inDungeon;   // the zone's sky.csv says "kind,dungeon": no sky, black fog
     private string _skyCondition = "clear";
     private float _skyEcliptic;   // degrees: how far the sun's path leans from overhead
 
@@ -438,7 +454,7 @@ public partial class WorldView
         _environment.AmbientLightEnergy = 1.15f;
         _sun.LightColor = new Color(sun.R * sunAmount, sun.G * sunAmount, sun.B * sunAmount);
         _sun.LightEnergy = 1.85f;
-        _environment.FogLightColor = Col("fog");
+        _environment.FogLightColor = _inDungeon ? Colors.Black : Col("fog");
         if (now is uint time)
         {
             // East = +X, up = +Y, south = +Z (DAoC's y). The light, retail's, never lower than 45 degrees and still at night
