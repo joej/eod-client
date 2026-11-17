@@ -83,6 +83,9 @@ public sealed class MonsterTables
         31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 57, 58, 59, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103,
         105, 106, 107, 114, 115, 116];
     internal static readonly int[] CreatureCombatSlots = [0, 1, 2, 3, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41];
+    private static readonly (string Clip, int Column)[] CombatSlotColumns = SlotColumns(CombatSlots);
+    private static readonly (string Clip, int Column)[] CreatureCombatSlotColumns = SlotColumns(CreatureCombatSlots);
+    private static (string, int)[] SlotColumns(int[] slots) => slots.Select(slot => ($"c{slot}", slot + 2)).ToArray();
 
     // anims.csv slot 76 (column 78) "Run Flinch": the flinch of a defender on the run.
     private const int RunFlinchColumn = 78;
@@ -264,7 +267,7 @@ public sealed class MonsterTables
         {
             if (combat)
                 Add(c, CombatColumns);
-            Add(c, (combat ? CombatSlots : CreatureCombatSlots).Select(slot => ($"c{slot}", slot + 2)).ToArray());
+            Add(c, combat ? CombatSlotColumns : CreatureCombatSlotColumns);
         }
         return clips;
     }

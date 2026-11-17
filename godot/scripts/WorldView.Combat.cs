@@ -54,11 +54,7 @@ public partial class WorldView
                 $"health {c.DefenderHealth}%, swing {(swing == "" ? "-" : swing)}");
 
         if (c.Result is CombatAnimation.Parried or CombatAnimation.Blocked or CombatAnimation.Evaded || c.IsHit)
-        {
-            ushort id = c.DefenderId;
-            byte result = c.Result;
-            GetTree().CreateTimer(HitSeconds).Timeout += () => React(id, result);
-        }
+            GetTree().CreateTimer(HitSeconds).Timeout += () => React(c.DefenderId, c.Result);
     }
 
     private string GearPath => (_libraryPath ?? "").PathJoin("models").PathJoin("cata_gear.json");
@@ -90,9 +86,12 @@ public partial class WorldView
             return;
         }
         // A hit: the flinch, unless busy in another clip (a swing, a parry, landing).
-        if (id == SelfId ? _landLeft > 0 : _entities.TryGetValue(id, out Entity? e) && _seconds < e.HoldUntil)
+        Entity? e = null;
+        if (id != SelfId && !_entities.TryGetValue(id, out e))
             return;
-        bool running = id == SelfId ? _runningForward : _entities.TryGetValue(id, out Entity? r) && r.Moved && r.MoveSpeed > 0;
+        if (e is null ? _landLeft > 0 : _seconds < e.HoldUntil)
+            return;
+        bool running = e is null ? _runningForward : e.Moved && e.MoveSpeed > 0;
         if (!(running && PlayCombatClip(id, "run_flinch", holdMoving: true) != ""))
             PlayCombatClip(id, 3);
     }
@@ -105,13 +104,14 @@ public partial class WorldView
     private string PlayCombatClip(ushort id, string clip, string? fallback = null, bool holdMoving = false)
     {
         AnimationPlayer? player;
+        Entity? e = null;
         if (id == SelfId)
         {
             if (_dead || _sitting || _quitting || _swimming || _airborne)
                 return "";
             player = _bodyAnim;
         }
-        else if (_entities.TryGetValue(id, out Entity? e) && !e.Dead && e.Posture == PlayerPosture.Normal)
+        else if (_entities.TryGetValue(id, out e) && !e.Dead && e.Posture == PlayerPosture.Normal)
             player = e.Player;
         else
             return "";
@@ -123,21 +123,26 @@ public partial class WorldView
                 return "";
             clip = fallback;
         }
+        player.SpeedScale = 1f;
+        float length = StartOnce(player, clip);
+        if (e is null)
+            (_bodyClip, _landLeft, _holdMoving) = (clip, length, holdMoving);
+        else
+            (e.Clip, e.HoldUntil, e.HoldMoving) = (clip, _seconds + length, holdMoving);
+        return clip;
+    }
+
+    // Plays a clip once (no loop) from its start, blending in unless it is already the current clip; its length.
+    // Shared by the one-shots: swings and reactions here, jump and land (PlayOnce, PlayHeld).
+    private static float StartOnce(AnimationPlayer player, string clip)
+    {
         Animation a = player.GetAnimation(clip);
         a.LoopMode = Animation.LoopModeEnum.None;
-        player.SpeedScale = 1f;
         if (player.CurrentAnimation == clip)
             player.Seek(0, true);
         else
             player.Play(clip, customBlend: 0.1);
-        if (id == SelfId)
-            (_bodyClip, _landLeft, _holdMoving) = (clip, (float)a.Length, holdMoving);
-        else
-        {
-            Entity e = _entities[id];
-            (e.Clip, e.HoldUntil, e.HoldMoving) = (clip, _seconds + a.Length, holdMoving);
-        }
-        return clip;
+        return (float)a.Length;
     }
 
     // Last Attacker (Shift+Tab): whoever last attacked us, if still in view and in sight (RE/76). "In range" is ours: the

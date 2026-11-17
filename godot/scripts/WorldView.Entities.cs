@@ -530,9 +530,8 @@ public partial class WorldView
     {
         if (e.Player is null || e.Clip == clip || !e.Player.HasAnimation(clip))
             return;
-        e.Player.GetAnimation(clip).LoopMode = Animation.LoopModeEnum.None;
         e.Player.SpeedScale = 1f;
-        e.Player.Play(clip, customBlend: 0.1);
+        StartOnce(e.Player, clip);
         e.Clip = clip;
     }
 
@@ -570,12 +569,12 @@ public partial class WorldView
         string lib = _libraryPath ?? "";
         _cataFig3 ??= ReadCataFigures(lib.PathJoin("models").PathJoin("catacombs.csv"));
         if (_cataFig3.TryGetValue(model, out int fig3))
-            FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_gear.json"), lib.PathJoin("models").PathJoin("colours.json"),
+            FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), GearPath, lib.PathJoin("models").PathJoin("colours.json"),
                 lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, drawn, TexDirs("items"));
     }
 
     private string CombatIdle(IReadOnlyList<WornItem> worn, byte activeWeapons) =>
-        FigureLook.CombatIdle((_libraryPath ?? "").PathJoin("models").PathJoin("cata_gear.json"), worn, activeWeapons);
+        FigureLook.CombatIdle(GearPath, worn, activeWeapons);
 
     // Standing still: the idle, or in attack mode the weapon's combat idle (else the one-hand one; a figure
     // converted before the combat clips existed has neither and keeps its idle).
@@ -592,7 +591,7 @@ public partial class WorldView
         string lib = _libraryPath ?? "";
         string text = ApplyLook(figure, model, look) + Dress(figure, model, look, worn, hoodUp, cloakHidden);
         if (_cataFig3 is not null && _cataFig3.TryGetValue(model, out int fig3))
-            text += FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), lib.PathJoin("models").PathJoin("cata_gear.json"), lib.PathJoin("models").PathJoin("colours.json"),
+            text += FigureLook.Gear(figure, lib.PathJoin("models").PathJoin($"fig3_{fig3}.json"), GearPath, lib.PathJoin("models").PathJoin("colours.json"),
                 lib.PathJoin("models"), worn, activeWeapons, helmHidden, hoodUp, drawn, TexDirs("items"));
         return text;
     }

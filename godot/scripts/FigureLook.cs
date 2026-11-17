@@ -263,19 +263,20 @@ public static class FigureLook
         (byte? right, byte? left) = WornSlot.Active(activeWeapons);
         foreach (byte? slot in new[] { right, left })
             if (slot is { } sl && worn.FirstOrDefault(w => w.Slot == sl) is { Model: > 0 } item
-                && GearEntry(gearPath, item.Model) is { } entry && !entry.GetProperty("shield").GetBoolean())
-                return entry.GetProperty("stance").GetInt32();
+                && WeaponStance(gearPath, item.Model) is { } stance)
+                return stance;
         return 0;
     }
 
     /// <summary>The "Combat Stance" of item model <paramref name="model"/> (0: unknown, a shield, or no weapon).</summary>
-    public static int Stance(string gearPath, int model) =>
-        GearEntry(gearPath, model) is { } entry && !entry.GetProperty("shield").GetBoolean() ? entry.GetProperty("stance").GetInt32() : 0;
+    public static int Stance(string gearPath, int model) => WeaponStance(gearPath, model) ?? 0;
 
-    private static System.Text.Json.JsonElement? GearEntry(string gearPath, int model) =>
+    // A weapon model's stance; null for an unknown model or a shield.
+    private static int? WeaponStance(string gearPath, int model) =>
         model > 0 && Json(Items, gearPath) is { } gear
             && gear.GetProperty("items").TryGetProperty(model.ToString(System.Globalization.CultureInfo.InvariantCulture), out var entry)
-            ? entry : null;
+            && !entry.GetProperty("shield").GetBoolean()
+            ? entry.GetProperty("stance").GetInt32() : null;
 
     private static Node3D? ItemModel(string modelsDir, string nif, string[] dirs)
     {

@@ -604,8 +604,7 @@ public partial class WorldView : Node3D
         if (_bodyAnim is null || _bodyClip == clip || !_bodyAnim.HasAnimation(clip))
             return;
         _holdMoving = false;
-        _bodyAnim.GetAnimation(clip).LoopMode = Animation.LoopModeEnum.None;
-        _bodyAnim.Play(clip, customBlend: 0.1);
+        StartOnce(_bodyAnim, clip);
         _bodyClip = clip;
         _landLeft = hold;
     }
