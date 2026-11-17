@@ -263,6 +263,28 @@ public sealed class AssetLibraryTests : IDisposable
     }
 
     [LiveFact(Bowsprit)]
+    public void ADungeonsTextureRenamesGiveItsPieceItsOwnCopy()
+    {
+        byte[] nif = File.ReadAllBytes(BowspritFixture());   // names PSbeamLt_grey.dds
+        Put("zones/Dnifs/piece.nif", nif);
+        Put("zones/Nifs/PSbeamLt_grey.dds", "original"u8.ToArray());
+        Put("zones/Nifs/wetstones.dds", "renamed"u8.ToArray());
+        var library = new AssetLibrary(AssetIndex.Build(_client), _lib);
+        AssetLibrary dungeon = library.WithTextureProxy("zone060", TextureProxy.Parse("psbeamlt_grey,wetstones,0"));
+
+        string renamed = dungeon.GetModel("piece.nif").GlbPath!;
+        Assert.Equal("zone060/piece.glb", library.ManifestName(renamed));
+        Assert.Contains("wetstones", System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(renamed)), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("renamed", File.ReadAllText(Path.Combine(_lib, "textures", "wetstones.dds")));
+
+        // The same piece anywhere else, and in a dungeon whose table doesn't name its textures: as before.
+        Assert.Equal("piece.glb", library.ManifestName(library.GetModel("piece.nif").GlbPath!));
+        Assert.Equal("piece.glb", library.ManifestName(
+            library.WithTextureProxy("zone079", TextureProxy.Parse("conch,OceanSeashell01,0")).GetModel("piece.nif").GlbPath!));
+        Assert.Equal("original", File.ReadAllText(Path.Combine(_lib, "textures", "psbeamlt_grey.dds")));
+    }
+
+    [LiveFact(Bowsprit)]
     public void WithoutItsOwnCopyACityModelFallsBackToZonesNifs()
     {
         Put("zones/zone026/nifs/citything.nif", File.ReadAllBytes(BowspritFixture()));

@@ -43,6 +43,19 @@ public sealed class AssetLibrary
     // figures, items and effects, whose skins go through a loader of their own (not traced): they keep the
     // install-wide lookup preferring their folders.
     private bool _modelFolders = true;
+    // A dungeon's texture renames (texproxy.csv) and the scope a model they change is stored in; _proxied: this view
+    // converts such a model (its texture names renamed).
+    private TextureProxy? _proxy;
+    private string? _proxyScope;
+    private bool _proxied;
+
+    /// <summary>
+    /// The view a dungeon's fixtures convert in: their texture names go through the dungeon's <c>texproxy.csv</c> first,
+    /// as the client loads them. A model one of whose texture names it renames is stored as that dungeon's own
+    /// (<c>models/&lt;scope&gt;/</c>, its materials naming the new textures); any other converts as anywhere else.
+    /// </summary>
+    public AssetLibrary WithTextureProxy(string scope, TextureProxy proxy) => proxy.Count == 0 ? this
+        : new(_index, _root) { _scope = _scope, _prefer = _prefer, _modelFolders = _modelFolders, _proxy = proxy, _proxyScope = scope };
 
     /// <summary>
     /// A view of the library for one kind of asset ("figures", "items", "effects"): names resolve to the
@@ -153,6 +166,8 @@ public sealed class AssetLibrary
     /// again (the Makefile asks for this when the converter changed).</remarks>
     public ModelResult GetModel(string nifName, bool reconvert = false)
     {
+        if (_proxy is not null && !_proxied)
+            return GetProxiedModel(nifName, reconvert);
         if (ForModel(nifName) is { } own && !ReferenceEquals(own, this))
             return own.GetModel(nifName, reconvert);
         string stem = Path.GetFileNameWithoutExtension(BareName(nifName));
@@ -165,7 +180,7 @@ public sealed class AssetLibrary
         string models = Folder(_models, nifName, texture: false);
         string scoped = _scope is null ? models : Path.Combine(_models, _scope);
         if (!reconvert)
-            foreach (string dir in new[] { scoped, models }.Distinct())
+            foreach (string dir in (_proxied ? [scoped] : new[] { scoped, models }).Distinct())
                 if (File.Exists(Path.Combine(dir, glbName)))
                     return new ModelResult(OnDiskName(Path.Combine(dir, glbName)), AssetOrigin.Converted);
 
@@ -177,6 +192,8 @@ public sealed class AssetLibrary
         {
             // With its patch files merged in (<name>_p00.nif, … beside it), as the client loads it.
             NifModel model = NifFile.Read(nifBytes, _index.ReadPatches(nifName, _prefer));
+            if (_proxied)
+                model = Renamed(model, _proxy!);
             // Textures first, the glb last: a glb on disk means its model converted completely.
             // Base textures and the extra layers (dark and detail maps) the client binds by name.
             // A model one of whose textures is the scope's own copy goes in the scope's folder too: the client takes a
@@ -185,11 +202,11 @@ public sealed class AssetLibrary
             string? modelFolder = _modelFolders && _index.Locate(nifName, _prefer) is { } at ? _index.RelativeFolder(at) : null;
             string scopeTextures = _scope is null ? "" : Path.GetFullPath(Path.Combine(_textures, _scope));
             foreach (NifMesh mesh in model.Meshes)
-                foreach (string? texture in new[] { mesh.TextureFile, mesh.DarkTextureFile, mesh.DetailTextureFile, mesh.DecalTextureFile, mesh.GlowTextureFile })
+                foreach (string? texture in TextureNames(mesh))
                     if (!string.IsNullOrEmpty(texture) && GatherTexture(texture!, reconvert, modelFolder) is string got && _scope is not null
                         && string.Equals(Path.GetDirectoryName(Path.GetFullPath(got)), scopeTextures, StringComparison.OrdinalIgnoreCase))
                         scopedTexture = true;
-            string glbPath = Path.Combine(scopedTexture ? scoped : models, glbName);
+            string glbPath = Path.Combine(scopedTexture || _proxied ? scoped : models, glbName);
             Directory.CreateDirectory(Path.GetDirectoryName(glbPath)!);
             WriteAtomically(glbPath, tmp => GltfExporter.SaveGlb(model, tmp));
             return new ModelResult(glbPath, AssetOrigin.Converted);
@@ -203,6 +220,56 @@ public sealed class AssetLibrary
             // One model the converter can't export must not take the whole zone down with it.
             return new ModelResult(null, AssetOrigin.Failed, $"{nifName}: {e.GetType().Name}: {e.Message}");
         }
+    }
+
+    // A dungeon fixture: converted with its texture names renamed (in the dungeon's scope) when the table renames any of
+    // them, else as this view without the table.
+    private ModelResult GetProxiedModel(string nifName, bool reconvert)
+    {
+        var plain = new AssetLibrary(_index, _root) { _scope = _scope, _prefer = _prefer, _modelFolders = _modelFolders };
+        string glb = Path.Combine(_models, _proxyScope!, Path.GetFileNameWithoutExtension(BareName(nifName)) + ".glb");
+        if (File.Exists(Path.Combine(_overrides, Path.GetFileName(glb))))
+            return plain.GetModel(nifName, reconvert);
+        if (!reconvert && File.Exists(glb))
+            return new ModelResult(OnDiskName(glb), AssetOrigin.Converted);
+        if (_index.Read(nifName, _prefer) is not byte[] bytes || _index.Locate(nifName, _prefer) is not { } at)
+            return plain.GetModel(nifName, reconvert);
+        NifModel model;
+        try
+        {
+            model = NifFile.Read(bytes, _index.ReadPatches(nifName, _prefer));
+        }
+        catch (Exception e) when (e is NifFormatException or ArgumentException or InvalidOperationException or IndexOutOfRangeException)
+        {
+            return plain.GetModel(nifName, reconvert);   // reports the same failure
+        }
+        if (!model.Meshes.Any(m => TextureNames(m).Any(t => !string.IsNullOrEmpty(t) && _proxy!.Apply(t!) != t)))
+            return plain.GetModel(nifName, reconvert);
+        var view = new AssetLibrary(_index, _root)
+        {
+            _scope = _proxyScope, _prefer = [_index.RelativeFolder(at), AssetIndex.GlobalTextureFolder],
+            _proxy = _proxy, _proxyScope = _proxyScope, _proxied = true,
+        };
+        return view.GetModel(nifName, reconvert);
+    }
+
+    private static string?[] TextureNames(NifMesh m) =>
+        [m.TextureFile, m.DarkTextureFile, m.DetailTextureFile, m.DecalTextureFile, m.GlowTextureFile];
+
+    private static NifModel Renamed(NifModel model, TextureProxy proxy)
+    {
+        string? R(string? t) => string.IsNullOrEmpty(t) ? t : proxy.Apply(t);
+        return new NifModel
+        {
+            Version = model.Version,
+            Meshes = model.Meshes.Select(m => m with
+            {
+                TextureFile = R(m.TextureFile), DarkTextureFile = R(m.DarkTextureFile), DetailTextureFile = R(m.DetailTextureFile),
+                DecalTextureFile = R(m.DecalTextureFile), GlowTextureFile = R(m.GlowTextureFile),
+            }).ToList(),
+            Joints = model.Joints,
+            NodeWorlds = model.NodeWorlds,
+        };
     }
 
     /// <summary>

@@ -532,6 +532,9 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
 (unconfirmed).
 - Audit the chunk format across all 299 zones, then assemble a dungeon from its pieces and placements.
 - Portals and the dungeon visibility rules; dungeon water and lighting (`[dungeonfix]`).
+- *Ready 2026-11-17:* the textures of `zones/Dnifs` pieces are looked up as the client does (their folder, then
+  `zones/Nifs`), and a dungeon's `texproxy.csv` renames are applied (`AssetLibrary.WithTextureProxy`; W63).
+  `nifproxy.csv` (alternate pieces, e.g. zone 060's `ALTSTONEHall01`) is not yet read.
 - **Done when:** you can enter a dungeon from its zone jump and walk it, rendered from its pieces.
 
 ### M12 — Atmosphere: effects, sound and music
