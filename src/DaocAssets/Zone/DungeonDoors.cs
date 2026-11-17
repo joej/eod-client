@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // A dungeon's doors (roadmap M11): which door of which placed room or prop has which id. The client names a dungeon
-// piece's door by zone × 1,000,000 + room × 100 + n, n from the node name door001…009 (daoc-re's doors note, RE/80,
-// inferred there); a prop's doors take its room's number (its "collision and doors join the room's", RE/83). Checked
-// 2026-11-17 against the one dungeon door in OpenDAoC's database that fits a door piece: Hibernia's Darkspire 98000001,
-// room 0 (darkspire_01, door001). Its other one, Galladoria 191000501, names room 5, which has no door piece (a
-// hand-added row, probably). A name with nine digits is an id of its own.
+// door zone × 1,000,000 + room × 100 + n: room is the dungeon.place row (0-based), a prop's door takes its prop's room
+// (dungeon.prop column 10) and its own name's number, with no offset; n is read after "door" (daoc-re's door-id answer,
+// 2026-11-17, from the client's code: at load it renames each door node "door" + zone (3) + room (4) + n (2) and a
+// click sends those 9 digits). Both of OpenDAoC's dungeon door rows fit: Hibernia's Darkspire 98000001 (room 0,
+// darkspire_01's door001) and Galladoria 191000501 (room 5, ROOTRoom03's door001H). A name of exactly 13 characters,
+// "door" + 9 digits, is an id of its own.
 // Written per zone as doors.csv: id, the zone.csv row the door's model is placed on, the door's node, and that
 // placement's position; the client plays the door's animation (GltfExporter's door parts) when 0x99 arrives.
 
@@ -25,16 +26,16 @@ public static class DungeonDoors
 {
     public const string CsvHeader = "id,row,door,x,y,z";
 
-    /// <summary>A dungeon door's id: zone × 1,000,000 + room × 100 + n (door001 → 1), or the nine digits of a
-    /// "door" + 9 digits name. Null when the name has no number or the parts don't fit.</summary>
+    /// <summary>A dungeon door's id: zone × 1,000,000 + room × 100 + n, n read after "door" as the client does
+    /// (NifFile.DoorNumber: door001 → 1, door001H → 1), or, for a name of exactly 13 characters, "door" + 9 digits, those
+    /// digits. Null when the name isn't a door, or n is outside 1–99 (the click couldn't name it).</summary>
     public static uint? Id(int zone, int room, string door)
     {
-        string digits = new(door.Skip(4).TakeWhile(char.IsAsciiDigit).ToArray());
-        if (!door.StartsWith("door", StringComparison.OrdinalIgnoreCase) || digits.Length < 2
-            || !long.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out long n))
+        if (!NifFile.IsDoorNode(door))
             return null;
-        if (digits.Length == 9)
-            return (uint)n;
+        if (door.Length == 13 && door.Skip(4).All(char.IsAsciiDigit))
+            return uint.Parse(door[4..], CultureInfo.InvariantCulture);
+        long n = NifFile.DoorNumber(door);
         long id = zone * 1_000_000L + room * 100L + n;
         return n is >= 1 and <= 99 && room is >= 0 and < 10_000 && id <= uint.MaxValue ? (uint)id : null;
     }

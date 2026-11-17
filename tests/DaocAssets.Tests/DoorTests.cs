@@ -11,14 +11,18 @@ public sealed class DoorTests
 {
     [Theory]
     [InlineData("door001", true)]
-    [InlineData("Door001S", true)]       // a four-state door
-    [InlineData("door12", true)]          // outdoors: "door" + 2 digits
+    [InlineData("door001H", true)]        // Galladoria's ROOTRoom03: the client reads the leading digits
+    [InlineData("Door001S", true)]        // a four-state door
+    [InlineData("door001-15", true)]
+    [InlineData("door1:5", true)]         // 7 characters, n = 1 (inside a door it is that door's geometry)
+    [InlineData("door0012", true)]
     [InlineData("door123456789", true)]
-    [InlineData("door", false)]           // a door's own mesh node (bdungdoor01: door001 / visible / door)
-    [InlineData("door1", false)]          // InconnuDoor01's leaves under its door001
-    [InlineData("door001:5", false)]      // a shape
-    [InlineData("doorway", false)]
-    public void ADoorNodeIsDoorAndTwoOrMoreDigits(string name, bool door) => Assert.Equal(door, NifFile.IsDoorNode(name));
+    [InlineData("door", false)]           // too short (bdungdoor01's mesh node: door001 / visible / door)
+    [InlineData("door1", false)]          // too short (InconnuDoor01's leaves under its door001)
+    [InlineData("door12", false)]         // too short
+    [InlineData("doorway", false)]        // n = 0
+    [InlineData("door000", false)]        // n = 0
+    public void ADoorNodeIsAsTheClientTestsIt(string name, bool door) => Assert.Equal(door, NifFile.IsDoorNode(name));
 
     [Fact]
     public void ADoorsLengthComesFromItsNameItsExtraDataOrFifteenFrames()
@@ -76,16 +80,19 @@ public sealed class DoorTests
 
     [Theory]
     [InlineData(98, 0, "door001", 98000001u)]       // Hibernia's Darkspire: OpenDAoC's database row
+    [InlineData(191, 5, "door001H", 191000501u)]    // Galladoria's room 5: its other row
     [InlineData(221, 57, "door002", 221005702u)]
+    [InlineData(221, 57, "door0012", 221005712u)]
     [InlineData(5, 3, "door123456789", 123456789u)]
     public void ADungeonDoorsIdIsZoneRoomAndNumber(int zone, int room, string door, uint id) =>
         Assert.Equal(id, DungeonDoors.Id(zone, room, door));
 
     [Fact]
-    public void ADoorWithoutANumberHasNoId()
+    public void ADoorWithoutANumberOrAboveNinetyNineHasNoId()
     {
         Assert.Null(DungeonDoors.Id(98, 0, "door"));
         Assert.Null(DungeonDoors.Id(98, 0, "gate01"));
+        Assert.Null(DungeonDoors.Id(98, 0, "door0100"));   // n 100: the click's 2 digits can't hold it
     }
 
     [Fact]
@@ -109,6 +116,24 @@ public sealed class DoorTests
             Assert.Equal(["door001"], DungeonDoors.InGlb(path));
         }
         finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void ADungeonsRenamedTexturesKeepThePiecesDoors()
+    {
+        // Zones 060, 079 and 423 convert their pieces through texproxy.csv (AssetLibrary.Renamed): the doors must come too.
+        var keys = new KfaTrack("leaf", [(0f, Quaternion.Identity), (1f, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, 1f))], [], []);
+        var model = new NifModel
+        {
+            Version = new NifVersion(4, 2, 1, 0),
+            Meshes = [Tri("leaf", 0)],
+            Doors = [new NifDoor("door001", 1f)],
+            Movers = [new NifMover("door001", "leaf", Matrix4x4.Identity, Matrix4x4.Identity, Matrix4x4.Identity, keys)],
+        };
+        NifModel renamed = DaocAssets.Library.AssetLibrary.Renamed(model, DaocAssets.Library.TextureProxy.Parse("stone,granite,0\n"));
+        Assert.Equal("granite.dds", renamed.Meshes[0].TextureFile);
+        Assert.Equal(model.Doors, renamed.Doors);
+        Assert.Equal(model.Movers, renamed.Movers);
     }
 
     private static NifMesh Tri(string name, int mover) => new()

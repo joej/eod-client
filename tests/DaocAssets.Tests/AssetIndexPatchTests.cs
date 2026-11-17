@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 using DaocAssets.Library;
+using DaocAssets.Nif;
 
 namespace DaocAssets.Tests;
 
@@ -48,5 +49,22 @@ public sealed class AssetIndexPatchTests : IDisposable
         AssetIndex index = AssetIndex.Build(_client);
         Assert.NotNull(index.Read("cam32.nif", null));
         Assert.Empty(index.ReadPatches("cam32.nif", null));
+    }
+
+    // Kobold Undercity's room 0 piece (zone 243): six doors, and three patch files. Merged with its patches it must keep
+    // its doors (they were lost there until 2026-11-17, so its doors.csv missed 243000001 … 243000006).
+    [LiveFact("live-mpk/koboldroom01.npk", "live-mpk/koboldroom01_p00.npk", "live-mpk/koboldroom01_p01.npk", "live-mpk/koboldroom01_p02.npk")]
+    public void APatchedModelKeepsItsDoors()
+    {
+        string dnifs = Folder("zones/Dnifs");
+        foreach (string f in new[] { "koboldroom01.npk", "koboldroom01_p00.npk", "koboldroom01_p01.npk", "koboldroom01_p02.npk" })
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "live-mpk", f), Path.Combine(dnifs, f));
+        AssetIndex index = AssetIndex.Build(_client);
+        IReadOnlyList<byte[]> patches = index.ReadPatches("KoboldRoom01.NIF", null);
+        Assert.Equal(3, patches.Count);
+        NifModel model = NifFile.Read(index.Read("KoboldRoom01.NIF", null)!, patches);
+        Assert.Equal(["door001", "door002", "door003", "door004", "door005", "door006"], model.Doors.Select(d => d.Name).Order());
+        Assert.Equal(12, model.Movers.Count);
+        Assert.All(model.Meshes.Where(m => m.Mover >= 0), m => Assert.InRange(m.Mover, 0, model.Movers.Count - 1));
     }
 }

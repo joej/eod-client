@@ -22,10 +22,8 @@ namespace DaocAssets.Nif;
 /// door with a mid frame, and whether it is a four-state door (not animated here).</summary>
 public sealed record NifDoor(string Name, float Duration, float? Mid = null, bool FourState = false)
 {
-    /// <summary>The number in the name (door001 → 1; door123456789 → 123456789), or -1.</summary>
-    public long Number => long.TryParse(DoorDigits.Match(Name).Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out long n) ? n : -1;
-
-    private static readonly Regex DoorDigits = new("^door([0-9]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    /// <summary>The number after "door" (door001 → 1, door001H → 1; door123456789 → 123456789).</summary>
+    public long Number => NifFile.DoorNumber(Name);
 }
 
 /// <summary>
@@ -73,15 +71,26 @@ public static partial class NifFile
     /// <summary>The frame rate door keyframes are counted in (maxframes/30 s), and the default frame count.</summary>
     public const float DoorFramesPerSecond = 30, DefaultDoorFrames = 15;
 
-    // "door" followed by two or more digits: a door node (retail's names: "door" + 2 digits outdoors, door001…009 in
-    // dungeons, "door" + 9 digits anywhere). Not "door" alone or "door1" (a door's own parts: InconnuDoor01's two leaves,
-    // "door1" and "door2", hang under its door001), nor a shape's "door1:5".
-    private static readonly Regex DoorNode = new("^door[0-9]{2,}[^:]*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    // A door node, as the client tests a name (daoc-re's door-id answer, 2026-11-17): it starts with "door" in any case, is
+    // at least 7 characters long, and the number read from right after "door" (C atol: leading digits) is not 0. So
+    // door001, door001H (Galladoria's ROOTRoom03), door001s, Door001, door1:5 and door0012 are doors; door, door1, door12,
+    // doorway and door000 are not.
     private static readonly Regex NameFrames = new("-F([0-9]+)", RegexOptions.CultureInvariant);
     private static readonly Regex NameMid = new("-M([0-9]+)", RegexOptions.CultureInvariant);
 
-    /// <summary>True for a door node's name: "door" and two or more digits (door001, door001s, door12, door123456789).</summary>
-    public static bool IsDoorNode(string name) => !string.IsNullOrEmpty(name) && DoorNode.IsMatch(name);
+    /// <summary>True for a door node's name: "door…", 7 characters or more, a non-zero number after "door".</summary>
+    public static bool IsDoorNode(string name) =>
+        !string.IsNullOrEmpty(name) && name.Length >= 7 && name.StartsWith("door", StringComparison.OrdinalIgnoreCase)
+        && DoorNumber(name) != 0;
+
+    /// <summary>The number right after "door", read as C atol reads it (leading digits; 0 when there are none).</summary>
+    public static long DoorNumber(string name)
+    {
+        long n = 0;
+        for (int i = 4; i < name.Length && char.IsAsciiDigit(name[i]) && n < 1_000_000_000_000; i++)
+            n = n * 10 + (name[i] - '0');
+        return n;
+    }
 
     /// <summary>The doors found in a model's nodes, the movers inside them, and which node index is which mover.</summary>
     internal sealed record DoorScan(IReadOnlyList<NifDoor> Doors, IReadOnlyList<NifMover> Movers, IReadOnlyDictionary<int, int> MoverOf)
@@ -120,28 +129,48 @@ public static partial class NifFile
                 stack.Push((c, w));
         }
 
+        // The doors: walking down from the roots, the first door node on a branch is a door and the client doesn't look
+        // inside it; door-named nodes under it are its geometry (Darkspire's door001 / visible / door001, door001:5). A
+        // second door of a name the model already has gets the same id; retail moves only the first, so it is left out.
+        var outer = new List<int>();
+        var down = new Stack<int>(n.Roots.Reverse());
+        var visited = new HashSet<int>();
+        while (down.Count > 0)
+        {
+            int i = down.Pop();
+            if (!world.ContainsKey(i) || !visited.Add(i))
+                continue;
+            if (IsDoorNode(n.Name(i).Trim()))
+            {
+                outer.Add(i);
+                continue;
+            }
+            foreach (int c in n.Children(i).Reverse())
+                down.Push(c);
+        }
+
         var doors = new List<NifDoor>();
         var movers = new List<NifMover>();
         var moverOf = new Dictionary<int, int>();
-        foreach (int d in world.Keys.Order())
+        foreach (int d in outer)
         {
             string name = n.Name(d).Trim();
-            if (!IsDoorNode(name) || doors.Any(x => x.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            if (doors.Any(x => x.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
                 continue;
+            // The eighth character 's' makes a four-state door (the note says 's'; upper case too is ours: AerusIsland14's
+            // Door001S).
             bool four = name.Length >= 8 && name[7] is 's' or 'S';
             (float frames, float? mid) = DoorFrames(name, n.ExtraStrings(d));
             doors.Add(new NifDoor(name.ToLowerInvariant(), frames / DoorFramesPerSecond, mid / DoorFramesPerSecond, four));
             if (four)
                 continue;
-            // The nodes with keys in its subtree (not entering another door; a node of the door's own name is its part:
-            // Darkspire's leaves move under door001 / visible / door001).
+            // The nodes with keys in its whole subtree (door-named ones included: they are its geometry).
             var todo = new Stack<int>(n.Children(d));
             var seen = new HashSet<int>();
             while (todo.Count > 0)
             {
                 int i = todo.Pop();
-                if (!world.ContainsKey(i) || !seen.Add(i)
-                    || (IsDoorNode(n.Name(i)) && !n.Name(i).Trim().Equals(name, StringComparison.OrdinalIgnoreCase)))
+                if (!world.ContainsKey(i) || !seen.Add(i))
                     continue;
                 if (n.Keys(i, n.Name(i)) is { } keys && (keys.Rotations.Length + keys.Translations.Length + keys.Scales.Length) > 0)
                 {

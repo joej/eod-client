@@ -154,7 +154,13 @@ public static partial class NifFile
         }
         if (meshes.Count == 0)
             throw new NifFormatException("No geometry in the model or its patches.");
-        return new NifModel { Version = model.Version, Meshes = meshes, Joints = model.Joints, NodeWorlds = model.NodeWorlds };
+        // The base model's doors come along: its meshes keep their mover tags (KoboldRoom01 and InconnuRoom03, patched,
+        // lost every door without these). A patch's own donated parts don't move (ours).
+        return new NifModel
+        {
+            Version = model.Version, Meshes = meshes, Joints = model.Joints, NodeWorlds = model.NodeWorlds,
+            Doors = model.Doors, Movers = model.Movers,
+        };
     }
 
     private sealed record Donor(Tree Tree, int Node, string Name, int Patch);

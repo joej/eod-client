@@ -288,7 +288,7 @@ public sealed class AssetLibrary
     private static string?[] TextureNames(NifMesh m) =>
         [m.TextureFile, m.DarkTextureFile, m.DetailTextureFile, m.DecalTextureFile, m.GlowTextureFile];
 
-    private static NifModel Renamed(NifModel model, TextureProxy proxy)
+    internal static NifModel Renamed(NifModel model, TextureProxy proxy)
     {
         string? R(string? t) => string.IsNullOrEmpty(t) ? t : proxy.Apply(t);
         return new NifModel
@@ -301,6 +301,9 @@ public sealed class AssetLibrary
             }).ToList(),
             Joints = model.Joints,
             NodeWorlds = model.NodeWorlds,
+            // A swapped dungeon piece's doors move as the original's (060, 079, 423 lost every door without these).
+            Doors = model.Doors,
+            Movers = model.Movers,
         };
     }
 
