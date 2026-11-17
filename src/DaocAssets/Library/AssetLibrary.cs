@@ -39,6 +39,10 @@ public sealed class AssetLibrary
     // the default one of its name is stored under models/<scope>/ or textures/<scope>/.
     private string? _scope;
     private IReadOnlyList<string>? _prefer;
+    // Models convert with the client's model texture lookup: the model's own folder, then zones/Nifs (W63). Off for
+    // figures, items and effects, whose skins go through a loader of their own (not traced): they keep the
+    // install-wide lookup preferring their folders.
+    private bool _modelFolders = true;
 
     /// <summary>
     /// A view of the library for one kind of asset ("figures", "items", "effects"): names resolve to the
@@ -47,39 +51,62 @@ public sealed class AssetLibrary
     /// looks in textures/&lt;scope&gt;/ (models/&lt;scope&gt;/) first for these models.
     /// </summary>
     public AssetLibrary Scoped(string scope, params string[] folders) =>
+        new(_index, _root) { _scope = scope, _prefer = folders, _modelFolders = false };
+
+    /// <summary>As <see cref="Scoped"/>, for zone models (a capital's pieces, the tutorial's): their textures are looked
+    /// up as the client does for a model, in the model's own folder, then zones/Nifs.</summary>
+    public AssetLibrary ZoneScoped(string scope, params string[] folders) =>
         new(_index, _root) { _scope = scope, _prefer = folders };
 
-    // The view a model converts in. A model in a zone's own folder (zones/zoneNNN/nifs: the capitals' pieces, zone-local
-    // pieces) takes its textures from that folder first, then zones/Nifs, as the client does (daoc-re, 2026-11-16: a
-    // model's own folder, then the global zones/Nifs; W63), in the zone's scope (models/zoneNNN/, textures/zoneNNN/).
+    // The view a model converts in. The client looks a model's textures up in the model's own folder, then the global
+    // zones/Nifs (daoc-re, 2026-11-16; W63). A model stored elsewhere than zones/Nifs (a capital's pieces in
+    // zones/zoneNNN/nifs, the tutorial's, housing's, Newtowns') converts in a scope named after its folder ("zone026",
+    // "tutorial", "phousing"), so a texture of its own folder that differs from the zones/Nifs one is stored apart
+    // (textures/<scope>/) instead of overwriting the one zones/Nifs models use. Items, figures and effects keep the
+    // lookup of their own views (Scoped), which share their stored files.
     private AssetLibrary ForModel(string nifName)
     {
-        if (_scope is not null || _index.Locate(nifName, null) is not { } loc)
+        if (_scope is not null || !_modelFolders || _index.Locate(nifName, null) is not { } loc)
             return this;
         string folder = _index.RelativeFolder(loc);
-        var zone = System.Text.RegularExpressions.Regex.Match(folder, "^zones/(zone[0-9]+)/nifs/$",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        return zone.Success ? Scoped(zone.Groups[1].Value.ToLowerInvariant(), folder, "zones/Nifs/") : this;
+        if (folder.Equals(AssetIndex.GlobalTextureFolder, StringComparison.OrdinalIgnoreCase))
+            return this;
+        string[] parts = folder.ToLowerInvariant().Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || parts[0] is "items" or "figures" or "effects")
+            return new AssetLibrary(_index, _root) { _modelFolders = false };
+        string scope = string.Join('-', parts.Where(p => p is not ("zones" or "nifs")));
+        return ZoneScoped(scope.Length > 0 ? scope : parts[0], folder, AssetIndex.GlobalTextureFolder);
     }
 
     // Where a converted model or texture of this name goes: the shared folder, or the scope's own when the
     // scope's file differs from the default one (a byte-identical copy elsewhere still shares).
-    private string Folder(string shared, string name, bool texture)
+    private string Folder(string shared, string name, bool texture, string? modelFolder = null)
     {
         if (_scope is null || _prefer is null)
             return shared;
-        bool isDefault = _index.IsDefault(name, _prefer);
-        string stem = Path.GetFileNameWithoutExtension(BareName(name));
         if (texture)
-            foreach (string ext in TextureExts)
-                if (_index.Locate(stem + ext, null) is not null)
-                    isDefault &= _index.IsDefault(stem + ext, _prefer);
-        if (isDefault)
+        {
+            // The scope's copy against the one a model in zones/Nifs (or an unscoped one) gets.
+            var mineAt = FindTexture(name, modelFolder);
+            var theirsAt = FindTexture(name, modelFolder is null ? null : AssetIndex.GlobalTextureFolder, shared: true);
+            if (mineAt is null || theirsAt is null)
+                return mineAt is null ? shared : Path.Combine(shared, _scope);
+            if (mineAt.Value.Location == theirsAt.Value.Location)
+                return shared;
+            byte[]? m = _index.Read(mineAt)?.Bytes, t = _index.Read(theirsAt)?.Bytes;
+            return m is not null && t is not null && m.AsSpan().SequenceEqual(t) ? shared : Path.Combine(shared, _scope);
+        }
+        if (_index.IsDefault(name, _prefer))
             return shared;
-        byte[]? mine = texture ? _index.ReadTexture(name, _prefer)?.Bytes : _index.Read(name, _prefer);
-        byte[]? theirs = texture ? _index.ReadTexture(name)?.Bytes : _index.Read(name);
+        byte[]? mine = _index.Read(name, _prefer);
+        byte[]? theirs = _index.Read(name);
         return mine is not null && theirs is not null && mine.AsSpan().SequenceEqual(theirs) ? shared : Path.Combine(shared, _scope);
     }
+
+    // A texture for a model stored in modelFolder (the client's lookup), or, without one, the install-wide lookup
+    // preferring this view's folders (shared: no preference).
+    private (AssetLocation Location, string FileName)? FindTexture(string name, string? modelFolder, bool shared = false) =>
+        modelFolder is not null ? _index.LocateModelTexture(name, modelFolder) : _index.LocateTexture(name, shared ? null : _prefer);
 
     /// <summary>How a placement manifest names a converted model: its path under <c>models/</c> with '/'
     /// ("elm1.glb", or "tutorial/ochpier.glb" for a scope's own copy); an override by its file name.</summary>
@@ -155,10 +182,11 @@ public sealed class AssetLibrary
             // A model one of whose textures is the scope's own copy goes in the scope's folder too: the client takes a
             // model's textures from its scope's folder first only for a model stored there (W63: a city's pieces).
             bool scopedTexture = false;
+            string? modelFolder = _modelFolders && _index.Locate(nifName, _prefer) is { } at ? _index.RelativeFolder(at) : null;
             string scopeTextures = _scope is null ? "" : Path.GetFullPath(Path.Combine(_textures, _scope));
             foreach (NifMesh mesh in model.Meshes)
                 foreach (string? texture in new[] { mesh.TextureFile, mesh.DarkTextureFile, mesh.DetailTextureFile, mesh.DecalTextureFile, mesh.GlowTextureFile })
-                    if (!string.IsNullOrEmpty(texture) && GatherTexture(texture!, reconvert) is string got && _scope is not null
+                    if (!string.IsNullOrEmpty(texture) && GatherTexture(texture!, reconvert, modelFolder) is string got && _scope is not null
                         && string.Equals(Path.GetDirectoryName(Path.GetFullPath(got)), scopeTextures, StringComparison.OrdinalIgnoreCase))
                         scopedTexture = true;
             string glbPath = Path.Combine(scopedTexture ? scoped : models, glbName);
@@ -185,7 +213,10 @@ public sealed class AssetLibrary
     /// finds it. Copies the client's texture bytes verbatim (no transcode) so the client can load it.
     /// </summary>
     /// <remarks>With <paramref name="refresh"/> an already gathered copy is replaced.</remarks>
-    public string? GatherTexture(string textureName, bool refresh = false)
+    public string? GatherTexture(string textureName, bool refresh = false) => GatherTexture(textureName, refresh, null);
+
+    // With modelFolder, the texture of a model stored there, looked up as the client does (AssetIndex.LocateModelTexture).
+    private string? GatherTexture(string textureName, bool refresh, string? modelFolder)
     {
         string stem = Path.GetFileNameWithoutExtension(BareName(textureName));
 
@@ -199,7 +230,7 @@ public sealed class AssetLibrary
             }
 
         // Already gathered? (match by stem — we store under the real on-disk name).
-        string textures = Folder(_textures, textureName, texture: true);
+        string textures = Folder(_textures, textureName, texture: true, modelFolder);
         if (!refresh && Directory.Exists(textures))
             foreach (string ext in TextureExts)
             {
@@ -208,7 +239,7 @@ public sealed class AssetLibrary
                     return ep;
             }
 
-        (byte[] Bytes, string FileName)? found = _index.ReadTexture(textureName, _prefer);
+        (byte[] Bytes, string FileName)? found = _index.Read(FindTexture(textureName, modelFolder));
         if (found is null)
             return null;
         Directory.CreateDirectory(textures);

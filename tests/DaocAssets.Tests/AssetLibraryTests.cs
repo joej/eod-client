@@ -246,6 +246,23 @@ public sealed class AssetLibraryTests : IDisposable
     }
 
     [LiveFact(Bowsprit)]
+    public void AModelInAnyOtherFolderKeepsItsOwnCopyApartFromZonesNifs()
+    {
+        byte[] nif = File.ReadAllBytes(BowspritFixture());   // names PSbeamLt_grey.dds
+        Put("phousing/nifs/housething.nif", nif);
+        Put("zones/Nifs/sharedthing.nif", nif);
+        Put("phousing/nifs/PSbeamLt_grey.dds", "housing"u8.ToArray());
+        Put("zones/Nifs/PSbeamLt_grey.dds", "shared"u8.ToArray());
+        var library = new AssetLibrary(AssetIndex.Build(_client), _lib);
+
+        // Either order: neither overwrites the other's copy.
+        Assert.Equal("phousing/housething.glb", library.ManifestName(library.GetModel("housething.nif").GlbPath!));
+        Assert.Equal("sharedthing.glb", library.ManifestName(library.GetModel("sharedthing.nif").GlbPath!));
+        Assert.Equal("housing", File.ReadAllText(Path.Combine(_lib, "textures", "phousing", "psbeamlt_grey.dds")));
+        Assert.Equal("shared", File.ReadAllText(Path.Combine(_lib, "textures", "psbeamlt_grey.dds")));
+    }
+
+    [LiveFact(Bowsprit)]
     public void WithoutItsOwnCopyACityModelFallsBackToZonesNifs()
     {
         Put("zones/zone026/nifs/citything.nif", File.ReadAllBytes(BowspritFixture()));

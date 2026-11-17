@@ -275,37 +275,69 @@ public sealed class AssetIndex
     public (byte[] Bytes, string FileName)? ReadTexture(string name) => ReadTexture(name, null);
 
     /// <summary>As <see cref="ReadTexture(string)"/>, preferring a copy under <paramref name="folders"/>.</summary>
-    public (byte[] Bytes, string FileName)? ReadTexture(string name, IReadOnlyList<string>? folders)
-    {
-        // Try the exact name first (covers a correct reference and an already-bare name with ext).
-        string exact = KeyFromAny(name);
-        if (Path.GetExtension(exact).Length > 0 && _byName.ContainsKey(exact))
-        {
-            byte[]? b = Read(exact, folders);
-            if (b is not null)
-                return (b, BareName(name));
-        }
+    public (byte[] Bytes, string FileName)? ReadTexture(string name, IReadOnlyList<string>? folders) =>
+        Read(LocateTexture(name, folders));
 
-        // Fall back by stem across the texture extensions, preferring .dds.
+    /// <summary>Where texture <paramref name="name"/> is: the exact name first, then the same stem as .dds, .tga, .bmp
+    /// (a NIF's stale <c>.tga</c> reference finds the shipped <c>.dds</c>), preferring a copy under
+    /// <paramref name="folders"/>; with the file's real name.</summary>
+    public (AssetLocation Location, string FileName)? LocateTexture(string name, IReadOnlyList<string>? folders)
+    {
+        string exact = KeyFromAny(name);
+        if (Path.GetExtension(exact).Length > 0 && Locate(exact, folders) is { } at)
+            return (at, BareName(name));
         string stem = Path.GetFileNameWithoutExtension(exact);
         foreach (string ext in TextureExtensions)
-        {
-            string candidate = stem + ext;
-            if (Locate(candidate, folders) is { } loc)
-            {
-                byte[]? b = ReadAt(loc);
-                if (b is not null)
-                {
-                    // Name the output by the real file (e.g. the .dds), so the stem-based loader finds it.
-                    string real = loc.LoosePath is not null
-                        ? Path.GetFileName(loc.LoosePath)
-                        : loc.Member is not null ? BareName(loc.Member) : candidate;
-                    return (b, real);
-                }
-            }
-        }
+            if (Locate(stem + ext, folders) is { } loc)
+                return (loc, RealName(loc, stem + ext));
         return null;
     }
+
+    /// <summary>The folder every model's textures fall back to (set once at startup by the client).</summary>
+    public const string GlobalTextureFolder = "zones/Nifs/";
+
+    /// <summary>
+    /// Where the client finds texture <paramref name="name"/> for a model stored in <paramref name="modelFolder"/>
+    /// (relative to the install, e.g. "zones/zone026/nifs/"): a loose file in the model's own folder, where a
+    /// <c>.tga</c> name prefers a <c>.dds</c> of the same name, then <c>zones/Nifs</c>, <c>.dds</c> first, then the name
+    /// as given (daoc-re, 2026-11-16, W63). Model archives hold no textures, so only loose files count.
+    /// Not found there: the install-wide lookup (<see cref="LocateTexture"/>; ours, the client would find nothing).
+    /// </summary>
+    public (AssetLocation Location, string FileName)? LocateModelTexture(string name, string modelFolder)
+    {
+        string bare = BareName(name);
+        string stem = Path.GetFileNameWithoutExtension(bare);
+        bool tga = Path.GetExtension(bare).Equals(".tga", StringComparison.OrdinalIgnoreCase);
+        foreach (string folder in new[] { modelFolder, GlobalTextureFolder }.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            bool global = folder.Equals(GlobalTextureFolder, StringComparison.OrdinalIgnoreCase);
+            foreach (string candidate in global || tga ? new[] { stem + ".dds", bare } : [bare])
+                if (LooseIn(candidate, folder) is { } loc)
+                    return (loc, RealName(loc, candidate));
+        }
+        return LocateTexture(name, [modelFolder, GlobalTextureFolder]);
+    }
+
+    /// <summary>The bytes of a located texture with its real file name, or null.</summary>
+    public (byte[] Bytes, string FileName)? Read((AssetLocation Location, string FileName)? found) =>
+        found is { } f && ReadAt(f.Location) is byte[] b ? (b, f.FileName) : null;
+
+    // A loose copy of the name directly in the folder (relative to the install), if indexed.
+    private AssetLocation? LooseIn(string name, string folder)
+    {
+        string key = KeyFromAny(name);
+        if (!_byName.TryGetValue(key, out AssetLocation main))
+            return null;
+        _others.TryGetValue(key, out var others);
+        foreach (AssetLocation l in new[] { main }.Concat(others ?? []))
+            if (l.LoosePath is not null && RelativeFolder(l).Equals(folder, StringComparison.OrdinalIgnoreCase))
+                return l;
+        return null;
+    }
+
+    // Name the output by the real file (e.g. the .dds), so the stem-based loader finds it.
+    private static string RealName(AssetLocation loc, string fallback) =>
+        loc.LoosePath is not null ? Path.GetFileName(loc.LoosePath) : loc.Member is not null ? BareName(loc.Member) : fallback;
 
     // --- persistence (JSON under private/) ---
 

@@ -44,7 +44,7 @@ internal static partial class Cli
 
     internal static AssetLibrary ZoneLibrary(AssetLibrary library, string datMpk) =>
         Path.GetFullPath(datMpk).Replace('\\', '/').Contains("/tutorial/zones/", StringComparison.OrdinalIgnoreCase)
-            ? library.Scoped("tutorial", TutorialFolders) : library;
+            ? library.ZoneScoped("tutorial", TutorialFolders) : library;
 
     private static int ZoneCmd(string[] args)
     {
