@@ -126,7 +126,7 @@ internal static partial class Cli
               mpk nifinfo  <model.nif>
               mpk textures <client-dir> <model.nif | dir-of-nifs> --out DIR
               mpk index    <client-dir> --out index.json
-              mpk model    <name.nif> --index index.json --library LIBDIR
+              mpk model    <name.nif> --index index.json --library LIBDIR [--dungeon dat<NNN>.mpk]   (a dungeon piece: its nifproxy/texproxy applied)
               mpk figure   <model-id> --gamedata gamedata.mpk --index index.json --library LIBDIR
               mpk figures  --gamedata gamedata.mpk --index index.json --library LIBDIR   (every model id: classic figures, and Catacombs versions)
               mpk objects  --gamedata gamedata.mpk --index index.json --library LIBDIR   (the models of the server's objects: carts, banners, items on the ground)

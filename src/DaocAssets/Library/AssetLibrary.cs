@@ -48,14 +48,40 @@ public sealed class AssetLibrary
     private TextureProxy? _proxy;
     private string? _proxyScope;
     private bool _proxied;
+    // A dungeon's piece substitutions (nifproxy.csv), applied once, before anything else.
+    private ModelProxy? _modelProxy;
 
     /// <summary>
     /// The view a dungeon's fixtures convert in: their texture names go through the dungeon's <c>texproxy.csv</c> first,
     /// as the client loads them. A model one of whose texture names it renames is stored as that dungeon's own
     /// (<c>models/&lt;scope&gt;/</c>, its materials naming the new textures); any other converts as anywhere else.
     /// </summary>
-    public AssetLibrary WithTextureProxy(string scope, TextureProxy proxy) => proxy.Count == 0 ? this
-        : new(_index, _root) { _scope = _scope, _prefer = _prefer, _modelFolders = _modelFolders, _proxy = proxy, _proxyScope = scope };
+    public AssetLibrary WithTextureProxy(string scope, TextureProxy proxy)
+    {
+        if (proxy.Count == 0)
+            return this;
+        var view = (AssetLibrary)MemberwiseClone();
+        (view._proxy, view._proxyScope) = (proxy, scope);
+        return view;
+    }
+
+    /// <summary>
+    /// As <see cref="WithTextureProxy"/>, for a dungeon's <c>nifproxy.csv</c>: a piece it names loads the other file
+    /// instead, whose own patch files and textures are then used (inferred from the data; see <see cref="ModelProxy"/>).
+    /// </summary>
+    public AssetLibrary WithModelProxy(ModelProxy proxy)
+    {
+        if (proxy.Count == 0)
+            return this;
+        var view = (AssetLibrary)MemberwiseClone();
+        view._modelProxy = proxy;
+        return view;
+    }
+
+    /// <summary>The view a dungeon's fixtures convert in: its <c>nifproxy.csv</c> and <c>texproxy.csv</c> from
+    /// <paramref name="datArchive"/> (its <c>dat&lt;NNN&gt;.mpk</c>), a renamed piece stored under <paramref name="scope"/>.</summary>
+    public AssetLibrary Dungeon(string scope, string datArchive) =>
+        WithTextureProxy(scope, TextureProxy.FromZoneArchive(datArchive)).WithModelProxy(ModelProxy.FromZoneArchive(datArchive));
 
     /// <summary>
     /// A view of the library for one kind of asset ("figures", "items", "effects"): names resolve to the
@@ -166,6 +192,12 @@ public sealed class AssetLibrary
     /// again (the Makefile asks for this when the converter changed).</remarks>
     public ModelResult GetModel(string nifName, bool reconvert = false)
     {
+        if (_modelProxy is not null)
+        {
+            var rest = (AssetLibrary)MemberwiseClone();
+            rest._modelProxy = null;   // one substitution, not chained
+            return rest.GetModel(_modelProxy.Apply(nifName), reconvert);
+        }
         if (_proxy is not null && !_proxied)
             return GetProxiedModel(nifName, reconvert);
         if (ForModel(nifName) is { } own && !ReferenceEquals(own, this))

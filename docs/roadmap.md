@@ -534,7 +534,9 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
 - Portals and the dungeon visibility rules; dungeon water and lighting (`[dungeonfix]`).
 - *Ready 2026-11-17:* the textures of `zones/Dnifs` pieces are looked up as the client does (their folder, then
   `zones/Nifs`), and a dungeon's `texproxy.csv` renames are applied (`AssetLibrary.WithTextureProxy`; W63).
-  `nifproxy.csv` (alternate pieces, e.g. zone 060's `ALTSTONEHall01`) is not yet read.
+  A dungeon's `nifproxy.csv` swaps pieces (zones 060/423: 26 `STONE*` → `ALTSTONE*`; 079: 35 `Oceanus*` →
+  `Alt_Oceanus*`, whose originals aren't in the install) before they load: `AssetLibrary.Dungeon(scope, dat)`
+  applies both tables; `mpk model <piece> --dungeon datNNN.mpk` converts one. All 87 swapped pieces convert.
 - **Done when:** you can enter a dungeon from its zone jump and walk it, rendered from its pieces.
 
 ### M12 — Atmosphere: effects, sound and music

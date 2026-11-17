@@ -285,6 +285,27 @@ public sealed class AssetLibraryTests : IDisposable
     }
 
     [LiveFact(Bowsprit)]
+    public void ADungeonsPieceSwapLoadsTheOtherPieceEvenWhenTheNamedOneIsMissing()
+    {
+        // Zone 079: OceanusHall01.nif isn't in the install, only Alt_OceanusHall01, which its nifproxy.csv names.
+        Put("zones/Dnifs/Alt_Hall.nif", File.ReadAllBytes(BowspritFixture()));   // names PSbeamLt_grey.dds
+        Put("zones/Nifs/PSbeamLt_grey.dds", "original"u8.ToArray());
+        Put("zones/Nifs/wetstones.dds", "renamed"u8.ToArray());
+        var library = new AssetLibrary(AssetIndex.Build(_client), _lib);
+
+        Assert.Equal(AssetOrigin.Missing, library.GetModel("Hall.nif").Origin);
+        AssetLibrary swapped = library.WithModelProxy(ModelProxy.Parse("Hall.nif,Alt_Hall.nif,0"));
+        Assert.Equal("alt_hall.glb", library.ManifestName(swapped.GetModel("Hall.nif").GlbPath!).ToLowerInvariant());
+
+        // With the dungeon's texture renames too: the swapped-in piece's textures are renamed.
+        AssetLibrary dungeon = library.WithTextureProxy("zone079", TextureProxy.Parse("psbeamlt_grey,wetstones,0"))
+            .WithModelProxy(ModelProxy.Parse("Hall.nif,Alt_Hall.nif,0"));
+        string glb = dungeon.GetModel("Hall.nif").GlbPath!;
+        Assert.Equal("zone079/alt_hall.glb", library.ManifestName(glb).ToLowerInvariant());
+        Assert.Contains("wetstones", System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(glb)), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [LiveFact(Bowsprit)]
     public void WithoutItsOwnCopyACityModelFallsBackToZonesNifs()
     {
         Put("zones/zone026/nifs/citything.nif", File.ReadAllBytes(BowspritFixture()));

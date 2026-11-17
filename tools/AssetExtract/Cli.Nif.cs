@@ -179,16 +179,20 @@ internal static partial class Cli
     private static int ModelCmd(string[] args)
     {
         string name = args[1];
-        if (Options.Parse(args, 2, ["--index", "--library"]) is not { } o
+        if (Options.Parse(args, 2, ["--index", "--library", "--dungeon"]) is not { } o
             || o["--index"] is not { } indexPath || o["--library"] is not { } libDir)
             return Usage();
         var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir);
-        ModelResult r = library.GetModel(name, reconvert: true);
+        // A dungeon's piece, as its fixtures load: its dat<NNN>.mpk's nifproxy.csv and texproxy.csv applied.
+        AssetLibrary view = o["--dungeon"] is { } dat
+            ? library.Dungeon("zone" + new string(Path.GetFileNameWithoutExtension(dat).Where(char.IsAsciiDigit).ToArray()), dat)
+            : library;
+        ModelResult r = view.GetModel(name, reconvert: true);
         switch (r.Origin)
         {
             case AssetOrigin.Converted:
             case AssetOrigin.Override:
-                Console.WriteLine($"{r.Origin.ToString().ToLowerInvariant()} {Path.GetFileName(r.GlbPath)}");
+                Console.WriteLine($"{r.Origin.ToString().ToLowerInvariant()} {library.ManifestName(r.GlbPath!)}");
                 return 0;
             case AssetOrigin.Unsupported:
                 Console.WriteLine($"unsupported {r.Error}");
