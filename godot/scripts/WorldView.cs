@@ -455,6 +455,7 @@ public partial class WorldView : Node3D
         };
         _bridge.ObjectRemoved += OnObjectRemoved;   // (id, type): type 0 may leave a corpse
         _bridge.ObjectSpawned += OnWorldObject;
+        _bridge.DoorChanged += OnDoorChanged;
         _bridge.ChatReceived += OnChatReceived;
         SubscribeDeath();
         _bridge.CombatAnimated += OnCombatAnimated;
@@ -997,6 +998,9 @@ public partial class WorldView : Node3D
             else
             {
                 SetTarget(0);
+                // A door under the cursor: ask the server to open it (retail sends 0x99 on a click; WorldView.Doors).
+                if (PickDoor(click) is uint door)
+                    RequestDoor(door);
                 Inspect(click);
             }
         }
@@ -1028,6 +1032,7 @@ public partial class WorldView : Node3D
         UpdateStatsPanel();
         UpdateSkyTime();
         UpdateLamps(delta);
+        UpdateDoors();
         UpdateChat();
         _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)

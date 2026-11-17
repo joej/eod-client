@@ -286,7 +286,7 @@ public static partial class NifFile
         }
 
         public NifModel Build(IEnumerable<int> detached) =>
-            _b4 is not null ? Build4x(_bytes, _version, _b4, detached: detached) : BuildGamebryo(_g!, _version);
+            _b4 is not null ? Build4x(_bytes, _version, _b4, detached: detached) : BuildGamebryo(_g!, _version, _bytes);
 
         // The meshes of one node's subtree, walked from a parent at `at` (the node it was donated to).
         public List<NifMesh> WalkFrom(int node, State at)

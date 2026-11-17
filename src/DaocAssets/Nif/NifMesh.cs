@@ -41,6 +41,10 @@ public sealed record NifMesh
     /// shape's own name or its nodes' is inferred).</summary>
     public bool KeepsMaterial { get; init; }
 
+    /// <summary>The door part it moves with (an index into <see cref="NifModel.Movers"/>), or -1: baked at rest, it moves
+    /// by that mover's delta while its door opens.</summary>
+    public int Mover { get; init; } = -1;
+
     /// <summary>Transparency from the shape's (or an ancestor's) <c>NiAlphaProperty</c>.</summary>
     public SurfaceAlpha Alpha { get; init; }
 
@@ -155,6 +159,10 @@ public sealed class NifModel
     public required IReadOnlyList<NifMesh> Meshes { get; init; }
     /// <summary>The skeleton, parents before children; empty for a static model.</summary>
     public IReadOnlyList<NifJoint> Joints { get; init; } = [];
+
+    /// <summary>The doors among its nodes (NifFile.Doors), and the parts of them that move.</summary>
+    public IReadOnlyList<NifDoor> Doors { get; init; } = [];
+    public IReadOnlyList<NifMover> Movers { get; init; } = [];
 
     /// <summary>Every named node's world transform in the file's rest pose (NIF space, row vectors), by
     /// lower-case name (the first of a repeated name): an item's grip and sheath frames ("held", "belt",

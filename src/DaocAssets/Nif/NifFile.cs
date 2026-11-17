@@ -121,6 +121,11 @@ public static partial class NifFile
         public ushort AlphaFlags;     // NiAlphaProperty -> flags (bit 0 blend, bits 5-8 dest, bit 9 test)
         public byte AlphaThreshold;   // NiAlphaProperty -> alpha-test reference value (0..255)
         public uint StencilDrawMode;  // NiStencilProperty -> face draw mode (3 = both sides)
+        public int ExtraRef = -1;     // NiObjectNET -> its first extra data (4.x: a chain through each one's next ref)
+        public int Controller = -1;   // NiObjectNET -> its first time controller
+        public int NextRef = -1;      // NiExtraData / NiTimeController -> the next in its chain
+        public float StopTime;        // NiTimeController -> stop time (seconds)
+        public string[] Strings = []; // NiStringExtraData -> its text
     }
 
     // NetImmerse 4.x. Blocks reference each other by index and carry transforms in a NiNode/NiTriShape
@@ -151,7 +156,7 @@ public static partial class NifFile
                 case "NiBillboardNode":   // a NiNode whose layout differs only after the children
                                           // (billboard mode); until 2026-11-03 unread, so the far-level
                                           // picture cards under it lay flat on the ground (BSpanMoss)
-                    if (TryReadAvObject(ref c, out Xform nx, out int[] nprops, out string nname, out ushort nflags))
+                    if (TryReadAvObject(ref c, out Xform nx, out int[] nprops, out string nname, out ushort nflags, out b.ExtraRef, out b.Controller))
                     {
                         b.Name = nname;
                         b.Flags = nflags;
@@ -211,6 +216,29 @@ public static partial class NifFile
                         (b.MaterialColor, b.MaterialEmissive) = ReadMaterialPropertyColor(ref c);
                     }
                     break;
+                case "NiKeyframeController":
+                    try
+                    {
+                        // 4.x NiTimeController (nif.xml, as KfaClip reads it): Next Controller, Flags, Frequency, Phase,
+                        // Start Time, Stop Time, Target; then the NiKeyframeData ref.
+                        b.NextRef = c.I32();
+                        c.U16(); c.F32(); c.F32(); c.F32();
+                        b.StopTime = c.F32();
+                        c.I32();
+                        b.DataRef = c.I32();
+                    }
+                    catch (NifFormatException) { b.DataRef = -1; }
+                    break;
+                case "NiStringExtraData":
+                    try
+                    {
+                        // 4.x NiExtraData: Next Extra Data ref; NiStringExtraData: Bytes Remaining, String.
+                        b.NextRef = c.I32();
+                        c.U32();
+                        b.Strings = [c.SizedString()];
+                    }
+                    catch (NifFormatException) { b.Strings = []; }
+                    break;
                 case "NiAlphaProperty":
                     ReadAlphaProperty(ref c, b);
                     break;
@@ -236,7 +264,9 @@ public static partial class NifFile
         // and skinned shapes keep their vertices in skin space, as the 10.1 path does (open question W40).
         Skeleton4x? skeleton = figure || blocks.Any(x => x.Type is "NiTriShape" or "NiTriStrips" && SelfContained4x(blocks, x))
             ? new Skeleton4x { RigidToNodes = figure } : null;
-        Walk4x(bytes, blocks, 0, Xform.Identity, seen, meshes, skeleton: skeleton);
+        // Doors (NifFile.Doors): which nodes move, so the walk can tag the meshes under them. Not on a figure.
+        DoorScan doors = !figure && blocks.Any(x => IsDoorNode(x.Name)) ? ScanDoors(new DoorNodes4x(bytes.ToArray(), blocks)) : DoorScan.None;
+        Walk4x(bytes, blocks, 0, Xform.Identity, seen, meshes, skeleton: skeleton, movers: doors.MoverOf);
         skeleton?.Bind(blocks, meshes);
 
         // Fallback: bake any shape that is not in the root's hierarchy at all (a file whose root isn't
@@ -265,7 +295,8 @@ public static partial class NifFile
             throw new NifFormatException("No NiTriShapeData geometry found in NIF.");
 
         return new NifModel { Version = version, Meshes = meshes, NodeWorlds = NodeWorlds4x(blocks),
-            Joints = skeleton is not null && meshes.Any(m => m.SkinJoints is { Length: > 0 }) ? skeleton.Joints : [] };
+            Joints = skeleton is not null && meshes.Any(m => m.SkinJoints is { Length: > 0 }) ? skeleton.Joints : [],
+            Doors = doors.Doors, Movers = doors.Movers };
     }
 
     // Every named node's world transform, walking every child from the root (LOD levels and helpers
@@ -324,7 +355,7 @@ public static partial class NifFile
     private static void Walk4x(ReadOnlySpan<byte> bytes, Block[] blocks, int index, Xform world,
         HashSet<int> seen, List<NifMesh> meshes, bool helper = false, int alpha = -1, int stencil = -1,
         bool numberedHelper = false, int vertexColor = -1, Skeleton4x? skeleton = null, int parentJoint = -1, bool collision = false,
-        bool keepsMaterial = false)
+        bool keepsMaterial = false, IReadOnlyDictionary<int, int>? movers = null, int mover = -1)
     {
         if (index < 0 || index >= blocks.Length || !seen.Add(index))
             return;
@@ -337,6 +368,7 @@ public static partial class NifFile
         bool underNumbered = numberedHelper || IsNumberedHelperName(b.Name);
         bool underCollision = collision || IsCollisionName(b.Name);
         bool keeps = keepsMaterial || KeepsMaterialName(b.Name);
+        int moves = movers is not null && movers.TryGetValue(index, out int m) ? m : mover;
         if (b.Type is "NiNode" or "NiLODNode" or "NiBillboardNode")
         {
             // A billboard node is walked like a plain node: it keeps its stored orientation instead of
@@ -354,7 +386,7 @@ public static partial class NifFile
                 Walk4x(bytes, blocks, child, w, seen, meshes,
                     underHelper || (child >= 0 && child < blocks.Length && IsDungeonHelper(b.Name, blocks[child].Name)),
                     nodeAlpha, nodeStencil, underNumbered,
-                    nodeVertexColor, skeleton, joint, collision: underCollision, keepsMaterial: keeps);
+                    nodeVertexColor, skeleton, joint, collision: underCollision, keepsMaterial: keeps, movers: movers, mover: moves);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
         {
@@ -373,7 +405,7 @@ public static partial class NifFile
                     with
                     {
                         Helper = underHelper || (underNumbered && texture is null), Collision = underCollision,
-                        Emissive = ShapeEmissive(blocks, b), KeepsMaterial = keeps,
+                        Emissive = ShapeEmissive(blocks, b), KeepsMaterial = keeps, Mover = moves,
                     });
             }
         }
@@ -767,23 +799,27 @@ public static partial class NifFile
     // NiTriShape). Returns false if a bounding volume is present (we don't decode it) — the caller
     // then leaves the block's transform at identity rather than misparse.
     private static bool TryReadAvObject(ref NifCursor c, out Xform xform) =>
-        TryReadAvObject(ref c, out xform, out _, out _, out _);
+        TryReadAvObject(ref c, out xform, out _, out _, out _, out _, out _);
 
     private static bool TryReadAvObject(ref NifCursor c, out Xform xform, out string name, out ushort flags) =>
-        TryReadAvObject(ref c, out xform, out _, out name, out flags);
+        TryReadAvObject(ref c, out xform, out _, out name, out flags, out _, out _);
+
+    private static bool TryReadAvObject(ref NifCursor c, out Xform xform, out int[] props, out string name, out ushort flags) =>
+        TryReadAvObject(ref c, out xform, out props, out name, out flags, out _, out _);
 
     // Reads NiObjectNET + NiAVObject, yielding the local transform, the block's property refs
     // (one of which, on a shape, is the NiTexturingProperty that names its base texture), the block's
     // Name (a node name like "collidee"/"shadowcaster" marks helper geometry) and its NiAVObject
     // Flags (bit 0 = Hidden / app-culled; the client drops a hidden node and its whole subtree).
-    private static bool TryReadAvObject(ref NifCursor c, out Xform xform, out int[] props, out string name, out ushort flags)
+    private static bool TryReadAvObject(ref NifCursor c, out Xform xform, out int[] props, out string name, out ushort flags,
+        out int extra, out int controller)
     {
         xform = Xform.Identity;
         props = [];
         flags = 0;
         name = c.SizedString();    // NiObjectNET.Name
-        c.I32();                   // Extra Data ref (single, until 4.2.2.0)
-        c.I32();                   // Controller ref
+        extra = c.I32();           // Extra Data ref (single, until 4.2.2.0: a chain through each one's next ref)
+        controller = c.I32();      // Controller ref
         flags = c.U16();           // NiAVObject.Flags (ushort at <= 4.2.2.0); bit 0 = Hidden
         Vector3 trans = c.Vec3();
         float[] rot = new float[9];

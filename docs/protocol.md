@@ -419,6 +419,22 @@ does not check that the player is near the doorway. The move then comes as any o
 region, 0xB1 + 0xB7 to another). *Verified live 2026-11-07 (owner):* Camelot Hills' gate (zone point 6) into
 Camelot City. Which way a one-way doorway fires is open question W47.
 
+## Doors
+
+A door is part of a model: a node named `door` + digits (dungeon pieces `door001`…`door009`). Its id is the client's,
+built from the node name and where the model stands: in a dungeon zone × 1,000,000 + room × 100 + n (room 0's
+`door001` in Hibernia's Darkspire is 98000001, the id OpenDAoC's database has for it). A click on a door asks to open it;
+the server tells everyone near it:
+
+```
+C→S 0x99 DoorRequest   u32 BE door id, u8 request (1 open; OpenDAoC closes on anything else), 3 zero bytes
+S→C 0x99 DoorState     u32 BE door id, u8 state (0 closed, 1 open), u8 sound (0 in dungeons), u8 0xFF, u8 0
+```
+
+OpenDAoC keeps a row for a door only when one was added (432 in its database, 2 of them in dungeons); a door it doesn't
+know is opened through a stand-in at the player's position and closed again after a while, so every dungeon door can
+be opened. *From OpenDAoC's source (DoorRequestHandler, SendDoorState) and the client's model data; not yet seen live.*
+
 ## Target and interact
 
 ```

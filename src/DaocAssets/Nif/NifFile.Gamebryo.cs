@@ -48,14 +48,17 @@ public static partial class NifFile
         if (!g.Complete)
             throw new NifFormatException(
                 $"10.1 NIF stops at {g.StopType ?? "an undecoded block"} ({g.StopReason ?? g.Result.ToString()}); not supported.");
-        return BuildGamebryo(g, version);
+        return BuildGamebryo(g, version, bytes.ToArray());
     }
 
     // The model from a completely decoded 10.1 file.
-    private static NifModel BuildGamebryo(Gb10File g, NifVersion version)
+    private static NifModel BuildGamebryo(Gb10File g, NifVersion version, byte[]? bytes = null)
     {
         Gb10Block[] blocks = g.Blocks!;
-        var b = new Gb10Builder(blocks);
+        // Doors (NifFile.Doors): which nodes move, so the walk can tag the meshes under them.
+        DoorScan doors = bytes is not null && blocks.Any(x => x is not null && IsDoorNode(x.Name))
+            ? ScanDoors(new DoorNodesGb(bytes, g)) : DoorScan.None;
+        var b = new Gb10Builder(blocks) { Movers = doors.MoverOf };
         foreach (int root in g.Roots.Length > 0 ? g.Roots : [0])
             b.Walk(root, -1, Matrix4x4.Identity, helper: false, alpha: -1, stencil: -1);
         if (b.Meshes.Count == 0)
@@ -68,7 +71,11 @@ public static partial class NifFile
         foreach ((int i, Matrix4x4 w) in WorldTransforms(g))
             if (!string.IsNullOrEmpty(blocks[i].Name) && blocks[i].Type is "NiNode" or "NiLODNode" or "NiBillboardNode" or "NiTriShape" or "NiTriStrips")
                 nodeWorlds.TryAdd(blocks[i].Name.Trim().ToLowerInvariant(), w);
-        return new NifModel { Version = version, Meshes = b.Meshes, Joints = skinned ? b.Joints : [], NodeWorlds = nodeWorlds };
+        return new NifModel
+        {
+            Version = version, Meshes = b.Meshes, Joints = skinned ? b.Joints : [], NodeWorlds = nodeWorlds,
+            Doors = skinned ? [] : doors.Doors, Movers = skinned ? [] : doors.Movers,
+        };
     }
 
     /// <summary>
@@ -189,9 +196,10 @@ public static partial class NifFile
         private readonly Dictionary<int, Matrix4x4> _worldOf = [];
         private readonly List<(int Shape, int Joint)> _pendingSkins = [];
         private readonly HashSet<int> _seen = [];
+        public IReadOnlyDictionary<int, int>? Movers { get; init; }
 
         public void Walk(int index, int parentJoint, Matrix4x4 parentWorld, bool helper, int alpha, int stencil,
-            bool numberedHelper = false, int vertexColor = -1, bool collision = false, bool keepsMaterial = false)
+            bool numberedHelper = false, int vertexColor = -1, bool collision = false, bool keepsMaterial = false, int mover = -1)
         {
             if (index < 0 || index >= blocks.Length || !_seen.Add(index))
                 return;
@@ -202,6 +210,7 @@ public static partial class NifFile
             bool underNumbered = numberedHelper || IsNumberedHelperName(b.Name);
             bool underCollision = collision || IsCollisionName(b.Name);
             bool keeps = keepsMaterial || KeepsMaterialName(b.Name);
+            int moves = Movers is not null && Movers.TryGetValue(index, out int m) ? m : mover;
             if (b.Type is "NiNode" or "NiBillboardNode" or "NiLODNode")
             {
                 int joint = Joints.Count;
@@ -214,7 +223,7 @@ public static partial class NifFile
                 foreach (int child in b.Type == "NiLODNode" ? NearLevel(b) : b.Children)
                     Walk(child, joint, world,
                         underHelper || (child >= 0 && child < blocks.Length && IsDungeonHelper(b.Name, blocks[child].Name)),
-                        nodeAlpha, nodeStencil, underNumbered, nodeVertexColor, underCollision, keeps);
+                        nodeAlpha, nodeStencil, underNumbered, nodeVertexColor, underCollision, keeps, moves);
                 if (parentJoint < 0)
                     BindSkins();
             }
@@ -226,6 +235,7 @@ public static partial class NifFile
                 Meshes.Add(mesh with
                 {
                     Helper = underHelper || (underNumbered && mesh.TextureFile is null), Collision = underCollision, KeepsMaterial = keeps,
+                    Mover = moves,
                 });
             }
         }

@@ -51,6 +51,9 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
     /// <summary>How fast the server lets us run (0xB6): run no faster, or its speed check snaps us back.</summary>
     public event Action<MaxSpeed>? MaxSpeedChanged;
 
+    /// <summary>A door opened or closed (0x99 DoorState).</summary>
+    public event Action<DoorState>? DoorChanged;
+
     /// <summary>A static world object entered view (0xD9 ObjectCreate).</summary>
     public event Action<ObjectCreate>? ObjectSpawned;
 
@@ -240,6 +243,9 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
                 case RemoveObject.Code:
                     RemoveObject removed = RemoveObject.Parse(packet.Payload);
                     ObjectRemoved?.Invoke(removed.ObjectId, removed.ObjectType);
+                    break;
+                case DoorState.Code:
+                    DoorChanged?.Invoke(DoorState.Parse(packet.Payload));
                     break;
                 case ObjectDelete.Code:
                     ObjectRemoved?.Invoke(ObjectDelete.Parse(packet.Payload).ObjectId, RemoveObject.NonPlayer);

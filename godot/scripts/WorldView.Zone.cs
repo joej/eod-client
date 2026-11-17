@@ -25,6 +25,8 @@ public partial class WorldView
         public System.Collections.Generic.List<DaocAssets.Zone.BoundSegment> Bounds = [];   // edge walls
         public int Placed, Distinct, TexturedModels, TexturedSurfaces, WaterBodies;
         public ModelTexturing.DungeonFix? Fix;   // a dungeon's material fix-up (its sky.csv), applied to every model it loads
+        // Its doors (doors.csv): id -> the placed model and the door's node name (its animation), WorldView.Doors.
+        public System.Collections.Generic.Dictionary<uint, (Node3D Model, string Door)> Doors = new();
         public double Seconds;                // how long the build took
     }
 
@@ -238,9 +240,12 @@ public partial class WorldView
         var placements = DaocAssets.Zone.ZoneCheck.ReadManifest(Godot.FileAccess.GetFileAsString(zoneCsv));
         var zoneRoot = new Node3D { Name = "Objects" };
         var used = new System.Collections.Generic.HashSet<string>();
+        var placedRows = new Node3D?[placements.Count];   // each zone.csv row's placed model (doors.csv names rows)
+        int row = -1;
 
         foreach (DaocAssets.Zone.ZonePlacement placement in placements)
         {
+            row++;
             (string glb, float x, float y, float z, float angleDeg, float scale) =
                 (placement.Glb, placement.X, placement.Y, placement.Z, placement.AngleDeg, placement.Scale);
             bool fresh = !loaded.ContainsKey(glb);
@@ -265,6 +270,7 @@ public partial class WorldView
                 (placement.Tilt != 0 ? $"  tilt {Mathf.RadToDeg(placement.Tilt):0}° about ({placement.AxisX:0.##}, {placement.AxisY:0.##}, {placement.AxisZ:0.##})" : "") +
                 (placement.Collide == 0 ? "  not solid" : ""));
             zoneRoot.AddChild(inst);
+            placedRows[row] = inst;
             // Trimesh collision per placed object: the chase camera pulls in off buildings and the
             // character stands on floors. ~1,500 static bodies for a full zone. Not solid (fixtures.csv's Collide 0:
             // trees, campfire logs): no walls and nothing to stand on, as retail makes an object solid only when the
@@ -273,6 +279,8 @@ public partial class WorldView
             parts.Placed++;
             yield return true;
         }
+
+        TagDoors(parts, placedRows);
 
         if (parts.Placed > 0)
         {

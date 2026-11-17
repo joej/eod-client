@@ -24,7 +24,8 @@ public readonly record struct ZoneFixture(
     bool OnGround = false,  // the CSV's "On Ground" column: the object stands on the terrain
     int Collide = 1,        // the "Collide" column: 0 = not solid (the client makes it solid only when set; daoc-re RE/69)
     float Tilt = 0,         // the "3D Angle" (radians) about (AxisX, AxisY, AxisZ), zone frame, when the axis isn't vertical:
-    float AxisX = 0, float AxisY = 0, float AxisZ = 0);   // retail turns the object that way INSTEAD of by AngleDeg
+    float AxisX = 0, float AxisY = 0, float AxisZ = 0,    // retail turns the object that way INSTEAD of by AngleDeg
+    int Room = -1);         // a dungeon's room (DungeonLayout): the room itself, or the room a prop is in (its doors' ids)
 
 /// <summary>A zone's static-object layout: the fixtures and the distinct models they reference.</summary>
 public sealed class ZoneLayout

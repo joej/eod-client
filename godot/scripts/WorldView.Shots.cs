@@ -376,7 +376,7 @@ public partial class WorldView
     }
 
     // A fixed shot set (--shots FILE --shots-out DIR): each line of FILE is "name X Y Z YAW PITCH"
-    // (region units, degrees; '#' starts a comment). The camera visits each pose in turn, the frame
+    // (region units, degrees; '#' starts a comment), or "!open-doors" (every loaded door opens, and the set waits until they are open). The camera visits each pose in turn, the frame
     // is saved as DIR/name.png, and the client quits when the set is done. Run the same set before and
     // after an asset change and compare: the world checked the same way every time, not by walking.
     private async System.Threading.Tasks.Task RunShotSet(string file, string dir)
@@ -390,6 +390,8 @@ public partial class WorldView
             string[] f = line.Split((char[])[' ', '\t'], System.StringSplitOptions.RemoveEmptyEntries);
             if (f.Length == 6 && Floats(string.Join(' ', f[1..])) is { Length: 5 } c)
                 poses.Add((f[0], c));
+            else if (f is ["!open-doors"])
+                poses.Add((f[0], []));   // an action, not a pose: every loaded door opens (as a 0x99 would)
             else
                 GD.PrintErr($"[shots] skipped line: {raw}");
         }
@@ -398,6 +400,19 @@ public partial class WorldView
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         foreach ((string name, float[] c) in poses)
         {
+            if (name == "!open-doors")
+            {
+                double longest = 0;
+                foreach (ZoneParts z in _zones.Values)
+                    foreach ((uint id, (Node3D model, string door)) in z.Doors)
+                    {
+                        OnDoorChanged(new DoorState(id, DoorState.Open, 0, 0xFF));
+                        if (DoorPlayer(model, door) is AnimationPlayer p && p.HasAnimation(door))
+                            longest = System.Math.Max(longest, p.GetAnimation(door).Length);
+                    }
+                await ToSignal(GetTree().CreateTimer(longest + 0.5), SceneTreeTimer.SignalName.Timeout);   // until every door is open
+                continue;
+            }
             SetChase(false);
             _camera.GlobalPosition = ToGodot(c[0], c[1], c[2]);
             _camYaw = -Mathf.DegToRad(c[3]);

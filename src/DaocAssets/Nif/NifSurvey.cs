@@ -86,10 +86,12 @@ public sealed partial class NifSurvey
                 "NiTriShapeData" or "NiTriStripsData" or "NiSourceTexture" or "NiTexturingProperty"
                     or "NiMaterialProperty" or "NiStencilProperty" => NifCoverage.Partial,
                 "NiGeomMorpherController" or "NiMorphData" => NifCoverage.Partial,
+                "NiKeyframeController" or "NiKeyframeData" or "NiStringExtraData" => NifCoverage.Partial,
                 _ => NifCoverage.Unhandled,
             };
         return type switch
         {
+            "NiKeyframeController" or "NiKeyframeData" or "NiStringExtraData" => NifCoverage.Partial,
             "NiNode" or "NiTriShape" or "NiTriStrips" or "NiAlphaProperty" => NifCoverage.Handled,
             "NiBillboardNode" or "NiSkinInstance" or "NiSkinData" => NifCoverage.Partial,
             "NiLODNode" or "NiTriShapeData" or "NiTriStripsData" or "NiTexturingProperty"
@@ -119,6 +121,8 @@ public sealed partial class NifSurvey
                 "NiStencilProperty" => "draw mode (sidedness) only",
                 "NiGeomMorpherController" or "NiMorphData" =>
                     "morph targets and their FM/HM codes exported on skinned shapes (Catacombs face sliders); keys (animated morphs) ignored",
+                "NiKeyframeController" or "NiKeyframeData" => DoorKeysNote,
+                "NiStringExtraData" => DoorExtraNote,
                 _ => "",
             };
         return type switch
@@ -134,9 +138,15 @@ public sealed partial class NifSurvey
             "NiSourceTexture" => "external file name only; embedded pixel data not decoded",
             "NiMaterialProperty" => "diffuse, alpha and emissive (emissive for dungeons only); ambient/specular/glossiness dropped",
             "NiStencilProperty" => "draw mode (sidedness) only",
+            "NiKeyframeController" or "NiKeyframeData" => DoorKeysNote,
+            "NiStringExtraData" => DoorExtraNote,
             _ => "",
         };
     }
+
+    private const string DoorKeysNote =
+        "inside a door (a door node's parts that move) exported as the door's glTF animation; elsewhere ignored (clips: KfaClip)";
+    private const string DoorExtraNote = "a door's maxframes/midframe only";
 
     /// <summary>Surveys one NIF file. Throws <see cref="NifFormatException"/> if it isn't one.</summary>
     public static NifSurvey Read(ReadOnlySpan<byte> bytes)

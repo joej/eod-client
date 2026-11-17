@@ -119,6 +119,17 @@ public sealed record KfaClip(float Duration, IReadOnlyList<KfaTrack> Tracks)
         return new KfaClip(duration, tracks);
     }
 
+    /// <summary>One NiKeyframeData block's keys (a door's moving node: NifFile.Doors). <paramref name="skipType"/>: the
+    /// offset is at the block's type string (4.x), not past it (10.1).</summary>
+    internal static KfaTrack ReadKeysAt(ReadOnlySpan<byte> bytes, int offset, string name, bool skipType)
+    {
+        var c = new NifCursor(bytes);
+        c.SeekTo(offset);
+        if (skipType)
+            c.SizedString();
+        return ReadKeys(ref c, name);
+    }
+
     // NiKeyframeData (4.x): rotations (quaternion keys, or type 4: three Euler key groups), then
     // translation and scale key groups.
     private static KfaTrack ReadKeys(ReadOnlySpan<byte> bytes, int offset, string bone)

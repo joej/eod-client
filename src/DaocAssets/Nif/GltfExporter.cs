@@ -40,21 +40,70 @@ public static class GltfExporter
         if (model.Joints.Count > 0)
             return BuildSkinnedScene(model, clips);
         var scene = new SceneBuilder();
+        NodeBuilder[] movers = DoorNodes(model);
         foreach (NifMesh mesh in model.Meshes)
         {
+            NodeBuilder? mover = mesh.Mover >= 0 && mesh.Mover < movers.Length ? movers[mesh.Mover] : null;
             if (mesh.Helper)
             {
                 // A collision volume (under "collidee", "collider", "collision …") is kept as never-drawn geometry
                 // the client collides with (CollisionPrefix). Other helpers (climb, pick, shadow) are left out.
                 if (mesh.Collision && mesh.Triangles.Length > 0)
-                    scene.AddRigidMesh(BuildCollisionMesh(mesh), Matrix4x4.Identity).WithName(CollisionPrefix + NodeName(mesh));
+                    (mover is null ? scene.AddRigidMesh(BuildCollisionMesh(mesh), Matrix4x4.Identity)
+                        : scene.AddRigidMesh(BuildCollisionMesh(mesh), mover.CreateNode(CollisionPrefix + NodeName(mesh))))
+                        .WithName(CollisionPrefix + NodeName(mesh));
                 continue;
             }
             // Name the node after the mesh, so the client can tell meshes apart (water surfaces are
             // matched to their water.csv row by it; the inspect readout shows it).
-            scene.AddRigidMesh(BuildMesh(mesh, nifSpace: false), Matrix4x4.Identity).WithName(NodeName(mesh));
+            // A door part's meshes each hang on a node of their own under the part's node, which keeps its name and motion.
+            (mover is null ? scene.AddRigidMesh(BuildMesh(mesh, nifSpace: false), Matrix4x4.Identity)
+                : scene.AddRigidMesh(BuildMesh(mesh, nifSpace: false), mover.CreateNode(NodeName(mesh))))
+                .WithName(NodeName(mesh));
         }
         return scene;
+    }
+
+    /// <summary>The separator in a door part's node name: "door001__door" (the door, then the moving NIF node).</summary>
+    public const string DoorPartSeparator = "__";
+
+    // A static model's doors (NifFile.Doors): each moving part becomes a node, at rest where the meshes are baked
+    // (identity), named "<door>__<node>", and each door a glTF animation of its name ("door001") that moves its parts from
+    // rest (t = 0) to open (its duration), sampled at the doors' 30 frames per second. A part's motion is its NIF delta
+    // (rest world⁻¹ × local(t) × parent world) carried into glTF space: N⁻¹ × delta × N.
+    private static NodeBuilder[] DoorNodes(NifModel model)
+    {
+        if (model.Movers.Count == 0)
+            return [];
+        Matrix4x4.Invert(NifToGltf, out Matrix4x4 toNif);
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        var nodes = new NodeBuilder[model.Movers.Count];
+        for (int i = 0; i < nodes.Length; i++)
+        {
+            NifMover m = model.Movers[i];
+            string name = m.Door + DoorPartSeparator + m.Node;
+            for (int k = 2; !used.Add(name); k++)
+                name = $"{m.Door}{DoorPartSeparator}{m.Node}#{k}";
+            var node = new NodeBuilder(name);
+            NifDoor? door = model.Doors.FirstOrDefault(d => d.Name == m.Door);
+            float duration = door?.Duration ?? NifFile.DefaultDoorFrames / NifFile.DoorFramesPerSecond;
+            int frames = Math.Max(1, (int)MathF.Round(duration * NifFile.DoorFramesPerSecond));
+            var translation = node.UseTranslation(m.Door);
+            var rotation = node.UseRotation(m.Door);
+            var scale = node.UseScale(m.Door);
+            for (int f = 0; f <= frames; f++)
+            {
+                float t = duration * f / frames;
+                Matrix4x4 g = toNif * m.Delta(t) * NifToGltf;
+                if (!Matrix4x4.Decompose(g, out Vector3 sc, out Quaternion rot, out Vector3 tr))
+                    (sc, rot, tr) = (Vector3.One, Quaternion.Identity, g.Translation);
+                translation.SetPoint(t, tr);
+                rotation.SetPoint(t, Quaternion.Normalize(rot));
+                scale.SetPoint(t, sc);
+            }
+            nodes[i] = node;
+        }
+        return nodes;
     }
 
     // A model with a skeleton (a 10.1 figure or creature). The skeleton stays in NIF space under one

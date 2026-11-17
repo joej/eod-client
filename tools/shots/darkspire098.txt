@@ -1,0 +1,10 @@
+# Fixed camera poses in Hibernia's Darkspire (zone 098, a dungeon) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 98
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# Its door 98000001 (room 0, door001), the one dungeon door in OpenDAoC's database that fits a door piece, at
+# (32000, 33605, 18990): closed, then opened (as 0x99 would) from the same spot. The first pose is where the world opens
+# (and the character stands): away from the door, so its placeholder doesn't hide it.
+room-0        32000 38912 16200     0  -5   # room 0's middle
+door-closed   32000 34400 19060     0  -5   # facing the door from the south
+!open-doors
+door-open     32000 34400 19060     0  -5

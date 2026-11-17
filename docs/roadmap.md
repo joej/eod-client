@@ -551,6 +551,12 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
   every dungeon surface is lit white with a faint 1/16 glow and no vertex colours, unless the zone keeps the models'
   own glow (102 dungeons) or vertex colours (31); `anim…` and `door???s` meshes keep their own material. Not yet:
   showing only the current room's water, lava's look, `gb11alpha` and `applyfix`.
+- *Built 2026-11-17:* dungeon doors. The converter finds a model's doors (`door` + digits nodes) and the parts in them
+  that carry keyframes, and exports each door as a glTF animation of those parts (NIF keys, `maxframes`/30 s); each
+  dungeon writes `doors.csv` (id = zone × 1,000,000 + room × 100 + n, which matches the one usable dungeon door in
+  OpenDAoC's database, Hibernia's Darkspire 98000001). The client plays a door open or closed on 0x99, lets you through
+  while it is open, and asks the server to open a door you click (0x99). Not yet: door sounds, mid-frame doors,
+  four-state doors, outdoor and keep doors.
 - **Done when:** you can enter a dungeon from its zone jump and walk it, rendered from its pieces.
 
 ### M12 — Atmosphere: effects, sound and music

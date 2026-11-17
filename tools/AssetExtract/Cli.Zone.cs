@@ -72,7 +72,7 @@ internal static partial class Cli
                 TreeClusters.Load(index.Root));
             Console.WriteLine($"Zone: {r.Fixtures} fixtures, {r.Models} distinct models -> " +
                 $"{r.Converted} in library, {r.MissingModel} not found; " +
-                $"{r.Placed} placements ({r.Grounded} stood on the terrain) written to {Path.GetFullPath(outDir)}/zone.csv " +
+                $"{r.Placed} placements ({r.Grounded} stood on the terrain){(r.Doors > 0 ? $", {r.Doors} door(s)" : "")} written to {Path.GetFullPath(outDir)}/zone.csv " +
                 $"(library: {Path.GetFullPath(libDir)})");
             foreach (string failure in r.Failures)
                 Console.WriteLine($"  FAILED to convert {failure}");

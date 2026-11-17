@@ -635,6 +635,16 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     }
 
     /// <summary>
+    /// Asks to open (or close) door <paramref name="doorId"/>, as retail does when you click one (0x99). The server
+    /// answers with 0x99 DoorState to everyone near it (NetworkBridge.DoorChanged), and closes it again later.
+    /// </summary>
+    public Task RequestDoorAsync(uint doorId, bool open = true, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(DoorRequest.Code, DoorRequest.Payload(doorId, open), cancellationToken);
+    }
+
+    /// <summary>
     /// After death: asks to be released to the bind point (retail sends "&amp;release"). The server answers
     /// that it will release us in a few seconds, then moves us (0x04, or 0xB7 to another region) and revives
     /// us (0x89), both arriving as world packets. <paramref name="to"/> is OpenDAoC's optional target:

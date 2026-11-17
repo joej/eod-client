@@ -121,6 +121,7 @@ public static class ZoneExport
         // Ensure each distinct model is in the library (converted once, or an override); the library
         // also gathers each model's textures. Lookups are index-backed — no install scan.
         var glbByNif = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var pathByGlb = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         int converted = 0, missingModel = 0, failed = 0;
         var failures = new List<string>();
 
@@ -144,6 +145,7 @@ public static class ZoneExport
                 continue;
             }
             glbByNif[nif] = library.ManifestName(r.GlbPath);
+            pathByGlb[glbByNif[nif]] = r.GlbPath;
             converted++;
         }
 
@@ -152,10 +154,22 @@ public static class ZoneExport
         var sb = new StringBuilder();
         sb.Append("glb,x,y,z,angle,scale,collide,tilt,axisx,axisy,axisz\n");
         int placed = 0;
+        // A dungeon's doors (DungeonDoors): each door of each placed room or prop, by the row it is placed on.
+        var doors = new List<DungeonDoor>();
+        var doorsOf = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        int zoneNumber = dungeon ? int.Parse(DungeonScope(zoneDatMpk)[4..], CultureInfo.InvariantCulture) : 0;
         foreach (ZoneFixture f in layout.Fixtures)
         {
             if (!glbByNif.TryGetValue(f.NifName, out string? glb))
                 continue;
+            if (dungeon && f.Room >= 0)
+            {
+                if (!doorsOf.TryGetValue(glb, out IReadOnlyList<string>? names))
+                    doorsOf[glb] = names = DungeonDoors.InGlb(pathByGlb[glb]);
+                foreach (string door in names)
+                    if (DungeonDoors.Id(zoneNumber, f.Room, door) is uint id)
+                        doors.Add(new DungeonDoor(id, placed, door, f.X, f.Y, f.Z));
+            }
             sb.Append(glb).Append(',')
               .Append(f.X.ToString("0.###", CultureInfo.InvariantCulture)).Append(',')
               .Append(f.Y.ToString("0.###", CultureInfo.InvariantCulture)).Append(',')
@@ -168,10 +182,16 @@ public static class ZoneExport
             placed++;
         }
         File.WriteAllText(Path.Combine(outDir, "zone.csv"), sb.ToString());
+        string doorsPath = Path.Combine(outDir, "doors.csv");
+        if (doors.Count > 0)
+            File.WriteAllText(doorsPath, DungeonDoors.ToCsv(doors));
+        else if (File.Exists(doorsPath))
+            File.Delete(doorsPath);
 
         return new ZoneExportReport(layout.Fixtures.Count, layout.Models.Count, converted, missingModel, failed, placed)
         {
             Grounded = grounded,
+            Doors = doors.Count,
             Failures = failures,
         };
     }
@@ -255,6 +275,8 @@ public readonly record struct ZoneExportReport(
 {
     /// <summary>Placements stood on the terrain because they are flagged "On Ground".</summary>
     public int Grounded { get; init; }
+    /// <summary>Doors written to doors.csv (a dungeon's).</summary>
+    public int Doors { get; init; }
     /// <summary>Models whose conversion threw (converter bugs), one line each.</summary>
     public IReadOnlyList<string> Failures { get; init; } = [];
 }

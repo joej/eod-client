@@ -113,7 +113,7 @@ public sealed class DungeonLayout
             Quaternion turn = Top * Turn(r.Angle, r.AxisX, r.AxisY, r.AxisZ);
             Vector3 at = Vector3.Transform(ModelFrame(r.X, r.Y, r.Z), Top);
             roomAt[r.Id] = (turn, at);
-            fixtures.Add(Fixture(r.Piece, $"room {r.Id}", turn, at, 1));
+            fixtures.Add(Fixture(r.Piece, $"room {r.Id}", turn, at, 1) with { Room = r.Id });
         }
         foreach (DungeonProp p in Props)
         {
@@ -121,7 +121,7 @@ public sealed class DungeonLayout
                 continue;
             Quaternion turn = room.Turn * Turn(p.Angle, p.AxisX, p.AxisY, p.AxisZ);
             Vector3 at = room.At + Vector3.Transform(ModelFrame(p.X, p.Y, p.Z), room.Turn);
-            fixtures.Add(Fixture(p.Piece, $"prop in room {p.Room}", turn, at, p.Scale));
+            fixtures.Add(Fixture(p.Piece, $"prop in room {p.Room}", turn, at, p.Scale) with { Room = p.Room });
         }
         return new ZoneLayout { Fixtures = fixtures };
     }

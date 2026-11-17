@@ -61,7 +61,10 @@ public class NifSurveyTests(ITestOutputHelper output)
         foreach (string t in all)
             if (NifSurvey.Coverage(t, v4) != NifCoverage.Unhandled)
                 Assert.Contains(t, NifSurvey.DecodedTypes4x);
-        Assert.Equal(NifCoverage.Unhandled, NifSurvey.Coverage("NiKeyframeController", v4));
+        // Keyframes are read only inside a door (its moving parts, NifFile.Doors), so partly.
+        Assert.Equal(NifCoverage.Partial, NifSurvey.Coverage("NiKeyframeController", v4));
+        Assert.Contains("door", NifSurvey.CoverageNote("NiKeyframeData", v4));
+        Assert.Equal(NifCoverage.Unhandled, NifSurvey.Coverage("NiTextKeyExtraData", v4));
         Assert.NotEmpty(NifSurvey.CoverageNote("NiTexturingProperty", v4));
     }
 
