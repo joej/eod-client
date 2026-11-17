@@ -79,6 +79,7 @@ internal sealed class Gb10Block
     public string? TextureFile;
     // NiMaterialProperty
     public Vector4? MaterialColor;
+    public Vector3? MaterialEmissive;
     // NiAlphaProperty / NiStencilProperty
     public ushort AlphaFlags;
     public byte AlphaThreshold;
@@ -512,6 +513,7 @@ internal static class Gamebryo1010
                 c.F32();                                // Glossiness
                 float alpha = c.F32();
                 b.MaterialColor = new Vector4(diffuse, alpha);
+                b.MaterialEmissive = emissive == Vector3.Zero ? null : emissive;
                 if (emissive != Vector3.Zero) Bump(f, "NiMaterialProperty: non-black emissive");
                 if (alpha < 0.999f) Bump(f, "NiMaterialProperty: alpha < 1");
                 break;

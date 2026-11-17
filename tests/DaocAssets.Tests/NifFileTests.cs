@@ -288,6 +288,19 @@ public sealed class NifFileTests
     }
 
     [Fact]
+    public void AShapesEmissiveColourAndKeptMaterialReachTheClientForADungeonsFixUp()
+    {
+        // A dungeon's material fix-up (WorldView, ModelTexturing.ApplyDungeonFix) may keep the model's own emissive colour,
+        // and leaves the meshes under "anim…" and "door???s" nodes alone: both are carried as material extras.
+        NifMesh cloth = TriMesh("cloth", "fomor_hangcloth01.dds", null) with { Emissive = new Vector3(0.44f, 0.44f, 0.44f), KeepsMaterial = true };
+        var gltf = GltfExporter.BuildScene(new NifModel { Version = new NifVersion(4, 2, 1, 0), Meshes = [cloth] }).ToGltf2();
+        using var doc = System.Text.Json.JsonDocument.Parse(gltf.GetJsonPreview());
+        var extras = doc.RootElement.GetProperty("materials")[0].GetProperty("extras");
+        Assert.Equal("0.44 0.44 0.44", extras.GetProperty("emissive").GetString());
+        Assert.True(extras.GetProperty("keepsMaterial").GetBoolean());
+    }
+
+    [Fact]
     public void A4xLodNodeKeepsTheLevelWithTheNearestRangeNotEveryUnnamedLevel()
     {
         // Shaped like HBirchsingle.nif (4.2.1.0): an LOD node whose two levels are named neither near

@@ -126,6 +126,14 @@ public sealed class DungeonLayout
         return new ZoneLayout { Fixtures = fixtures };
     }
 
+    /// <summary>Where a point given in the dungeon's own frame (the frame rooms are placed in: dungeon.place,
+    /// dungeon.water) lands, in region coordinates.</summary>
+    public static Vector3 FramePoint(Vector3 p)
+    {
+        Vector3 g = Vector3.Transform(ModelFrame(p.X, p.Y, p.Z), Top);
+        return new Vector3(Origin.X + g.X, Origin.Y + g.Z, Origin.Z + g.Y);
+    }
+
     /// <summary>Where a point of a room's piece (NIF space, the piece's own units) lands, in region coordinates.</summary>
     public static Vector3 RegionPoint(DungeonRoom room, Vector3 nifPoint)
     {

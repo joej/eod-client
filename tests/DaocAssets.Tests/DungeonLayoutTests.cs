@@ -104,6 +104,7 @@ public sealed class DungeonLayoutTests
         Assert.True(NifFile.IsDungeonHelper("dungswitch", "bounding"));
         Assert.True(NifFile.IsDungeonHelper("DungSwitch", "Attachpoints"));
         Assert.True(NifFile.IsDungeonHelper("dungswitch", "portal01"));
+        Assert.True(NifFile.IsDungeonHelper("dungswitch", "waterproxy"));
         Assert.False(NifFile.IsDungeonHelper("dungswitch", "visible"));
         Assert.False(NifFile.IsDungeonHelper("dungswitch", "portal01a"));
         Assert.False(NifFile.IsDungeonHelper("scene root", "bounding"));   // only a dungeon piece's

@@ -191,7 +191,7 @@ public static partial class NifFile
         private readonly HashSet<int> _seen = [];
 
         public void Walk(int index, int parentJoint, Matrix4x4 parentWorld, bool helper, int alpha, int stencil,
-            bool numberedHelper = false, int vertexColor = -1, bool collision = false)
+            bool numberedHelper = false, int vertexColor = -1, bool collision = false, bool keepsMaterial = false)
         {
             if (index < 0 || index >= blocks.Length || !_seen.Add(index))
                 return;
@@ -201,6 +201,7 @@ public static partial class NifFile
             bool underHelper = helper || IsHelperNodeName(b.Name) || IsHidden(b.Flags);
             bool underNumbered = numberedHelper || IsNumberedHelperName(b.Name);
             bool underCollision = collision || IsCollisionName(b.Name);
+            bool keeps = keepsMaterial || KeepsMaterialName(b.Name);
             if (b.Type is "NiNode" or "NiBillboardNode" or "NiLODNode")
             {
                 int joint = Joints.Count;
@@ -213,7 +214,7 @@ public static partial class NifFile
                 foreach (int child in b.Type == "NiLODNode" ? NearLevel(b) : b.Children)
                     Walk(child, joint, world,
                         underHelper || (child >= 0 && child < blocks.Length && IsDungeonHelper(b.Name, blocks[child].Name)),
-                        nodeAlpha, nodeStencil, underNumbered, nodeVertexColor, underCollision);
+                        nodeAlpha, nodeStencil, underNumbered, nodeVertexColor, underCollision, keeps);
                 if (parentJoint < 0)
                     BindSkins();
             }
@@ -222,7 +223,10 @@ public static partial class NifFile
                 NifMesh? mesh = Shape(index, b, world, alpha, stencil, vertexColor);
                 if (mesh is null)
                     return;
-                Meshes.Add(mesh with { Helper = underHelper || (underNumbered && mesh.TextureFile is null), Collision = underCollision });
+                Meshes.Add(mesh with
+                {
+                    Helper = underHelper || (underNumbered && mesh.TextureFile is null), Collision = underCollision, KeepsMaterial = keeps,
+                });
             }
         }
 
@@ -252,6 +256,7 @@ public static partial class NifFile
             string? texture = null, dark = null, detail = null;
             uint uvSet = 0, darkUv = 0, detailUv = 0;
             Vector4? color = null;
+            Vector3? emissive = null;
             foreach (int p in shape.Props)
             {
                 Gb10Block prop = blocks[p];
@@ -265,7 +270,7 @@ public static partial class NifFile
                         (detail, detailUv) = (blocks[prop.DetailSourceRef].TextureFile, prop.DetailUvSet);
                 }
                 else if (prop.Type == "NiMaterialProperty")
-                    color = prop.MaterialColor;
+                    (color, emissive) = (prop.MaterialColor, prop.MaterialEmissive);
             }
             Vector2[]? Set(uint i) => i < data.UvSets.Length ? data.UvSets[i] : null;
             int vc = Find(shape.Props, "NiVertexColorProperty", vertexColor);
@@ -317,6 +322,7 @@ public static partial class NifFile
                 DetailTextureFile = Set(detailUv) is null ? null : detail,
                 DetailTexCoords = detail is null ? null : Set(detailUv),
                 BaseColor = color,
+                Emissive = emissive,
                 Alpha = mode,
                 Additive = a >= 0 && Additive(blocks[a].AlphaFlags),
                 AlphaCutoff = cutoff,

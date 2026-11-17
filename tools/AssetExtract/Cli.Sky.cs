@@ -80,7 +80,14 @@ internal static partial class Cli
         // A dungeon has no outdoor sky, and its fog is black (daoc-re's dungeon note and its 2026-11-11 correction); the
         // sky file still gives the lights. Its own sky model (SECTOR.DAT [sky] skynif, zones 049 and 092) isn't drawn yet.
         if (dungeon)
+        {
             lines.Add("kind,dungeon");
+            // Its material fix-up (SECTOR.DAT [dungeonfix]; the client applies it to every model of the dungeon): 1 keeps the
+            // models' own emissive colour (else a faint 1/16 grey), 1 keeps their vertex colours (else dropped). gb11alpha
+            // and applyfix (4 and 2 dungeons) aren't read yet.
+            lines.Add(FormattableString.Invariant($"dungeonfix.material_emittance,{sector.Float("dungeonfix", "catacombs_material_emittance") ?? 0}"));
+            lines.Add(FormattableString.Invariant($"dungeonfix.usevertex_emittance,{sector.Float("dungeonfix", "catacombs_usevertex_emittance") ?? 0}"));
+        }
         // The client's defaults when a key is missing: clip 640, amount 0 (W17 note).
         lines.Add(FormattableString.Invariant($"fog.clip,{sector.Float("fog", "clip") ?? 640}"));
         lines.Add(FormattableString.Invariant($"fog.amount,{sector.Float("fog", "amount") ?? 0}"));

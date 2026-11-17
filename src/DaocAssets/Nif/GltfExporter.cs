@@ -384,6 +384,12 @@ public static class GltfExporter
             extras["glow"] = System.IO.Path.GetFileNameWithoutExtension(m.GlowTextureFile);
         if (m.Additive && m.Alpha == SurfaceAlpha.Blend)
             extras["additive"] = true;
+        // For a dungeon's material fix-up (the client applies it per zone): the NIF's emissive colour, and the meshes it
+        // leaves alone.
+        if (m.Emissive is { } e)
+            extras["emissive"] = FormattableString.Invariant($"{e.X:0.###} {e.Y:0.###} {e.Z:0.###}");
+        if (m.KeepsMaterial)
+            extras["keepsMaterial"] = true;
         if (extras.Count > 0)
             material.Extras = extras;
         return material;

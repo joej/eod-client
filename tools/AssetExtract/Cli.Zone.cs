@@ -262,6 +262,9 @@ internal static partial class Cli
 
         // SECTOR.DAT as the client reads it: the csv archive's copy first (its water types and rivers differ in 43 zones).
         using DaocAssets.Zone.ZoneArchive zone = DaocAssets.Zone.ZoneArchive.Open(datMpk);
+        // A dungeon's water is its dungeon.water planes, not SECTOR.DAT's rivers (DungeonWater).
+        if (DaocAssets.Zone.DungeonLayout.IsDungeon(zone.Dat))
+            return DungeonWaterOut(zone, outDir, indexPath, libDir);
         if (zone.Text("SECTOR.DAT") is not string sectorText)
         {
             Console.Error.WriteLine("water: no SECTOR.DAT in this archive.");
@@ -292,6 +295,38 @@ internal static partial class Cli
         }
         return 0;
     }
+
+    // A dungeon's water planes as water.csv + water.glb, the outdoor water's files (the client draws both alike).
+    private static int DungeonWaterOut(DaocAssets.Zone.ZoneArchive zone, string outDir, string? indexPath, string? libDir)
+    {
+        var planes = DaocAssets.Zone.DungeonWater.Parse(DatText(zone.Dat, "dungeon.water"));
+        var rooms = DaocAssets.Zone.DungeonWater.ParseRooms(DatText(zone.Dat, "dungeon.water.csv"));
+        Directory.CreateDirectory(outDir);
+        File.WriteAllLines(Path.Combine(outDir, "water.csv"),
+            [ZoneWater.CsvHeader, .. planes.Select(p => DaocAssets.Zone.DungeonWater.CsvRow(p, rooms.GetValueOrDefault(p.Id) ?? []))]);
+        string glb = Path.Combine(outDir, "water.glb");
+        if (planes.Count == 0)
+        {
+            if (File.Exists(glb))
+                File.Delete(glb);
+            Console.WriteLine($"No water in this dungeon -> {Path.GetFullPath(Path.Combine(outDir, "water.csv"))} (header only)");
+            return 0;
+        }
+        GltfExporter.SaveGlb(new NifModel { Version = new NifVersion(0, 0, 0, 0), Meshes = planes.Select(DaocAssets.Zone.DungeonWater.BuildMesh).ToList() }, glb);
+        foreach (var p in planes)
+            Console.WriteLine($"  {p.MeshName}: {p.Kind,-5} height {p.Height:0}, rooms {string.Join(' ', rooms.GetValueOrDefault(p.Id) ?? [])}");
+        Console.WriteLine($"Water: {planes.Count} plane(s) -> {Path.GetFullPath(glb)}");
+        if (indexPath is not null && libDir is not null)
+        {
+            var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir);
+            foreach (string stem in planes.Select(p => p.Type == 6 ? ZoneWater.DefaultLavaTexture : ZoneWater.DefaultTexture).Distinct())
+                Console.WriteLine($"  texture {stem}: " + (library.GatherTexture(stem + ".dds") is not null ? "gathered" : "MISSING"));
+        }
+        return 0;
+    }
+
+    private static string DatText(DaocAssets.Mpk.MpkArchive dat, string name) =>
+        dat.TryGetEntry(name, out var e) ? System.Text.Encoding.Latin1.GetString(dat.Extract(e)) : "";
 
     // zonecheck <dat<NNN>.mpk> --zone DIR --library LIBDIR --offset X Y [--out FILE.md]: places every
     // object of a converted zone (DIR/zone.csv) as the client does and checks it against the terrain:
@@ -346,8 +381,12 @@ internal static partial class Cli
         var index = AssetIndex.Load(indexPath);
         DaocAssets.Zone.DungeonLayout layout;
         string portalsCsv;
+        List<DaocAssets.Zone.DungeonWaterPlane> planes;
+        Dictionary<int, List<int>> planeRooms;
         using (var dat = DaocAssets.Mpk.MpkArchive.Open(datMpk))
         {
+            planes = DaocAssets.Zone.DungeonWater.Parse(DatText(dat, "dungeon.water"));
+            planeRooms = DaocAssets.Zone.DungeonWater.ParseRooms(DatText(dat, "dungeon.water.csv"));
             if (!DaocAssets.Zone.DungeonLayout.IsDungeon(dat))
             {
                 Console.Error.WriteLine($"{datMpk}: not a dungeon (no dungeon.chunk / dungeon.place)");
@@ -379,6 +418,26 @@ internal static partial class Cli
             $"{met} meet (<= 2 units), {near} within 64, {measured.Count - met - near} apart, {links.Count - measured.Count} unmeasured" +
             (measured.Count > 0 ? $"; median {measured[measured.Count / 2]:0.#}, max {measured[^1]:0.#}" : "") +
             (layout.Skipped.Count > 0 ? $"; {layout.Skipped.Count} row(s) skipped" : "");
+        // Water: each plane against its rooms' water height (dungeon.place column 10) and the floors under it.
+        IReadOnlyList<(System.Numerics.Vector3, System.Numerics.Vector3, System.Numerics.Vector3)>? Surfaces(string piece) =>
+            Model(piece) is { } m
+                ? m.Meshes.Where(x => !x.Helper || x.Collision)
+                    .SelectMany(x => x.Triangles.Select(t => (x.Vertices[t.A], x.Vertices[t.B], x.Vertices[t.C]))).ToList()
+                : null;
+        var waterLines = new List<string>();
+        foreach (var p in planes)
+        {
+            var heights = (planeRooms.GetValueOrDefault(p.Id) ?? [])
+                .Select(r => layout.Rooms.FirstOrDefault(x => x.Id == r)).Where(r => r.WaterHeight != 0).Select(r => r.WaterHeight).ToList();
+            var grid = DaocAssets.Zone.DungeonWater.RegionGrid(p);
+            (int wet, int all) = DaocAssets.Zone.DungeonCheck.Floors(layout,
+                grid.ToList(), Surfaces, below: 3000, above: 0);
+            waterLines.Add($"{p.MeshName} ({p.Kind}) at {p.Height:0}: rooms' water height " +
+                (heights.Count == 0 ? "none given" : $"{heights.Min():0}..{heights.Max():0}") + $"; a floor under {wet} of {all} grid points");
+        }
+        if (planes.Count > 0)
+            summary += $"; water: {planes.Count} plane(s)";
+
         // --points FILE: "x,y,z" rows in region coordinates (the server's NPCs): how many stand on a floor.
         if (o["--points"] is { } pointsPath)
         {
@@ -392,6 +451,8 @@ internal static partial class Cli
             summary += $"; {on} of {all} points stand on a floor";
         }
         Console.WriteLine($"Dungeon check: {summary}");
+        foreach (string w in waterLines)
+            Console.WriteLine($"  water: {w}");
         if (o["--out"] is { } outPath)
         {
             var sb = new System.Text.StringBuilder($"# Dungeon check: {Path.GetFileName(datMpk)}\n\n{summary}\n\n");
@@ -400,6 +461,8 @@ internal static partial class Cli
                     (l.Gap is float g ? $"{g:0.#} units apart\n" : "not measured\n"));
             foreach (string s in layout.Skipped)
                 sb.Append($"- skipped: {s}\n");
+            foreach (string w in waterLines)
+                sb.Append($"- water: {w}\n");
             File.WriteAllText(outPath, sb.ToString());
         }
         return 0;

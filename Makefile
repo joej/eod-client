@@ -156,10 +156,10 @@ $(ZONEDIR)/zone$(1)/zonecheck.md: $(ZONEDIR)/zone$(1)/zone.csv $(KNOWN) $(ZONE_S
 	@echo "zone $(1) $$(zone$(1)_NAME): $$$$(sed -n 3p $$@)"
 
 .PHONY: zone$(1) check-zone$(1)
-# A capital city is all models: no terrain, and no water in its SECTOR.DAT. A dungeon is its rooms and props (its
-# water planes: not yet, M11).
+# A capital city is all models: no terrain, and no water in its SECTOR.DAT. A dungeon is its rooms, props and water
+# planes (dungeon.water).
 zone$(1): $(addprefix $(ZONEDIR)/zone$(1)/,$(if $(filter city,$(zone$(1)_KIND)),zone.csv sky.csv zonecheck.md,$(if \
-	$(filter dungeon,$(zone$(1)_KIND)),zone.csv sky.csv zonecheck.md dungeoncheck.md,terrain.glb zone.csv water.done sky.csv zonecheck.md)))
+	$(filter dungeon,$(zone$(1)_KIND)),zone.csv water.done sky.csv zonecheck.md dungeoncheck.md,terrain.glb zone.csv water.done sky.csv zonecheck.md)))
 
 ifneq ($(2),$(1))
 .PHONY: zone$(2) check-zone$(2)

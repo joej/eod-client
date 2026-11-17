@@ -117,6 +117,7 @@ public static partial class NifFile
         public int VertexMode = -1;   // NiVertexColorProperty: 0 ignore, 1 emissive, 2 ambient + diffuse
         public string? TextureFile;   // for NiSourceTexture blocks
         public Vector4? MaterialColor; // NiMaterialProperty -> diffuse RGB + alpha (0..1)
+        public Vector3? MaterialEmissive; // NiMaterialProperty -> emissive RGB, when not black
         public ushort AlphaFlags;     // NiAlphaProperty -> flags (bit 0 blend, bits 5-8 dest, bit 9 test)
         public byte AlphaThreshold;   // NiAlphaProperty -> alpha-test reference value (0..255)
         public uint StencilDrawMode;  // NiStencilProperty -> face draw mode (3 = both sides)
@@ -207,7 +208,7 @@ public static partial class NifFile
                         // Its name: on shapes whose texture is embedded, the texture's file name.
                         var nc = c;
                         try { b.Name = nc.SizedString(); } catch (NifFormatException) { }
-                        b.MaterialColor = ReadMaterialPropertyColor(ref c);
+                        (b.MaterialColor, b.MaterialEmissive) = ReadMaterialPropertyColor(ref c);
                     }
                     break;
                 case "NiAlphaProperty":
@@ -322,7 +323,8 @@ public static partial class NifFile
     // its own of the same type.
     private static void Walk4x(ReadOnlySpan<byte> bytes, Block[] blocks, int index, Xform world,
         HashSet<int> seen, List<NifMesh> meshes, bool helper = false, int alpha = -1, int stencil = -1,
-        bool numberedHelper = false, int vertexColor = -1, Skeleton4x? skeleton = null, int parentJoint = -1, bool collision = false)
+        bool numberedHelper = false, int vertexColor = -1, Skeleton4x? skeleton = null, int parentJoint = -1, bool collision = false,
+        bool keepsMaterial = false)
     {
         if (index < 0 || index >= blocks.Length || !seen.Add(index))
             return;
@@ -334,6 +336,7 @@ public static partial class NifFile
         bool underHelper = helper || IsHelperNodeName(b.Name) || IsHidden(b.Flags);
         bool underNumbered = numberedHelper || IsNumberedHelperName(b.Name);
         bool underCollision = collision || IsCollisionName(b.Name);
+        bool keeps = keepsMaterial || KeepsMaterialName(b.Name);
         if (b.Type is "NiNode" or "NiLODNode" or "NiBillboardNode")
         {
             // A billboard node is walked like a plain node: it keeps its stored orientation instead of
@@ -351,7 +354,7 @@ public static partial class NifFile
                 Walk4x(bytes, blocks, child, w, seen, meshes,
                     underHelper || (child >= 0 && child < blocks.Length && IsDungeonHelper(b.Name, blocks[child].Name)),
                     nodeAlpha, nodeStencil, underNumbered,
-                    nodeVertexColor, skeleton, joint, collision: underCollision);
+                    nodeVertexColor, skeleton, joint, collision: underCollision, keepsMaterial: keeps);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
         {
@@ -367,7 +370,11 @@ public static partial class NifFile
                     skeleton.Rigid.Add((meshes.Count, parentJoint, ToMatrix(world)));
                 meshes.Add(WithSurface(BakeTransform(geom, skinned ? Xform.Identity : w, $"mesh{index}",
                     texture, ShapeMaterialColor(blocks, b)), blocks, b, alpha, stencil, vertexColor)
-                    with { Helper = underHelper || (underNumbered && texture is null), Collision = underCollision });
+                    with
+                    {
+                        Helper = underHelper || (underNumbered && texture is null), Collision = underCollision,
+                        Emissive = ShapeEmissive(blocks, b), KeepsMaterial = keeps,
+                    });
             }
         }
     }
@@ -426,15 +433,26 @@ public static partial class NifFile
         return false;
     }
 
+    // A dungeon's material fix-up leaves a mesh alone when it is named "anim…" (7 characters or more: an animated part) or
+    // "door???s" (daoc-re's dungeon note); here the shape's own name or any node's above it (inferred).
+    internal static bool KeepsMaterialName(string name) =>
+        !string.IsNullOrEmpty(name)
+        && ((name.Length >= 7 && name.StartsWith("anim", StringComparison.OrdinalIgnoreCase))
+            || (name.Length == 8 && name.StartsWith("door", StringComparison.OrdinalIgnoreCase)
+                && (name[7] is 's' or 'S')));
+
     // A dungeon piece's nodes under "dungswitch" (daoc-re's dungeon note, 2026-11-10): "Bounding" is the room's volume for
     // finding which room a point is in, "Attachpoints" holds marker points, and "portal01"… are the polygons joining two
     // rooms; the client hides the first two. The portal polygons are a room's doorway quads (untextured placeholder
-    // colours), read for room links and not drawn (inferred: the note lists no drawing use). "Visible", "Collidee",
-    // "pickee", "waterproxy" and the doors and climbs are handled as anywhere else.
+    // colours), read for room links and not drawn (inferred: the note lists no drawing use). "waterproxy" is the room's
+    // water surface: an untextured grey outline of the pool at the waterline, drawn over by the dungeon's water planes
+    // (dungeon.water; Midgard's Abandoned Mines' CMineRoom05_water drew a flat grey-white pool), so not drawn either
+    // (inferred). "Visible", "Collidee", "pickee" and the doors and climbs are handled as anywhere else.
     internal static bool IsDungeonHelper(string parent, string name) =>
         string.Equals(parent, "dungswitch", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(name)
         && (name.Equals("bounding", StringComparison.OrdinalIgnoreCase)
             || name.Equals("attachpoints", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("waterproxy", StringComparison.OrdinalIgnoreCase)
             || DungeonPortal.IsMatch(name));
 
     private static readonly System.Text.RegularExpressions.Regex DungeonPortal = new(
@@ -890,7 +908,7 @@ public static partial class NifFile
     // Emissive — then Glossiness f32 and Alpha f32. We keep the Diffuse colour and Alpha; a shape
     // with no NiTexturingProperty renders flat in this colour (open question W3a). Returns null on a
     // short/garbled read rather than throwing, so one odd block doesn't fail the whole file.
-    private static Vector4? ReadMaterialPropertyColor(ref NifCursor c)
+    private static (Vector4? Color, Vector3? Emissive) ReadMaterialPropertyColor(ref NifCursor c)
     {
         try
         {
@@ -900,15 +918,24 @@ public static partial class NifFile
             c.Vec3();                   // Ambient (discarded)
             Vector3 diffuse = c.Vec3(); // Diffuse
             c.Vec3();                   // Specular (discarded)
-            c.Vec3();                   // Emissive (discarded)
+            Vector3 emissive = c.Vec3(); // Emissive: a dungeon's material fix-up may keep it
             c.F32();                    // Glossiness
             float alpha = c.F32();      // Alpha
-            return new Vector4(diffuse, alpha);
+            return (new Vector4(diffuse, alpha), emissive == Vector3.Zero ? null : emissive);
         }
         catch (NifFormatException)
         {
-            return null;
+            return (null, null);
         }
+    }
+
+    // The shape's material emissive colour (its NiMaterialProperty), or null.
+    private static Vector3? ShapeEmissive(Block[] blocks, Block shape)
+    {
+        foreach (int p in shape.Props)
+            if (p >= 0 && p < blocks.Length && blocks[p].Type == "NiMaterialProperty")
+                return blocks[p].MaterialEmissive;
+        return null;
     }
 
     // Converts one triangle strip to triangles: triangle i is (p[i], p[i+1], p[i+2]) with winding

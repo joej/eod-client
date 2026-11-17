@@ -77,6 +77,8 @@ public static class ModelTexturing
 
                 // Duplicate so we don't mutate a material shared across surfaces/instances.
                 var copy = (BaseMaterial3D)material.Duplicate();
+                if (material.HasMeta(LayersMeta))
+                    copy.SetMeta(LayersMeta, material.GetMeta(LayersMeta));
                 copy.AlbedoTexture = tex;
                 // Sharp at shallow angles (the ground under a chase camera) rather than blurred.
                 copy.TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic;
@@ -105,6 +107,57 @@ public static class ModelTexturing
     }
 
     private const string LayersMeta = "eod_layers";
+
+    /// <summary>A dungeon's material settings (SECTOR.DAT <c>[dungeonfix]</c>, carried in its sky.csv).</summary>
+    public sealed record DungeonFix(bool KeepEmissive, bool KeepVertexColours);
+
+    /// <summary>The faint glow every dungeon surface gets unless the zone keeps the models' own (daoc-re's dungeon note).</summary>
+    private static readonly Color DungeonGlow = new(0.0625f, 0.0625f, 0.0625f);
+
+    /// <summary>
+    /// The client's material fix-up for a dungeon's models (daoc-re's dungeon note): every surface's diffuse becomes white,
+    /// its emissive the faint 1/16 grey (or, with <see cref="DungeonFix.KeepEmissive"/>, the model's own), and its vertex
+    /// colours are dropped (kept with <see cref="DungeonFix.KeepVertexColours"/>). Retail's fixed-function lighting
+    /// multiplies the texture by ambient + diffuse light + emissive, so the glow here is the texture times that colour.
+    /// Surfaces under an "anim…" or "door???s" node keep their material (the converter's keepsMaterial mark). Not built:
+    /// gb11alpha and applyfix (4 and 2 dungeons).
+    /// </summary>
+    public static void ApplyDungeonFix(Node modelRoot, DungeonFix fix)
+    {
+        foreach (MeshInstance3D mi in Meshes(modelRoot))
+        {
+            if (mi.Mesh is not { } mesh)
+                continue;
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            {
+                if (mi.GetActiveMaterial(s) is not BaseMaterial3D material)
+                    continue;   // a shader material: an additive effect, left as it is
+                Godot.Collections.Dictionary? marks = material.HasMeta(LayersMeta) ? material.GetMeta(LayersMeta).AsGodotDictionary() : null;
+                if (marks is not null && marks.TryGetValue("keepsMaterial", out Variant keep) && keep.AsBool())
+                    continue;
+                var m = (BaseMaterial3D)material.Duplicate();
+                m.AlbedoColor = new Color(1, 1, 1, material.AlbedoColor.A);
+                Color glow = DungeonGlow;
+                if (fix.KeepEmissive)
+                    glow = marks is not null && marks.TryGetValue("emissive", out Variant e)
+                        && e.AsString().Split(' ') is { Length: 3 } rgb
+                        && float.TryParse(rgb[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float r)
+                        && float.TryParse(rgb[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float g)
+                        && float.TryParse(rgb[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float b)
+                        ? new Color(r, g, b) : Colors.Black;
+                m.EmissionEnabled = glow.R + glow.G + glow.B > 0;
+                m.Emission = glow;
+                m.EmissionEnergyMultiplier = 1f;
+                if (m.AlbedoTexture is { } tex)
+                {
+                    m.EmissionTexture = tex;
+                    m.EmissionOperator = BaseMaterial3D.EmissionOperatorEnum.Multiply;
+                }
+                m.VertexColorUseAsAlbedo = fix.KeepVertexColours && marks is not null && marks.ContainsKey("vertexColors");
+                mi.SetSurfaceOverrideMaterial(s, m);
+            }
+        }
+    }
 
     // An additive effect surface drawn as the original's fixed-function texture stages did: the base texture,
     // multiplied by the dark map (an effect's mist, on the second UV set), plus the glow map (the thin bright

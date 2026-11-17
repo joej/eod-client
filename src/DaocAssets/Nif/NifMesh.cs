@@ -32,6 +32,15 @@ public sealed record NifMesh
     /// player can't walk through it. Usually also <see cref="Helper"/> (never drawn); a textured one is both.</summary>
     public bool Collision { get; init; }
 
+    /// <summary>The shape's <c>NiMaterialProperty</c> emissive colour (RGB, 0..1), when not black: the light it gives
+    /// itself. Used by a dungeon's material fix-up (<c>[dungeonfix] catacombs_material_emittance=1</c> keeps it).</summary>
+    public Vector3? Emissive { get; init; }
+
+    /// <summary>True when the shape or a node above it is named <c>anim…</c> (7 characters or more) or <c>door???s</c>:
+    /// a dungeon's material fix-up leaves it as the file has it (daoc-re's dungeon note; whether the client tests the
+    /// shape's own name or its nodes' is inferred).</summary>
+    public bool KeepsMaterial { get; init; }
+
     /// <summary>Transparency from the shape's (or an ancestor's) <c>NiAlphaProperty</c>.</summary>
     public SurfaceAlpha Alpha { get; init; }
 
@@ -112,6 +121,7 @@ public sealed record NifMesh
         (UvSets is { Length: > 1 } sets ? $", {sets.Length} UV sets" : "") +
         (VertexColors is null ? "" : ", vertex colours") +
         (BaseColor is { } c ? $", rgba({c.X:0.##},{c.Y:0.##},{c.Z:0.##},{c.W:0.##})" : "") +
+        (Emissive is { } e ? $", emissive({e.X:0.##},{e.Y:0.##},{e.Z:0.##})" : "") + (KeepsMaterial ? ", keeps material" : "") +
         (Alpha == SurfaceAlpha.Opaque ? "" : $", {Alpha.ToString().ToLowerInvariant()} {AlphaCutoff:0.###}") +
         (DoubleSided ? ", two-sided" : "") + (Helper ? ", helper" : "") + (Collision ? ", collision" : "") + (Skin is null ? "" : ", skinned") +
         (MorphTargets is null ? "" : $", {MorphTargets.Length} morphs (codes {string.Join(" ", MorphCodes ?? [])})");

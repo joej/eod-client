@@ -1,0 +1,7 @@
+# Fixed camera poses in Midgard's Abandoned Mines (zone 226, a dungeon with water) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 226
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# Dungeon water (dungeon.water planes) and the dungeon material fix-up ([dungeonfix]; this zone has none: the default).
+pool-1        23802 27786 16950     0 -25   # over the first water plane (surface 16809), looking along it
+pool-1-back   23802 27786 16950   180 -25   # the same pool the other way
+pool-2        18172 31100 16950    90 -25   # the second plane (surface 16810)

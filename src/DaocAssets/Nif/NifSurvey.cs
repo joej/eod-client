@@ -115,7 +115,7 @@ public sealed partial class NifSurvey
                 "NiLODNode" => "nearest level only (smallest near extent; child 0 for screen-size LOD)",
                 "NiRangeLODData" => "near extents only, to pick the nearest level",
                 "NiTexturingProperty" => "base texture only",
-                "NiMaterialProperty" => "diffuse and alpha only",
+                "NiMaterialProperty" => "diffuse, alpha and emissive (emissive for dungeons only)",
                 "NiStencilProperty" => "draw mode (sidedness) only",
                 "NiGeomMorpherController" or "NiMorphData" =>
                     "morph targets and their FM/HM codes exported on skinned shapes (Catacombs face sliders); keys (animated morphs) ignored",
@@ -132,7 +132,7 @@ public sealed partial class NifSurvey
                 "self-contained skins exported (top 4 weights) with every node as a joint; a figure's rigid parts " +
                 "are bound to their parent node (NifFile.ReadFigure)",
             "NiSourceTexture" => "external file name only; embedded pixel data not decoded",
-            "NiMaterialProperty" => "diffuse and alpha only; ambient/specular/emissive/glossiness dropped",
+            "NiMaterialProperty" => "diffuse, alpha and emissive (emissive for dungeons only); ambient/specular/glossiness dropped",
             "NiStencilProperty" => "draw mode (sidedness) only",
             _ => "",
         };

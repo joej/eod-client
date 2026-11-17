@@ -24,6 +24,7 @@ public partial class WorldView
         public System.Collections.Generic.List<DaocAssets.Zone.ZoneJump> Jumps = [];
         public System.Collections.Generic.List<DaocAssets.Zone.BoundSegment> Bounds = [];   // edge walls
         public int Placed, Distinct, TexturedModels, TexturedSurfaces, WaterBodies;
+        public ModelTexturing.DungeonFix? Fix;   // a dungeon's material fix-up (its sky.csv), applied to every model it loads
         public double Seconds;                // how long the build took
     }
 
@@ -37,10 +38,27 @@ public partial class WorldView
         return parts;
     }
 
-    private static ZoneParts NewZoneParts(ushort id, string? zoneCsv, string? terrainGlb) => new()
+    private static ZoneParts NewZoneParts(ushort id, string? zoneCsv, string? terrainGlb)
     {
-        Id = id, Dir = System.IO.Path.GetDirectoryName(zoneCsv ?? terrainGlb ?? "") ?? "", Root = new Node3D { Name = $"zone{id:D3}" },
-    };
+        string dir = System.IO.Path.GetDirectoryName(zoneCsv ?? terrainGlb ?? "") ?? "";
+        return new() { Id = id, Dir = dir, Root = new Node3D { Name = $"zone{id:D3}" }, Fix = ReadDungeonFix(dir) };
+    }
+
+    // A dungeon's [dungeonfix] settings from its sky.csv ("kind,dungeon" and the two dungeonfix keys), or null outside one.
+    private static ModelTexturing.DungeonFix? ReadDungeonFix(string dir)
+    {
+        string csv = dir.PathJoin("sky.csv");
+        if (dir.Length == 0 || !Godot.FileAccess.FileExists(csv))
+            return null;
+        var kv = new System.Collections.Generic.Dictionary<string, string>();
+        foreach (string line in Godot.FileAccess.GetFileAsString(csv).Split('\n'))
+            if (line.IndexOf(',') is int comma and > 0)
+                kv[line[..comma]] = line[(comma + 1)..].Trim();
+        if (kv.GetValueOrDefault("kind") != "dungeon")
+            return null;
+        return new ModelTexturing.DungeonFix(kv.GetValueOrDefault("dungeonfix.material_emittance") == "1",
+            kv.GetValueOrDefault("dungeonfix.usevertex_emittance") == "1");
+    }
 
     // The build in small steps (each yield is a point where the caller may wait for the next frame). Built
     // on the main thread: from a worker thread most mesh and collider calls wait for the render thread,
@@ -295,6 +313,12 @@ public partial class WorldView
                 mat.SetShaderParameter("albedo_tex", tex);
             // DAoC's flow is about -50..50; as texture repeats per second, /1000 reads as a slow drift.
             mat.SetShaderParameter("flow", row.Flow / 1000f);
+            // A dungeon's water (dungeon.water planes): retail's 0.85 alpha above the surface, and no sun to glint on it.
+            if (parts.Fix is not null)
+            {
+                mat.SetShaderParameter("opacity", 0.85f);
+                mat.SetShaderParameter("specular", 0f);
+            }
             mi.MaterialOverride = mat;
             parts.WaterBodies++;
             // Its surface, for the swim check (WaterLayer only: nothing stands on it). Not lava: retail tells it apart
@@ -514,6 +538,8 @@ public partial class WorldView
         if (path is not null
             && ModelTexturing.LoadGlb(path, out int t, textureDirs) is Node3D m)
         {
+            if (parts.Fix is { } fix)
+                ModelTexturing.ApplyDungeonFix(m, fix);
             parts.TexturedModels += t > 0 ? 1 : 0;
             parts.TexturedSurfaces += t;
             model = m;

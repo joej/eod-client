@@ -543,8 +543,14 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
   fixture's 3D Angle). Checked two ways: the doorways of 26,763 of 27,782 `portals.csv` links meet within 64 units
   (`mpk dungeoncheck`), and the floors hold the server's NPCs (392 of 392 in Coruscating Mine, 313 of 318 in Muire Tomb,
   369 of 370 in zone 060; the mirror image holds 5, 105 and 26). A piece's room volume, attach points and doorway
-  polygons aren't drawn. No sky and black fog (W64). Not yet: water, the `[dungeonfix]` lighting, the sky model,
-  doors, animated nodes, and five pieces the NIF reader can't read (one of them a Darkness Falls tunnel).
+  polygons aren't drawn. No sky and black fog (W64). Not yet: the sky model, doors, animated nodes, and five pieces the
+  NIF reader can't read (one of them a Darkness Falls tunnel).
+- *Built 2026-11-17:* dungeon water: the 32 `dungeon.water` planes of 10 dungeons (an 11th, zone 230, is not in the zone
+  table), drawn and swum in as outdoor water is (`DungeonWater`). Each plane's surface is within 5 units of the water height its rooms give in `dungeon.place`,
+  and floors lie under it as placed (either mirror image leaves nearly none). The `[dungeonfix]` material fix-up:
+  every dungeon surface is lit white with a faint 1/16 glow and no vertex colours, unless the zone keeps the models'
+  own glow (102 dungeons) or vertex colours (31); `anim…` and `door???s` meshes keep their own material. Not yet:
+  showing only the current room's water, lava's look, `gb11alpha` and `applyfix`.
 - **Done when:** you can enter a dungeon from its zone jump and walk it, rendered from its pieces.
 
 ### M12 — Atmosphere: effects, sound and music
