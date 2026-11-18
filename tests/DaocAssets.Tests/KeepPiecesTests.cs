@@ -86,6 +86,9 @@ public sealed class KeepLayoutTests
     [InlineData("!sclimb_visible_Tier3_hib;!sclimb_visible_Tier3_hib:0", 3, 2, false, false, false)]   // not climbable
     [InlineData("!sclimb_visible_Tier3_hib", 1, 2, false, true, false)]   // another realm
     [InlineData("!sclimb_visible_Tier2_hib", 3, 2, false, true, false)]   // another level tier
+    [InlineData("!hib_cake_undamaged", 3, 2, false, false, true)]
+    [InlineData("!alb_cake_undamaged", 3, 2, false, false, false)]       // another realm's topping
+    [InlineData("!alb_cake_damaged", 1, 2, true, false, true)]
     public void ABranchShowsForItsStateLevelAndRealm(string? branches, int realm, int levelTier, bool broken, bool climbable, bool shows) =>
         Assert.Equal(shows, KeepLayout.Shows(branches, realm, levelTier, broken, climbable));
 
@@ -95,4 +98,56 @@ public sealed class KeepLayoutTests
         Dictionary<int, string?[]> p = KeepLayout.ReadPieces("skin,name,tier,glb\n31,outpost,1,keeps/outpost_lvl1\n31,outpost,5,5-outpost_tower\n");
         Assert.Equal(new string?[] { "keeps/outpost_lvl1", null, null, null, "5-outpost_tower" }, p[31]);
     }
+}
+
+/// <summary>Keep textures: fr_materials by realm and group, in either table width.</summary>
+public sealed class KeepMaterialsTests
+{
+    private const string Textures = """
+        141,,,,,,,
+        ,Desc,Filename,Damage,Clamp,,,
+        1,Hib Wall,hib_wall,,
+        2,Hib Wall 4,hib_wall_lvl4,,
+        3,Alb Wall,alb_wall,,
+        4,Dark,wall_dark,,
+        5,75-51% hps,damage_75,4,0
+        """;
+
+    [Fact]
+    public void AThreeWideTableGivesEachRealmAndTierItsTextures()
+    {
+        // id, name, Alb/Mid/Hib plain (3 each), Alb T1-4, Mid T1-4, Hib T1-4 (3 each), Damage, Emmitence: 49 columns.
+        string[] row = new string[49];
+        System.Array.Fill(row, "");
+        (row[0], row[1]) = ("1", "!nf_main_wall");
+        (row[2], row[3]) = ("3", "4");     // Albion plain: base 3, dark 4
+        row[8] = "1";                      // Hibernia plain
+        row[2 + 9 + (2 * 4 + 3) * 3] = "2";   // Hibernia Tier 4
+        (row[47], row[48]) = ("1", "128");
+        string header = "109,Search" + string.Concat(Enumerable.Repeat(",x", 47));
+        string names = ",String" + string.Concat(Enumerable.Repeat(",Base", 47));
+        KeepMaterials m = KeepMaterials.Parse($"{header}\n{names}\n{string.Join(',', row)}\n", Textures);
+
+        Assert.Equal(3, m.GroupWidth);
+        KeepMaterial wall = m.Materials["!NF_MAIN_WALL"];
+        Assert.Equal(new KeepTextureSet("alb_wall", "wall_dark", null, null), wall.Sets[0, 0]);
+        Assert.Equal("hib_wall", wall.Sets[2, 0]?.Base);
+        Assert.Equal("hib_wall_lvl4", wall.Sets[2, 4]?.Base);
+        Assert.Null(wall.Sets[1, 0]);
+        Assert.Equal((true, 128), (wall.Damage, wall.Emittance));
+        Assert.Equal("damage_75", m.DamageOverlays[4]);
+
+        var table = KeepMaterials.ReadCsv(m.ToCsv());
+        Assert.Equal("hib_wall_lvl4", table[("!nf_main_wall", 3, 4)].Set.Base);
+    }
+
+    [Theory]
+    [InlineData("!nf_main_wall", 0, 4, 0)]
+    [InlineData("!nf_main_wall", 3, 1, 3)]
+    [InlineData("!nf_door", 0, 4, 0)]      // "!nf_door" doesn't contain "!door": by the level tier
+    [InlineData("!door_postern", 0, 4, 4)] // a door by the piece's tier
+    [InlineData("!door", 3, 1, 1)]
+    [InlineData("!door", 3, 5, 4)]         // TIER 5 clamped to Tier 4 (ours)
+    public void AGroupIsTheLevelTierOrForADoorThePiecesTier(string name, int levelTier, int column, int group) =>
+        Assert.Equal(group, KeepMaterials.Group(name, levelTier, column));
 }

@@ -45,6 +45,10 @@ public sealed record NifMesh
     /// !sclimb_visible_tier3_hib, ...), or null. The client shows one such branch by the piece's state.</summary>
     public string? Branches { get; init; }
 
+    /// <summary>A keep piece's material name ("!nf_main_wall": its NiMaterialProperty's name, when it starts with '!'), or
+    /// null. The client textures the surface from fr_materials.csv by it (DaocAssets.Keeps.KeepMaterials).</summary>
+    public string? KeepMaterial { get; init; }
+
     /// <summary>The door part it moves with (an index into <see cref="NifModel.Movers"/>), or -1: baked at rest, it moves
     /// by that mover's delta while its door opens.</summary>
     public int Mover { get; init; } = -1;

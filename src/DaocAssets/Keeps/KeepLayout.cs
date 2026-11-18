@@ -11,7 +11,8 @@
 //     keep id with a high byte) at height 4; a missing cell falls back to the highest tier below it (ours);
 //   - branches: "_undamaged" nodes while not broken (flag bit 0), "_damaged" ones when broken; "!scl…" climbing
 //     variants only when the piece is climbable (flag bit 1), and then only the one for the keep's level tier (levels
-//     0–2/3–5/6–8/9+ → digit 1–4) and realm; "!…_static" and the rest always.
+//     0–2/3–5/6–8/9+ → digit 1–4) and realm; a realm's "!<realm>_cake…" toppings only on its own realm's keep
+//     (inferred); "!…_static" and the rest always.
 
 namespace DaocAssets.Keeps;
 
@@ -64,6 +65,11 @@ public static class KeepLayout
             if (colon > 0)
                 b = b[..colon];
             if (b.EndsWith("_damaged") && !broken || b.EndsWith("_undamaged") && broken)
+                return false;
+            // "!alb_cake_undamaged": a realm's own topping, shown only on that realm's keep (inferred from the names; RE/92
+            // names "!<realm>_cake_undamaged" among the nodes a break swaps).
+            if (b.Length > 5 && b[0] == '!' && b.AsSpan(4).StartsWith("_cake") && b.AsSpan(1, 3) is var r
+                && (r.SequenceEqual("alb") || r.SequenceEqual("mid") || r.SequenceEqual("hib")) && r[0] != realmLetter)
                 return false;
             // "!sclimb_visible_tier3_hib": the client reads character 20 (the tier digit) and 22 (the realm letter).
             if (b.StartsWith("!scl") && (!climbable || b.Length < 23 || b[20] != (char)('1' + levelTier) || b[22] != realmLetter))

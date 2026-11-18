@@ -563,8 +563,8 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
   build tier (`make keeps`: `fr_tiers.csv` and `fr_pieces.csv`, 115 models), placed around the keep as the client does
   (W67).
   OpenDAoC ships no New Frontiers keeps, so it is checked offline against the packets it would send for Eve of
-  Darkness db-public's keep tables (`mpk keeps`, `--keeps`; Dun Ailinne in `tools/shots/cruachan.txt`). Not yet: realm
-  and tier textures (`fr_materials`), damage, raised towers, keep doors.
+  Darkness db-public's keep tables (`mpk keeps`, `--keeps`; Dun Ailinne in `tools/shots/cruachan.txt`). Each surface
+  takes its realm's textures for the keep's level tier from `fr_materials.csv`. Not yet: damage, raised towers, keep doors.
 - **Done when:** you can enter a dungeon from its zone jump and walk it, rendered from its pieces.
 
 ### M12 — Atmosphere: effects, sound and music

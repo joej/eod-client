@@ -30,6 +30,7 @@ public partial class WorldView
     private readonly Dictionary<ushort, Keep> _keeps = [];
     private Dictionary<int, string?[]>? _keepPieces;   // skin → glb per tier (pieces.csv)
     private readonly Dictionary<string, Node3D?> _keepTemplates = [];
+    private Dictionary<(string Name, int Realm, int Group), (KeepTextureSet Set, bool Damage, int Emittance)>? _keepMaterials;
 
     private void ListenForKeeps()
     {
@@ -194,6 +195,17 @@ public partial class WorldView
             if (!KeepLayout.Shows(branches, keep.Info.Realm, levelTier, broken, climbable))
                 mi.Free();
         }
+        // The keep's textures for its realm and level tier ("!door…" by the piece's own tier).
+        if (_keepMaterials is null)
+        {
+            string table = lib.PathJoin("keeps").PathJoin("materials.csv");
+            _keepMaterials = Godot.FileAccess.FileExists(table) ? KeepMaterials.ReadCsv(Godot.FileAccess.GetFileAsString(table)) : [];
+        }
+        int column = KeepLayout.TierColumn(c.Height, c.KeepId, raised);
+        ModelTexturing.ApplyKeepTextures(node, name =>
+            _keepMaterials.TryGetValue((name, keep.Info.Realm, KeepMaterials.Group(name, levelTier, column)), out var m)
+                ? (m.Set.Base, m.Set.Dark, m.Emittance / 255f) : null,
+            _libraryPath!.PathJoin("overrides"), _libraryPath!.PathJoin("textures").PathJoin("keeps"));
         return node;
     }
 }

@@ -46,10 +46,12 @@ internal static partial class Cli
             return Usage();
         string frontiers = FindInstallFile(client, "frontiers/frontiers.mpk") ?? throw new FileNotFoundException("frontiers.mpk", client);
         Dictionary<int, DaocAssets.Keeps.KeepPieceType> types;
+        DaocAssets.Keeps.KeepMaterials materials;
         using (MpkArchive mpk = MpkArchive.Open(frontiers))
         {
             string Text(string name) => System.Text.Encoding.Latin1.GetString(mpk.Extract(name));
             types = DaocAssets.Keeps.KeepPieces.Parse(Text("fr_tiers.csv"), Text("fr_pieces.csv"));
+            materials = DaocAssets.Keeps.KeepMaterials.Parse(Text("fr_materials.csv"), Text("fr_textures.csv"));
         }
         var library = new AssetLibrary(AssetIndex.Load(indexPath), libDir).Scoped("keeps", KeepFolders);
         string modelsDir = Path.Combine(libDir, "models");
@@ -74,6 +76,27 @@ internal static partial class Cli
         string outDir = Path.Combine(libDir, "keeps");
         Directory.CreateDirectory(outDir);
         File.WriteAllText(Path.Combine(outDir, "pieces.csv"), table.ToString());
+
+        // The keep textures: every fr_textures file (frontiers/nifs/<file>.dds) into textures/keeps/, and the material table.
+        string texDir = Path.Combine(libDir, "textures", "keeps");
+        Directory.CreateDirectory(texDir);
+        int copied = 0, missing = 0;
+        foreach (string file in materials.Files)
+        {
+            if (FindInstallFile(client, $"frontiers/nifs/{file}.dds") is string src)
+            {
+                File.Copy(src, Path.Combine(texDir, file.ToLowerInvariant() + ".dds"), overwrite: true);   // the library's names are lower case
+                copied++;
+            }
+            else
+            {
+                missing++;
+                Console.Error.WriteLine($"  texture {file}.dds: not in frontiers/nifs");
+            }
+        }
+        File.WriteAllText(Path.Combine(outDir, "materials.csv"), materials.ToCsv());
+        Console.WriteLine($"keepmodels: {materials.Materials.Count} materials ({materials.GroupWidth} textures a group in this install's table), " +
+            $"{copied} textures copied, {missing} missing");
         Console.WriteLine($"keepmodels: {types.Count} component types, {rows} type/tier models ({stems.Count} files: {absent} not in the install, {failed} failed)");
         return 0;
     }

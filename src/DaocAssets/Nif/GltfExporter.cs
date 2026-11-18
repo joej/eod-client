@@ -441,6 +441,8 @@ public static class GltfExporter
             extras["keepsMaterial"] = true;
         if (m.Branches is not null)
             extras["branches"] = m.Branches;
+        if (m.KeepMaterial is not null)
+            extras["keepMaterial"] = m.KeepMaterial;
         if (extras.Count > 0)
             material.Extras = extras;
         return material;

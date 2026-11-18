@@ -201,12 +201,13 @@ $(STRIDES): $(CLIENT)/gamedata.mpk $(A)/Figures/MonsterFigure.cs $(A)/Figures/Fi
 	@mkdir -p $(@D)
 	$(MPK) strides --gamedata $(CLIENT)/gamedata.mpk --out $@
 
-# --- keeps: every frontier keep piece model (fr_tiers x fr_pieces in frontiers.mpk) and keeps/pieces.csv, for the
+# --- keeps: every frontier keep piece model (fr_tiers x fr_pieces in frontiers.mpk), keeps/pieces.csv, the keep textures
+# (fr_textures, into textures/keeps) and keeps/materials.csv (fr_materials), for the
 # keeps a server sends (0x69/0x6C; New Frontiers). Old Frontiers keeps are zone fixtures and come with their zones.
 KEEPS := $(LIB)/keeps/pieces.csv
 .PHONY: keeps
 keeps: $(KEEPS)
-$(KEEPS): $(INDEX) $(MODEL_SRC) $(A)/Keeps/KeepPieces.cs $(CLI_SRC) $(X)/Cli.Keeps.cs | $(TOOL)
+$(KEEPS): $(INDEX) $(MODEL_SRC) $(A)/Keeps/KeepPieces.cs $(A)/Keeps/KeepMaterials.cs $(CLI_SRC) $(X)/Cli.Keeps.cs | $(TOOL)
 	@mkdir -p $(@D)
 	$(MPK) keepmodels $(CLIENT) --index $(INDEX) --library $(LIB)
 

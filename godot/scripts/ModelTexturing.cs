@@ -308,6 +308,55 @@ public static class ModelTexturing
         return result;
     }
 
+    private static readonly System.Collections.Generic.Dictionary<string, ImageTexture?> KeepTextureCache = [];
+
+    /// <summary>
+    /// A keep piece's textures (daoc-re RE/92 §4): each surface whose material the converter tagged with a keep material
+    /// name ("!nf_main_wall") takes the base texture <paramref name="pick"/> gives for that name, its dark map multiplied
+    /// over it on the second UV set when the surface has one, and the material's grey glow. Others keep their own.
+    /// Returns how many surfaces were retextured.
+    /// </summary>
+    public static int ApplyKeepTextures(Node modelRoot, System.Func<string, (string? Base, string? Dark, float Glow)?> pick,
+        params string[] textureDirs)
+    {
+        var dirs = new System.Collections.Generic.List<string>(textureDirs);
+        int done = 0;
+        foreach (MeshInstance3D mi in Meshes(modelRoot))
+        {
+            if (mi.Mesh is not { } mesh)
+                continue;
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            {
+                if (mi.GetActiveMaterial(s) is not BaseMaterial3D material || !material.HasMeta(LayersMeta)
+                    || !material.GetMeta(LayersMeta).AsGodotDictionary().TryGetValue("keepMaterial", out Variant name)
+                    || pick(name.AsString()) is not var (baseName, dark, glow)
+                    || baseName is null || LoadTexture(dirs, baseName, KeepTextureCache) is not { } tex)
+                    continue;
+                var copy = (BaseMaterial3D)material.Duplicate();
+                copy.AlbedoTexture = tex;
+                copy.AlbedoColor = new Color(1, 1, 1, material.AlbedoColor.A);
+                bool uv2 = mesh is ArrayMesh am && (am.SurfaceGetFormat(s) & Mesh.ArrayFormat.FormatTexUV2) != 0;
+                if (dark is not null && uv2 && LoadTexture(dirs, dark, KeepTextureCache) is { } darkTex)
+                {
+                    copy.DetailEnabled = true;
+                    copy.DetailAlbedo = darkTex;
+                    copy.DetailUVLayer = BaseMaterial3D.DetailUV.UV2;
+                    copy.DetailBlendMode = BaseMaterial3D.BlendModeEnum.Mul;
+                }
+                // Retail's fixed-function lighting multiplies the texture by ambient + diffuse + emissive, so the glow is the
+                // texture times that grey, as the dungeon fix-up draws it.
+                copy.EmissionEnabled = glow > 0;
+                copy.Emission = new Color(glow, glow, glow);
+                copy.EmissionEnergyMultiplier = 1f;
+                copy.EmissionTexture = tex;
+                copy.EmissionOperator = BaseMaterial3D.EmissionOperatorEnum.Multiply;
+                mi.SetSurfaceOverrideMaterial(s, copy);
+                done++;
+            }
+        }
+        return done;
+    }
+
     private static System.Collections.Generic.IEnumerable<MeshInstance3D> Meshes(Node node)
     {
         if (node is MeshInstance3D mi)

@@ -411,6 +411,7 @@ public static partial class NifFile
                     {
                         Helper = underHelper || (underNumbered && texture is null), Collision = underCollision,
                         Emissive = ShapeEmissive(blocks, b), KeepsMaterial = keeps, Mover = moves, Branches = branches,
+                        KeepMaterial = ShapeKeepMaterial(blocks, b),
                     });
             }
         }
@@ -589,6 +590,16 @@ public static partial class NifFile
                         && System.IO.Path.GetExtension(blocks[m].Name).ToLowerInvariant() is ".tga" or ".dds" or ".bmp")
                         return blocks[m].Name;
         }
+        return null;
+    }
+
+    // A keep piece's surface names its material in its NiMaterialProperty's name ("!nf_main_wall", "!stone_trim"): the
+    // client takes its textures from fr_materials.csv by that name (daoc-re RE/92). Null for any other name.
+    private static string? ShapeKeepMaterial(Block[] blocks, Block shape)
+    {
+        foreach (int p in shape.Props)
+            if (p >= 0 && p < blocks.Length && blocks[p].Type == "NiMaterialProperty" && blocks[p].Name.Trim().StartsWith('!'))
+                return blocks[p].Name.Trim();
         return null;
     }
 
