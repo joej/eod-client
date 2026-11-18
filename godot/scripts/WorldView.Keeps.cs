@@ -5,6 +5,8 @@
 // height byte names, from library/keeps/pieces.csv (`make keeps`), placed around the keep and turned with it, with the
 // branches for its realm, level and state shown (DaocAssets.Keeps.KeepLayout: retail's rules, daoc-re RE/92). 0x69 has
 // no height: the keep stands on the terrain under it, found once that terrain is loaded.
+// A piece's doors open and close on 0x99 and are clicked like a dungeon's (WorldView.Doors), by the id the client gives
+// them (KeepLayout.DoorId: 7 + keep id low byte + its high byte + component + n).
 // --keeps FILE replays a keep packet file (`mpk keeps`) as if the server had sent it, when the file's region is ours:
 // our server has no New Frontiers keeps.
 
@@ -28,6 +30,8 @@ public partial class WorldView
     }
 
     private readonly Dictionary<ushort, Keep> _keeps = [];
+    private readonly Dictionary<uint, (Node3D Model, string Door)> _keepDoors = [];   // keep door id → its piece and door
+    private readonly HashSet<uint> _keepDoorsOpen = [];   // keep doors the last 0x99 opened
     private Dictionary<int, string?[]>? _keepPieces;   // skin → glb per tier (pieces.csv)
     private readonly Dictionary<string, Node3D?> _keepTemplates = [];
     private Dictionary<(string Name, int Realm, int Group), (KeepTextureSet Set, bool Damage, int Emittance)>? _keepMaterials;
@@ -84,7 +88,7 @@ public partial class WorldView
                 return;
             foreach ((ushort id, Node3D node) in keep.Nodes.Where(n => componentId is null || n.Key == componentId).ToList())
             {
-                node.QueueFree();
+                DropKeepPart(node);
                 keep.Nodes.Remove(id);
                 keep.Parts.Remove(id);
             }
@@ -141,7 +145,7 @@ public partial class WorldView
     private void PlaceKeepPart(Keep keep, KeepComponentInfo c)
     {
         if (keep.Nodes.Remove(c.ComponentId, out Node3D? old))
-            old.QueueFree();
+            DropKeepPart(old);
         if (keep.GroundY is not float ground || KeepPart(keep, c) is not Node3D node)
             return;
         KeepInfo k = keep.Info;
@@ -152,6 +156,45 @@ public partial class WorldView
         _entityRoot.AddChild(node);
         MakeSolid(node, true, drawnWalls: false);
         keep.Nodes[c.ComponentId] = node;
+        TagKeepDoors(node, k.KeepId, c.ComponentId);
+    }
+
+    // A piece's doors (its door001… animations): their parts tagged with the door's id (for clicks), a player of their own
+    // each, and kept by id for 0x99 (WorldView.Doors).
+    private void TagKeepDoors(Node3D model, ushort keepId, ushort componentId)
+    {
+        if (FindAnimationPlayer(model) is not AnimationPlayer imported)
+            return;
+        foreach (int n in KeepLayout.DoorNumbers(imported.GetAnimationList().Select(a => a.ToString())).ToList())
+        {
+            string door = $"door{n:000}";
+            if (KeepLayout.DoorId(keepId, componentId, door) is not uint id)
+                continue;
+            foreach (Node3D part in DoorParts(model, door))
+                part.SetMeta("door_id", (long)id);
+            var player = new AnimationPlayer { Name = DoorPlayerPrefix + door };
+            player.AddAnimationLibrary("", imported.GetAnimationLibrary(""));
+            model.AddChild(player);
+            _keepDoors[id] = (model, door);
+            // A rebuilt piece (0x6D, a realm change) starts closed; the client may not re-apply the state (daoc-re), so we
+            // do: a door the server last opened stands open again.
+            if (_keepDoorsOpen.Contains(id))
+            {
+                player.Play(door);
+                player.Seek(player.GetAnimation(door).Length, true);
+                SetDoorBlocking(model, door, false);
+            }
+        }
+    }
+
+    private void DropKeepPart(Node3D node)
+    {
+        foreach (uint id in _keepDoors.Where(d => d.Value.Model == node).Select(d => d.Key).ToList())
+        {
+            _keepDoors.Remove(id);
+            _doorsBlockingAt.Remove(id);
+        }
+        node.QueueFree();
     }
 
     // The component's model at its tier, with only the branches for its realm, tier and state; null without one.

@@ -92,6 +92,7 @@ public sealed partial class NifSurvey
         return type switch
         {
             "NiKeyframeController" or "NiKeyframeData" or "NiStringExtraData" => NifCoverage.Partial,
+            "NiVisController" => NifCoverage.Partial,
             "NiNode" or "NiTriShape" or "NiTriStrips" or "NiAlphaProperty" => NifCoverage.Handled,
             "NiBillboardNode" or "NiSkinInstance" or "NiSkinData" => NifCoverage.Partial,
             "NiLODNode" or "NiTriShapeData" or "NiTriStripsData" or "NiTexturingProperty"
@@ -140,6 +141,8 @@ public sealed partial class NifSurvey
             "NiStencilProperty" => "draw mode (sidedness) only",
             "NiKeyframeController" or "NiKeyframeData" => DoorKeysNote,
             "NiStringExtraData" => DoorExtraNote,
+            "NiVisController" => "only its next-controller link, so a keyframe controller after it is found (a keep gate's " +
+                "leaves); the visibility keys are ignored",
             _ => "",
         };
     }

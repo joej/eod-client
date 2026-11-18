@@ -407,13 +407,13 @@ public partial class WorldView
             if (name == "!open-doors")
             {
                 double longest = 0;
-                foreach (ZoneParts z in _zones.Values)
-                    foreach ((uint id, (Node3D model, string door)) in z.Doors)
-                    {
-                        OnDoorChanged(new DoorState(id, DoorState.Open, 0, 0xFF));
-                        if (DoorPlayer(model, door) is AnimationPlayer p && p.HasAnimation(door))
-                            longest = System.Math.Max(longest, p.GetAnimation(door).Length);
-                    }
+                foreach ((uint id, (Node3D model, string door)) in _zones.Values.SelectMany(z => z.Doors)
+                             .Concat(_keepDoors.Select(k => new System.Collections.Generic.KeyValuePair<uint, (Node3D, string)>(k.Key, (k.Value.Model, k.Value.Door)))).ToList())
+                {
+                    OnDoorChanged(new DoorState(id, DoorState.Open, 0, 0xFF));
+                    if (DoorPlayer(model, door) is AnimationPlayer p && p.HasAnimation(door))
+                        longest = System.Math.Max(longest, p.GetAnimation(door).Length);
+                }
                 await ToSignal(GetTree().CreateTimer(longest + 0.5), SceneTreeTimer.SignalName.Timeout);   // until every door is open
                 continue;
             }

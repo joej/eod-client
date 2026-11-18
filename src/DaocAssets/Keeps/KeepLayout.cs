@@ -78,6 +78,34 @@ public static class KeepLayout
         return true;
     }
 
+    /// <summary>A keep door's id, as the client names it (daoc-re RE/92 §6): it renames a piece's door001–door009 nodes
+    /// "door7" + keep id low byte (3 digits) + keep id high byte (a tower's number, 1 digit) + component (2) + n (2), and a
+    /// click sends those 9 digits. Null when the name isn't such a door or a part doesn't fit its digits.
+    /// OpenDAoC builds its own from other parts (GameKeepDoor.GenerateDoorID: the owner keep's full id, and a keepposition
+    /// template number for n), so its ids can differ, a tower's above all (its full id doesn't fit 3 digits); the one that
+    /// matches the client is 7e8 + (KeepID &amp; 0xFF)·1e5 + (KeepID &gt;&gt; 8)·1e4 + component·100 + n (W67).</summary>
+    public static uint? DoorId(int keepId, int componentId, string door)
+    {
+        if (!DaocAssets.Nif.NifFile.IsDoorNode(door))
+            return null;
+        long n = DaocAssets.Nif.NifFile.DoorNumber(door);
+        int high = keepId >> 8;
+        if (n is < 1 or > 9 || high > 9 || componentId is < 0 or > 99)
+            return null;
+        return (uint)(700_000_000 + (keepId & 0xFF) * 100_000 + high * 10_000 + componentId * 100 + n);
+    }
+
+    /// <summary>The door numbers the client gives a piece (daoc-re's keep-door note §3): for n = 1…9 it looks for a node
+    /// named exactly "door00n" (any case) and stops at the first missing n, so suffixed names (door001s, Door001V) never
+    /// count and nothing after a gap does. <paramref name="names"/>: the piece's door names (ours: its door animations,
+    /// so a door node without keys counts as missing).</summary>
+    public static IEnumerable<int> DoorNumbers(IEnumerable<string> names)
+    {
+        var have = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+        for (int n = 1; n <= 9 && have.Contains($"door{n:000}"); n++)
+            yield return n;
+    }
+
     /// <summary>Reads library/keeps/pieces.csv (skin,name,tier,glb): each skin's glb per tier.</summary>
     public static Dictionary<int, string?[]> ReadPieces(string csv)
     {

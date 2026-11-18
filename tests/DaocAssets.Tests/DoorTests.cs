@@ -136,6 +136,18 @@ public sealed class DoorTests
         Assert.Equal(model.Movers, renamed.Movers);
     }
 
+    [LiveFact("live-nif/gatehouse_lvl4.nif")]
+    public void AKeepGatesLeavesSwingWithItsDoor()
+    {
+        // A frontier gatehouse: door001's leaves (vis1, vis2 and their _damaged twins) each carry a NiVisController and
+        // then the NiKeyframeController that swings them; the chain must be followed past the first to find the keys.
+        NifModel model = NifFile.Read(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "live-nif", "gatehouse_lvl4.nif")));
+        Assert.Equal(["door001"], model.Doors.Select(d => d.Name));
+        Assert.Equal(["collision01", "collision02", "vis1", "vis1_damaged", "vis2", "vis2_damaged"], model.Movers.Select(m => m.Node).Order());
+        // The visible leaves (the "!nf_door" surfaces that aren't hidden) move with it.
+        Assert.Equal(2, model.Meshes.Count(m => m.KeepMaterial == "!nf_door" && !m.Helper && m.Mover >= 0));
+    }
+
     private static NifMesh Tri(string name, int mover) => new()
     {
         Name = name,

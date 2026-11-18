@@ -557,14 +557,15 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
   dungeon writes `doors.csv` (id = zone × 1,000,000 + room × 100 + n, the client's own rule as daoc-re read it, which both
   of OpenDAoC's dungeon door rows fit; 397 doors). The client plays a door open or closed on 0x99, lets you through
   while it is open, and asks the server to open a door you click (0x99). Not yet: door sounds, mid-frame doors,
-  four-state doors, outdoor and keep doors.
+  four-state doors, outdoor doors.
 - *Built 2026-11-18:* the New Frontiers zones (from `frontiers/zones/`) and keeps built from components. The client
   reads the keep packets (0x69, 0x6C and their updates) and draws each component as its type's model at the keep's
   build tier (`make keeps`: `fr_tiers.csv` and `fr_pieces.csv`, 115 models), placed around the keep as the client does
   (W67).
   OpenDAoC ships no New Frontiers keeps, so it is checked offline against the packets it would send for Eve of
   Darkness db-public's keep tables (`mpk keeps`, `--keeps`; Dun Ailinne in `tools/shots/cruachan.txt`). Each surface
-  takes its realm's textures for the keep's level tier from `fr_materials.csv`. Not yet: damage, raised towers, keep doors.
+  takes its realm's textures for the keep's level tier from `fr_materials.csv`; its doors open on 0x99 and on a click, by
+  the client's own door id. Not yet: damage, raised towers.
 - **Done when:** you can enter a dungeon from its zone jump and walk it, rendered from its pieces.
 
 ### M12 — Atmosphere: effects, sound and music

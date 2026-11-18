@@ -92,6 +92,28 @@ public sealed class KeepLayoutTests
     public void ABranchShowsForItsStateLevelAndRealm(string? branches, int realm, int levelTier, bool broken, bool climbable, bool shows) =>
         Assert.Equal(shows, KeepLayout.Shows(branches, realm, levelTier, broken, climbable));
 
+    [Theory]
+    [InlineData(106, 4, "door001", 710600401u)]     // Dun Ailinne, component 4
+    [InlineData(362, 0, "door002", 710610002u)]     // its Guardtower: low byte 106, tower 1
+    [InlineData(50, 12, "Door001", 705001201u)]
+    public void AKeepDoorsIdIsKeepTowerComponentAndNumber(int keep, int component, string door, uint id) =>
+        Assert.Equal(id, KeepLayout.DoorId(keep, component, door));
+
+    [Theory]
+    [InlineData(106, 4, "door010")]     // n above 9: the client renames door001-door009 only
+    [InlineData(106, 4, "doorway")]
+    [InlineData(2600, 4, "door001")]    // a high byte of 10 doesn't fit its digit
+    public void AKeepDoorOutsideTheRuleHasNoId(int keep, int component, string door) =>
+        Assert.Null(KeepLayout.DoorId(keep, component, door));
+
+    [Fact]
+    public void APiecesDoorsRunFromDoor001ToTheFirstGap()
+    {
+        Assert.Equal([1, 2], KeepLayout.DoorNumbers(["door001", "Door002", "door004"]));   // door004 after a gap: never
+        Assert.Empty(KeepLayout.DoorNumbers(["door002", "door003"]));                       // no door001: no doors
+        Assert.Empty(KeepLayout.DoorNumbers(["door001s", "door001v"]));                     // suffixed names don't count
+    }
+
     [Fact]
     public void ThePieceTableReadsEachTier()
     {

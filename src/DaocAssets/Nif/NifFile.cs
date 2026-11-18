@@ -229,6 +229,12 @@ public static partial class NifFile
                     }
                     catch (NifFormatException) { b.DataRef = -1; }
                     break;
+                case "NiVisController":
+                    // A NiTimeController: only its Next Controller, so a chain reaches a keyframe controller behind it (a
+                    // keep gatehouse's vis1: NiVisController, then the NiKeyframeController that swings the leaf).
+                    try { b.NextRef = c.I32(); }
+                    catch (NifFormatException) { }
+                    break;
                 case "NiStringExtraData":
                     try
                     {

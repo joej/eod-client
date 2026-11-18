@@ -6,7 +6,8 @@
 // (daoc-re's doors note, RE/80): S→C 0x99 opens (plays forward) or closes (plays backward) a door; a click on a door
 // sends C→S 0x99 with request 1; in a dungeon a door stops blocking as soon as it starts opening and blocks again once
 // fully closed. OpenDAoC opens a door it doesn't know (nearly every dungeon door) and closes it after a while.
-// Not built: the door sound (0x99's sound row), a mid-frame hold, four-state doors, outdoor and keep doors.
+// Keep doors (WorldView.Keeps) go through the same path by their own ids. Not built: the door sound (0x99's sound row), a
+// mid-frame hold, four-state doors, outdoor doors.
 
 using Godot;
 
@@ -71,6 +72,11 @@ public partial class WorldView
 
     private bool TryDoor(uint id, out Node3D model, out string door)
     {
+        if (_keepDoors.TryGetValue(id, out var k) && IsInstanceValid(k.Model))
+        {
+            (model, door) = k;
+            return true;
+        }
         foreach (ZoneParts z in _zones.Values)
             if (z.Doors.TryGetValue(id, out var d))
             {
@@ -92,6 +98,13 @@ public partial class WorldView
         if (DoorPlayer(model, door) is not AnimationPlayer player || !player.HasAnimation(door))
             return;
         bool open = state.State == DaocProtocol.Packets.DoorState.Toggle ? !IsDoorOpen(player, door) : state.IsOpen;
+        if (_keepDoors.ContainsKey(state.DoorId))
+        {
+            if (open)
+                _keepDoorsOpen.Add(state.DoorId);   // kept so a rebuilt piece stands open again (WorldView.Keeps)
+            else
+                _keepDoorsOpen.Remove(state.DoorId);
+        }
         if (open)
         {
             player.Play(door);

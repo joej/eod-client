@@ -8,3 +8,14 @@ ailinne_above   411649 609800 12500  0 -50   # from above: the components' layou
 ailinne_gate    411649 609000 8700   0  -4   # close, at eye height: wall faces, doorways, hoardings
 guardtower      412822 613600 9000   0 -10   # Dun Ailinne Guardtower: a tower (one component, skin 31)
 portalstone     412639 608400 8650   0  -8   # the Frontiers Portal Stone beside the keep (a server object; offline: absent)
+gate_out        413800 608357 8750 270  -4   # the gatehouse (component 1) from outside, east: its door closed
+gate_in         412200 608357 8750  90  -4   # the same from the courtyard
+mainkeep        410749 607600 8800   0  -6   # the main keep (component 0) from the south: its door closed
+gate_close      413350 608357 8640 270   0   # the gate leaves up close
+gate_top        412999 608357 9700   0 -89   # the gatehouse from above: the leaves' swing
+!open-doors                                  # every keep door opens, as a 0x99 would (offline: no server)
+gate_out_open   413800 608357 8750 270  -4   # the gatehouse open: the leaves swung, a way through
+gate_in_open    412200 608357 8750  90  -4
+mainkeep_open   410749 607600 8800   0  -6
+gate_close_open 413350 608357 8640 270   0
+gate_top_open   412999 608357 9700   0 -89
