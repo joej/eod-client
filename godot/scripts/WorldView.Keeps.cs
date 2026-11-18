@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // WorldView: keeps the server builds from components (S→C 0x69 keep, 0x6C per component; New Frontiers keeps and
-// towers; Old Frontiers keeps are zone fixtures). Each component's model is its type's (the 0x6C skin) at the keep's
-// build tier, from library/keeps/pieces.csv (`make keeps`), placed around the keep and turned with it, with the
-// branches for its realm, tier and state shown (DaocAssets.Keeps.KeepLayout: provisional rules, see there). 0x69 has no
-// height: the keep stands on the terrain under it, found once that terrain is loaded.
+// towers; Old Frontiers keeps are zone fixtures). Each component's model is its type's (the 0x6C skin) at the TIER its
+// height byte names, from library/keeps/pieces.csv (`make keeps`), placed around the keep and turned with it, with the
+// branches for its realm, level and state shown (DaocAssets.Keeps.KeepLayout: retail's rules, daoc-re RE/92). 0x69 has
+// no height: the keep stands on the terrain under it, found once that terrain is loaded.
 // --keeps FILE replays a keep packet file (`mpk keeps`) as if the server had sent it, when the file's region is ours:
 // our server has no New Frontiers keeps.
 
@@ -165,7 +165,9 @@ public partial class WorldView
             _keepPieces = Godot.FileAccess.FileExists(table) ? KeepLayout.ReadPieces(Godot.FileAccess.GetFileAsString(table)) : [];
             GD.Print($"[keeps] {_keepPieces.Count} component types{(_keepPieces.Count == 0 ? " (run make keeps)" : "")}");
         }
-        if (!_keepPieces.TryGetValue(c.Skin, out string?[]? tiers) || KeepLayout.Tier(tiers, c.Height) is not int tier
+        bool raised = (c.Flags & KeepComponentInfo.Raised) != 0;
+        if (!_keepPieces.TryGetValue(c.Skin, out string?[]? tiers)
+            || KeepLayout.Tier(tiers, KeepLayout.TierColumn(c.Height, c.KeepId, raised)) is not int tier
             || tiers[tier - 1] is not string glb)
         {
             GD.Print($"[keeps] keep {c.KeepId} component {c.ComponentId}: no model for skin {c.Skin} at height {c.Height}");
@@ -182,13 +184,14 @@ public partial class WorldView
         var node = (Node3D)template.Duplicate();
         node.Name = $"keep{c.KeepId}_{c.ComponentId}";
         node.SetMeta("glb", glb);
-        bool broken = (c.Flags & KeepComponentInfo.Broken) != 0;
+        bool broken = (c.Flags & KeepComponentInfo.Broken) != 0, climbable = (c.Flags & KeepComponentInfo.Climbable) != 0;
+        int levelTier = KeepLayout.LevelTier(keep.Info.Level);
         foreach (MeshInstance3D mi in node.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>().ToList())
         {
             Material? m = mi.Mesh?.GetSurfaceCount() > 0 ? mi.GetActiveMaterial(0) : null;
             string? branches = m is not null && m.HasMeta(ModelTexturing.LayersMeta)
                 && m.GetMeta(ModelTexturing.LayersMeta).AsGodotDictionary().TryGetValue("branches", out Variant b) ? b.AsString() : null;
-            if (!KeepLayout.Shows(branches, keep.Info.Realm, tier, broken))
+            if (!KeepLayout.Shows(branches, keep.Info.Realm, levelTier, broken, climbable))
                 mi.Free();
         }
         return node;

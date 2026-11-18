@@ -43,39 +43,51 @@ public sealed class KeepLayoutTests
     [Fact]
     public void AComponentStandsItsOffsetFromTheKeepTurnedByTheKeepsHeading()
     {
-        // Heading 0: x east, y north (the server subtracts y).
+        // 150 units a step (retail). Heading 0: x east, y north.
         (double x, double y, double deg) = KeepLayout.Place(1000, 1000, 0, 2, 1, 1);
-        Assert.Equal((1296, 852, 90), (Math.Round(x), Math.Round(y), deg));
+        Assert.Equal((1300, 850, 90), (Math.Round(x), Math.Round(y), deg));
         // Heading 90: the same offsets turned a quarter.
         (x, y, deg) = KeepLayout.Place(1000, 1000, 90, 2, 1, 3);
-        Assert.Equal((1148, 1296, 0), (Math.Round(x), Math.Round(y), deg));
+        Assert.Equal((1150, 1300, 0), (Math.Round(x), Math.Round(y), deg));
     }
 
     [Theory]
-    [InlineData(0, 1)] [InlineData(1, 1)] [InlineData(3, 3)] [InlineData(4, 4)] [InlineData(5, 4)]
-    public void TheTierIsTheBuildHeight(int height, int tier) =>
-        Assert.Equal(tier, KeepLayout.Tier(["a", "b", "c", "d"], height));
+    [InlineData(0, 1, false, 1)]
+    [InlineData(3, 1, false, 4)]
+    [InlineData(4, 1, false, 5)]
+    [InlineData(9, 1, false, 5)]        // clamped to 4
+    [InlineData(1, 0x162, true, 5)]     // a raised tower (keep id with a high byte): height 4
+    [InlineData(1, 0x62, true, 2)]      // the flag on a keep is no tower's
+    public void TheTierColumnIsTheHeightPlusOne(int height, int keepId, bool raised, int column) =>
+        Assert.Equal(column, KeepLayout.TierColumn(height, keepId, raised));
 
     [Fact]
     public void AMissingTierFallsToTheOneBelow()
     {
+        Assert.Equal(4, KeepLayout.Tier(["a", "b", "c", "d"], 5));
         Assert.Equal(1, KeepLayout.Tier(["a", null, null, null, "e"], 3));
         Assert.Equal(5, KeepLayout.Tier(["a", null, null, null, "e"], 5));
         Assert.Null(KeepLayout.Tier([], 3));
     }
 
     [Theory]
-    [InlineData(null, 3, 3, false, true)]
-    [InlineData("!visible_static", 3, 3, true, true)]
-    [InlineData("!visible_undamaged", 3, 3, false, true)]
-    [InlineData("!visible_undamaged", 3, 3, true, false)]
-    [InlineData("!visible_damaged", 3, 3, false, false)]
-    [InlineData("!visible_damaged", 3, 3, true, true)]
-    [InlineData("!sclimb_visible_Tier3_hib;!sclimb_visible_Tier3_hib:0", 3, 3, false, true)]
-    [InlineData("!sclimb_visible_Tier3_hib;!sclimb_visible_Tier3_hib:0", 1, 3, false, false)]
-    [InlineData("!sclimb_visible_Tier2_hib", 3, 3, false, false)]
-    public void ABranchShowsForItsStateTierAndRealm(string? branches, int realm, int tier, bool broken, bool shows) =>
-        Assert.Equal(shows, KeepLayout.Shows(branches, realm, tier, broken));
+    [InlineData(0, 0)] [InlineData(2, 0)] [InlineData(3, 1)] [InlineData(5, 1)] [InlineData(6, 2)] [InlineData(8, 2)]
+    [InlineData(9, 3)] [InlineData(10, 3)]
+    public void TheLevelTierGoesByThrees(int level, int tier) => Assert.Equal(tier, KeepLayout.LevelTier(level));
+
+    [Theory]
+    [InlineData(null, 3, 2, false, false, true)]
+    [InlineData("!visible_static", 3, 2, true, false, true)]
+    [InlineData("!visible_undamaged", 3, 2, false, false, true)]
+    [InlineData("!visible_undamaged", 3, 2, true, false, false)]
+    [InlineData("!visible_damaged", 3, 2, false, false, false)]
+    [InlineData("!visible_damaged", 3, 2, true, false, true)]
+    [InlineData("!sclimb_visible_Tier3_hib;!sclimb_visible_Tier3_hib:0", 3, 2, false, true, true)]
+    [InlineData("!sclimb_visible_Tier3_hib;!sclimb_visible_Tier3_hib:0", 3, 2, false, false, false)]   // not climbable
+    [InlineData("!sclimb_visible_Tier3_hib", 1, 2, false, true, false)]   // another realm
+    [InlineData("!sclimb_visible_Tier2_hib", 3, 2, false, true, false)]   // another level tier
+    public void ABranchShowsForItsStateLevelAndRealm(string? branches, int realm, int levelTier, bool broken, bool climbable, bool shows) =>
+        Assert.Equal(shows, KeepLayout.Shows(branches, realm, levelTier, broken, climbable));
 
     [Fact]
     public void ThePieceTableReadsEachTier()

@@ -560,10 +560,11 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
   four-state doors, outdoor and keep doors.
 - *Built 2026-11-18:* the New Frontiers zones (from `frontiers/zones/`) and keeps built from components. The client
   reads the keep packets (0x69, 0x6C and their updates) and draws each component as its type's model at the keep's
-  build tier (`make keeps`: `fr_tiers.csv` and `fr_pieces.csv`, 115 models), placed around the keep (W67, inferred).
+  build tier (`make keeps`: `fr_tiers.csv` and `fr_pieces.csv`, 115 models), placed around the keep as the client does
+  (W67).
   OpenDAoC ships no New Frontiers keeps, so it is checked offline against the packets it would send for Eve of
-  Darkness db-public's keep tables (`mpk keeps`, `--keeps`; Dun Ailinne in `tools/shots/cruachan.txt`). Not yet: the
-  retail placement and tier rules, realm and tier textures, damage, raised towers, keep doors.
+  Darkness db-public's keep tables (`mpk keeps`, `--keeps`; Dun Ailinne in `tools/shots/cruachan.txt`). Not yet: realm
+  and tier textures (`fr_materials`), damage, raised towers, keep doors.
 - **Done when:** you can enter a dungeon from its zone jump and walk it, rendered from its pieces.
 
 ### M12 — Atmosphere: effects, sound and music
