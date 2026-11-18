@@ -305,6 +305,35 @@ public sealed class AssetLibraryTests : IDisposable
         Assert.Contains("wetstones", System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(glb)), StringComparison.OrdinalIgnoreCase);
     }
 
+    [LiveFact(Bowsprit, "live-nif/2-outpost_tower.nif")]
+    public void ADungeonOpensItsPieceFromZonesDnifsFirst()
+    {
+        // Darkness Falls' halls and the kobold tents: zones/Nifs and items/ hold different files of the same names, which
+        // the install-wide lookup finds first. The client opens zones/Dnifs/<stem>.npk, then zones/Nifs (daoc-re).
+        Put("zones/Nifs/hall.nif", File.ReadAllBytes(BowspritFixture()));
+        Put("items/tent.nif", File.ReadAllBytes(BowspritFixture()));
+        string other = Path.Combine(AppContext.BaseDirectory, "live-nif", "2-outpost_tower.nif");
+        Put("zones/Dnifs/hall.nif", File.ReadAllBytes(other));
+        Put("zones/Dnifs/tent.nif", File.ReadAllBytes(other));
+        Put("zones/Dnifs/only.nif", File.ReadAllBytes(other));
+        var index = AssetIndex.Build(_client);
+        Assert.NotEqual("zones/Dnifs/", index.RelativeFolder(index.Locate("hall.nif")!.Value));   // the trap
+        var library = new AssetLibrary(index, _lib);
+        AssetLibrary dungeon = library.Dungeon("zone336", TextureProxy.Empty, ModelProxy.Empty);
+
+        Assert.True(dungeon.OpensOtherCopy("hall.nif"));
+        Assert.True(dungeon.OpensOtherCopy("tent.nif"));
+        Assert.False(dungeon.OpensOtherCopy("only.nif"));
+        Assert.False(library.OpensOtherCopy("hall.nif"));
+        string inDungeon = library.ManifestName(dungeon.GetModel("hall.nif").GlbPath!);
+        string outdoors = library.ManifestName(library.GetModel("hall.nif").GlbPath!);
+        Assert.Equal("dnifs/hall.glb", inDungeon);
+        Assert.Equal("hall.glb", outdoors);   // neither overwrites the other
+        Assert.Equal("dnifs/tent.glb", library.ManifestName(dungeon.GetModel("tent.nif").GlbPath!));
+        Assert.NotEqual(File.ReadAllBytes(Path.Combine(_lib, "models", "dnifs", "hall.glb")),
+            File.ReadAllBytes(Path.Combine(_lib, "models", "hall.glb")));
+    }
+
     [LiveFact(Bowsprit)]
     public void WithoutItsOwnCopyACityModelFallsBackToZonesNifs()
     {

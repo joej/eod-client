@@ -543,8 +543,9 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
   fixture's 3D Angle). Checked two ways: the doorways of 26,763 of 27,782 `portals.csv` links meet within 64 units
   (`mpk dungeoncheck`), and the floors hold the server's NPCs (392 of 392 in Coruscating Mine, 313 of 318 in Muire Tomb,
   369 of 370 in zone 060; the mirror image holds 5, 105 and 26). A piece's room volume, attach points and doorway
-  polygons aren't drawn. No sky and black fog (W64). Not yet: the sky model, doors, animated nodes, and five pieces the
-  NIF reader can't read (one of them a Darkness Falls tunnel).
+  polygons aren't drawn. No sky and black fog (W64). Not yet: the sky model, doors, animated nodes, and one prop the
+  converter can't read. Pieces are opened from `zones/Dnifs` first, then `zones/Nifs`, as the client opens them (fixed
+  2026-11-17: 26 pieces have a different file of the same name elsewhere, among them Darkness Falls' halls).
 - *Built 2026-11-17:* dungeon water: the 32 `dungeon.water` planes of 10 dungeons (an 11th, zone 230, is not in the zone
   table), drawn and swum in as outdoor water is (`DungeonWater`). Each plane's surface is within 5 units of the water height its rooms give in `dungeon.place`,
   and floors lie under it as placed (either mirror image leaves nearly none). The `[dungeonfix]` material fix-up:

@@ -50,6 +50,11 @@ public sealed class AssetLibrary
     private bool _proxied;
     // A dungeon's piece substitutions (nifproxy.csv), applied once, before anything else.
     private ModelProxy? _modelProxy;
+    // Where a dungeon's pieces are opened, in order (null elsewhere): zones/Dnifs/<stem>.npk, then zones/Nifs/<stem>.npk
+    // (daoc-re, 2026-11-17). 26 pieces have a different copy in zones/Nifs (Darkness Falls' halls, the Coruscating Mine's
+    // signs) or items/ (the kobold tents), which the install-wide lookup would find first.
+    public static IReadOnlyList<string> DungeonModelFolders { get; } = ["zones/Dnifs/", AssetIndex.GlobalTextureFolder];
+    private IReadOnlyList<string>? _modelSearch;
 
     /// <summary>
     /// The view a dungeon's fixtures convert in: their texture names go through the dungeon's <c>texproxy.csv</c> first,
@@ -81,7 +86,26 @@ public sealed class AssetLibrary
     /// <summary>The view a dungeon's fixtures convert in: its <c>nifproxy.csv</c> and <c>texproxy.csv</c> from
     /// <paramref name="datArchive"/> (its <c>dat&lt;NNN&gt;.mpk</c>), a renamed piece stored under <paramref name="scope"/>.</summary>
     public AssetLibrary Dungeon(string scope, string datArchive) =>
-        WithTextureProxy(scope, TextureProxy.FromZoneArchive(datArchive)).WithModelProxy(ModelProxy.FromZoneArchive(datArchive));
+        Dungeon(scope, TextureProxy.FromZoneArchive(datArchive), ModelProxy.FromZoneArchive(datArchive));
+
+    /// <summary>As <see cref="Dungeon(string, string)"/>, with the dungeon's tables given: its pieces are opened from
+    /// zones/Dnifs, then zones/Nifs, as the client opens them.</summary>
+    public AssetLibrary Dungeon(string scope, TextureProxy textures, ModelProxy pieces)
+    {
+        var view = (AssetLibrary)WithTextureProxy(scope, textures).WithModelProxy(pieces).MemberwiseClone();
+        view._modelSearch = DungeonModelFolders;
+        return view;
+    }
+
+    /// <summary>True when this view opens a different copy of <paramref name="nifName"/> than the install-wide lookup
+    /// (a dungeon piece whose zones/Dnifs file isn't the one listed first): the Makefile's per-model step, which has no
+    /// view, doesn't make it, so the zone step remakes it.</summary>
+    public bool OpensOtherCopy(string nifName)
+    {
+        string name = _modelProxy?.Apply(nifName) ?? nifName;
+        return _modelSearch is not null && _index.Locate(name, _modelSearch) is { } at && _index.Locate(name, null) is { } main
+            && at != main;
+    }
 
     /// <summary>
     /// A view of the library for one kind of asset ("figures", "items", "effects"): names resolve to the
@@ -105,7 +129,7 @@ public sealed class AssetLibrary
     // lookup of their own views (Scoped), which share their stored files.
     private AssetLibrary ForModel(string nifName)
     {
-        if (_scope is not null || !_modelFolders || _index.Locate(nifName, null) is not { } loc)
+        if (_scope is not null || !_modelFolders || _index.Locate(nifName, _modelSearch) is not { } loc)
             return this;
         string folder = _index.RelativeFolder(loc);
         if (folder.Equals(AssetIndex.GlobalTextureFolder, StringComparison.OrdinalIgnoreCase))
@@ -258,18 +282,22 @@ public sealed class AssetLibrary
     // them, else as this view without the table.
     private ModelResult GetProxiedModel(string nifName, bool reconvert)
     {
-        var plain = new AssetLibrary(_index, _root) { _scope = _scope, _prefer = _prefer, _modelFolders = _modelFolders };
+        var plain = new AssetLibrary(_index, _root)
+        {
+            _scope = _scope, _prefer = _prefer, _modelFolders = _modelFolders, _modelSearch = _modelSearch,
+        };
         string glb = Path.Combine(_models, _proxyScope!, Path.GetFileNameWithoutExtension(BareName(nifName)) + ".glb");
         if (File.Exists(Path.Combine(_overrides, Path.GetFileName(glb))))
             return plain.GetModel(nifName, reconvert);
         if (!reconvert && File.Exists(glb))
             return new ModelResult(OnDiskName(glb), AssetOrigin.Converted);
-        if (_index.Read(nifName, _prefer) is not byte[] bytes || _index.Locate(nifName, _prefer) is not { } at)
+        IReadOnlyList<string>? search = _prefer ?? _modelSearch;
+        if (_index.Read(nifName, search) is not byte[] bytes || _index.Locate(nifName, search) is not { } at)
             return plain.GetModel(nifName, reconvert);
         NifModel model;
         try
         {
-            model = NifFile.Read(bytes, _index.ReadPatches(nifName, _prefer));
+            model = NifFile.Read(bytes, _index.ReadPatches(nifName, search));
         }
         catch (Exception e) when (e is NifFormatException or ArgumentException or InvalidOperationException or IndexOutOfRangeException)
         {

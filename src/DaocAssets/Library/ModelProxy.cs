@@ -5,10 +5,12 @@
 // the same three that have texproxy.csv. Every old name is one of the zone's dungeon.chunk pieces, every new one a
 // zones/Dnifs/<name>.npk; zone 079's old pieces aren't in the install at all, so it is built only from the new ones.
 //
-// Read as a substitution made before the piece is loaded (inferred from the data, 2026-11-17; asked of daoc-re):
-// patch files exist under the new names (altstonehall14_p00, alt_oceanusroom01_p00) and none under the old ones, and
-// 060's ALTSTONEHall pieces with its texproxy renames applied once carry exactly the texture names of the STONEHall
-// pieces they replace.
+// The client applies it as each dungeon.chunk line is read, once (daoc-re, 2026-11-17): the whole line against the first
+// column, any case, extension included, first row winning, the third column never read. Nothing else uses it; place and
+// prop rows name pieces by chunk index, so they follow. Everything after uses the new name: the file opened
+// (zones/Dnifs, then zones/Nifs: AssetLibrary.DungeonModelFolders), its patch files, node names and portals. Ours also
+// trims and matches without a folder; no chunk line or row in the install has a space or a folder, so that changes
+// nothing. A piece that is missing aborts the whole dungeon in retail; we leave it out and build the rest.
 
 using DaocAssets.Mpk;
 
@@ -55,7 +57,7 @@ public sealed class ModelProxy
     }
 
     /// <summary>The model file loaded for <paramref name="name"/>: the new file name in its folder, or the name unchanged.
-    /// Matched by the whole file name, any case (inferred).</summary>
+    /// Matched by the whole file name, any case.</summary>
     public string Apply(string name)
     {
         int slash = name.LastIndexOfAny(['/', '\\']);

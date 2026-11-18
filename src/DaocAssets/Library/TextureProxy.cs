@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// A dungeon's texture substitutions: datNNN.mpk : texproxy.csv, rows "old,new,0" (file names without extension). While
-// the client loads that dungeon's fixtures, a texture named "old" is read as "new", keeping the name's folder and
-// extension, before the usual lookup (the model's own folder, then zones/Nifs). Three dungeons have one (zones 060, 079,
-// 423). (daoc-re, 2026-11-16; W63.)
+// A dungeon's texture substitutions: datNNN.mpk : texproxy.csv, rows "old,new,0" (file names without extension). A
+// texture named "old" is read as "new", keeping the name's folder and extension, before the usual lookup (the model's own
+// folder, then zones/Nifs), one step, no chaining. Three dungeons have one (zones 060, 079, 423). (daoc-re, 2026-11-16
+// and 2026-11-17; W63, W64.) The client keeps the table installed for the whole stay in the dungeon, so any texture it
+// reads then goes through it; ours applies it to the dungeon's pieces and their patch files only (the tables name only
+// dungeon wall, floor and fixture textures).
 
 using DaocAssets.Mpk;
 
@@ -52,7 +54,7 @@ public sealed class TextureProxy
     /// <summary>
     /// The name the client reads for <paramref name="name"/>: its stem renamed, its folder and extension kept
     /// ("dstonewall04.dds" → "dstonewall03.dds"). One rename only: a new name that is itself an old one in the table
-    /// (zone 060: RockCaveFloor01 → dstonerockfloor01 → wetstones) is not renamed again (inferred; not traced).
+    /// (zone 060: RockCaveFloor01 → dstonerockfloor01 → wetstones) is not renamed again, as in the client.
     /// </summary>
     public string Apply(string name)
     {

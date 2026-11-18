@@ -400,11 +400,13 @@ internal static partial class Cli
         DaocAssets.Nif.NifModel? Model(string piece)
         {
             if (models.TryGetValue(piece, out var found)) return found;
-            byte[]? bytes = index.Read(proxy.Apply(piece));
+            // Opened as the client opens a piece: zones/Dnifs, then zones/Nifs, with its patch files.
+            string name = proxy.Apply(piece);
+            byte[]? bytes = index.Read(name, AssetLibrary.DungeonModelFolders);
             DaocAssets.Nif.NifModel? model = null;
             if (bytes is not null)
             {
-                try { model = DaocAssets.Nif.NifFile.Read(bytes); }
+                try { model = DaocAssets.Nif.NifFile.Read(bytes, index.ReadPatches(name, AssetLibrary.DungeonModelFolders)); }
                 catch (Exception ex) when (ex is DaocAssets.Nif.NifFormatException or InvalidDataException or IndexOutOfRangeException) { }
             }
             return models[piece] = model;

@@ -129,9 +129,11 @@ public static class ZoneExport
         foreach (string nif in layout.Models)
         {
             ModelResult r = library.GetModel(nif);
-            // A piece renamed by the dungeon's own tables is stored in its scope, which the Makefile's per-model steps
-            // (mpk model, no tables) don't make: this step remakes it, so a converter change reaches it too.
-            if (dungeon && r.GlbPath is not null && library.ManifestName(r.GlbPath).StartsWith(scoped, StringComparison.OrdinalIgnoreCase))
+            // A piece renamed by the dungeon's own tables is stored in its scope, and a piece whose zones/Dnifs copy isn't
+            // the install-wide one in models/dnifs/; the Makefile's per-model steps (mpk model, no view) make neither: this
+            // step remakes them, so a converter change reaches them too.
+            if (dungeon && r.GlbPath is not null
+                && (library.ManifestName(r.GlbPath).StartsWith(scoped, StringComparison.OrdinalIgnoreCase) || library.OpensOtherCopy(nif)))
                 r = library.GetModel(nif, reconvert: true);
             if (r.Origin == AssetOrigin.Failed)
             {
