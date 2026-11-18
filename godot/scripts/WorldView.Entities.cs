@@ -791,6 +791,9 @@ public partial class WorldView
     // stands: the first floor or terrain from a little above it down; when there is none (it was sent under the
     // ground), the terrain from high above. Without either (the zone not loaded yet), its own height. Retail probes
     // every entity that moved, every frame (daoc-re RE/77 "Grounding").
+    // Retail's probe starts at the entity's own height (RE/77: offset 0); one unit up keeps a floor it stands exactly on.
+    private const float FloorProbeAbove = 1 * RegionMetresPerUnit;
+
     private void GroundEntities()
     {
         foreach (Entity e in _entities.Values)
@@ -806,7 +809,13 @@ public partial class WorldView
             // From a little above the higher of where it stands and where the server puts it: a creature walking uphill
             // has climbed above the server's height (OpenDAoC has no terrain), one sent onto a floor may be above us.
             float top = Mathf.Max(float.IsNaN(e.ProbedAt.X) ? e.ServerY : at.Y, e.ServerY);
-            float? y = GroundRay(new Vector3(at.X, top + 3f, at.Z), new Vector3(at.X, top - 40f, at.Z), ~NotSolid)
+            // Retail looks for a floor from just above the entity, or for an NPC walking to a higher destination from that
+            // height + 128 units (RE/77). Starting higher stood the Frontiers portal stone's teleport ring on the stone's top,
+            // 86 units up (Cruachan Gorge, 2026-11-18). Retail's 256 units for large creatures isn't built: "large" isn't known.
+            float from = top + FloorProbeAbove;
+            if (e.Destination is Vector3 dest && dest.Y > top)
+                from = dest.Y + 128 * RegionMetresPerUnit;
+            float? y = GroundRay(new Vector3(at.X, from, at.Z), new Vector3(at.X, top - 40f, at.Z), ~NotSolid)
                        ?? GroundRay(new Vector3(at.X, top + 80f, at.Z), new Vector3(at.X, top - 40f, at.Z), TerrainLayer);
             if (y is null)
                 continue;   // nothing loaded under it yet: probe again next frame
