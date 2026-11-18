@@ -6,7 +6,7 @@
 // release (see CLAUDE.md, "Game client and assets").
 //
 // One file per subject: Cli.Archive (list, extract, index), Cli.Nif (nifinfo, convert, textures,
-// model), Cli.Zone (zonedeps, zone, terrain, water, zonecheck), Cli.Sky, Cli.Loading, Cli.Maps, Cli.Figures (figure,
+// model), Cli.Zone (zonedeps, zone, terrain, water, zonecheck), Cli.Sky, Cli.Loading, Cli.Maps, Cli.Keeps, Cli.Figures (figure,
 // figures, cata; CataConverter), Cli.Audit (audit, worldaudit). Options parses every command's options.
 
 return Cli.Run(args);
@@ -89,6 +89,12 @@ internal static partial class Cli
         if (command == "strides")
             return StridesCmd(args);
 
+        if (command == "keeps")
+            return KeepsCmd(args);
+
+        if (command == "keepmodels")
+            return KeepModelsCmd(args);
+
         string inputPath = args[1];
         if (!File.Exists(inputPath))
         {
@@ -134,6 +140,8 @@ internal static partial class Cli
               mpk figures  --gamedata gamedata.mpk --index index.json --library LIBDIR   (every model id: classic figures, and Catacombs versions)
               mpk objects  --gamedata gamedata.mpk --index index.json --library LIBDIR   (the models of the server's objects: carts, banners, items on the ground)
               mpk strides  --gamedata gamedata.mpk --out FILE.csv   (each model id's run/walk/back/strafe strides, for the clips' playback speed)
+              mpk keepmodels <client-dir> --index index.json --library LIBDIR   (every frontier keep piece model, and keeps/pieces.csv)
+              mpk keeps    <Keep.json> <KeepComponent.json> --region N [--look old|new] [--level L] --out FILE   (the keep packets a server would send there, for the client's --keeps)
               mpk cata     <model-id> --gamedata gamedata.mpk --index index.json --library LIBDIR   (its Catacombs figure)
               mpk zonedeps <dat<NNN>.mpk> --index index.json --var NAME
               mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR [--size W H]

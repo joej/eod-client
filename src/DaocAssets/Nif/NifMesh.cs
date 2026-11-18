@@ -41,6 +41,10 @@ public sealed record NifMesh
     /// shape's own name or its nodes' is inferred).</summary>
     public bool KeepsMaterial { get; init; }
 
+    /// <summary>The "!"-named nodes above the shape, outermost first, joined by ';' (a keep piece's !visible_damaged,
+    /// !sclimb_visible_tier3_hib, ...), or null. The client shows one such branch by the piece's state.</summary>
+    public string? Branches { get; init; }
+
     /// <summary>The door part it moves with (an index into <see cref="NifModel.Movers"/>), or -1: baked at rest, it moves
     /// by that mover's delta while its door opens.</summary>
     public int Mover { get; init; } = -1;

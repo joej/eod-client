@@ -439,6 +439,8 @@ public static class GltfExporter
             extras["emissive"] = FormattableString.Invariant($"{e.X:0.###} {e.Y:0.###} {e.Z:0.###}");
         if (m.KeepsMaterial)
             extras["keepsMaterial"] = true;
+        if (m.Branches is not null)
+            extras["branches"] = m.Branches;
         if (extras.Count > 0)
             material.Extras = extras;
         return material;

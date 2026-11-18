@@ -27,6 +27,8 @@ dotnet build "$REPO/godot/EodClient.csproj" -v q --nologo >/dev/null
 # The world opens at the first pose's position (the zone and terrain around it load from there).
 read -r _ x y z _ < <(grep -v '^\s*#' "$POSES" | grep -v '^\s*$' | head -1)
 cd "$REPO"
+# "# keeps: FILE" in the poses file replays a keep packet file (`mpk keeps`): keeps the server would send.
+KEEPS=$(sed -n 's/^#[[:space:]]*keeps:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$POSES" | head -1)
 "$GODOT" --path godot -- --offline "$x" "$y" "$z" "$REGION" --zone "$Z/zone.csv" --library "$PRIV/library" \
-    --terrain "$Z/terrain.glb" --shots "$POSES" --shots-out "$OUT" 2>&1 | grep -E '^\[shots\]|ERROR' | grep -vE 'leaked at exit|Pages in use|never freed' || true
+    --terrain "$Z/terrain.glb" ${KEEPS:+--keeps "$REPO/$KEEPS"} --shots "$POSES" --shots-out "$OUT" 2>&1 | grep -E '^\[shots\]|^\[keeps\]|ERROR' | grep -vE 'leaked at exit|Pages in use|never freed' || true
 echo "shots -> $OUT"

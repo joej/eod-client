@@ -54,6 +54,24 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
     /// <summary>A door opened or closed (0x99 DoorState).</summary>
     public event Action<DoorState>? DoorChanged;
 
+    /// <summary>A keep in the region (0x69 KeepInfo), sent for every keep on entering the region.</summary>
+    public event Action<KeepInfo>? KeepArrived;
+
+    /// <summary>One component of a keep (0x6C KeepComponentInfo): a wall, gate, tower, ... with its place and state.</summary>
+    public event Action<KeepComponentInfo>? KeepComponentArrived;
+
+    /// <summary>A component's height, health or flags changed (0x6D).</summary>
+    public event Action<KeepComponentDetail>? KeepComponentChanged;
+
+    /// <summary>A keep's realm, level and every component's state (0x67).</summary>
+    public event Action<KeepUpdate>? KeepUpdated;
+
+    /// <summary>A keep changed realm or level (0x6A).</summary>
+    public event Action<KeepRealm>? KeepRealmChanged;
+
+    /// <summary>A keep was removed (0x6B), or one of its components (0x6E, component id; null for the whole keep).</summary>
+    public event Action<ushort, ushort?>? KeepRemoved;
+
     /// <summary>A static world object entered view (0xD9 ObjectCreate).</summary>
     public event Action<ObjectCreate>? ObjectSpawned;
 
@@ -246,6 +264,28 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
                     break;
                 case DoorState.Code:
                     DoorChanged?.Invoke(DoorState.Parse(packet.Payload));
+                    break;
+                case KeepInfo.Code:
+                    KeepArrived?.Invoke(KeepInfo.Parse(packet.Payload));
+                    break;
+                case KeepComponentInfo.Code:
+                    KeepComponentArrived?.Invoke(KeepComponentInfo.Parse(packet.Payload));
+                    break;
+                case KeepComponentDetail.Code:
+                    KeepComponentChanged?.Invoke(KeepComponentDetail.Parse(packet.Payload));
+                    break;
+                case KeepUpdate.Code:
+                    KeepUpdated?.Invoke(KeepUpdate.Parse(packet.Payload));
+                    break;
+                case KeepRealm.Code:
+                    KeepRealmChanged?.Invoke(KeepRealm.Parse(packet.Payload));
+                    break;
+                case KeepRemove.Code:
+                    KeepRemoved?.Invoke(KeepRemove.Parse(packet.Payload), null);
+                    break;
+                case KeepRemove.ComponentCode:
+                    (ushort keep, ushort component) = KeepRemove.ParseComponent(packet.Payload);
+                    KeepRemoved?.Invoke(keep, component);
                     break;
                 case ObjectDelete.Code:
                     ObjectRemoved?.Invoke(ObjectDelete.Parse(packet.Payload).ObjectId, RemoveObject.NonPlayer);

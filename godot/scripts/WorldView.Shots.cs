@@ -51,6 +51,10 @@ public partial class WorldView
             _camYaw = -Mathf.DegToRad(c[3]);
             _camPitch = Mathf.DegToRad(c[4]);
         }
+        // --keeps FILE: replay a keep packet file (`mpk keeps`) as if the server had sent it.
+        int keepsArg = System.Array.IndexOf(args, "--keeps");
+        if (keepsArg >= 0 && keepsArg + 1 < args.Length)
+            ReplayKeeps(ResolveArgPath(args[keepsArg + 1]));
         int set = System.Array.IndexOf(args, "--shots");
         int dir = System.Array.IndexOf(args, "--shots-out");
         if (set >= 0 && set + 1 < args.Length && dir >= 0 && dir + 1 < args.Length)

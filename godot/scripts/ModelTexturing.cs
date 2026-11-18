@@ -106,7 +106,7 @@ public static class ModelTexturing
         return textured;
     }
 
-    private const string LayersMeta = "eod_layers";
+    internal const string LayersMeta = "eod_layers";
 
     /// <summary>A dungeon's material settings (SECTOR.DAT <c>[dungeonfix]</c>, carried in its sky.csv).</summary>
     public sealed record DungeonFix(bool KeepEmissive, bool KeepVertexColours);

@@ -456,6 +456,7 @@ public partial class WorldView : Node3D
         _bridge.ObjectRemoved += OnObjectRemoved;   // (id, type): type 0 may leave a corpse
         _bridge.ObjectSpawned += OnWorldObject;
         _bridge.DoorChanged += OnDoorChanged;
+        ListenForKeeps();
         _bridge.ChatReceived += OnChatReceived;
         SubscribeDeath();
         _bridge.CombatAnimated += OnCombatAnimated;
@@ -984,6 +985,7 @@ public partial class WorldView : Node3D
         WalkToTarget();
         FollowStep();
         GroundEntities();
+        GroundKeeps();
         ProbeCorpses();
         UpdatePlayer(delta);
         if (_chase)

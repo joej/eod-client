@@ -355,11 +355,15 @@ public static partial class NifFile
     private static void Walk4x(ReadOnlySpan<byte> bytes, Block[] blocks, int index, Xform world,
         HashSet<int> seen, List<NifMesh> meshes, bool helper = false, int alpha = -1, int stencil = -1,
         bool numberedHelper = false, int vertexColor = -1, Skeleton4x? skeleton = null, int parentJoint = -1, bool collision = false,
-        bool keepsMaterial = false, IReadOnlyDictionary<int, int>? movers = null, int mover = -1)
+        bool keepsMaterial = false, IReadOnlyDictionary<int, int>? movers = null, int mover = -1, string? branches = null)
     {
         if (index < 0 || index >= blocks.Length || !seen.Add(index))
             return;
         Block b = blocks[index];
+        // The "!"-named nodes above a shape (a keep piece's !visible_damaged, !sclimb_visible_tier3_hib, ...): the client
+        // shows one of them by the piece's state, so each mesh keeps the list.
+        if (b.Name.StartsWith('!'))
+            branches = branches is null ? b.Name.Trim() : branches + ";" + b.Name.Trim();
         Xform w = world.Compose(b.Local);
         int joint = -1;
         if (skeleton is not null && b.Type is "NiNode" or "NiLODNode" or "NiBillboardNode")
@@ -386,7 +390,8 @@ public static partial class NifFile
                 Walk4x(bytes, blocks, child, w, seen, meshes,
                     underHelper || (child >= 0 && child < blocks.Length && IsDungeonHelper(b.Name, blocks[child].Name)),
                     nodeAlpha, nodeStencil, underNumbered,
-                    nodeVertexColor, skeleton, joint, collision: underCollision, keepsMaterial: keeps, movers: movers, mover: moves);
+                    nodeVertexColor, skeleton, joint, collision: underCollision, keepsMaterial: keeps, movers: movers, mover: moves,
+                    branches: branches);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
         {
@@ -405,7 +410,7 @@ public static partial class NifFile
                     with
                     {
                         Helper = underHelper || (underNumbered && texture is null), Collision = underCollision,
-                        Emissive = ShapeEmissive(blocks, b), KeepsMaterial = keeps, Mover = moves,
+                        Emissive = ShapeEmissive(blocks, b), KeepsMaterial = keeps, Mover = moves, Branches = branches,
                     });
             }
         }

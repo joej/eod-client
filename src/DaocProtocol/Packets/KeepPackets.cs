@@ -70,3 +70,124 @@ public sealed record HookpointStore(ushort KeepId, ushort ComponentId, ushort Ho
         return new HookpointStore(keep, component, hookpoint, items);
     }
 }
+
+// Keeps and their components (New Frontiers keeps are built by the client from these; Old Frontiers keeps are zone
+// fixtures). Layouts from OpenDAoC-Core (GPL-3.0, field order only): PacketLib1124.SendKeepInfo (0x69),
+// PacketLib170.SendKeepComponentInfo (0x6C), SendKeepComponentDetailUpdate (0x6D), SendKeepComponentUpdate (0x67),
+// SendKeepRealmUpdate (0x6A), SendKeepRemove (0x6B), SendKeepComponentRemove (0x6E). The server sends 0x69 and a 0x6C
+// per component for every keep in the region when the player enters it (its 0xE8 PlayerInit). Each record also writes
+// its payload, for tests and the offline test keep.
+
+/// <summary>S→C 0x69 KeepInfo: keep id, 0, x and y (u32, region coordinates), heading, realm, level, 0, model (OpenDAoC
+/// writes 0), 0. No z: the client finds the ground.</summary>
+public sealed record KeepInfo(ushort KeepId, uint X, uint Y, ushort Heading, byte Realm, byte Level, byte Model = 0)
+{
+    public const byte Code = 0x69;
+
+    public static KeepInfo Parse(ReadOnlySpan<byte> payload)
+    {
+        var r = new Net.PayloadReader(payload);
+        ushort id = r.U16BE();
+        r.Skip(2);
+        uint x = r.U32BE(), y = r.U32BE();
+        ushort heading = r.U16BE();
+        byte realm = r.U8(), level = r.U8();
+        r.Skip(2);
+        return new KeepInfo(id, x, y, heading, realm, level, r.U8());
+    }
+
+    public byte[] Payload() => new Net.PayloadWriter().U16BE(KeepId).U16BE(0).U32BE(X).U32BE(Y).U16BE(Heading)
+        .U8(Realm).U8(Level).U16BE(0).U8(Model).U8(0).ToArray();
+}
+
+/// <summary>S→C 0x6C KeepComponentInfo: keep id, component id, object id, skin (the component type), x and y offsets
+/// (signed steps from the keep), heading (quarter turns, 0–3), height (0–5, from the keep's level), health %, status
+/// flags, 0.</summary>
+public sealed record KeepComponentInfo(ushort KeepId, ushort ComponentId, uint ObjectId, byte Skin, sbyte X, sbyte Y,
+    byte Heading, byte Height, byte Health, byte Flags)
+{
+    public const byte Code = 0x6C;
+
+    /// <summary>Status flags (daoc-re's packet table): bit 0 broken, bit 1 climbable, bit 2 a raised tower.</summary>
+    public const byte Broken = 0x01, Climbable = 0x02, Raised = 0x04;
+
+    public static KeepComponentInfo Parse(ReadOnlySpan<byte> payload)
+    {
+        var r = new Net.PayloadReader(payload);
+        return new KeepComponentInfo(r.U16BE(), r.U16BE(), r.U32BE(), r.U8(), (sbyte)r.U8(), (sbyte)r.U8(), r.U8(), r.U8(),
+            r.U8(), r.U8());
+    }
+
+    public byte[] Payload() => new Net.PayloadWriter().U16BE(KeepId).U16BE(ComponentId).U32BE(ObjectId).U8(Skin)
+        .U8((byte)X).U8((byte)Y).U8(Heading).U8(Height).U8(Health).U8(Flags).U8(0).ToArray();
+}
+
+/// <summary>S→C 0x6D KeepComponentDetailUpdate: a component's height, health % and flags changed.</summary>
+public sealed record KeepComponentDetail(ushort KeepId, ushort ComponentId, byte Height, byte Health, byte Flags)
+{
+    public const byte Code = 0x6D;
+
+    public static KeepComponentDetail Parse(ReadOnlySpan<byte> payload)
+    {
+        var r = new Net.PayloadReader(payload);
+        return new KeepComponentDetail(r.U16BE(), r.U16BE(), r.U8(), r.U8(), r.U8());
+    }
+
+    public byte[] Payload() => new Net.PayloadWriter().U16BE(KeepId).U16BE(ComponentId).U8(Height).U8(Health).U8(Flags)
+        .U8(0).ToArray();
+}
+
+/// <summary>S→C 0x67 KeepComponentUpdate: a keep's realm and level, and one byte per component (in the order they were
+/// sent): its height, plus 0x80 climbable, 0x40 dead, 0x20 levelling up, 0x10 raised.</summary>
+public sealed record KeepUpdate(ushort KeepId, byte Realm, byte Level, IReadOnlyList<byte> Components)
+{
+    public const byte Code = 0x67;
+    public const byte HeightMask = 0x0F, RaisedBit = 0x10, LevelUpBit = 0x20, DeadBit = 0x40, ClimbableBit = 0x80;
+
+    public static KeepUpdate Parse(ReadOnlySpan<byte> payload)
+    {
+        var r = new Net.PayloadReader(payload);
+        ushort id = r.U16BE();
+        byte realm = r.U8(), level = r.U8(), count = r.U8();
+        var parts = new byte[count];
+        for (int i = 0; i < count; i++)
+            parts[i] = r.U8();
+        return new KeepUpdate(id, realm, level, parts);
+    }
+
+    public byte[] Payload()
+    {
+        var w = new Net.PayloadWriter().U16BE(KeepId).U8(Realm).U8(Level).U8((byte)Components.Count);
+        foreach (byte b in Components)
+            w.U8(b);
+        return w.U8(0).ToArray();
+    }
+}
+
+/// <summary>S→C 0x6A KeepRealmUpdate: a keep changed realm or level.</summary>
+public sealed record KeepRealm(ushort KeepId, byte Realm, byte Level)
+{
+    public const byte Code = 0x6A;
+
+    public static KeepRealm Parse(ReadOnlySpan<byte> payload)
+    {
+        var r = new Net.PayloadReader(payload);
+        return new KeepRealm(r.U16BE(), r.U8(), r.U8());
+    }
+
+    public byte[] Payload() => new Net.PayloadWriter().U16BE(KeepId).U8(Realm).U8(Level).ToArray();
+}
+
+/// <summary>S→C 0x6B KeepRemove (keep id) and 0x6E KeepComponentRemove (keep id, component id).</summary>
+public static class KeepRemove
+{
+    public const byte Code = 0x6B, ComponentCode = 0x6E;
+
+    public static ushort Parse(ReadOnlySpan<byte> payload) => new Net.PayloadReader(payload).U16BE();
+
+    public static (ushort KeepId, ushort ComponentId) ParseComponent(ReadOnlySpan<byte> payload)
+    {
+        var r = new Net.PayloadReader(payload);
+        return (r.U16BE(), r.U16BE());
+    }
+}

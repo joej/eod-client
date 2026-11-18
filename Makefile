@@ -201,6 +201,15 @@ $(STRIDES): $(CLIENT)/gamedata.mpk $(A)/Figures/MonsterFigure.cs $(A)/Figures/Fi
 	@mkdir -p $(@D)
 	$(MPK) strides --gamedata $(CLIENT)/gamedata.mpk --out $@
 
+# --- keeps: every frontier keep piece model (fr_tiers x fr_pieces in frontiers.mpk) and keeps/pieces.csv, for the
+# keeps a server sends (0x69/0x6C; New Frontiers). Old Frontiers keeps are zone fixtures and come with their zones.
+KEEPS := $(LIB)/keeps/pieces.csv
+.PHONY: keeps
+keeps: $(KEEPS)
+$(KEEPS): $(INDEX) $(MODEL_SRC) $(A)/Keeps/KeepPieces.cs $(CLI_SRC) $(X)/Cli.Keeps.cs | $(TOOL)
+	@mkdir -p $(@D)
+	$(MPK) keepmodels $(CLIENT) --index $(INDEX) --library $(LIB)
+
 # --- loading screens: the pictures, tips, bar and font the client shows while it loads a region ----------
 LOADING := $(LIB)/loading/loading.csv
 .PHONY: loading
@@ -232,7 +241,7 @@ $(ICONS): $(wildcard $(CLIENT)/icons/*.bmp $(CLIENT)/icons/*.BMP $(CLIENT)/Icons
 dungeons: $(foreach z,$(DUNGEONS),zone$(z))
 
 .PHONY: zones check-zones
-zones: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(OBJECTS) $(STRIDES) $(LOADING) $(MAPS) $(ICONS)
+zones: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(OBJECTS) $(STRIDES) $(KEEPS) $(LOADING) $(MAPS) $(ICONS)
 
 $(ZONEDIR)/summary.md: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),$(ZONEDIR)/zone$(z)/zonecheck.md)
 	@{ echo "# Zone check, every converted zone (outdoor, cities and dungeons)"; echo; \
