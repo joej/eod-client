@@ -376,7 +376,7 @@ internal static partial class Cli
     {
         if (args.Length < 2) return Usage();
         string datMpk = args[1];
-        if (Options.Parse(args, 2, ["--index", "--out", "--points"]) is not { } o || o["--index"] is not { } indexPath)
+        if (Options.Parse(args, 2, ["--index", "--out", "--points", "--landing"]) is not { } o || o["--index"] is not { } indexPath)
             return Usage();
         var index = AssetIndex.Load(indexPath);
         DaocAssets.Zone.DungeonLayout layout;
@@ -451,6 +451,23 @@ internal static partial class Cli
                     .SelectMany(x => x.Triangles.Select(t => (x.Vertices[t.A], x.Vertices[t.B], x.Vertices[t.C]))).ToList()
                 : null);
             summary += $"; {on} of {all} points stand on a floor";
+        }
+        // --landing FILE: the zone's landing spot ("x y z", region), written by `mpk zone` from the exit doorway, checked
+        // against the rooms' floors and moved onto the nearest one when it has none (18 dungeons' doorways don't sit on a
+        // floor of the assembled rooms; 24 have no doorway). DungeonCheck.Landing.
+        if (o["--landing"] is { } landingPath)
+        {
+            System.Numerics.Vector3? doorway = null;
+            if (File.Exists(landingPath) && File.ReadAllText(landingPath).Split(' ', StringSplitOptions.RemoveEmptyEntries) is [var lx, var ly, var lz, ..])
+                doorway = new System.Numerics.Vector3(float.Parse(lx, CultureInfo.InvariantCulture), float.Parse(ly, CultureInfo.InvariantCulture),
+                    float.Parse(lz, CultureInfo.InvariantCulture));
+            if (DaocAssets.Zone.DungeonCheck.Landing(layout, doorway, Surfaces) is { } spot)
+            {
+                File.WriteAllText(landingPath, string.Create(CultureInfo.InvariantCulture, $"{spot.X:0} {spot.Y:0} {spot.Z:0}\n"));
+                summary += spot == doorway ? "; landing on a floor" : $"; landing moved to a floor at ({spot.X:0}, {spot.Y:0}, {spot.Z:0})";
+            }
+            else
+                summary += "; no floor for a landing";
         }
         Console.WriteLine($"Dungeon check: {summary}");
         foreach (string w in waterLines)

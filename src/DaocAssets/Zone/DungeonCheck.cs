@@ -83,6 +83,47 @@ public static class DungeonCheck
         return (on, points.Count);
     }
 
+    /// <summary>
+    /// Where a character can be put in a dungeon (its landing spot): <paramref name="near"/> (the exit doorway's middle,
+    /// 40 units up) when a floor of the placed rooms is under it, else the floor nearest to it, else to the first room.
+    /// A floor is a flat surface (within ~25° of level) with at least 90 units clear above it and something over it
+    /// within 1500 units (a ceiling: a room's roof seen from above has nothing over it). Region coordinates, 40 units
+    /// above the floor; null when the rooms have no such floor. Ours: retail has no landing spot (the server places you).
+    /// </summary>
+    public static Vector3? Landing(DungeonLayout layout, Vector3? near,
+        Func<string, IReadOnlyList<(Vector3 A, Vector3 B, Vector3 C)>?> roomTriangles)
+    {
+        var placed = new List<(Vector3 A, Vector3 B, Vector3 C)>();
+        foreach (DungeonRoom r in layout.Rooms)
+            if (roomTriangles(r.Piece) is { } tris)
+                foreach (var t in tris)
+                    placed.Add((DungeonLayout.RegionPoint(r, t.A), DungeonLayout.RegionPoint(r, t.B), DungeonLayout.RegionPoint(r, t.C)));
+        if (placed.Count == 0)
+            return null;
+        if (near is Vector3 n && placed.Any(t => HeightAt(t, n.X, n.Y) is float h && h <= n.Z + 16 && h >= n.Z - 100))
+            return n;
+        Vector3 from = near ?? (layout.Rooms.Count > 0 ? DungeonLayout.RegionPoint(layout.Rooms[0], Vector3.Zero) : placed[0].A);
+        bool Clear(Vector3 c)
+        {
+            bool ceiling = false;
+            foreach (var t in placed)
+                if (HeightAt(t, c.X, c.Y) is float h)
+                {
+                    if (h > c.Z + 2 && h <= c.Z + 90)
+                        return false;
+                    ceiling |= h > c.Z + 90 && h <= c.Z + 1500;
+                }
+            return ceiling;
+        }
+        foreach (Vector3 c in placed
+                     .Where(t => Vector3.Cross(t.B - t.A, t.C - t.A) is var nn && nn.LengthSquared() > 1 && MathF.Abs(nn.Z) >= 0.9f * nn.Length())
+                     .Select(t => (t.A + t.B + t.C) / 3)
+                     .OrderBy(c => Vector3.DistanceSquared(c, from)))
+            if (Clear(c))
+                return c + new Vector3(0, 0, 40);
+        return null;
+    }
+
     // The triangle's height over (x, y), when (x, y) is inside its outline seen from above.
     private static float? HeightAt((Vector3 A, Vector3 B, Vector3 C) t, float x, float y)
     {

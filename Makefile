@@ -145,8 +145,9 @@ $(ZONEDIR)/zone$(1)/sky.csv: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(ZONE_S
 	$(MPK) sky $$(zone$(1)_DAT) --index $(INDEX) --library $(LIB) --out $$(@D)
 
 # A dungeon's rooms placed as the client places them: do the doorways of each portals.csv link meet (mpk dungeoncheck)?
+# It also moves the landing spot (travel, --goto) onto a floor of the rooms when the exit doorway's isn't on one.
 $(ZONEDIR)/zone$(1)/dungeoncheck.md: $(ZONEDIR)/zone$(1)/zone.csv | $(TOOL)
-	@$(MPK) dungeoncheck $$(zone$(1)_DAT) --index $(INDEX) --out $$@.tmp >/dev/null && mv $$@.tmp $$@
+	@$(MPK) dungeoncheck $$(zone$(1)_DAT) --index $(INDEX) --landing $(ZONEDIR)/zone$(1)/landing.txt --out $$@.tmp >/dev/null && mv $$@.tmp $$@
 	@echo "zone $(1) $$(zone$(1)_NAME): $$$$(sed -n 3p $$@)"
 
 # The report is kept whatever it finds (exit 1 = errors found); check-zone<N> is what fails on them.

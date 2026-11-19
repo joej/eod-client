@@ -35,6 +35,28 @@ public sealed class DungeonLayoutTests
     }
 
     [Fact]
+    public void ALandingOffTheRoomsMovesToTheNearestFloorNotOntoARoof()
+    {
+        // One room: a floor 400 units square at its height and a ceiling 200 above it (NIF z is up).
+        DungeonLayout d = DungeonLayout.Parse(Chunk, "0, 0, 0, 0, 0, 1, 0, 0\n", "");
+        (Vector3, Vector3, Vector3)[] Square(float z) =>
+            [(new(-200, -200, z), new(200, -200, z), new(200, 200, z)), (new(-200, -200, z), new(200, 200, z), new(-200, 200, z))];
+        var tris = Square(0).Concat(Square(200)).ToList();
+
+        // A doorway on the floor stays where it is.
+        var onFloor = new Vector3(32000, 32050, 16040);
+        Assert.Equal(onFloor, DungeonCheck.Landing(d, onFloor, _ => tris));
+        // One out in the dark moves onto the floor (16000 + 40), not onto the roof (16200), which has nothing over it.
+        Vector3 moved = Assert.IsType<Vector3>(DungeonCheck.Landing(d, new Vector3(34000, 32000, 16240), _ => tris));
+        Assert.Equal(16040, moved.Z, 1);
+        Assert.InRange(moved.X, 31800, 32200);
+        // No doorway: the floor nearest the first room.
+        Assert.Equal(16040, Assert.IsType<Vector3>(DungeonCheck.Landing(d, null, _ => tris)).Z, 1);
+        // Without a ceiling, nothing counts as a floor to move to (a roof can't be told from one).
+        Assert.Null(DungeonCheck.Landing(d, new Vector3(34000, 32000, 16240), _ => Square(0).ToList()));
+    }
+
+    [Fact]
     public void AnUnturnedRoomIsPlacedByTheCitiesRuleAtHeight16000()
     {
         // The capitals' pieces, turned 180°, land at (32000 − x, 32000 + y, 8000 + z) (ZoneLayout.ParseCity); a dungeon's
