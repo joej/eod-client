@@ -22,7 +22,8 @@
 // quit path four ways: quit and wait; quit and move (the quit is called off); quit again;
 // quit while running. It prints the server's chat lines and sitting state as they arrive.
 // --cmd (repeatable, with --enter) sends a slash command after entering (and after --goto) and prints the chat
-// and system lines that arrive in the next 2 s. "/jump to X Y Z REGION" goes through the session's jump, so the
+// and system lines, door states (0x99) and objects (0xD9) that arrive in the next 2 s. Two are ours, not slash
+// commands: "!door ID [close]" sends a door click (0x99) for that id, "!target OID" selects an object (0xB0). "/jump to X Y Z REGION" goes through the session's jump, so the
 // client follows the move (the server would otherwise be sent the old position). --probe-hookpoints (with --enter)
 // asks a keep component for its free hookpoints (C→S 0x6F response 1 → S→C 0x65), then selects each of those and
 // of ids 0-37, 65, 97 and 129 (response 2 → 0x65, then the store 0x63) and prints one line per hookpoint: its items
@@ -359,6 +360,19 @@ async Task Command(string command)
         PositionAndObjectId m = moved.Position;
         Note($"jumped: region {m.RegionId}, zone {moved.Zone.Id} ({moved.Zone.Name}), x {m.X} y {m.Y} z {m.Z}");
     }
+    else if (words is ["!door", var did, ..] && uint.TryParse(did, out uint doorId))
+    {
+        // "!door ID [close]": a door click (C→S 0x99) for that id, as the client sends it.
+        bool open = words.Length < 3 || words[2] != "close";
+        Note($"> door request {doorId} {(open ? "open" : "close")}");
+        await session.RequestDoorAsync(doorId, open);
+    }
+    else if (words is ["!target", var tid] && ushort.TryParse(tid, out ushort targetId))
+    {
+        // "!target OID": select an object (C→S 0xB0), e.g. a door from a 0xD9 line, before a command like /door kill.
+        Note($"> target {targetId}");
+        await session.SetTargetAsync(targetId);
+    }
     else
     {
         Note($"> {command}");
@@ -380,6 +394,17 @@ async Task<ServerPacket?> Collect(TimeSpan wait, Func<ServerPacket, bool> done)
             {
                 ChatMessage m = ChatMessage.Parse(packet.Payload);
                 Note($"  chat {m.Type}: {m.Text}");
+            }
+            else if (packet.Code == DoorState.Code)
+            {
+                DoorState d = DoorState.Parse(packet.Payload);
+                Note($"  door state {d.DoorId}: state {d.State}, sound {d.Sound}, start {d.Start}");
+            }
+            else if (packet.Code == ObjectCreate.Code)
+            {
+                // The object's name, then (for a door) a non-zero byte and its u32 door id: shown as the raw tail.
+                ObjectCreate o = ObjectCreate.Parse(packet.Payload);
+                Note($"  object {o.ObjectId} '{o.Name}' model {o.Model} at {o.X},{o.Y},{o.Z}; payload {Convert.ToHexString(packet.Payload)}");
             }
             if (done(packet))
                 return packet;
