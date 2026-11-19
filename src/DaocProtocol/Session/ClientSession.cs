@@ -104,6 +104,9 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// </summary>
     public bool IsDead { get; set; }
 
+    /// <summary>The player's torch is lit: 0xA9 carries action bit 0x80, which the server relays to others.</summary>
+    public bool TorchLit { get; set; }
+
     /// <summary>Our health percent from the last 0xAD, sent in each 0xA9 (the server skips it).</summary>
     public byte HealthPercent { get; set; } = 100;
 
@@ -449,7 +452,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
             PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: TargetId, world.Zone.Id,
                 PositionUpdate.Heading(p.Heading, onGround), speed,
                 verticalSpeed, stateFlags,
-                actionFlags: (byte)(PositionUpdate.ActionAlways | (TargetId != 0 ? PositionUpdate.TargetInView : 0)),
+                actionFlags: (byte)((TorchLit ? PositionUpdate.Torch : 0) | (TargetId != 0 ? PositionUpdate.TargetInView : 0)),
                 health: IsDead ? (byte)0 : HealthPercent,
                 landed: landed),
             cancellationToken);

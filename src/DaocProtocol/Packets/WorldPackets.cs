@@ -131,7 +131,8 @@ public static class PositionUpdate
     /// OpenDAoC (1.127+); the recorded client sends 0.</param>
     /// <param name="zoneId">Must be a zone the server knows, or the player is kicked to the character screen.</param>
     /// <param name="heading">0–4095, plus bit 0x1000 when on the ground (<see cref="Heading"/>).</param>
-    /// <param name="actionFlags">Retail 1.127 sends 0x80 always and 0xB0 while a target is in view (<see cref="TargetInView"/>).</param>
+    /// <param name="actionFlags">0x80 while the torch is lit (<see cref="Torch"/>), 0x30 while a target is in view
+    /// (<see cref="TargetInView"/>). The 2026-11-05 retail session sent 0x80 throughout because its torch was on.</param>
     /// <param name="verticalSpeed">Non-zero while falling or jumping (the server's FallSpeed).</param>
     /// <param name="health">Percent; the server skips it.</param>
     /// <param name="landed">Set on the one update that lands from a fall: the falling-damage field's bit 15.
@@ -143,8 +144,9 @@ public static class PositionUpdate
     public static ushort Heading(ushort heading, bool onGround) =>
         (ushort)((heading & 0x0FFF) | (onGround ? 0x1000 : 0));
 
-    /// <summary>Action flags: set always by retail 1.127, and the bits it adds while a target is in view.</summary>
-    public const byte ActionAlways = 0x80, TargetInView = 0x30;
+    /// <summary>Action flags: the torch is lit (only that, daoc-re 2026-11-19; others see it), and the bits retail adds
+    /// while a target is in view.</summary>
+    public const byte Torch = 0x80, TargetInView = 0x30;
 
     public static byte[] Payload(float x, float y, float z, ushort sessionId, ushort objectId, ushort zoneId,
         ushort heading, float speed = 0, float verticalSpeed = 0, byte stateFlags = 0, byte actionFlags = 0, byte health = 100,

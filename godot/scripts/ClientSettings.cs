@@ -135,6 +135,14 @@ public static class ClientSettings
         set => SaveIn("game", "compass", value);
     }
 
+    /// <summary>The torch (T), kept between sessions as retail's user.dat `torchmode` is (per install, not per
+    /// character); on for a new settings file, as retail's defaults are (daoc-re 2026-11-19).</summary>
+    public static bool Torch
+    {
+        get => Load().GetValue("game", "torchmode", true).AsBool();
+        set => SaveIn("game", "torchmode", value);
+    }
+
     /// <summary>The clock (retail's Interface Elements → CLOCK): the game time of day. Shown by default.</summary>
     public static bool ShowClock
     {

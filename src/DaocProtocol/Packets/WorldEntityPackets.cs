@@ -82,6 +82,10 @@ public sealed record ObjectUpdate(
     public bool Underwater => (Flags & 0x10) != 0;
     public bool Flying => (Flags & 0x20) != 0;
 
+    /// <summary>Flags 0x04: the NPC carries a lit torch (the client switches on its model's torch node; daoc-re
+    /// 2026-11-19; OpenDAoC: GameNPC.eFlags.TORCH).</summary>
+    public bool Torch => (Flags & 0x04) != 0;
+
     /// <summary>Flags 0x10: a peaceful NPC, one that can't be attacked (PacketLib1124.SendNPCCreate: GameNPC.eFlags.PEACE).</summary>
     public bool Peaceful => (Flags & 0x10) != 0;
 

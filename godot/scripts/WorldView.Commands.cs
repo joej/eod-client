@@ -133,38 +133,37 @@ public partial class WorldView
         _ => null,
     };
 
-    // The torch (T): a warm light the character carries, lighting the ground ahead and a little around. Ours alone so far:
-    // whether retail tells the server (other players seeing it) and its exact reach are asked of daoc-re.
-    private SpotLight3D? _torch;
+    // The torch (T), as retail's (daoc-re's commands-and-keys note Q6 and torch-bit answer, 2026-11-19): two white point
+    // lights 128 units above the character, brightness 2.0 and 0.5, linear attenuation 0.006 (Godot's falloff differs:
+    // ours reaches ~32 m, where retail's has faded to a twentieth). While lit, 0xA9 carries action bit 0x80, so others
+    // see it. The state is kept between sessions (torchmode) and is on in a new settings file, as retail's.
+    // Not yet: the model's own torch node, and others' torches (their 0xA9 0x80, an NPC's 0xDA flags 0x04).
+    private Node3D? _torch;
+    private const float TorchHeight = 128 * RegionMetresPerUnit;
 
-    private void ToggleTorch() => SetTorch(_torch is null || !_torch.Visible);
+    private void ToggleTorch() => SetTorch(_torch is null || !_torch.Visible, announce: true);
 
-    private void SetTorch(bool lit)
+    private void SetTorch(bool lit, bool announce = false)
     {
         if (_torch is null)
         {
-            _torch = new SpotLight3D
-            {
-                Name = "Torch",
-                // Shoulder height, a little ahead (the body faces -Z), tilted down toward the ground in front.
-                Position = new Vector3(0, 1.7f, -0.3f),
-                Rotation = new Vector3(Mathf.DegToRad(-25), 0, 0),
-                LightColor = new Color(1f, 0.72f, 0.42f),
-                LightEnergy = 3f,
-                SpotRange = 18f,
-                SpotAngle = 55f,
-                SpotAttenuation = 1.2f,
-                ShadowEnabled = true,
-                Visible = false,
-            };
-            // A dim glow all round, so the character itself and its feet are lit too.
-            _torch.AddChild(new OmniLight3D { LightColor = _torch.LightColor, LightEnergy = 0.8f, OmniRange = 5f });
+            _torch = new Node3D { Name = "Torch", Position = new Vector3(0, TorchHeight, 0), Visible = false };
+            foreach (float energy in new[] { 2.0f, 0.5f })
+                _torch.AddChild(new OmniLight3D
+                {
+                    LightColor = Colors.White, LightEnergy = energy, LightSpecular = 0, OmniRange = 32f, OmniAttenuation = 1f,
+                    ShadowEnabled = energy > 1,
+                });
             _body.AddChild(_torch);
         }
+        if (_session is not null)
+            _session.TorchLit = lit;
         if (_torch.Visible == lit)
             return;
         _torch.Visible = lit;
-        GD.Print($"[world] torch {(_torch.Visible ? "lit" : "out")}");
-        AppendChat(_torch.Visible ? "You light your torch." : "You put out your torch.", LocalReply);
+        ClientSettings.Torch = lit;
+        GD.Print($"[world] torch {(lit ? "lit" : "out")}");
+        if (announce)
+            AppendChat(lit ? "You light your torch." : "You put out your torch.", LocalReply);   // the wording is ours
     }
 }
