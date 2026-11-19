@@ -24,7 +24,13 @@ public partial class WorldView
     private bool LocalCommand(string line)
     {
         string[] words = line.Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
-        switch (words[0].ToLowerInvariant())
+        string word = words[0].ToLowerInvariant();
+        if (word.StartsWith("/qbar"))   // one of the few prefix-matched commands: /qbar3 = page 3 (daoc-re, commands note)
+        {
+            QbarCommand(word, words);
+            return true;
+        }
+        switch (word)
         {
             case "/loc":
                 Reply(LocText());
@@ -33,7 +39,7 @@ public partial class WorldView
                 ToggleMap();
                 GD.Print("[local] /map: map toggled");
                 return true;
-            case "/quickbar" or "/qbar":
+            case "/quickbar":
                 QuickbarCommand(words);
                 return true;
             case "/follow":
@@ -70,29 +76,50 @@ public partial class WorldView
         AppendChat(text, LocalReply);
     }
 
-    // Retail's exact wording is still to confirm (daoc-re); the numbers are what /faceloc and guides use: the position
-    // from the zone's corner, and the heading 0-4095.
+    // Retail's line (daoc-re, commands-and-keys note): "<zone>: loc=x,y,z dir=d", x and y from the zone's corner and z
+    // the region's, all truncated; dir = ((heading + 2048) * 360 / 4096) % 360. Not built: 0,0 outside every zone, a
+    // dungeon's origin (the region's first zone), the House line.
     private string LocText()
     {
         PositionAndObjectId p = _world.Position;
         Zone z = _world.Zone;
-        return $"You are at X: {p.X - z.X:0} Y: {p.Y - z.Y:0} Z: {p.Z:0} Heading: {p.Heading & 0x0FFF} in {z.Name}";
+        int dir = ((p.Heading & 0x0FFF) + 2048) * 360 / 4096 % 360;
+        return $"{z.Name}: loc={(int)(p.X - z.X)},{(int)(p.Y - z.Y)},{(int)p.Z} dir={dir}";
+    }
+
+    // "/qbar<page> [bar]": turns a bar (default 1) to that page, 1-10.
+    private void QbarCommand(string word, string[] words)
+    {
+        int bar = 1;
+        if (!int.TryParse(word[5..], out int page) || page is < 1 or > 10
+            || words.Length > 1 && (!int.TryParse(words[1], out bar) || bar < 1 || bar > _bars.Count))
+        {
+            Reply("Usage: /qbar [[bank#] [quickbar#(defaults to 1)]");
+            return;
+        }
+        _bars[bar - 1].TurnTo(page - 1);
+    }
+
+    private void QuickbarUsage()
+    {
+        Reply("Usage: /quickbar [quickbar#(1-3)] [1/0(1=on, 0=off)]");
+        Reply("Example: \"/quickbar 2 0\" to disable quickbar #2.");
     }
 
     private void QuickbarCommand(string[] words)
     {
         if (words.Length < 2 || !int.TryParse(words[1], out int bar) || bar < 1 || bar > _bars.Count)
         {
-            Reply($"Usage: /quickbar <1-{_bars.Count}> <on|off>");
+            QuickbarUsage();
             return;
         }
         bool? show = words.Length < 3 ? null : OnOff(words[2]);
         if (words.Length >= 3 && show is null)
         {
-            Reply($"/quickbar: say on or off (or 1 or 0), not \"{words[2]}\".");
+            QuickbarUsage();
             return;
         }
-        // Without on/off, flip it.
+        // Without 1/0, flip it; on/off and the confirmation line are ours (retail takes 1/0).
         bool visible = show ?? !_bars[bar - 1].Window.Visible;
         ShowQuickbar(bar - 1, visible, save: true);
         Reply($"Quickbar {bar} {(visible ? "shown" : "hidden")}.");

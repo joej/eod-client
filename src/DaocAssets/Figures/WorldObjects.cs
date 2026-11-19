@@ -7,7 +7,7 @@
 //
 // Solid: objects.csv column 52 ("Colideable") is 1 on 206 rows: props such as carts, tents, fences, statues, crates,
 // crypts and an "Invisible Blocker"; chests, banners and loose items are left out. (Column 43, "House Collide", is the
-// housing items'.) That the client makes exactly these solid is read from the column's name and contents, unconfirmed.
+// housing items'.) The client makes an object solid when the column isn't 0 (daoc-re, commands-and-keys note).
 
 namespace DaocAssets.Figures;
 
@@ -29,7 +29,7 @@ public static class WorldObjects
         var models = new Dictionary<int, ObjectModel>();
         foreach (string[] r in Rows(objectsCsv))
             if (r.Length > 2 && int.TryParse(r[0], out int model) && int.TryParse(r[2], out int item) && items.TryGetValue(item, out string? nif))
-                models.TryAdd(model, new ObjectModel(nif, r.Length > CollideableColumn && r[CollideableColumn].Trim() == "1"));
+                models.TryAdd(model, new ObjectModel(nif, r.Length > CollideableColumn && int.TryParse(r[CollideableColumn], out int solid) && solid != 0));
         return models;
     }
 

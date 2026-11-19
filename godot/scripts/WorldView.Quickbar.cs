@@ -69,7 +69,8 @@ public partial class WorldView
     }
 
     // The number keys, built in as retail's (daoc-re RE/68; not in its key presets): 1–0 use bar 1's slot, Alt+ bar 2's,
-    // Ctrl+ bar 3's; with Shift added, the same keys turn that bar to page N (0 = page 10).
+    // Ctrl+ bar 3's; with Shift added, the same keys turn that bar to page N (0 = page 10). A hidden bar's keys still count
+    // as taken.
     private bool QuickbarKey(InputEvent e)
     {
         if (e is not InputEventKey { Pressed: true, Echo: false } k || k.MetaPressed || (k.AltPressed && k.CtrlPressed))
@@ -84,9 +85,9 @@ public partial class WorldView
         if (slot < 0 || bar >= _bars.Count)
             return false;
         if (k.ShiftPressed)
-            _bars[bar].TurnTo(slot);
-        else
-            _bars[bar].Use(slot);
+            _bars[bar].TurnTo(slot);   // pages turn even on a hidden bar, as retail's do
+        else if (_bars[bar].Window.Visible)
+            _bars[bar].Use(slot);      // a bar turned off (/quickbar N 0) ignores its keys (daoc-re, commands note)
         return true;
     }
 

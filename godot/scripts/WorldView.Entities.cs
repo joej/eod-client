@@ -143,13 +143,13 @@ public partial class WorldView
     }
 
     // Players we heard from but never saw created: asked for by session id (0xD5, as the server expects of a client), again
-    // after 5 s if the create still hasn't come (out of range then, or gone).
+    // after 6 s if the create still hasn't come (retail's interval; out of range then, or gone).
     private readonly Dictionary<ushort, double> _playersRequested = new();
 
     private void RequestPlayer(ushort sessionId)
     {
         if (_session is null || _closedReason is not null || sessionId == 0
-            || (_playersRequested.TryGetValue(sessionId, out double at) && _seconds - at < 5))
+            || (_playersRequested.TryGetValue(sessionId, out double at) && _seconds - at < 6))
             return;
         _playersRequested[sessionId] = _seconds;
         GD.Print($"[entity] player session {sessionId}: heard from but never created, create requested");

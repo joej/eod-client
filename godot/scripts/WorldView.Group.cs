@@ -9,11 +9,14 @@
 // targets that member. Under them the skin's 14 buttons: INVITE (the target, 0x87) and DISBAND (0x9F: the target if it is
 // in our group and we lead it, else ourselves); ASSIST, FOLLOW, STICK, FACE and MAP as the target window's and the menu
 // bar's; MINI (the floating group window), FIND and SET LFG (looking for group), BENEFITS, WARMAP, CGF (casual group
-// finder) and OPTIONS open windows not built yet and are dimmed. What retail's name-colour adapter shows isn't known; ours
-// keeps the skin's grey and writes a member's state (dead, mezzed, link dead, ...) where the class goes, in orange.
+// finder) and OPTIONS open windows not built yet and are dimmed. A member's name shows its state as the client does
+// (daoc-re's group-page note, Q1): the first of its 0x70 state bits in the order link dead, dead, mezzed, diseased,
+// poisoned, nearsight, other region, 0x80 wraps the name in that state's marker (*name*, =name=, ...) and colours it;
+// none: white. Clicking a row, or a group key, targets that member (an empty row clears the target; nothing while dead).
+// Effect icons are spells.csv ids (Q3).
 //
-// Dialog (retail's dialog box, 320 x 128, centred): the text and YES / NO, or OK; the answer goes back as 0x82 with the
-// dialog's data words. A new dialog replaces one still open.
+// Dialog (retail's dialog_sm, 256 x 96, centred): up to 7 centred lines and ACCEPT / DECLINE, or OK, 58 x 16 at y 76
+// (Q6); the answer goes back as 0x82 with the dialog's data words. A new dialog replaces one still open, unanswered.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -144,14 +147,14 @@ public partial class WorldView
             bool used = i < g.Members.Count;
             GroupMemberInfo? m = used ? g.Members[i] : null;
             GroupMemberStatus? st = used ? g.Status(i) : null;
-            row.Name.Text = m?.Name ?? "";
+            var (open, close, colour) = NameMarker(st?.Flags ?? GroupMemberFlags.None);
+            row.Name.Text = m is null ? "" : open + m.Name + close;
+            row.Name.AddThemeColorOverride("font_color", colour);
             row.Level.Text = m is null ? "" : m.Level.ToString();
-            string state = st is { Flags: not GroupMemberFlags.None } ? StateWords(st.Flags) : "";
-            row.Class.Text = state.Length > 0 ? state : m?.ClassName ?? "";
-            row.Class.AddThemeColorOverride("font_color", state.Length > 0 ? new Color(1f, 0.6f, 0.25f) : Colors.White);
+            row.Class.Text = m?.ClassName ?? "";
             row.Health.Set(st is null ? -1 : st.Health);
             row.Endurance.Set(st is null ? -1 : st.Endurance);
-            row.Power.Set(st is null ? -1 : st.Mana);
+            row.Power.Set(st is null ? -1 : st.Mana == 0xFF ? 0 : st.Mana);   // 0xff: no power value, shown as 0
             IReadOnlyList<ushort> icons = used ? g.Icons(i) : [];
             for (int k = 0; k < row.Icons.Length; k++)
                 row.Icons[k].Texture = k < icons.Count ? IconPictureTexture(icons[k]) : null;
@@ -174,33 +177,42 @@ public partial class WorldView
         Dim(_groupAssist, !ours);
     }
 
-    private static string StateWords(GroupMemberFlags f)
+    /// <summary>A member name's marker and colour: the first state bit set, in the client's order (daoc-re, group page Q1).</summary>
+    internal static (string Open, string Close, Color Colour) NameMarker(GroupMemberFlags f)
     {
-        var words = new List<string>();
-        if (f.HasFlag(GroupMemberFlags.OtherRegion)) words.Add("Away");
-        if (f.HasFlag(GroupMemberFlags.LinkDead)) words.Add("Link dead");
-        if (f.HasFlag(GroupMemberFlags.Dead)) words.Add("Dead");
-        if (f.HasFlag(GroupMemberFlags.Mezzed)) words.Add("Mezzed");
-        if (f.HasFlag(GroupMemberFlags.Diseased)) words.Add("Diseased");
-        if (f.HasFlag(GroupMemberFlags.Poisoned)) words.Add("Poisoned");
-        if (f.HasFlag(GroupMemberFlags.Nearsighted)) words.Add("Nearsight");
-        return string.Join(", ", words);
+        foreach (var (bit, open, close, r, g, b) in NameMarkers)
+            if ((f & bit) != 0)
+                return (open, close, Color.Color8(r, g, b));
+        return ("", "", Colors.White);
     }
 
-    // The server writes an effect's Icon, which we take as an icons.csv id (as 0x7F's source-0xFF entries are; daoc-re
-    // RE/75). Unconfirmed for 0x70.
-    private Texture2D? IconPictureTexture(ushort icon)
+    private static readonly (GroupMemberFlags Bit, string Open, string Close, byte R, byte G, byte B)[] NameMarkers =
+    [
+        (GroupMemberFlags.LinkDead, "*", "*", 99, 99, 251),
+        (GroupMemberFlags.Dead, "=", "=", 255, 255, 255),
+        (GroupMemberFlags.Mezzed, "!", "!", 0, 254, 250),
+        (GroupMemberFlags.Diseased, "-", "-", 254, 131, 49),
+        (GroupMemberFlags.Poisoned, "$", "$", 156, 255, 133),
+        (GroupMemberFlags.Nearsighted, "^", "^", 210, 127, 252),
+        (GroupMemberFlags.OtherRegion, "[", "]", 147, 145, 145),
+        (GroupMemberFlags.Flag80, ">", "<", 255, 255, 0),
+    ];
+
+    // The client reads a 0x70 icon as a spells.csv id and draws that spell's icon (daoc-re, group page Q3). OpenDAoC writes
+    // a spell effect's spell.Icon, which holds the spells.csv id (its DB column is misnamed); only its built-in ability
+    // effects (Berserk 479, Engage 421, ...) send icons.csv numbers, which come out as the wrong picture here, as in retail.
+    private Texture2D? IconPictureTexture(ushort spell)
     {
         _iconTable ??= LoadIconTable();
-        return _iconTable.Resolve(DaocAssets.Ui.IconKind.Icon, icon) is DaocAssets.Ui.IconPicture p ? IconTexture(p.Base) : null;
+        return _iconTable.Resolve(DaocAssets.Ui.IconKind.Spell, spell) is DaocAssets.Ui.IconPicture p ? IconTexture(p.Base) : null;
     }
 
     private void TargetGroupMember(int index)
     {
-        GroupState g = _bridge.Group;
-        if (index >= g.Members.Count)
+        if (_session?.IsDead == true)
             return;
-        SetTarget(g.Members[index].ObjectId);
+        GroupState g = _bridge.Group;
+        SetTarget(index < g.Members.Count ? g.Members[index].ObjectId : (ushort)0);   // an empty row clears the target
         _statsDirty = true;
     }
 
@@ -216,13 +228,14 @@ public partial class WorldView
 
     private void BuildDialog(CanvasLayer overlay)
     {
-        _dialogWindow = new HudWindow("dialog", new Vector2(320, 128), UiScale, screen => new Vector2(screen.X / 2 - 160, screen.Y / 2 - 100)) { Visible = false };
-        _dialogText = _dialogWindow.Label(new Vector2(12, 12), new Vector2(296, 82), 10, centred: true);
+        _dialogWindow = new HudWindow("dialog", new Vector2(256, 96), UiScale, screen => new Vector2(screen.X / 2 - 128, screen.Y / 2 - 80)) { Visible = false };
+        _dialogText = _dialogWindow.Label(new Vector2(8, 6), new Vector2(240, 68), 8, centred: true);
         _dialogText.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _dialogText.ClipText = false;
-        _dialogYes = _dialogWindow.Button("YES", new Vector2(90, 102), 60, () => AnswerDialog(true));
-        _dialogNo = _dialogWindow.Button("NO", new Vector2(170, 102), 60, () => AnswerDialog(false));
-        _dialogOk = _dialogWindow.Button("OK", new Vector2(130, 102), 60, () => AnswerDialog(true));
+        _dialogText.MaxLinesVisible = 7;
+        _dialogYes = _dialogWindow.Button("ACCEPT", new Vector2(69, 76), 58, () => AnswerDialog(true), 16);
+        _dialogNo = _dialogWindow.Button("DECLINE", new Vector2(129, 76), 58, () => AnswerDialog(false), 16);
+        _dialogOk = _dialogWindow.Button("OK", new Vector2(99, 76), 58, () => AnswerDialog(true), 16);
         _dialogOk.Visible = false;   // one set at a time: YES / NO, or OK
         overlay.AddChild(_dialogWindow);
         if (_dialog is Dialog open)

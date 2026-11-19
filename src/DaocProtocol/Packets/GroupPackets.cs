@@ -50,12 +50,14 @@ public enum GroupMemberFlags : byte
     None = 0, Dead = 0x01, Mezzed = 0x02, Diseased = 0x04, Poisoned = 0x08, LinkDead = 0x10, OtherRegion = 0x20,
     /// <summary>A range debuff (the server's comment: "NS", nearsight).</summary>
     Nearsighted = 0x40,
+    /// <summary>Shown by the client as ">name&lt;" in yellow; OpenDAoC never sends it (daoc-re, group page Q1).</summary>
+    Flag80 = 0x80,
 }
 
 /// <summary>One member's health, power and endurance (percent) and state, from 0x70.</summary>
 public sealed record GroupMemberStatus(byte Index, byte Health, byte Mana, byte Endurance, GroupMemberFlags Flags);
 
-/// <summary>One member's effect icons (icons.csv ids), from 0x70.</summary>
+/// <summary>One member's effect icons (spells.csv ids, as the client reads them), from 0x70.</summary>
 public sealed record GroupMemberIcons(byte Index, IReadOnlyList<ushort> Icons);
 
 /// <summary>
