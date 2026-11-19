@@ -565,7 +565,8 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
   OpenDAoC ships no New Frontiers keeps, so it is checked offline against the packets it would send for Eve of
   Darkness db-public's keep tables (`mpk keeps`, `--keeps`; Dun Ailinne in `tools/shots/cruachan.txt`). Each surface
   takes its realm's textures for the keep's level tier from `fr_materials.csv`; its doors open on 0x99 and on a click, by
-  the client's own door id. Not yet: damage, raised towers.
+  the client's own door id; damaged pieces take the damage overlay or their damaged models, and a raised tower its
+  rubble. Not yet: the crumble effect, raised towers' raze models, door sounds.
 - **Done when:** you can enter a dungeon from its zone jump and walk it, rendered from its pieces.
 
 ### M12 — Atmosphere: effects, sound and music

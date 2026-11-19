@@ -106,6 +106,14 @@ public sealed class KeepLayoutTests
     public void AKeepDoorOutsideTheRuleHasNoId(int keep, int component, string door) =>
         Assert.Null(KeepLayout.DoorId(keep, component, door));
 
+    [Theory]
+    [InlineData(true, 106, 100, 1)]
+    [InlineData(false, 106, 25, 2)] [InlineData(false, 106, 26, 3)] [InlineData(false, 106, 50, 3)]
+    [InlineData(false, 106, 51, 4)] [InlineData(false, 106, 75, 4)] [InlineData(false, 106, 76, 0)]
+    [InlineData(false, 362, 35, 2)] [InlineData(false, 362, 36, 3)] [InlineData(false, 362, 65, 4)] [InlineData(false, 362, 66, 0)]
+    public void ThePiecesDamageStateGoesByHealth(bool broken, int keepId, int health, int state) =>
+        Assert.Equal(state, KeepLayout.DamageState(broken, keepId, health));
+
     [Fact]
     public void APiecesDoorsRunFromDoor001ToTheFirstGap()
     {

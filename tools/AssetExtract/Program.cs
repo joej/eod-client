@@ -141,7 +141,7 @@ internal static partial class Cli
               mpk objects  --gamedata gamedata.mpk --index index.json --library LIBDIR   (the models of the server's objects: carts, banners, items on the ground)
               mpk strides  --gamedata gamedata.mpk --out FILE.csv   (each model id's run/walk/back/strafe strides, for the clips' playback speed)
               mpk keepmodels <client-dir> --index index.json --library LIBDIR   (every frontier keep piece model, and keeps/pieces.csv)
-              mpk keeps    <Keep.json> <KeepComponent.json> --region N [--look old|new] [--level L] --out FILE   (the keep packets a server would send there, for the client's --keeps)
+              mpk keeps    <Keep.json> <KeepComponent.json> --region N [--look old|new] [--level L] [--health H] [--raised yes] --out FILE   (the keep packets a server would send there, for the client's --keeps)
               mpk cata     <model-id> --gamedata gamedata.mpk --index index.json --library LIBDIR   (its Catacombs figure)
               mpk zonedeps <dat<NNN>.mpk> --index index.json --var NAME
               mpk zone     <dat<NNN>.mpk> --index index.json --library LIBDIR --offset X Y --out DIR [--size W H]

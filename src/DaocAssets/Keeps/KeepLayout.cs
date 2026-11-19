@@ -46,6 +46,17 @@ public static class KeepLayout
         return null;
     }
 
+    /// <summary>A component's damage state (daoc-re RE/92 §1): 1 broken (0x6C/0x6D flag bit 0); else by health %, a keep's
+    /// piece 2 below 26, 3 below 51, 4 at 75 or less; a tower's (a keep id with a high byte) 2 below 36, 3 below 51, 4 at 65
+    /// or less; 0 intact.</summary>
+    public static int DamageState(bool broken, int keepId, int health)
+    {
+        if (broken)
+            return 1;
+        bool tower = keepId >> 8 != 0;
+        return health < (tower ? 36 : 26) ? 2 : health < 51 ? 3 : health <= (tower ? 65 : 75) ? 4 : 0;
+    }
+
     /// <summary>The keep's level tier, as its climbing variants and textures choose it: levels 0–2 → 0, 3–5 → 1, 6–8 → 2,
     /// 9 and up → 3.</summary>
     public static int LevelTier(int level) => level switch { <= 2 => 0, <= 5 => 1, <= 8 => 2, _ => 3 };

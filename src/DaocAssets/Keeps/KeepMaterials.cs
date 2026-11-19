@@ -88,6 +88,12 @@ public sealed class KeepMaterials
         return sb.ToString();
     }
 
+    /// <summary>Reads keeps/damage.csv (state,texture): the overlay texture stem by damage state 1–4.</summary>
+    public static Dictionary<int, string> ReadDamageCsv(string csv) =>
+        csv.Split('\n').Skip(1).Select(l => l.TrimEnd('\r').Split(','))
+            .Where(f => f.Length >= 2 && int.TryParse(f[0], out _) && f[1].Length > 0)
+            .ToDictionary(f => int.Parse(f[0]), f => f[1]);
+
     /// <summary>Reads <see cref="ToCsv"/>'s table: (material name, realm 1–3, group) → its row.</summary>
     public static Dictionary<(string Name, int Realm, int Group), (KeepTextureSet Set, bool Damage, int Emittance)> ReadCsv(string csv)
     {

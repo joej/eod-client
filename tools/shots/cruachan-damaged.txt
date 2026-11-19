@@ -1,0 +1,7 @@
+# Dun Ailinne with every piece at 40 % health (damage state 3: the damage_50 overlay), from replayed keep packets
+# (`mpk keeps ... --health 40`). Poses as in cruachan.txt.
+# zone: 173
+# keeps: private/keeps/region163-damaged.keeps
+ailinne_south   411649 610600 9300   0 -12
+ailinne_above   411649 609800 12500  0 -50
+guardtower      412822 613600 9000   0 -10

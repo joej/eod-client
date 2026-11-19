@@ -35,9 +35,12 @@ public static class KeepReplay
     public static byte HeightFromLevel(int level) => level switch { > 15 => 5, > 10 => 4, > 7 => 3, > 4 => 2, > 1 => 1, _ => 0 };
 
     /// <summary>The packets for <paramref name="region"/>'s keeps, in the order the server sends them. <paramref name="level"/>,
-    /// when given, replaces every keep's level (gaheris sets region 163 to 10: build height 3, the one that draws).</summary>
+    /// when given, replaces every keep's level (gaheris sets region 163 to 10: build height 3, the one that draws).
+    /// <paramref name="health"/> sets every component's health % (0: broken, as OpenDAoC flags a dead piece), and
+    /// <paramref name="raised"/> flags every tower's components raised (bit 2; towers are keep ids with a high byte): for
+    /// checking damage and raised towers offline.</summary>
     public static List<ServerPacket> Build(IEnumerable<KeepRow> keeps, IEnumerable<KeepComponentRow> components, int region,
-        bool newKeeps, int? level = null)
+        bool newKeeps, int? level = null, byte health = 100, bool raised = false)
     {
         ILookup<ushort, KeepComponentRow> byKeep = components
             .Where(c => newKeeps ? c.Skin > 20 : c.Skin < 20)
@@ -52,8 +55,11 @@ public static class KeepReplay
             foreach (KeepComponentRow c in byKeep[k.KeepId].OrderBy(c => c.Id))
             {
                 bool climbable = (c.Skin is WallSkin or ClimbingWallSkin) && k.BaseLevel < 100;
+                byte flags = health == 0 ? KeepComponentInfo.Broken : climbable ? KeepComponentInfo.Climbable : (byte)0;
+                if (raised && k.KeepId >> 8 != 0)
+                    flags |= KeepComponentInfo.Raised;
                 packets.Add(new ServerPacket(KeepComponentInfo.Code, new KeepComponentInfo(k.KeepId, c.Id, objectId++, c.Skin,
-                    c.X, c.Y, c.Heading, height, 100, climbable ? KeepComponentInfo.Climbable : (byte)0).Payload()));
+                    c.X, c.Y, c.Heading, height, health, flags).Payload()));
             }
         }
         return packets;

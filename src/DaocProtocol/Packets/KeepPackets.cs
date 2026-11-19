@@ -127,6 +127,9 @@ public sealed record KeepComponentDetail(ushort KeepId, ushort ComponentId, byte
 {
     public const byte Code = 0x6D;
 
+    /// <summary>A health byte of 199: the health is unchanged (the client keeps its own; daoc-re RE/92).</summary>
+    public const byte HealthUnchanged = 199;
+
     public static KeepComponentDetail Parse(ReadOnlySpan<byte> payload)
     {
         var r = new Net.PayloadReader(payload);

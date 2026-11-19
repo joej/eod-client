@@ -47,6 +47,17 @@ public class KeepReplayTests
     }
 
     [Fact]
+    public void DamageAndRaisedTowersCanBeAskedFor()
+    {
+        KeepRow tower = new(362, "Dun Ailinne Guardtower", 163, 412822, 612291, 8496, 0, 3, 10, 50);
+        List<ServerPacket> broken = KeepReplay.Build([Benowyc, tower], [new(50, 1, 27, 0, 0, 0), new(362, 1, 31, 0, 0, 0)], 163, true,
+            health: 0, raised: true);
+        KeepComponentInfo wall = KeepComponentInfo.Parse(broken[1].Payload), top = KeepComponentInfo.Parse(broken[3].Payload);
+        Assert.Equal((0, KeepComponentInfo.Broken), (wall.Health, wall.Flags));   // no climbing on a broken wall
+        Assert.Equal(KeepComponentInfo.Broken | KeepComponentInfo.Raised, top.Flags);   // only the tower is raised
+    }
+
+    [Fact]
     public void TheReplayFileRoundTripsAndReadsTheTables()
     {
         List<ServerPacket> packets = KeepReplay.Build([Benowyc], [new(50, 1, 27, -3, 4, 1)], 163, true);

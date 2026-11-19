@@ -7,10 +7,10 @@ using DaocProtocol.World;
 
 internal static partial class Cli
 {
-    // keeps <Keep.json> <KeepComponent.json> --region N [--look old|new] [--level L] --out FILE
+    // keeps <Keep.json> <KeepComponent.json> --region N [--look old|new] [--level L] [--health H] [--raised yes] --out FILE
     private static int KeepsCmd(string[] args)
     {
-        if (Options.Parse(args, 1, ["--region", "--look", "--level", "--out"], positional: true) is not { } o
+        if (Options.Parse(args, 1, ["--region", "--look", "--level", "--health", "--raised", "--out"], positional: true) is not { } o
             || o.Positional.Count != 2 || o["--region"] is not string regionText || !int.TryParse(regionText, out int region)
             || o["--out"] is not string outFile)
             return Usage();
@@ -19,10 +19,13 @@ internal static partial class Cli
 
         List<KeepRow> keeps = KeepReplay.ReadKeeps(File.ReadAllText(o.Positional[0]));
         List<KeepComponentRow> parts = KeepReplay.ReadComponents(File.ReadAllText(o.Positional[1]));
-        var packets = KeepReplay.Build(keeps, parts, region, newKeeps, level);
+        byte health = o["--health"] is string h ? byte.Parse(h, System.Globalization.CultureInfo.InvariantCulture) : (byte)100;
+        bool raised = o["--raised"] is "yes" or "1" or "true";
+        var packets = KeepReplay.Build(keeps, parts, region, newKeeps, level, health, raised);
         int count = keeps.Count(k => k.Region == region);
         string header = $"Keep packets for region {region}: {count} keeps, {packets.Count - count} components ({(newKeeps ? "new" : "old")} look"
-            + (level is null ? "" : $", every keep at level {level}") + $"),\nas OpenDAoC would send them, from {Path.GetFileName(o.Positional[0])} and "
+            + (level is null ? "" : $", every keep at level {level}") + (health == 100 ? "" : $", every piece at {health} % health")
+            + (raised ? ", towers raised" : "") + $"),\nas OpenDAoC would send them, from {Path.GetFileName(o.Positional[0])} and "
             + $"{Path.GetFileName(o.Positional[1])}. Made by mpk keeps.";
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outFile))!);
         File.WriteAllText(outFile, KeepReplay.ToText(packets, header));
@@ -95,6 +98,9 @@ internal static partial class Cli
             }
         }
         File.WriteAllText(Path.Combine(outDir, "materials.csv"), materials.ToCsv());
+        // The damage overlays by damage state (fr_textures' Damage column: 1 broken … 4 lightly damaged).
+        File.WriteAllText(Path.Combine(outDir, "damage.csv"), "state,texture\n" + string.Concat(materials.DamageOverlays
+            .OrderBy(d => d.Key).Select(d => $"{d.Key},{d.Value}\n")));
         Console.WriteLine($"keepmodels: {materials.Materials.Count} materials ({materials.GroupWidth} textures a group in this install's table), " +
             $"{copied} textures copied, {missing} missing");
         Console.WriteLine($"keepmodels: {types.Count} component types, {rows} type/tier models ({stems.Count} files: {absent} not in the install, {failed} failed)");

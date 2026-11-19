@@ -35,6 +35,7 @@ public partial class WorldView
     private Dictionary<int, string?[]>? _keepPieces;   // skin → glb per tier (pieces.csv)
     private readonly Dictionary<string, Node3D?> _keepTemplates = [];
     private Dictionary<(string Name, int Realm, int Group), (KeepTextureSet Set, bool Damage, int Emittance)>? _keepMaterials;
+    private Dictionary<int, string>? _keepDamage;   // damage state → overlay texture (keeps/damage.csv)
 
     private void ListenForKeeps()
     {
@@ -53,8 +54,12 @@ public partial class WorldView
         };
         _bridge.KeepComponentChanged += d =>
         {
+            // Health 199 means "unchanged" (daoc-re RE/92 §1).
             if (_keeps.TryGetValue(d.KeepId, out Keep? keep) && keep.Parts.TryGetValue(d.ComponentId, out KeepComponentInfo? c))
-                PlaceKeepPart(keep, keep.Parts[d.ComponentId] = c with { Height = d.Height, Health = d.Health, Flags = d.Flags });
+                PlaceKeepPart(keep, keep.Parts[d.ComponentId] = c with
+                {
+                    Height = d.Height, Health = d.Health == KeepComponentDetail.HealthUnchanged ? c.Health : d.Health, Flags = d.Flags,
+                });
         };
         _bridge.KeepRealmChanged += r =>
         {
@@ -228,7 +233,9 @@ public partial class WorldView
         var node = (Node3D)template.Duplicate();
         node.Name = $"keep{c.KeepId}_{c.ComponentId}";
         node.SetMeta("glb", glb);
-        bool broken = (c.Flags & KeepComponentInfo.Broken) != 0, climbable = (c.Flags & KeepComponentInfo.Climbable) != 0;
+        bool climbable = (c.Flags & KeepComponentInfo.Climbable) != 0;
+        int damage = KeepLayout.DamageState((c.Flags & KeepComponentInfo.Broken) != 0, c.KeepId, c.Health);
+        bool broken = damage == 1;
         int levelTier = KeepLayout.LevelTier(keep.Info.Level);
         foreach (MeshInstance3D mi in node.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>().ToList())
         {
@@ -243,11 +250,14 @@ public partial class WorldView
         {
             string table = lib.PathJoin("keeps").PathJoin("materials.csv");
             _keepMaterials = Godot.FileAccess.FileExists(table) ? KeepMaterials.ReadCsv(Godot.FileAccess.GetFileAsString(table)) : [];
+            string damageTable = lib.PathJoin("keeps").PathJoin("damage.csv");
+            _keepDamage = Godot.FileAccess.FileExists(damageTable) ? KeepMaterials.ReadDamageCsv(Godot.FileAccess.GetFileAsString(damageTable)) : [];
         }
+        string? overlay = damage > 0 && _keepDamage!.TryGetValue(damage, out string? o) ? o : null;
         int column = KeepLayout.TierColumn(c.Height, c.KeepId, raised);
         ModelTexturing.ApplyKeepTextures(node, name =>
             _keepMaterials.TryGetValue((name, keep.Info.Realm, KeepMaterials.Group(name, levelTier, column)), out var m)
-                ? (m.Set.Base, m.Set.Dark, m.Emittance / 255f) : null,
+                ? (m.Set.Base, m.Set.Dark, m.Emittance / 255f, m.Damage ? overlay : null) : null,
             _libraryPath!.PathJoin("overrides"), _libraryPath!.PathJoin("textures").PathJoin("keeps"));
         return node;
     }

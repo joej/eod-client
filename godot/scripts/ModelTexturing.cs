@@ -316,7 +316,7 @@ public static class ModelTexturing
     /// over it on the second UV set when the surface has one, and the material's grey glow. Others keep their own.
     /// Returns how many surfaces were retextured.
     /// </summary>
-    public static int ApplyKeepTextures(Node modelRoot, System.Func<string, (string? Base, string? Dark, float Glow)?> pick,
+    public static int ApplyKeepTextures(Node modelRoot, System.Func<string, (string? Base, string? Dark, float Glow, string? Overlay)?> pick,
         params string[] textureDirs)
     {
         var dirs = new System.Collections.Generic.List<string>(textureDirs);
@@ -329,14 +329,24 @@ public static class ModelTexturing
             {
                 if (mi.GetActiveMaterial(s) is not BaseMaterial3D material || !material.HasMeta(LayersMeta)
                     || !material.GetMeta(LayersMeta).AsGodotDictionary().TryGetValue("keepMaterial", out Variant name)
-                    || pick(name.AsString()) is not var (baseName, dark, glow)
+                    || pick(name.AsString()) is not var (baseName, dark, glow, overlay)
                     || baseName is null || LoadTexture(dirs, baseName, KeepTextureCache) is not { } tex)
                     continue;
                 var copy = (BaseMaterial3D)material.Duplicate();
                 copy.AlbedoTexture = tex;
                 copy.AlbedoColor = new Color(1, 1, 1, material.AlbedoColor.A);
                 bool uv2 = mesh is ArrayMesh am && (am.SurfaceGetFormat(s) & Mesh.ArrayFormat.FormatTexUV2) != 0;
-                if (dark is not null && uv2 && LoadTexture(dirs, dark, KeepTextureCache) is { } darkTex)
+                // A damaged piece's overlay (cracks, scorch) multiplied over the base on its own UV set: retail adds it in
+                // texture slot 4 (daoc-re RE/92 §4); the blend and UV set are ours. Godot has one detail layer, so it
+                // takes the dark map's place.
+                if (overlay is not null && LoadTexture(dirs, overlay, KeepTextureCache) is { } overlayTex)
+                {
+                    copy.DetailEnabled = true;
+                    copy.DetailAlbedo = overlayTex;
+                    copy.DetailUVLayer = BaseMaterial3D.DetailUV.UV1;
+                    copy.DetailBlendMode = BaseMaterial3D.BlendModeEnum.Mul;
+                }
+                else if (dark is not null && uv2 && LoadTexture(dirs, dark, KeepTextureCache) is { } darkTex)
                 {
                     copy.DetailEnabled = true;
                     copy.DetailAlbedo = darkTex;

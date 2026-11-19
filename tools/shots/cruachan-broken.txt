@@ -1,0 +1,7 @@
+# Dun Ailinne with every piece broken and its towers raised (damaged models, tier-5 towers), from replayed keep packets
+# (`mpk keeps ... --health 0 --raised yes`). Poses as in cruachan.txt.
+# zone: 173
+# keeps: private/keeps/region163-broken.keeps
+ailinne_south   411649 610600 9300   0 -12
+ailinne_above   411649 609800 12500  0 -50
+guardtower      412822 613600 9000   0 -10
