@@ -83,6 +83,7 @@ public partial class WorldView
         }
         if (moving)
             _sitting = false;   // moving stands up (the server stands us up too: GamePlayer.OnPlayerMove)
+        Vector3 stepStart = _body.Position;   // the ceiling check (below) undoes the whole step
         if (moving)
         {
             // Body faces -Z in Godot; forward is its -Z basis, strafe its +X basis (right). Both are
@@ -102,27 +103,34 @@ public partial class WorldView
             }
         }
 
-        // Space jumps from the ground.
-        if (driving && !_airborne && _groundHit && KeyBindings.Held(ControlAction.Jump))
+        // Space jumps from the ground, at most about once a second (retail, W32).
+        if (driving && !_airborne && _groundHit && _seconds >= _jumpAgainAt && KeyBindings.Held(ControlAction.Jump))
         {
             _verticalSpeed = JumpSpeed;
             _airborne = true;
             _jumping = true;
+            _fallTop = _body.Position.Y;
+            _jumpAgainAt = _seconds + JumpCooldown;
         }
-        bool wasAirborne = _airborne;
+        bool wasShownAirborne = _airborne && (_jumping || Falling);
         Ground(delta);
+        if (moving && CeilingBlocks(stepStart, _body.Position))
+        {
+            _body.Position = stepStart;   // a ceiling under 2.25 m at the new spot undoes the step (daoc-re, W55)
+            (_airborne, _verticalSpeed, _groundHit) = (false, 0, true);
+        }
 
         // In the air, the jump clip (legs tucked, held to its end); on landing standing still, the land clip
         // (down out of the tuck) before the idle; landing on the move goes straight back to the run.
         // DAoC's normal pace is a run; backing up has its own clip.
         _landLeft -= (float)delta;
-        if (wasAirborne && !_airborne && !moving)
+        if (wasShownAirborne && !_airborne && !moving)
             PlayOnce("land", LandTime);
         if (_dead)
             PlayOnce("death");   // held on its last frame: lying down
         else if (_swimming)
             PlayBodyClip(!moving ? "swim_idle" : forward < 0 ? "swim_back" : "swim");
-        else if (_airborne)
+        else if (_airborne && (_jumping || Falling))   // a short drop (under 128 units) keeps the run
             PlayOnce("jump");
         else if ((_quitting || _sitting) && !moving)
             Sit();
@@ -159,15 +167,15 @@ public partial class WorldView
         }
     }
 
-    // Gravity (roadmap M8 movement). The character stands on the highest floor below a point a step above
-    // its feet: terrain or a model's surface (street, stair, bridge, keep wall, roof) that faces up enough to
-    // stand on, never leaves (alpha cut-out) or a wall. A floor within a step (up 1.5 m, down 2 m) is stood on
-    // at once, walking up stairs and down slopes; one further below is fallen to under gravity and landed on,
-    // and Space jumps. The landing is reported to the server with the impact speed, which charges fall
-    // damage (0xA9). With no floor below (under the terrain after a bad position, or off the models) the
-    // character is put back on the terrain above it, or keeps its height.
-    // Not yet: walls and obstacles (nothing stops the character sideways), the client's own
-    // collision hulls ("collidee" nodes, which our converter drops), retail's gravity and jump values.
+    // Gravity (roadmap M8 movement), as retail's floor check (daoc-re's player-collision note Q6, W55; values W32). The
+    // character stands on the highest floor below a point 64 units (1.6 m) above its feet: terrain or a model's surface
+    // (street, stair, bridge, keep wall, roof) that faces up enough to stand on, never leaves (alpha cut-out) or a wall.
+    // A floor up to 64 units above or less than 1 unit below is stood on at once (stairs, slopes up); one 1 unit or more
+    // below is fallen to under gravity (1000 units/s², at most 4000 units/s) and landed on. Only a fall from more than
+    // 128 units above the floor shows the fall clip, and its landing is reported to the server (0xA9, which charges fall
+    // damage) when faster than 333 units/s. Space jumps at 275 units/s, about once a second. With no floor below,
+    // the character is put back on the terrain above it (under the ground after a bad position), or keeps its height
+    // (retail falls away from the terrain; not yet ours, see below). Ours: which surfaces count as floors (drawn ones; retail's dungeons use `pickee`, W55).
     private void Ground(double delta)
     {
         if (_dropsLeft > 0 && !_dead)
@@ -192,7 +200,9 @@ public partial class WorldView
             return;
         if (floor is null)
         {
-            // Nothing below: under the ground? Back onto the terrain above.
+            // Nothing below: outdoors that means under the ground, so back onto the terrain above; else keep the height.
+            // Retail falls when there's no floor away from the terrain; ours doesn't yet: a live walk in Coruscating Mine
+            // (2026-11-19) went out of the rooms without meeting a wall and fell without end (W55).
             if (AnyTerrain && TerrainAbove(at) is float above)
                 _body.Position = new Vector3(at.X, above, at.Z);
             _airborne = false;
@@ -200,17 +210,23 @@ public partial class WorldView
             _groundHit = false;
             return;
         }
-        if (_airborne || _verticalSpeed > 0 || at.Y - floor.Value > StepDown)
+        if (_airborne || _verticalSpeed > 0 || at.Y - floor.Value >= StepDown)
         {
+            if (!_airborne)
+                _fallTop = at.Y;
             _airborne = true;
+            _fallTop = Mathf.Max(_fallTop, at.Y);
             _verticalSpeed = Mathf.Max(_verticalSpeed - Gravity * dt, -MaxFallSpeed);
             float y = at.Y + _verticalSpeed * dt;
             if (y <= floor.Value)
             {
                 y = floor.Value;
-                _landingSpeed = -_verticalSpeed;     // reported on the next position send
-                if (_landingSpeed > 5f)
-                    GD.Print($"[world] landed at {_landingSpeed:0.0} m/s ({_landingSpeed / RegionMetresPerUnit:0} units/s)");
+                // Reported on the next position send only after a real fall (W32): more than 128 units, faster than 333/s.
+                if (_fallTop - y > FallHeight && -_verticalSpeed > FallReportSpeed)
+                {
+                    _landingSpeed = -_verticalSpeed;
+                    GD.Print($"[world] landed at {_landingSpeed:0.0} m/s ({_landingSpeed / RegionMetresPerUnit:0} units/s) after {(_fallTop - y) / RegionMetresPerUnit:0} units");
+                }
                 _verticalSpeed = 0;
                 _airborne = false;
                 _jumping = false;
@@ -260,6 +276,42 @@ public partial class WorldView
             (mi.GetActiveMaterial(i) as BaseMaterial3D)?.Transparency is BaseMaterial3D.TransparencyEnum.AlphaScissor
                 or BaseMaterial3D.TransparencyEnum.Alpha);
 
+    // Retail's ceiling check (daoc-re's player-collision note): straight up from 64 units above where the step started,
+    // at the new spot; a surface less than 90 units (2.25 m) above the new feet undoes the step. Lower geometry is the wall
+    // box's. Outdoors, server objects don't count; leaves (alpha cut-out) don't either (ours).
+    private bool CeilingBlocks(Vector3 start, Vector3 end)
+    {
+        float from = start.Y + StepUp, to = end.Y + CeilingClearance;
+        if (to <= from)
+            return false;
+        var exclude = new Godot.Collections.Array<Rid>();
+        foreach (Node n in _body.FindChildren("*", "CollisionObject3D", true, false))
+            exclude.Add(((CollisionObject3D)n).GetRid());
+        for (int tries = 0; tries < 8; tries++)
+        {
+            var ray = PhysicsRayQueryParameters3D.Create(new Vector3(end.X, from, end.Z), new Vector3(end.X, to, end.Z));
+            ray.CollisionMask = ~(NotSolid | TerrainLayer);
+            ray.Exclude = exclude;
+            ray.HitBackFaces = true;
+            Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);
+            if (hit.Count == 0)
+                return false;
+            GodotObject collider = hit["collider"].AsGodotObject();
+            if (CutOut(collider) || !_inDungeon && collider is Node n && _entityRoot.IsAncestorOf(n))
+            {
+                exclude.Add(hit["rid"].AsRid());
+                continue;
+            }
+            if (_seconds - _ceilingLogAt > 2)
+            {
+                _ceilingLogAt = _seconds;
+                GD.Print($"[world] ceiling {(hit["position"].AsVector3().Y - end.Y) / RegionMetresPerUnit:0} units above: step refused ({(collider as Node)?.Name})");
+            }
+            return true;
+        }
+        return false;
+    }
+
     // The terrain surface above a point (the character got under the ground), or null.
     private float? TerrainAbove(Vector3 at)
     {
@@ -279,11 +331,20 @@ public partial class WorldView
     private float _landingSpeed;              // a landing's impact speed (m/s), until it is reported
     private float _landLeft;                  // seconds of the land clip still to show before the idle
     private const float LandTime = 0.8f;      // Cat_JU_H_B is standing again by about 1 s (the rest holds)
-    private const float StepUp = 1.5f;        // a rise walked up at once (a stair)
-    private const float StepDown = 2f;        // a drop walked down at once
-    private const float Gravity = 9.8f;       // ours; retail's value is unknown
-    private const float JumpSpeed = 4.5f;     // about 1 m high; retail's value is unknown
-    private const float MaxFallSpeed = 50f;
+    private float _fallTop;                   // the highest point of the current fall or jump
+    private double _jumpAgainAt;              // the jump cooldown's end
+    private double _ceilingLogAt;
+    private bool Falling => _airborne && _fallTop - _body.Position.Y > FallHeight;
+    // Retail's values (daoc-re: W32 and the player-collision note), in units × 0.025 m.
+    private const float StepUp = 64 * RegionMetresPerUnit;           // the floor ray's start: a rise walked up at once
+    private const float StepDown = 1 * RegionMetresPerUnit;          // a drop of this or more is fallen
+    private const float FallHeight = 128 * RegionMetresPerUnit;      // a fall: the fall clip and the landing report
+    private const float FallReportSpeed = 333 * RegionMetresPerUnit; // a landing slower than this isn't reported
+    private const float CeilingClearance = 90 * RegionMetresPerUnit; // a ceiling lower than this above the feet refuses a step
+    private const float Gravity = 1000 * RegionMetresPerUnit;        // 25 m/s²
+    private const float JumpSpeed = 275 * RegionMetresPerUnit;       // 6.9 m/s: about 0.95 m high, 0.55 s in the air
+    private const float JumpCooldown = 1f;
+    private const float MaxFallSpeed = 4000 * RegionMetresPerUnit;   // 100 m/s
     private const float MaxFallSearch = 600f; // how far below a floor is looked for
     private const float MinFloorNormal = 0.6f;   // a surface up to ~53 degrees from flat is stood on
 

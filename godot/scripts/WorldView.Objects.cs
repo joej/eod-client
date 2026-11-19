@@ -49,7 +49,7 @@ public partial class WorldView
         node.Rotation = new Vector3(0, -Mathf.DegToRad((o.Heading & 0x0FFF) * 360f / 4096f), 0);
         node.SetMeta("glb", glb);   // for the wall log and the inspect readout
         _entityRoot.AddChild(node);
-        MakeSolid(node, entry.Solid, drawnWalls: true);
+        MakeSolid(node, entry.Solid && !_inDungeon, drawnWalls: true);   // server objects are solid only outdoors (daoc-re, W55)
         return node;
     }
 
