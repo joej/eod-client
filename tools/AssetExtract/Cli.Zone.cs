@@ -461,7 +461,14 @@ internal static partial class Cli
             if (File.Exists(landingPath) && File.ReadAllText(landingPath).Split(' ', StringSplitOptions.RemoveEmptyEntries) is [var lx, var ly, var lz, ..])
                 doorway = new System.Numerics.Vector3(float.Parse(lx, CultureInfo.InvariantCulture), float.Parse(ly, CultureInfo.InvariantCulture),
                     float.Parse(lz, CultureInfo.InvariantCulture));
-            if (DaocAssets.Zone.DungeonCheck.Landing(layout, doorway, Surfaces) is { } spot)
+            // The zone's jump points (jumps.csv beside landing.txt, written by `mpk zone`): a landing keeps clear of them.
+            string jumpsPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(landingPath))!, "jumps.csv");
+            var doorways = File.Exists(jumpsPath)
+                ? File.ReadAllLines(jumpsPath).Skip(1).Select(l => l.Split(',')).Where(c => c.Length >= 8)
+                    .Select(c => c[2..8].Select(v => float.Parse(v, CultureInfo.InvariantCulture)).ToArray())
+                    .Select(v => new DaocAssets.Zone.DungeonCheck.Doorway(new(v[0], v[1]), new(v[2], v[3]), v[4], v[5])).ToList()
+                : [];
+            if (DaocAssets.Zone.DungeonCheck.Landing(layout, doorway, Surfaces, doorways) is { } spot)
             {
                 File.WriteAllText(landingPath, string.Create(CultureInfo.InvariantCulture, $"{spot.X:0} {spot.Y:0} {spot.Z:0}\n"));
                 summary += spot == doorway ? "; landing on a floor" : $"; landing moved to a floor at ({spot.X:0}, {spot.Y:0}, {spot.Z:0})";

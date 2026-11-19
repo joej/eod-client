@@ -89,9 +89,14 @@ public static class DungeonCheck
     /// A floor is a flat surface (within ~25° of level) with at least 90 units clear above it and something over it
     /// within 1500 units (a ceiling: a room's roof seen from above has nothing over it). Region coordinates, 40 units
     /// above the floor; null when the rooms have no such floor. Ours: retail has no landing spot (the server places you).
+    /// <paramref name="doorways"/> are the zone's jump points (jumps.csv: a line x1,y1 → x2,y2 between heights z1 and z2):
+    /// a landing keeps <see cref="DoorwayClearance"/> units from each (one step from a spot in the doorway took the
+    /// character out of Muire Tomb), and never stands on a doorway's outer side within <see cref="OuterSideReach"/>
+    /// (the stub of tunnel beyond it); the inner side is the one with more of the rooms' floor on it.
     /// </summary>
     public static Vector3? Landing(DungeonLayout layout, Vector3? near,
-        Func<string, IReadOnlyList<(Vector3 A, Vector3 B, Vector3 C)>?> roomTriangles)
+        Func<string, IReadOnlyList<(Vector3 A, Vector3 B, Vector3 C)>?> roomTriangles,
+        IReadOnlyList<Doorway>? doorways = null)
     {
         var placed = new List<(Vector3 A, Vector3 B, Vector3 C)>();
         foreach (DungeonRoom r in layout.Rooms)
@@ -100,7 +105,15 @@ public static class DungeonCheck
                     placed.Add((DungeonLayout.RegionPoint(r, t.A), DungeonLayout.RegionPoint(r, t.B), DungeonLayout.RegionPoint(r, t.C)));
         if (placed.Count == 0)
             return null;
-        if (near is Vector3 n && placed.Any(t => HeightAt(t, n.X, n.Y) is float h && h <= n.Z + 16 && h >= n.Z - 100))
+        List<Vector3> floors = placed
+            .Where(t => Vector3.Cross(t.B - t.A, t.C - t.A) is var nn && nn.LengthSquared() > 1 && MathF.Abs(nn.Z) >= 0.9f * nn.Length())
+            .Select(t => (t.A + t.B + t.C) / 3).ToList();
+        // Each doorway's inner side: the sign of the side most floor centroids are on.
+        var doors = (doorways ?? []).Select(d => (d, inner: MathF.Sign(floors.Sum(f => (float)MathF.Sign(d.Side(f)))))).ToList();
+        bool AwayFromDoorways(Vector3 p) => doors.All(x =>
+            !x.d.Spans(p.Z) || (x.d.Distance(p) >= DoorwayClearance
+                                && (x.inner == 0 || MathF.Sign(x.d.Side(p)) == x.inner || x.d.Distance(p) > OuterSideReach)));
+        if (near is Vector3 n && AwayFromDoorways(n) && placed.Any(t => HeightAt(t, n.X, n.Y) is float h && h <= n.Z + 16 && h >= n.Z - 100))
             return n;
         Vector3 from = near ?? (layout.Rooms.Count > 0 ? DungeonLayout.RegionPoint(layout.Rooms[0], Vector3.Zero) : placed[0].A);
         bool Clear(Vector3 c)
@@ -115,13 +128,34 @@ public static class DungeonCheck
                 }
             return ceiling;
         }
-        foreach (Vector3 c in placed
-                     .Where(t => Vector3.Cross(t.B - t.A, t.C - t.A) is var nn && nn.LengthSquared() > 1 && MathF.Abs(nn.Z) >= 0.9f * nn.Length())
-                     .Select(t => (t.A + t.B + t.C) / 3)
-                     .OrderBy(c => Vector3.DistanceSquared(c, from)))
-            if (Clear(c))
+        foreach (Vector3 c in floors.OrderBy(c => Vector3.DistanceSquared(c, from)))
+            if (Clear(c) && AwayFromDoorways(c + new Vector3(0, 0, 40)))
                 return c + new Vector3(0, 0, 40);
         return null;
+    }
+
+    /// <summary>How far (units, across the ground) a landing keeps from a jump point's line: 3.2 m.</summary>
+    public const float DoorwayClearance = 128;
+
+    /// <summary>How far beyond a doorway's outer side a landing may not stand.</summary>
+    public const float OuterSideReach = 1000;
+
+    /// <summary>A jump point: the line (x1, y1) → (x2, y2), between heights <see cref="ZLow"/> and <see cref="ZHigh"/>.</summary>
+    public readonly record struct Doorway(Vector2 A, Vector2 B, float ZLow, float ZHigh)
+    {
+        /// <summary>Whether height z is level with the doorway (within a storey of it).</summary>
+        public bool Spans(float z) => z >= ZLow - 200 && z <= ZHigh + 200;
+
+        /// <summary>Which side of the line p is on (sign) and how far (scaled by the line's length).</summary>
+        public float Side(Vector3 p) => (B.X - A.X) * (p.Y - A.Y) - (B.Y - A.Y) * (p.X - A.X);
+
+        /// <summary>The ground distance from p to the line segment.</summary>
+        public float Distance(Vector3 p)
+        {
+            Vector2 q = new(p.X, p.Y), ab = B - A;
+            float t = ab.LengthSquared() > 0 ? Math.Clamp(Vector2.Dot(q - A, ab) / ab.LengthSquared(), 0, 1) : 0;
+            return Vector2.Distance(q, A + t * ab);
+        }
     }
 
     // The triangle's height over (x, y), when (x, y) is inside its outline seen from above.

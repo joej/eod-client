@@ -54,6 +54,16 @@ public sealed class DungeonLayoutTests
         Assert.Equal(16040, Assert.IsType<Vector3>(DungeonCheck.Landing(d, null, _ => tris)).Z, 1);
         // Without a ceiling, nothing counts as a floor to move to (a roof can't be told from one).
         Assert.Null(DungeonCheck.Landing(d, new Vector3(34000, 32000, 16240), _ => Square(0).ToList()));
+
+        // A spot in the exit doorway (a jump point's line near the room's edge) moves into the room, clear of it: one
+        // step from the doorway's middle took the character out of Muire Tomb.
+        var exit = new DungeonCheck.Doorway(new(31900, 32190), new(32100, 32190), 15990, 16200);
+        Vector3 inside = Assert.IsType<Vector3>(DungeonCheck.Landing(d, new Vector3(32000, 32190, 16040), _ => tris, [exit]));
+        Assert.True(exit.Distance(inside) >= DungeonCheck.DoorwayClearance);
+        Assert.True(inside.Y < 32190);
+        // A doorway on another storey doesn't count.
+        var below = exit with { ZLow = 14000, ZHigh = 14200 };
+        Assert.Equal(new Vector3(32000, 32190, 16040), DungeonCheck.Landing(d, new Vector3(32000, 32190, 16040), _ => tris, [below]));
     }
 
     [Fact]
