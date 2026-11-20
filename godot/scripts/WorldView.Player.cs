@@ -174,8 +174,8 @@ public partial class WorldView
     // below is fallen to under gravity (1000 units/s², at most 4000 units/s) and landed on. Only a fall from more than
     // 128 units above the floor shows the fall clip, and its landing is reported to the server (0xA9, which charges fall
     // damage) when faster than 333 units/s. Space jumps at 275 units/s, about once a second. With no floor below,
-    // the character is put back on the terrain above it (under the ground after a bad position), or keeps its height
-    // (retail falls away from the terrain; not yet ours, see below). Ours: which surfaces count as floors (drawn ones; retail's dungeons use `pickee`, W55).
+    // the character is put back on the terrain above it (under the ground after a bad position), or, away from the
+    // terrain, falls as retail's does. Ours: which surfaces count as floors (drawn ones; retail's dungeons use `pickee`, W55).
     private void Ground(double delta)
     {
         if (_dropsLeft > 0 && !_dead)
@@ -200,13 +200,35 @@ public partial class WorldView
             return;
         if (floor is null)
         {
-            // Nothing below: outdoors that means under the ground, so back onto the terrain above; else keep the height.
-            // Retail falls when there's no floor away from the terrain; ours doesn't yet: a live walk in Coruscating Mine
-            // (2026-11-19) went out of the rooms without meeting a wall and fell without end (W55).
+            // Nothing below: outdoors that means under the ground, so back onto the terrain above.
             if (AnyTerrain && TerrainAbove(at) is float above)
+            {
                 _body.Position = new Vector3(at.X, above, at.Z);
-            _airborne = false;
-            _verticalSpeed = 0;
+                (_airborne, _verticalSpeed, _groundHit) = (false, 0, false);
+                return;
+            }
+            // Elsewhere (a dungeon's rooms, a city's or sky city's floors) retail falls (W55). Ours: a fall with no
+            // floor anywhere below ends after LostFall back where the character last stood, rather than without end,
+            // and a character that hasn't stood anywhere yet (put over nothing) keeps its height.
+            if (_lastStood is null)
+            {
+                (_airborne, _verticalSpeed, _groundHit) = (false, 0, false);
+                return;
+            }
+            if (!_airborne)
+                _fallTop = at.Y;
+            _airborne = true;
+            _fallTop = Mathf.Max(_fallTop, at.Y);
+            _verticalSpeed = Mathf.Max(_verticalSpeed - Gravity * dt, -MaxFallSpeed);
+            float down = at.Y + _verticalSpeed * dt;
+            if (_fallTop - down > LostFall && _lastStood is Vector3 stood)
+            {
+                GD.Print($"[world] fell {(_fallTop - down) / RegionMetresPerUnit:0} units with no floor below: back at {ToRegion(stood)}");
+                _body.Position = stood;
+                (_airborne, _jumping, _verticalSpeed) = (false, false, 0);
+            }
+            else
+                _body.Position = new Vector3(at.X, down, at.Z);
             _groundHit = false;
             return;
         }
@@ -239,6 +261,8 @@ public partial class WorldView
             _verticalSpeed = 0;
         }
         _groundHit = !_airborne;
+        if (_groundHit)
+            _lastStood = _body.Position;
     }
 
     // The highest standable surface below a point a step above the feet: a ray down that passes walls,
@@ -332,6 +356,7 @@ public partial class WorldView
     private float _landLeft;                  // seconds of the land clip still to show before the idle
     private const float LandTime = 0.8f;      // Cat_JU_H_B is standing again by about 1 s (the rest holds)
     private float _fallTop;                   // the highest point of the current fall or jump
+    private Vector3? _lastStood;              // where the character last stood on a floor
     private double _jumpAgainAt;              // the jump cooldown's end
     private double _ceilingLogAt;
     private bool Falling => _airborne && _fallTop - _body.Position.Y > FallHeight;
@@ -346,6 +371,7 @@ public partial class WorldView
     private const float JumpCooldown = 1f;
     private const float MaxFallSpeed = 4000 * RegionMetresPerUnit;   // 100 m/s
     private const float MaxFallSearch = 600f; // how far below a floor is looked for
+    private const float LostFall = 16000 * RegionMetresPerUnit;      // ours: a fall with no floor below ends after 400 m
     private const float MinFloorNormal = 0.6f;   // a surface up to ~53 degrees from flat is stood on
 
     // Region units per second for the way we're moving: running forward at the server's speed (0xB6); backing up
