@@ -199,7 +199,7 @@ public static partial class NifFile
         public IReadOnlyDictionary<int, int>? Movers { get; init; }
 
         public void Walk(int index, int parentJoint, Matrix4x4 parentWorld, bool helper, int alpha, int stencil,
-            bool numberedHelper = false, int vertexColor = -1, bool collision = false, bool keepsMaterial = false, int mover = -1)
+            bool numberedHelper = false, int vertexColor = -1, bool collision = false, bool keepsMaterial = false, int mover = -1, byte climb = 0)
         {
             if (index < 0 || index >= blocks.Length || !_seen.Add(index))
                 return;
@@ -210,6 +210,7 @@ public static partial class NifFile
             bool underNumbered = numberedHelper || IsNumberedHelperName(b.Name);
             bool underCollision = collision || IsCollisionName(b.Name);
             bool keeps = keepsMaterial || KeepsMaterialName(b.Name);
+            byte climbs = climb != 0 ? climb : ClimbOf(b.Name);
             int moves = Movers is not null && Movers.TryGetValue(index, out int m) ? m : mover;
             if (b.Type is "NiNode" or "NiBillboardNode" or "NiLODNode")
             {
@@ -223,7 +224,7 @@ public static partial class NifFile
                 foreach (int child in b.Type == "NiLODNode" ? NearLevel(b) : b.Children)
                     Walk(child, joint, world,
                         underHelper || (child >= 0 && child < blocks.Length && IsDungeonHelper(b.Name, blocks[child].Name)),
-                        nodeAlpha, nodeStencil, underNumbered, nodeVertexColor, underCollision, keeps, moves);
+                        nodeAlpha, nodeStencil, underNumbered, nodeVertexColor, underCollision, keeps, moves, climbs);
                 if (parentJoint < 0)
                     BindSkins();
             }
@@ -235,7 +236,7 @@ public static partial class NifFile
                 Meshes.Add(mesh with
                 {
                     Helper = underHelper || (underNumbered && mesh.TextureFile is null), Collision = underCollision, KeepsMaterial = keeps,
-                    Mover = moves,
+                    Mover = moves, Climb = climbs,
                 });
             }
         }

@@ -293,7 +293,7 @@ public static partial class NifFile
                 if (geom is not null)
                     meshes.Add(WithSurface(BakeTransform(geom, b.Local, $"mesh{i}",
                         ShapeTexture(blocks, b), ShapeMaterialColor(blocks, b)), blocks, b, -1, -1)
-                        with { Helper = IsHelperNodeName(b.Name) || IsHidden(b.Flags), Collision = IsCollisionName(b.Name) });
+                        with { Helper = IsHelperNodeName(b.Name) || IsHidden(b.Flags), Collision = IsCollisionName(b.Name), Climb = ClimbOf(b.Name) });
             }
         }
 
@@ -361,7 +361,7 @@ public static partial class NifFile
     private static void Walk4x(ReadOnlySpan<byte> bytes, Block[] blocks, int index, Xform world,
         HashSet<int> seen, List<NifMesh> meshes, bool helper = false, int alpha = -1, int stencil = -1,
         bool numberedHelper = false, int vertexColor = -1, Skeleton4x? skeleton = null, int parentJoint = -1, bool collision = false,
-        bool keepsMaterial = false, IReadOnlyDictionary<int, int>? movers = null, int mover = -1, string? branches = null)
+        bool keepsMaterial = false, IReadOnlyDictionary<int, int>? movers = null, int mover = -1, string? branches = null, byte climb = 0)
     {
         if (index < 0 || index >= blocks.Length || !seen.Add(index))
             return;
@@ -378,6 +378,7 @@ public static partial class NifFile
         bool underNumbered = numberedHelper || IsNumberedHelperName(b.Name);
         bool underCollision = collision || IsCollisionName(b.Name);
         bool keeps = keepsMaterial || KeepsMaterialName(b.Name);
+        byte climbs = climb != 0 ? climb : ClimbOf(b.Name);
         int moves = movers is not null && movers.TryGetValue(index, out int m) ? m : mover;
         if (b.Type is "NiNode" or "NiLODNode" or "NiBillboardNode")
         {
@@ -397,7 +398,7 @@ public static partial class NifFile
                     underHelper || (child >= 0 && child < blocks.Length && IsDungeonHelper(b.Name, blocks[child].Name)),
                     nodeAlpha, nodeStencil, underNumbered,
                     nodeVertexColor, skeleton, joint, collision: underCollision, keepsMaterial: keeps, movers: movers, mover: moves,
-                    branches: branches);
+                    branches: branches, climb: climbs);
         }
         else if (b.Type is "NiTriShape" or "NiTriStrips")
         {
@@ -415,7 +416,7 @@ public static partial class NifFile
                     texture, ShapeMaterialColor(blocks, b)), blocks, b, alpha, stencil, vertexColor)
                     with
                     {
-                        Helper = underHelper || (underNumbered && texture is null), Collision = underCollision,
+                        Helper = underHelper || (underNumbered && texture is null), Collision = underCollision, Climb = climbs,
                         Emissive = ShapeEmissive(blocks, b), KeepsMaterial = keeps, Mover = moves, Branches = branches,
                         KeepMaterial = ShapeKeepMaterial(blocks, b),
                     });
@@ -462,6 +463,15 @@ public static partial class NifFile
             || name.StartsWith("collider", StringComparison.OrdinalIgnoreCase)
             || (name.StartsWith("collision", StringComparison.OrdinalIgnoreCase)
                 && !name.Equals("collisionswitch", StringComparison.OrdinalIgnoreCase)));
+
+    /// <summary>A shape under a node named "climb…" (0x01: climbable) or "sclimb…" (0x02: a wall climb, which needs the Climb
+    /// Walls ability or effect 7092), or neither (0). The client climbs a model's "climb"/"sclimb" nodes (any case) and a
+    /// dungeon piece's "Climbs" and "climb001"… (daoc-re's climbing note); here any name starting so (inferred for the
+    /// numbered ones outside dungeons: a tower's ladder volume is "climb001").</summary>
+    internal static byte ClimbOf(string name) =>
+        string.IsNullOrEmpty(name) ? (byte)0
+        : name.StartsWith("sclimb", StringComparison.OrdinalIgnoreCase) ? NifMesh.WallClimb
+        : name.StartsWith("climb", StringComparison.OrdinalIgnoreCase) ? NifMesh.PlainClimb : (byte)0;
 
     private static readonly System.Text.RegularExpressions.Regex NumberedHelper = new(
         "^(collidee|pickee|ladder|climb|sclimb|shadowcaster)[0-9]+$",

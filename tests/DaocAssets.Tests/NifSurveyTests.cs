@@ -403,7 +403,7 @@ public class NifFiniteGeometryTests
         foreach (NifMesh m in model.Meshes.Where(m => !m.Helper))
             Assert.All(m.Vertices, v => Assert.True(float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z), $"{m.Name}: {v}"));
         var gltf = GltfExporter.BuildScene(model).ToGltf2();
-        // Nothing dropped: every drawn shape, plus each collision volume as an "eodcollide_" mesh.
-        Assert.Equal(model.Meshes.Count(m => !m.Helper || (m.Collision && m.Triangles.Length > 0)), gltf.LogicalMeshes.Count);
+        // Nothing dropped: every drawn shape, plus each collision or climb volume as an "eodcollide_" mesh.
+        Assert.Equal(model.Meshes.Count(m => !m.Helper || ((m.Collision || m.Climb != 0) && m.Triangles.Length > 0)), gltf.LogicalMeshes.Count);
     }
 }

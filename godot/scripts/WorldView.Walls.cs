@@ -28,6 +28,7 @@ public partial class WorldView
     {
         Vector3 motion = to - from;
         motion.Y = 0;
+        _wallBlocked = false;
         if (motion.LengthSquared() < 1e-8f)
             return to;
         _wallShape ??= new BoxShape3D { Size = new Vector3(2 * WallHalfWidth, WallHeight, 2 * WallHalfWidth) };
@@ -82,6 +83,7 @@ public partial class WorldView
                 break;
             }
             at += motion * cast[0];
+            _wallBlocked = true;
             normal.Y = 0;
             if (normal.LengthSquared() < 1e-6f)
                 break;
@@ -165,12 +167,16 @@ public partial class WorldView
                 if (c is StaticBody3D body)
                 {
                     if (volume)
-                        (body.CollisionLayer, body.CollisionMask) = (WallLayer, 0);
+                        (body.CollisionLayer, body.CollisionMask) = (IsClimbVolume(mi) ? WallLayer | ClimbLayer : WallLayer, 0);
                     else if (drawnWalls && !hasVolumes)
                         body.CollisionLayer |= WallLayer;
                 }
         }
     }
+
+    // A climb volume (GltfExporter.ClimbPrefix); "sclimb" ones (WallClimbPrefix) are plain walls without Climb Walls.
+    private static bool IsClimbVolume(MeshInstance3D mi) =>
+        mi.Name.ToString().StartsWith(DaocAssets.Nif.GltfExporter.ClimbPrefix, System.StringComparison.Ordinal);
 
     private static bool IsCollisionVolume(MeshInstance3D mi) =>
         mi.Name.ToString().StartsWith(DaocAssets.Nif.GltfExporter.CollisionPrefix, System.StringComparison.Ordinal);

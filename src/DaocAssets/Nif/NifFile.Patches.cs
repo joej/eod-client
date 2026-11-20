@@ -166,7 +166,7 @@ public static partial class NifFile
     private sealed record Donor(Tree Tree, int Node, string Name, int Patch);
 
     // A node's world transform and what it inherits from its ancestors, as the walk reaches it.
-    private readonly record struct State(Matrix4x4 World, bool Helper, bool Numbered, bool Collision, bool KeepsMaterial = false);
+    private readonly record struct State(Matrix4x4 World, bool Helper, bool Numbered, bool Collision, bool KeepsMaterial = false, byte Climb = 0);
 
     // A parsed file of either format, seen as a node tree.
     private sealed class Tree
@@ -278,7 +278,7 @@ public static partial class NifFile
                 string name = Name(i);
                 var s = new State(Local(i) * above.World, above.Helper || IsHelperNodeName(name) || IsHidden(Flags(i)) || IsDungeonHelper(aboveName, name),
                     above.Numbered || IsNumberedHelperName(name), above.Collision || IsCollisionName(name),
-                    above.KeepsMaterial || KeepsMaterialName(name));
+                    above.KeepsMaterial || KeepsMaterialName(name), above.Climb != 0 ? above.Climb : ClimbOf(name));
                 states[i] = s;
                 int[] children = Type(i) != "NiLODNode" ? Children(i)
                     : _b4 is not null ? SelectLodChildren(_b4, _b4[i]) : new Gb10Builder(_g!.Blocks!).NearLevel(_g.Blocks[i]!);
@@ -300,13 +300,13 @@ public static partial class NifFile
             if (_g is not null)
             {
                 var b = new Gb10Builder(_g.Blocks!);
-                b.Walk(node, -1, at.World, at.Helper, -1, -1, at.Numbered, -1, at.Collision, at.KeepsMaterial);
+                b.Walk(node, -1, at.World, at.Helper, -1, -1, at.Numbered, -1, at.Collision, at.KeepsMaterial, climb: at.Climb);
                 return b.Meshes;
             }
             var meshes = new List<NifMesh>();
             NifTransform w = FromMatrix(at.World);
             Walk4x(_bytes, _b4!, node, new Xform(w.Rot, w.Scale, w.Trans), [], meshes, at.Helper,
-                numberedHelper: at.Numbered, collision: at.Collision, keepsMaterial: at.KeepsMaterial);
+                numberedHelper: at.Numbered, collision: at.Collision, keepsMaterial: at.KeepsMaterial, climb: at.Climb);
             return meshes;
         }
     }

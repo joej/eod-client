@@ -88,7 +88,9 @@ public partial class WorldView
         {
             // Body faces -Z in Godot; forward is its -Z basis, strafe its +X basis (right). Both are
             // flattened to the ground plane, summed, then normalised so diagonal moves aren't faster.
-            Vector3 move = _body.GlobalTransform.Basis.Z * -forward + _body.GlobalTransform.Basis.X * strafe;
+            // Climbing, forward and back go up and down (Climb); only a strafe moves along the surface.
+            float ahead = _climbing ? 0f : forward;
+            Vector3 move = _body.GlobalTransform.Basis.Z * -ahead + _body.GlobalTransform.Basis.X * strafe;
             move.Y = 0;
             if (move.LengthSquared() > 0)
             {
@@ -96,7 +98,7 @@ public partial class WorldView
                 // GM may (the server snaps a player back and then kicks them). The sent 0xA9 speed stays
                 // the allowed run speed.
                 float sprint = ClientSettings.Sprint && Input.IsKeyPressed(Key.Shift) ? 4f : 1f;
-                float metresPerSec = MoveSpeed(forward) * RegionMetresPerUnit * sprint;
+                float metresPerSec = MoveSpeed(ahead) * RegionMetresPerUnit * sprint;
                 // The zone's edge walls (WorldView.Bounds) slide or stop the step, as retail's do.
                 Vector3 step = WallStep(_body.Position, _body.Position + move.Normalized() * metresPerSec * (float)delta);
                 _body.Position = BoundedStep(_body.Position, step);
@@ -104,7 +106,7 @@ public partial class WorldView
         }
 
         // Space jumps from the ground, at most about once a second (retail, W32).
-        if (driving && !_airborne && _groundHit && _seconds >= _jumpAgainAt && KeyBindings.Held(ControlAction.Jump))
+        if (driving && !_airborne && !_climbing && _groundHit && _seconds >= _jumpAgainAt && KeyBindings.Held(ControlAction.Jump))
         {
             _verticalSpeed = JumpSpeed;
             _airborne = true;
@@ -113,8 +115,14 @@ public partial class WorldView
             _jumpAgainAt = _seconds + JumpCooldown;
         }
         bool wasShownAirborne = _airborne && (_jumping || Falling);
-        Ground(delta);
-        if (moving && CeilingBlocks(stepStart, _body.Position))
+        if (_climbing)
+            Climb(delta, forwardHeld || (_autoRun && driving), backHeld);
+        else
+        {
+            Ground(delta);
+            TryStartClimb();
+        }
+        if (moving && !_climbing && CeilingBlocks(stepStart, _body.Position))
         {
             _body.Position = stepStart;   // a ceiling under 2.25 m at the new spot undoes the step (daoc-re, W55)
             (_airborne, _verticalSpeed, _groundHit) = (false, 0, true);
@@ -128,6 +136,8 @@ public partial class WorldView
             PlayOnce("land", LandTime);
         if (_dead)
             PlayOnce("death");   // held on its last frame: lying down
+        else if (_climbing)
+            PlayClimbClip();
         else if (_swimming)
             PlayBodyClip(!moving ? "swim_idle" : forward < 0 ? "swim_back" : "swim");
         else if (_airborne && (_jumping || Falling))   // a short drop (under 128 units) keeps the run
@@ -151,9 +161,9 @@ public partial class WorldView
         (float rx, float ry, float rz) = ToRegion(_body.Position);
         // What others see us doing (0xA9 state byte): swimming 0x04, in a jump 0x08, sitting 0x10; strafing left 0x40 or
         // right 0x80. A change goes out at once.
-        byte state = (byte)((_swimming ? 0x04 : _jumping ? 0x08 : (_quitting || _sitting) && !moving ? 0x10 : 0)
+        byte state = (byte)((_climbing ? ClimbState : _swimming ? 0x04 : _jumping ? 0x08 : (_quitting || _sitting) && !moving ? 0x10 : 0)
             | (strafe < 0 ? 0x40 : strafe > 0 ? 0x80 : 0));
-        bool changed = moving || _airborne || _landingSpeed > 0 || state != _stateSent
+        bool changed = moving || _airborne || (_climbing && _verticalSpeed != 0) || _landingSpeed > 0 || state != _stateSent
             || heading != _world.Position.Heading
             || Mathf.Abs(rx - _world.Position.X) > PositionEpsilon
             || Mathf.Abs(ry - _world.Position.Y) > PositionEpsilon
@@ -161,7 +171,10 @@ public partial class WorldView
 
         if (_posLeft <= 0f || _landingSpeed > 0 || (changed && !_sendingChanges))
         {
-            SendMove(moving ? (forward < 0 ? -MoveSpeed(forward) : MoveSpeed(forward)) : 0f, state);
+            // Climbing, the speed is the strafe's only (inferred: the wall contact zeroes the forward speed).
+            float sent = !moving ? 0f : _climbing ? (strafe != 0 ? MoveSpeed(0) : 0f)
+                : forward < 0 ? -MoveSpeed(forward) : MoveSpeed(forward);
+            SendMove(sent, state);
             _posLeft = changed ? MovingSendInterval : IdleSendInterval;
             _sendingChanges = changed;
         }
@@ -397,7 +410,7 @@ public partial class WorldView
         // While airborne the vertical speed goes along; the landing update carries the impact speed and
         // the landed bit, from which the server charges fall damage. Region units per second, falling negative.
         bool landed = _landingSpeed > 0;
-        float vertical = (landed ? -_landingSpeed : _airborne ? _verticalSpeed : 0f) / RegionMetresPerUnit;
+        float vertical = (landed ? -_landingSpeed : _airborne || _climbing ? _verticalSpeed : 0f) / RegionMetresPerUnit;
         _landingSpeed = 0;
         if (_session is not null)
             _ = _session.MoveToAsync(rx, ry, rz, heading, speed, vertical, landed,

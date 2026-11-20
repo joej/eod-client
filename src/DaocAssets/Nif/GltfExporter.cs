@@ -47,11 +47,15 @@ public static class GltfExporter
             if (mesh.Helper)
             {
                 // A collision volume (under "collidee", "collider", "collision …") is kept as never-drawn geometry
-                // the client collides with (CollisionPrefix). Other helpers (climb, pick, shadow) are left out.
-                if (mesh.Collision && mesh.Triangles.Length > 0)
+                // the client collides with (CollisionPrefix), and so is a climb volume (ClimbPrefix, WallClimbPrefix).
+                // Other helpers (pick, shadow) are left out.
+                if ((mesh.Collision || mesh.Climb != 0) && mesh.Triangles.Length > 0)
+                {
+                    string name = VolumePrefix(mesh) + NodeName(mesh);
                     (mover is null ? scene.AddRigidMesh(BuildCollisionMesh(mesh), Matrix4x4.Identity)
-                        : scene.AddRigidMesh(BuildCollisionMesh(mesh), mover.CreateNode(CollisionPrefix + NodeName(mesh))))
-                        .WithName(CollisionPrefix + NodeName(mesh));
+                        : scene.AddRigidMesh(BuildCollisionMesh(mesh), mover.CreateNode(name)))
+                        .WithName(name);
+                }
                 continue;
             }
             // Name the node after the mesh, so the client can tell meshes apart (water surfaces are
@@ -198,6 +202,16 @@ public static class GltfExporter
     /// <summary>The name prefix of a model's collision volumes: never drawn, only collided with (roadmap M9, solid
     /// world). Also their material's name.</summary>
     public const string CollisionPrefix = "eodcollide_";
+
+    /// <summary>A climb volume's name prefix (under a "climb…" node): a collision volume that is also climbed.</summary>
+    public const string ClimbPrefix = CollisionPrefix + "climb_";
+
+    /// <summary>A wall-climb volume's name prefix (under "sclimb…"): climbed only with the Climb Walls ability or effect 7092,
+    /// otherwise a plain wall; on a keep piece solid only while the server marks the piece climbable.</summary>
+    public const string WallClimbPrefix = CollisionPrefix + "sclimb_";
+
+    private static string VolumePrefix(NifMesh m) =>
+        m.Climb == NifMesh.WallClimb ? WallClimbPrefix : m.Climb == NifMesh.PlainClimb ? ClimbPrefix : CollisionPrefix;
 
     // A collision volume: positions only (no normals, UVs or colours), one plain material named for what it is.
     private static IMeshBuilder<MaterialBuilder> BuildCollisionMesh(NifMesh m)

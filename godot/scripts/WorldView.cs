@@ -118,7 +118,7 @@ public partial class WorldView : Node3D
     private const uint WallLayer = 1 << 4;     // collision layer 5: the models' collision volumes (eodcollide_), for walking into
     // Not a floor, nothing the camera pulls in off, nothing that hides a pick: creatures' pick shapes, water, and the
     // invisible collision volumes (only the character's movement meets those: WorldView.Walls).
-    private const uint NotSolid = EntityLayer | WaterLayer | WallLayer;
+    private const uint NotSolid = EntityLayer | WaterLayer | WallLayer | ClimbLayer;
     // Free-fly debug camera speed in Godot units/second (hold Shift to move faster).
     private int _packets;
     private int _pings;

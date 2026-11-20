@@ -30,6 +30,7 @@ internal static partial class Cli
             }
 
         var rows = new List<(string Model, int Placed, int Shapes, int Tris, int CollShapes, int CollTris, int Textured, string Nodes)>();
+        var climbs = new List<(string Model, int Placed, int Climb, int WallClimb, int Tris, int Drawn)>();
         int unreadable = 0;
         foreach ((string model, int count) in placed)
         {
@@ -42,6 +43,10 @@ internal static partial class Cli
             var drawn = nif.Meshes.Where(m => !m.Helper).ToList();
             rows.Add((model, count, drawn.Count, drawn.Sum(m => m.Triangles.Length), coll.Count, coll.Sum(m => m.Triangles.Length),
                 coll.Count(m => !m.Helper), string.Join(" ", coll.Select(m => m.Name).Distinct().Take(4))));
+            var climb = nif.Meshes.Where(m => m.Climb != 0).ToList();
+            if (climb.Count > 0)
+                climbs.Add((model, count, climb.Count(m => m.Climb == NifMesh.PlainClimb), climb.Count(m => m.Climb == NifMesh.WallClimb),
+                    climb.Sum(m => m.Triangles.Length), climb.Count(m => !m.Helper)));
         }
 
         int with = rows.Count(r => r.CollShapes > 0);
@@ -61,6 +66,13 @@ internal static partial class Cli
         sb.AppendLine("| Model | Placed | Drawn shapes / tris |").AppendLine("|---|---:|---|");
         foreach (var r in rows.Where(r => r.CollShapes == 0).OrderByDescending(r => r.Placed).Take(80))
             sb.AppendLine($"| {r.Model} | {r.Placed} | {r.Shapes} / {r.Tris} |");
+
+        sb.AppendLine().AppendLine("## Climb volumes (\"climb…\" / \"sclimb…\" nodes), by placements").AppendLine();
+        sb.AppendLine($"{climbs.Count} models, {climbs.Sum(r => (long)r.Placed)} placements; " +
+                      $"{climbs.Count(r => r.WallClimb > 0)} with wall climbs (sclimb).").AppendLine();
+        sb.AppendLine("| Model | Placed | climb shapes | sclimb shapes | Tris | Drawn |").AppendLine("|---|---:|---:|---:|---:|---:|");
+        foreach (var r in climbs.OrderByDescending(r => r.Placed))
+            sb.AppendLine($"| {r.Model} | {r.Placed} | {r.Climb} | {r.WallClimb} | {r.Tris} | {r.Drawn} |");
 
         string report = sb.ToString();
         if (o["--out"] is string outPath)

@@ -242,7 +242,9 @@ public partial class WorldView
             Material? m = mi.Mesh?.GetSurfaceCount() > 0 ? mi.GetActiveMaterial(0) : null;
             string? branches = m is not null && m.HasMeta(ModelTexturing.LayersMeta)
                 && m.GetMeta(ModelTexturing.LayersMeta).AsGodotDictionary().TryGetValue("branches", out Variant b) ? b.AsString() : null;
-            if (!KeepLayout.Shows(branches, keep.Info.Realm, levelTier, broken, climbable))
+            // A wall-climb volume ("sclimb") is solid only while the server marks the piece climbable (daoc-re's climbing note).
+            if (!KeepLayout.Shows(branches, keep.Info.Realm, levelTier, broken, climbable)
+                || (!climbable && mi.Name.ToString().StartsWith(DaocAssets.Nif.GltfExporter.WallClimbPrefix, System.StringComparison.Ordinal)))
                 mi.Free();
         }
         // The keep's textures for its realm and level tier ("!door…" by the piece's own tier).

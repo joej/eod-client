@@ -32,6 +32,12 @@ public sealed record NifMesh
     /// player can't walk through it. Usually also <see cref="Helper"/> (never drawn); a textured one is both.</summary>
     public bool Collision { get; init; }
 
+    /// <summary>Under a climb node: <see cref="PlainClimb"/> ("climb…") or <see cref="WallClimb"/> ("sclimb…"), else 0
+    /// (NifFile.ClimbOf). The exporter keeps such a shape as a climb volume: never drawn, solid, and climbed.</summary>
+    public byte Climb { get; init; }
+
+    public const byte PlainClimb = 1, WallClimb = 2;
+
     /// <summary>The shape's <c>NiMaterialProperty</c> emissive colour (RGB, 0..1), when not black: the light it gives
     /// itself. Used by a dungeon's material fix-up (<c>[dungeonfix] catacombs_material_emittance=1</c> keeps it).</summary>
     public Vector3? Emissive { get; init; }

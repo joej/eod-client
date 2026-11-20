@@ -417,7 +417,9 @@ with its own sound, intro movie and pregame screens, then the better-looking ver
   exported as never-drawn `eodcollide_` meshes; the character's steps are cast against them as a capsule that stops
   and slides (`WorldView.Walls`). `mpk collision` measured them first: 965 of 1,161 placed models carry some; the
   rest are mostly trees and kelp. `--show-walls` draws them translucent red. Checked offline at Prydwen Keep (walls
-  hold, the side gateways pass). Open: W55 (retail's player size and rules), standing on collision volumes, climb.
+  hold, the side gateways pass). Open: W55 (retail's player size and rules), standing on collision volumes.
+  *Climbing (built 2026-11-20):* the models' `climb` volumes are walls that start a climb, retail's facing ray and
+  85 units/s (`WorldView.Climb`; W55).
 - **Jump** (spacebar) — also deferred from the walk-through, post-MVP. Not needed to walk the world,
   and it opens a protocol question (the 0xBE jump packet seen in 1.130 RE).
 - **UI direction (decided 2026-11-04): a skinnable interface built on the retail one, then a clean,

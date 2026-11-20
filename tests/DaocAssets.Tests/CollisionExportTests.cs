@@ -7,8 +7,9 @@ namespace DaocAssets.Tests;
 
 /// <summary>
 /// Collision volumes (shapes under "collidee", "collider", "collision …" nodes) reach the exported model as
-/// "eodcollide_" nodes for the client to collide with; other helpers (climb, pick, shadow) still don't; the
-/// node-name rule keeps "collisionswitch" (which holds visible parts) out.
+/// "eodcollide_" nodes for the client to collide with, and climb volumes (under "climb…"/"sclimb…") as "eodcollide_climb_" /
+/// "eodcollide_sclimb_" ones; other helpers (pick, shadow, a plain "ladder") still don't; the node-name rule keeps
+/// "collisionswitch" (which holds visible parts) out.
 /// </summary>
 public sealed class CollisionExportTests
 {
@@ -27,7 +28,9 @@ public sealed class CollisionExportTests
             [
                 Tri("wall") with { TextureFile = "stone.dds" },
                 Tri("hull") with { Helper = true, Collision = true },
-                Tri("ladder") with { Helper = true },                       // a climb volume: not exported
+                Tri("ladder") with { Helper = true },                       // a "ladder" node: not climbed, not exported
+                Tri("rungs") with { Helper = true, Climb = NifMesh.PlainClimb },
+                Tri("wallclimb") with { Helper = true, Climb = NifMesh.WallClimb },
                 Tri("tower") with { TextureFile = "stone.dds", Collision = true },   // drawn and solid
             ],
         };
@@ -36,6 +39,9 @@ public sealed class CollisionExportTests
 
         Assert.Contains(GltfExporter.CollisionPrefix + "hull", nodes);
         Assert.DoesNotContain(nodes, n => n.Contains("ladder"));
+        Assert.Contains(GltfExporter.ClimbPrefix + "rungs", nodes);
+        Assert.Contains(GltfExporter.WallClimbPrefix + "wallclimb", nodes);
+        Assert.StartsWith(GltfExporter.CollisionPrefix, GltfExporter.ClimbPrefix);   // a climb volume is solid too
         Assert.Contains("wall", nodes);
         Assert.Contains("tower", nodes);   // a textured shape under a collision node stays a drawn one
         Mesh hull = gltf.LogicalNodes.Single(n => n.Name == GltfExporter.CollisionPrefix + "hull").Mesh;
@@ -54,4 +60,16 @@ public sealed class CollisionExportTests
     [InlineData("climb", false)]
     public void WhichNodesAreCollision(string name, bool collision) =>
         Assert.Equal(collision, NifFile.IsCollisionName(name));
+
+    [Theory]
+    [InlineData("climb", NifMesh.PlainClimb)]
+    [InlineData("CLIMB", NifMesh.PlainClimb)]
+    [InlineData("climb001", NifMesh.PlainClimb)]
+    [InlineData("Climbs", NifMesh.PlainClimb)]
+    [InlineData("sclimb", NifMesh.WallClimb)]
+    [InlineData("!sclimb_visible_tier3_hib", 0)]   // a keep piece's visible branch, not a volume
+    [InlineData("ladder", 0)]
+    [InlineData("collidee", 0)]
+    public void WhichNodesAreClimbed(string name, byte climb) =>
+        Assert.Equal(climb, NifFile.ClimbOf(name));
 }
