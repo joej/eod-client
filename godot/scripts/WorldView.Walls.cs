@@ -37,7 +37,11 @@ public partial class WorldView
             Shape = _wallShape, CollisionMask = WallLayer, Margin = 0.02f,
         };
         PhysicsDirectSpaceState3D space = GetWorld3D().DirectSpaceState;
-        Vector3 at = from, lift = new(0, WallClearance + WallHeight / 2, 0);
+        Vector3 lift = new(0, WallClearance + WallHeight / 2, 0);
+        // A cast ignores every shape the box already overlaps, and each placed model's walls are one shape: a box
+        // that starts a step a little inside a wall (turned into it, or put there by a slide into a corner) would
+        // walk through all of that model's walls. So it is put back out first, and again where the step ends.
+        Vector3 at = OutOfWalls(space, query, facing, from, lift);
         for (int pass = 0; pass < 3 && motion.LengthSquared() > 1e-8f; pass++)
         {
             query.Transform = new Transform3D(facing, at + lift);
@@ -96,7 +100,43 @@ public partial class WorldView
                 GD.Print($"[world] walked into {what} at {ToRegion(at)}");
             }
         }
+        at = OutOfWalls(space, query, facing, at, lift);
         return new Vector3(at.X, to.Y, at.Z);
+    }
+
+    // The box at `at` moved sideways out of any wall it overlaps: each contact pair (a point of the box inside a
+    // wall, then the nearest point of the wall's surface) pushes it out along their horizontal difference. Contacts
+    // pushing mostly up or down (a ramp, a step's top) are the ground's, not a wall's.
+    private Vector3 OutOfWalls(PhysicsDirectSpaceState3D space, PhysicsShapeQueryParameters3D query, Basis facing,
+        Vector3 at, Vector3 lift)
+    {
+        const float Skin = 0.005f;   // a fifth of a unit off the wall, so the next cast starts clear of it
+        float margin = query.Margin;
+        query.Margin = 0;
+        query.Motion = Vector3.Zero;
+        for (int round = 0; round < 4; round++)
+        {
+            query.Transform = new Transform3D(facing, at + lift);
+            Godot.Collections.Array<Vector3> pts = space.CollideShape(query, 8);
+            Vector3 push = Vector3.Zero;
+            for (int i = 0; i + 1 < pts.Count; i += 2)
+            {
+                Vector3 d = pts[i + 1] - pts[i];
+                float len = d.Length();
+                if (len < 1e-5f || Mathf.Abs(d.Y) / len >= MinFloorNormal)
+                    continue;
+                d.Y = 0;
+                Vector3 n = d.Normalized();
+                float more = d.Length() + Skin - push.Dot(n);
+                if (more > 0)
+                    push += n * more;
+            }
+            if (push.LengthSquared() < 1e-10f)
+                break;
+            at += push;
+        }
+        query.Margin = margin;
+        return at;
     }
 
     /// <summary>
