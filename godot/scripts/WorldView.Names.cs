@@ -5,10 +5,14 @@
 // OpenDAoC (and retail) put an NPC's trade ("Hastener", "Weapon Merchant", "Teleporter", "Healer"). So a
 // merchant, a teleporter and a plain townsperson read apart at a glance. Colours: a monster by how it cons to
 // you; the colours and the rule are retail's (RE/56, icons-con-combat "Two colour sets"; PlateColour).
-// The NPC's "hide name" flag hides it. Shown within NameRange metres; the dev overlay's "Names" switch turns
-// them all off; Settings → Game has retail's "Names: Colored/White" and Display Names switches (ClientSettings). Retail (daoc-re, 2026-11-07): "[prefix ]name[ lastname]", then "<guild>"; Minion Pro Bold 20 with
-// an outline layer (ui/fonts/MinionPro-Bold.ttf, which `mpk loading` copies into the library); no plate on
-// yourself by default. Range and occlusion are still open (W50).
+// The NPC's "hide name" flag hides it. The dev overlay's "Names" switch turns
+// them all off; Settings → Game has retail's "Names: Colored/White" and Display Names switches (ClientSettings). Retail (daoc-re, 2026-11-07): "[prefix ]name[ lastname]", then "<guild>"; no plate on
+// yourself by default. How retail draws it (daoc-re, 2026-11-21, RE/56): ui/fonts/MinionPro-Bold.ttf (which `mpk loading`
+// copies into the library) at 20 px with a 1 px black outline, both in the plate's colour and alpha (the outline stays
+// black); no shadow, no fog, no light; world-size text (each 20 px glyph 0.35 units a texel, × s for figures taller
+// than 140 units), shown from 35 to 1200 × s units from the camera; hidden by walls in front. Ours: Godot blends it in
+// linear space, retail in gamma space, so a partly transparent colour reads a little stronger (to settle by screenshot);
+// the guild line isn't drawn at retail's 0.8 of the name's size.
 
 using System.Linq;
 using DaocProtocol.Packets;
@@ -19,7 +23,8 @@ namespace EodClient;
 
 public partial class WorldView
 {
-    private const float NameRange = 45f;          // metres
+    private const float NameNear = 35, NameFar = 1200;   // units from the camera, × s
+    private const float GlyphUnits = 0.35f;              // world units per texel of the 20 px raster
     private static bool _namesVisible = true;     // the dev switch, kept across region changes
 
     /// <summary>The entered character's level and realm (the character list), for con colours and "friendly".</summary>
@@ -140,17 +145,19 @@ public partial class WorldView
         {
             Text = role.Length > 0 ? $"{name}\n<{role}>" : name,
             Font = NameFont(),
-            OutlineModulate = new Color(0, 0, 0, 0.85f),
-            OutlineSize = 8,
+            OutlineModulate = new Color(0, 0, 0, 1),
+            // Retail rasterises at 20 px with a 1 px outline; we draw at 32 px for sharpness, so 1.6 px, at the same
+            // world size per line.
             FontSize = 32,
-            // The same size on screen near or far (about 18 px a line at 900 px high), as a HUD label.
-            FixedSize = true,
-            PixelSize = 0.0009f,
+            OutlineSize = 2,
+            FixedSize = false,
+            PixelSize = GlyphUnits * RegionMetresPerUnit * 20f / 32f * NameScale(head),
             Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
             VerticalAlignment = VerticalAlignment.Bottom,
             // Above the head, under a quest glyph (0.9 m up).
             Position = head + new Vector3(0, 0.3f, 0),
-            VisibilityRangeEnd = NameRange,
+            VisibilityRangeBegin = NameNear * RegionMetresPerUnit * NameScale(head),
+            VisibilityRangeEnd = NameFar * RegionMetresPerUnit * NameScale(head),
             // Over the figure's own hair and helmet, still hidden by walls in front.
             RenderPriority = 1,
         };
@@ -167,7 +174,14 @@ public partial class WorldView
         label.Visible = _namesVisible && ClientSettings.ShowNames.HasFlag(kind);
         Color c = label.GetMeta("colour").AsColor();
         label.Modulate = ClientSettings.ColouredNames ? c : new Color(1, 1, 1, c.A);
-        label.OutlineModulate = new Color(0, 0, 0, 0.85f * c.A);
+        label.OutlineModulate = new Color(0, 0, 0, c.A);   // black, at the plate's own alpha
+    }
+
+    // Retail's s: 1 for figures up to 140 units tall, then 1 + min((h − 140) × 0.0167, 1.5); the head stands for the height.
+    private static float NameScale(Vector3 head)
+    {
+        float h = head.Y / RegionMetresPerUnit;
+        return h <= 140 ? 1f : 1f + Mathf.Min((h - 140) * 0.0167f, 1.5f);
     }
 
     // After a settings change: each plate's visibility and colour again.
