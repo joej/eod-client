@@ -1,0 +1,200 @@
+# Tiers for tools/packetcoverage.py: "<S|C> 0xNN | tier | feature".
+# Tiers (owner, 2026-11-21): 0 needed already (login, world, movement); P1 minimal playable (PvE to level 20, other
+# players and NPCs, quests); P2 post-20 PvE and battlegrounds (and the rest of 1.65 PvE life: housing, crafting, guilds);
+# P3 PvP and RvR; dev GM/debug; - not needed (another era's or another client version's form, or never sent).
+# S = server to client, C = client to server. A judgement per packet; correct it when we learn better.
+
+# --- login, character screen, world entry, keep-alive (tier 0)
+S 0x22 | 0 | login: version and crypt key
+S 0x2A | 0 | login granted
+S 0x2C | 0 | login denied
+S 0x28 | 0 | session id
+S 0xFE | 0 | character screen: realm
+S 0xFC | 0 | character screen: overview
+S 0xB1 | 0 | world entry: region list
+S 0x20 | 0 | world entry: position and object id
+S 0x2D | 0 | world entry: game open reply
+S 0x2B | 0 | world entry: player init finished (not read; nothing follows from it)
+S 0x29 | 0 | keep-alive: ping reply
+S 0xA4 | 0 | quit
+S 0xB7 | 0 | region change
+S 0x04 | 0 | moved by the server (/jump, teleport)
+S 0xB6 | 0 | max speed
+S 0x7E | 0 | game time
+C 0xF4 | 0 | login: crypt key request
+C 0xA7 | 0 | login
+C 0x10 | 0 | character select
+C 0xFC | 0 | character overview request
+C 0xFF | 0 | character create, customise, delete
+C 0x9D | 0 | world entry: region list
+C 0xD4 | 0 | world entry: world init
+C 0xE8 | 0 | world entry: player init
+C 0xBF | 0 | world entry: game open
+C 0xA3 | 0 | keep-alive: ping
+C 0xA9 | 0 | movement: position update
+C 0x90 | 0 | region change (zone jumps)
+
+# --- the world, others, chat, HUD (built through M9)
+S 0xDA | P1 | NPCs appear
+S 0x4B | P1 | players appear
+S 0xD9 | P1 | ground objects appear
+S 0xA1 | P1 | NPC movement and health
+S 0xA9 | P1 | other players' movement
+S 0xBA | P1 | other players turning
+S 0xA2 | P1 | objects removed, corpses
+S 0x15 | P1 | others' equipment
+S 0x99 | P1 | doors
+S 0xAF | P1 | chat and system messages
+S 0xAD | P1 | your health, power, endurance
+S 0x91 | P1 | experience and points
+S 0xFB | P1 | stats and resists
+S 0x16 | P1 | skills, spell lines, player info, group list
+S 0x02 | P1 | inventory
+S 0xBD | P1 | encumbrance
+S 0xFA | P1 | money
+S 0xC4 | P1 | text windows (NPC and item details)
+S 0xD8 | P1 | delve (spell, style, item details)
+S 0x81 | P1 | dialogs (group invites, script questions)
+S 0xF3 | P1 | timer windows (quit, crafting, release)
+S 0xAE | P1 | deaths
+S 0x89 | P1 | revive
+S 0x4C | P1 | quest markers over NPCs and other effects
+S 0x74 | P1 | attack mode
+S 0xBC | P1 | melee combat
+S 0x70 | P1 | group members' bars
+S 0xEF | P1 | area music, level-up sound
+S 0xD3 | P1 | sounds
+S 0xC9 | P1 | sounds at a spot
+C 0xB0 | P1 | targeting
+C 0x7A | P1 | talk to / interact with
+C 0xAF | P1 | chat and slash commands
+C 0xD8 | P1 | delve requests
+C 0xDD | P1 | moving items
+C 0x74 | P1 | attack
+C 0x99 | P1 | opening doors
+C 0xC7 | P1 | sit and stand
+C 0x82 | P1 | answering dialogs
+C 0x87 | P1 | group invite
+C 0x9F | P1 | leaving a group
+C 0x71 | P1 | using an item
+C 0xBB | P1 | using a skill or style
+C 0x7D | P1 | casting a spell
+C 0xD5 | P1 | asking for an unknown player
+C 0xBE | P1 | asking for an unknown object
+
+# --- missing for minimal playable (P1)
+S 0x17 | P1 | merchants: their item pages
+C 0x78 | P1 | merchants: buy
+C 0x79 | P1 | merchants: sell
+C 0xE0 | P1 | merchants: what an item sells for
+S 0x7B | P1 | trainers: the train window (specs, points, costs)
+C 0x7B | P1 | trainers: asking for the train window
+C 0x53 | P1 | trainers: train a specialisation
+S 0x72 | P1 | casting: the cast animation and bar
+S 0x73 | P1 | casting: interrupted
+S 0x1B | P1 | spells: the effect on the target (140 call sites)
+S 0x75 | P1 | casting: concentration buffs list
+C 0x76 | P1 | casting: drop a concentration buff
+C 0xF8 | P1 | effects: cancel a buff
+S 0xD0 | P1 | line-of-sight checks the server asks of the client (NPC casters and archers wait on the answer)
+C 0xD0 | P1 | line-of-sight answers
+S 0x83 | P1 | quests: journal entries
+C 0x40 | P1 | quests: choosing a reward
+C 0x4F | P1 | quests: abandoning one
+C 0xB5 | P1 | loot: picking up from the ground
+C 0x80 | P1 | items: destroying one
+S 0xEA | P1 | trade with players
+C 0xEB | P1 | trade with players
+S 0xC5 | P1 | friends list
+S 0xC6 | P1 | friends list
+S 0xF6 | P1 | /assist: the server changes your target
+S 0xF9 | P1 | emotes (M10)
+S 0xEE | P1 | a figure's level, guild and last name changing (PacketLib171.SendLivingDataUpdate)
+S 0x88 | P1 | pets (Cabalist, Theurgist, Enchanter and more start pets early)
+C 0x8A | P1 | pet commands
+S 0x4E | P1 | horse routes: the horse you ride (counted as handled, but read today only as the end of world entry)
+S 0xC8 | P1 | horse routes: riding, others' mounts
+C 0xC8 | P1 | horse routes: dismounting
+C 0xA5 | P1 | asking for an object the client doesn't know
+C 0xBA | P1 | turning on the spot (check retail: 0xA9 carries the heading)
+S 0xC3 | P1 | character creation: name not allowed
+S 0xCC | P1 | character creation: name taken
+C 0xCB | P1 | character creation: name check
+
+# --- post-20 PvE, battlegrounds, the rest of 1.65 life (P2)
+S 0x8D | P2 | illusions and shape changes (model change)
+S 0x92 | P2 | weather (the look; no gameplay effect)
+S 0xDE | P2 | guild names over players
+S 0xE2 | P2 | guild emblem
+C 0xE2 | P2 | guild emblem
+S 0x86 | P2 | looking for group
+C 0x84 | P2 | looking for group
+C 0x85 | P2 | looking for group
+S 0xEC | P2 | ground target (ground-target spells)
+C 0xEC | P2 | ground target
+C 0xED | P2 | crafting
+C 0xCA | P2 | the bonuses window
+C 0xDC | P2 | the spell-effects filter (EffectsFlag)
+S 0xF7 | P2 | the starter help window
+S 0x12 | P2 | boats
+S 0x03 | P2 | housing
+S 0x05 | P2 | housing
+S 0x08 | P2 | housing
+S 0x09 | P2 | housing
+S 0x0A | P2 | housing
+S 0x0F | P2 | housing
+S 0x18 | P2 | housing
+S 0xD1 | P2 | housing
+S 0xD2 | P2 | housing
+S 0x1E | P2 | housing: consignment merchant
+S 0x1F | P2 | housing: market explorer
+C 0x00 | P2 | housing
+C 0x01 | P2 | housing
+C 0x03 | P2 | housing
+C 0x05 | P2 | housing
+C 0x06 | P2 | housing
+C 0x07 | P2 | housing
+C 0x0B | P2 | housing
+C 0x0C | P2 | housing
+C 0x0D | P2 | housing
+C 0x0E | P2 | housing
+C 0x18 | P2 | housing
+C 0x11 | P2 | housing: market search
+C 0x1A | P2 | housing: consignment price
+C 0x1C | P2 | housing: consignment money
+
+# --- PvP and RvR (P3)
+S 0x69 | P3 | keeps
+S 0x6A | P3 | keeps
+S 0x6B | P3 | keeps
+S 0x6C | P3 | keeps
+S 0x6D | P3 | keeps
+S 0x6E | P3 | keeps
+S 0x67 | P3 | keeps
+S 0x61 | P3 | keeps: component interaction
+S 0x62 | P3 | keeps: claiming
+S 0x63 | P3 | keeps: hookpoint store
+S 0x65 | P3 | keeps: hookpoints
+C 0x6F | P3 | keeps: component interaction
+C 0x64 | P3 | keeps: buying for a hookpoint
+C 0xE4 | P3 | ship hookpoints
+S 0x49 | P3 | war map
+S 0x4A | P3 | war map
+S 0x66 | P3 | war map: realm bonuses
+C 0x48 | P3 | war map
+C 0x66 | P3 | war map: realm bonuses
+S 0xE3 | P3 | siege weapons
+S 0xF5 | P3 | siege weapons
+
+# --- not needed
+S 0x21 | dev | GM debug mode
+C 0x37 | dev | client crash report
+S 0x2F | - | UDP (OpenDAoC's UDP isn't used by our TCP-only client)
+S 0x13 | - | master levels (Trials of Atlantis, after 1.65)
+C 0x7C | - | champion levels (after 1.65)
+S 0x45 | - | Minotaur relics (Labyrinth, after 1.65)
+S 0x46 | - | Minotaur relics
+C 0x4C | - | Minotaur relics
+S 0x5C | - | Xfire
+S 0xF0 | - | character create reply (never sent)
+C 0xC0 | - | character delete (1.127 deletes through 0xFF)
