@@ -478,6 +478,7 @@ public partial class WorldView : Node3D
             _note = "   changing region…";
             RegionChanging?.Invoke(change.RegionId);
         };
+        StartSound();
 
         var overlay = new CanvasLayer();
         // Click-only: don't let the button take keyboard focus, or Enter/Space could "press" it and
@@ -1036,6 +1037,7 @@ public partial class WorldView : Node3D
         UpdateSkyTime();
         UpdateLamps(delta);
         UpdateDoors();
+        UpdateSound(delta);
         UpdateChat();
         _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)

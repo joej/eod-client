@@ -596,8 +596,15 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
     (0xBC's result, 0x72/0x1B's spell phases, 0xEF area music, 0x99 doors, 0xC9/0xD3 server sounds),
     animation sounds as an animation starts; not yet confirmed by ear (W52). We play them from the
     protocol events we already raise. Godot plays wav and mp3 natively (`AudioStreamPlayer3D` for
-    positional sound), so no conversion is needed. Order: interface clicks and footsteps, zone
+    positional sound): it plays the mp3s as they are, and the client decodes the wavs, since 593 of
+    them are IMA ADPCM, which Godot doesn't read. Order: interface clicks and footsteps, zone
     ambience and music, combat (with M10), spells.
+  - **Built 2026-11-21 (first part):** `make sounds` copies the sounds, their tables, each zone's
+    `sounds.dat` and `zones.dat` into the library and checks them (all 4,226 files decode). The
+    client plays the title music, each region's entry music, the zone's ambience (beds, random
+    sounds, ambient music cues by time of day), 0xEF area music, combat music, 0xC9/0xD3 sounds and
+    door sounds, with Music and Sound effects volumes in Settings. Not yet: footsteps, combat hits,
+    spells, water, emotes.
 - **The intro movie and the company logo** (`movie/intro_movie.bik`, 5 min, 555 x 416, 30 fps;
   `ealogo.bik`), shown at start as retail does, skippable. Bink, which Godot can't play: converted
   once to Ogg Theora (Godot's video format) by ffmpeg, which reads Bink. Homebrew's ffmpeg has no

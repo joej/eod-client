@@ -276,6 +276,7 @@ public partial class CharacterScreen
         _world = null;
         world.QueueFree();
         Visible = true;
+        GameAudio.Instance?.PlayMusic("mp3_Title", loop: true);
         ClientSettings.ApplyLoginWindow();
         _enter.Disabled = _session?.State != SessionState.CharacterScreen;
     }

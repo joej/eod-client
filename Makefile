@@ -13,7 +13,7 @@
 #   make dungeons           every dungeon
 #   make zones              every outdoor zone, capital city and dungeon, plus private/zones/summary.md
 #                           and the figures (make figures: every model id, classic and Catacombs)
-#                           and the region loading screens (make loading) and maps (make maps)
+#                           and the region loading screens (make loading), maps (make maps) and sounds (make sounds)
 #   make check-zones        ... and fail if any zone check has errors
 #   make clean-library      delete every converted model and texture (they are redone on demand)
 #   make clean              delete everything this Makefile made
@@ -221,6 +221,15 @@ $(LOADING): $(CLIENT)/gamedata.mpk $(A)/Zone/LoadingScreens.cs $(A)/Zone/IniFile
 	$(MPK) loading $(CLIENT) --out $(@D)
 
 # --- maps: the zone and region map pictures and their layout (ui/maps), for the map window (M) -------------
+# --- sounds: the install's sound files, their tables, each zone's sounds.dat and zones.dat, copied (M12) ---------------
+SOUNDS := $(LIB)/sounds/.sounds.done
+.PHONY: sounds
+sounds: $(SOUNDS)
+$(SOUNDS): $(CLIENT)/sounds/cc_sounds.csv $(CLIENT)/zones/zones.mpk $(CLI_SRC) $(X)/Cli.Sounds.cs $(X)/Cli.Loading.cs | $(TOOL)
+	@mkdir -p $(@D)
+	$(MPK) sounds $(CLIENT) --out $(@D)
+	@touch $@
+
 MAPS := $(LIB)/maps/.maps.done
 .PHONY: maps
 maps: $(MAPS)
@@ -243,7 +252,7 @@ $(ICONS): $(wildcard $(CLIENT)/icons/*.bmp $(CLIENT)/icons/*.BMP $(CLIENT)/Icons
 dungeons: $(foreach z,$(DUNGEONS),zone$(z))
 
 .PHONY: zones check-zones
-zones: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(OBJECTS) $(STRIDES) $(KEEPS) $(LOADING) $(MAPS) $(ICONS)
+zones: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(OBJECTS) $(STRIDES) $(KEEPS) $(LOADING) $(MAPS) $(ICONS) $(SOUNDS)
 
 $(ZONEDIR)/summary.md: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),$(ZONEDIR)/zone$(z)/zonecheck.md)
 	@{ echo "# Zone check, every converted zone (outdoor, cities and dungeons)"; echo; \

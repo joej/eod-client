@@ -144,6 +144,20 @@ public static class ClientSettings
     }
 
     /// <summary>The clock (retail's Interface Elements → CLOCK): the game time of day. Shown by default.</summary>
+    /// <summary>Music volume, 0–1 (ours: 0.7).</summary>
+    public static float MusicVolume
+    {
+        get => Mathf.Clamp(Load().GetValue("sound", "music", 0.7f).AsSingle(), 0, 1);
+        set => SaveIn("sound", "music", value);
+    }
+
+    /// <summary>Sound effects and ambience volume, 0–1 (ours: 0.8).</summary>
+    public static float EffectsVolume
+    {
+        get => Mathf.Clamp(Load().GetValue("sound", "effects", 0.8f).AsSingle(), 0, 1);
+        set => SaveIn("sound", "effects", value);
+    }
+
     public static bool ShowClock
     {
         get => Load().GetValue("game", "clock", true).AsBool();

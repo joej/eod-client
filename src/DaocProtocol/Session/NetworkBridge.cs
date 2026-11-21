@@ -54,6 +54,15 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
     /// <summary>A door opened or closed (0x99 DoorState).</summary>
     public event Action<DoorState>? DoorChanged;
 
+    /// <summary>Area music or a level-up fanfare (0xEF RegionSound).</summary>
+    public event Action<RegionSound>? RegionSoundArrived;
+
+    /// <summary>A sound by id, or a crafting result's (0xD3 PlaySound).</summary>
+    public event Action<PlaySound>? SoundPlayed;
+
+    /// <summary>A sound by id, at a spot or 2D (0xC9 SoundEffect).</summary>
+    public event Action<SoundEffect>? SoundEffectArrived;
+
     /// <summary>A keep in the region (0x69 KeepInfo), sent for every keep on entering the region.</summary>
     public event Action<KeepInfo>? KeepArrived;
 
@@ -264,6 +273,15 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
                     break;
                 case DoorState.Code:
                     DoorChanged?.Invoke(DoorState.Parse(packet.Payload));
+                    break;
+                case RegionSound.Code:
+                    RegionSoundArrived?.Invoke(RegionSound.Parse(packet.Payload));
+                    break;
+                case PlaySound.Code:
+                    SoundPlayed?.Invoke(PlaySound.Parse(packet.Payload));
+                    break;
+                case SoundEffect.Code:
+                    SoundEffectArrived?.Invoke(SoundEffect.Parse(packet.Payload));
                     break;
                 case KeepInfo.Code:
                     KeepArrived?.Invoke(KeepInfo.Parse(packet.Payload));

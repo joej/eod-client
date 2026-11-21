@@ -345,7 +345,8 @@ eod-client.slnx                    # .NET 10 SDK; Directory.Build.props: warning
 │       └── NetworkBridge.cs       # ✓ drained world packets → typed events (entities, chat, pings, quit)
 ├── src/DaocAssets/                # ✓ asset reading (no Godot): Mpk/ (MPAK archives, CRC-checked),
 │                                  #   Nif/ (NIF 4.x/10.1 geometry reader, game.dll helper-shape
-│                                  #   and LOD rules, GltfExporter via SharpGLTF), Zone/ (zone
+│                                  #   and LOD rules, GltfExporter via SharpGLTF), Sound/ (sound tables,
+│                                  #   .wav decoding, zone ambience; docs/sound.md), Zone/ (zone
 │                                  #   layout, heightmap terrain, PCX), Library/ (convert-once
 │                                  #   asset library + install index), TextureResolver
 ├── tests/DaocAssets.Tests/        # asset readers against golden fixtures; [LiveFact]/[LiveTheory] ones read

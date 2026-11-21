@@ -58,6 +58,7 @@ public partial class SettingsDialog : AcceptDialog
         tabs.AddChild(column);
         tabs.AddChild(new KeyboardPanel());
         tabs.AddChild(GamePanel());
+        tabs.AddChild(SoundPanel());
         var grid = new GridContainer { Columns = 2 };
         grid.AddThemeConstantOverride("h_separation", 12);
         grid.AddThemeConstantOverride("v_separation", 10);
@@ -192,6 +193,35 @@ public partial class SettingsDialog : AcceptDialog
             Text = "Window mode and size are for the game world; this login screen stays a small window.",
             AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new Vector2(420, 0),
         });
+    }
+
+    // Sound (M12): music, and everything else (effects and ambience), each 0–100 %, applied as the slider moves.
+    private static Control SoundPanel()
+    {
+        var grid = new GridContainer { Name = "Sound", Columns = 3 };
+        grid.AddThemeConstantOverride("h_separation", 12);
+        grid.AddThemeConstantOverride("v_separation", 10);
+        void Row(string label, float value, System.Action<float> set)
+        {
+            grid.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(160, 0) });
+            var slider = new HSlider
+            {
+                MinValue = 0, MaxValue = 100, Step = 1, Value = value * 100, CustomMinimumSize = new Vector2(200, 0),
+                SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+            };
+            var shown = new Label { Text = $"{value * 100:0}%", CustomMinimumSize = new Vector2(48, 0) };
+            slider.ValueChanged += v =>
+            {
+                set((float)v / 100);
+                shown.Text = $"{v:0}%";
+                GameAudio.Instance?.ApplyVolumes();
+            };
+            grid.AddChild(slider);
+            grid.AddChild(shown);
+        }
+        Row("Music", ClientSettings.MusicVolume, v => ClientSettings.MusicVolume = v);
+        Row("Sound effects", ClientSettings.EffectsVolume, v => ClientSettings.EffectsVolume = v);
+        return grid;
     }
 
     // Game: retail's Game Options "Names" choice and its "Display Names" switches, in its two columns.

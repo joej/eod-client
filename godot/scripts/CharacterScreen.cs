@@ -78,6 +78,12 @@ public partial class CharacterScreen : Control
         // A login-sized window; the world gets the player's window mode (ClientSettings) when entered.
         ClientSettings.ApplyLoginWindow();
         ClientSettings.ApplyFrameCap();
+        // The game's sound for the whole run (M12): the title music here, then each region's.
+        if (GameAudio.Create(LibraryDir()) is GameAudio audio)
+        {
+            AddChild(audio);
+            audio.PlayMusic("mp3_Title", loop: true);
+        }
         BuildUi();
         LoginProfiles.MigrateOldLogin();
         RefreshProfiles(LoginProfiles.Last()?.Name);

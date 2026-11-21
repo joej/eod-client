@@ -442,6 +442,7 @@ public partial class WorldView
         if (on == _attacking)
             return;
         _attacking = on;
+        CombatMusic(on);
         GD.Print($"[world] attack mode {(on ? "on: weapons drawn" : "off: weapons put away")}");
         if (_ownFigure is not null && IsInstanceValid(_ownFigure))
             Regear(_ownFigure, PlayerModel, PlayerWorn, PlayerActiveWeapons, false, PlayerHoodUp, on);

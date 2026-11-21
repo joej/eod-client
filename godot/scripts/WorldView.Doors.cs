@@ -118,6 +118,7 @@ public partial class WorldView
             double left = player.CurrentAnimation == door ? player.CurrentAnimationPosition : anim.Length;
             _doorsBlockingAt[state.DoorId] = _seconds + left;   // and blocks again once fully closed
         }
+        DoorSound(state, model, open);
         GD.Print($"[world] door {state.DoorId} ({door}) {(open ? "opens" : "closes")}");
     }
 

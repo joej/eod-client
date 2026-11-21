@@ -154,12 +154,13 @@ position and the game time.
 Optional reverb keys: `enable_reverb`, `reverb_time`, `reverb_pre_delay`, `reverb_damping`,
 `global_sound_wet_level`, `global_sound_dry_level`.
 
-**Each `SoundNN` (up to 128) gives:**
+**Each `SoundNN` (up to 128) gives** (the file's own header: `Type, Sound, Period, Chance, Volume, Start Time,
+End Time, Weather, Environment Type`):
 - kind: 1 a one-shot or group, 2 a looping bed;
-- the sound, by name or number;
-- spacing: seconds, as a min-max range;
-- an int (always 100);
-- volume;
+- the sound, by name or number (a cc_sounds id);
+- period: seconds, a single value or a min-max range;
+- chance, in % (not always 100: zone 0's wind lines use 60–90);
+- volume, 0–100;
 - start and end time, HHMM (0,0 = always; a range may wrap past midnight);
 - a condition: 0 always, 1 clear, 2 rain, 3 fog (presumably the weather);
 - with `version=2`, one more int: 1 normal, 2 underwater.
@@ -190,3 +191,12 @@ Optional reverb keys: `enable_reverb`, `reverb_time`, `reverb_pre_delay`, `rever
   RegionListRequest. OpenDAoC ignores that bit.
 - For us: the converter should prefer `Newtowns/zones/Nifs` over `zones/Nifs` for zone objects when the
   folder exists, as the client does.
+
+## In our client (2026-11-21)
+
+`make sounds` (`mpk sounds`) copies `sounds/`, `Tutorial/sounds`, `frontiers/sounds`, every zone's `sounds.dat` and
+`zones.dat` into `library/sounds`, then checks them (`soundcheck.md` there). The client decodes the wavs itself
+(`DaocAssets.Sound.WavFile`: PCM and the 593 IMA ADPCM files) and plays the mp3s as they are. `DaocAssets.Sound` reads
+the tables (`SoundTables`), resolves a name to the files it plays (`SoundPlanner`), reads `sounds.dat` (`ZoneSounds`)
+and runs a zone's ambience (`Ambience`); `godot/scripts/GameAudio.cs` plays them and `WorldView.Sound.cs` connects the
+packets. What is built and what is ours is in open question W52.

@@ -34,6 +34,8 @@
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\private\nif-fixtures')" />
     <None Include="..\..\private\nif-fixtures\*.kfa" Link="live-nif\%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\private\nif-fixtures')" />
+    <None Include="..\..\private\sound-fixtures\*.*" Link="live-sound\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\private\sound-fixtures')" />
     <None Include="..\..\private\terrain-fixtures\*.*" Link="live-terrain\%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\private\terrain-fixtures')" />
   </ItemGroup>

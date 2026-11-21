@@ -50,6 +50,9 @@ internal static partial class Cli
         if (command == "sky")
             return SkyCmd(args);
 
+        if (command == "sounds")
+            return SoundsCmd(args);
+
         if (command == "loading")
             return LoadingCmd(args);
 
@@ -153,6 +156,7 @@ internal static partial class Cli
               mpk water    <dat<NNN>.mpk> --offset X Y --out DIR [--size W H] [--index index.json --library LIBDIR]
               mpk sky      <dat<NNN>.mpk> --out DIR [--name albion] [--skympk <zones/sky/sky.mpk>] [--index index.json --library LIBDIR]
               mpk loading  <client-dir> --out DIR   (region loading screens: pictures, tips, bar, font)
+              mpk sounds   <client-dir> --out DIR   (the sounds, their cc_ tables, each zone's sounds.dat and zones.dat, for the client to play)
               mpk maps     <client-dir> --out DIR   (zone and region map pictures, regions.dat, areas.dat)
               mpk icons    <client-dir> --out DIR   (spell, style, item and skill icon sheets, for the quickbars)
               mpk collision <zones-dir> --index INDEX [--out REPORT.md]   (collision volumes in the zones' models)
