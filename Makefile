@@ -225,7 +225,7 @@ $(LOADING): $(CLIENT)/gamedata.mpk $(A)/Zone/LoadingScreens.cs $(A)/Zone/IniFile
 SOUNDS := $(LIB)/sounds/.sounds.done
 .PHONY: sounds
 sounds: $(SOUNDS)
-$(SOUNDS): $(CLIENT)/sounds/cc_sounds.csv $(CLIENT)/zones/zones.mpk $(CLI_SRC) $(X)/Cli.Sounds.cs $(X)/Cli.Loading.cs | $(TOOL)
+$(SOUNDS): $(CLIENT)/sounds/cc_sounds.csv $(CLIENT)/zones/zones.mpk $(CLIENT)/gamedata.mpk $(wildcard $(A)/Sound/*.cs) $(CLI_SRC) $(X)/Cli.Sounds.cs $(X)/Cli.Loading.cs | $(TOOL)
 	@mkdir -p $(@D)
 	$(MPK) sounds $(CLIENT) --out $(@D)
 	@touch $@

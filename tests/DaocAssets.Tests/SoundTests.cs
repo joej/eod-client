@@ -198,6 +198,24 @@ public sealed class SoundTests
     }
 
     [Fact]
+    public void SoundSetsComeFromTheModelAndObjectTables()
+    {
+        // monsters.csv column 15 and objects.csv columns 19 (stance) and 21 (sound set), after two header rows.
+        string monsters = "Information,,NIF\nID,name,#\n8,Briton Male Merchant 1,206,114,1020,116,117,118,119,120,0,0,100,80,1,1,0\n" +
+                          "9,No Sound,206,0,0,0,0,0,0,0,0,0,100,80,1,0,0\n";
+        string objects = "Information,,NIF\nID,name,#\n1,briton dagger,166,201,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,21,0\n" +
+                         "2,bow,166,201,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,5,0,3,0\n";
+        SoundSets sets = SoundSets.FromTables(monsters, objects);
+        Assert.Equal(1, sets.Creature(8));
+        Assert.Null(sets.Creature(9));
+        Assert.Equal((21, 1), sets.Weapon(1));
+        Assert.Equal((3, 5), sets.Weapon(2));
+        Assert.False(SoundSets.HasAttackSound(5));
+        SoundSets again = SoundSets.FromCsv(sets.ToCsv());
+        Assert.Equal((1, (21, 1)), (again.Creature(8), again.Weapon(1)));
+    }
+
+    [Fact]
     public void EntryMusicIsTheRegionsOrItsProxys()
     {
         var zonesDat = DaocAssets.Zone.IniFile.Parse("""

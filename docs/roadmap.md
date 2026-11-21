@@ -603,8 +603,9 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
     `sounds.dat` and `zones.dat` into the library and checks them (all 4,226 files decode). The
     client plays the title music, each region's entry music, the zone's ambience (beds, random
     sounds, ambient music cues by time of day), 0xEF area music, combat music, 0xC9/0xD3 sounds and
-    door sounds, with Music and Sound effects volumes in Settings. Not yet: footsteps, combat hits,
-    spells, water, emotes.
+    door sounds, with Music and Sound effects volumes in Settings. Then combat (swings, parries,
+    blocks, hits and pain), deaths, footsteps, wading, swimming and the water's edge. Not yet:
+    spells, emotes, the horse, interface clicks.
 - **The intro movie and the company logo** (`movie/intro_movie.bik`, 5 min, 555 x 416, 30 fps;
   `ealogo.bik`), shown at start as retail does, skippable. Bink, which Godot can't play: converted
   once to Ogg Theora (Godot's video format) by ffmpeg, which reads Bink. Homebrew's ffmpeg has no

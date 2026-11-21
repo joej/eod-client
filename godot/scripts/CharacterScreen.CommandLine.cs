@@ -23,6 +23,10 @@ public partial class CharacterScreen
             return;
         }
         var world = new WorldPosition(new PositionAndObjectId(x, y, z, 0, 0, region, 0), zone);
+        // --player-model N: be that model offline (its figure, strides and sounds), not the capsule.
+        int pm = Array.IndexOf(args, "--player-model");
+        if (pm >= 0 && pm + 1 < args.Length && ushort.TryParse(args[pm + 1], out ushort model))
+            _playerModel = model;
         _world = NewWorldView(world, offline: true);
         _world.QuitPressed += () => QuitCleanly(0);
         GetTree().Root.CallDeferred(Node.MethodName.AddChild, _world);

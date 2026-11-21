@@ -9,7 +9,8 @@ internal static partial class Cli
     //   DIR/*.wav, *.mp3, *.csv     sounds/ (the cc_ tables and every file they name), names lower-cased;
     //   DIR/tutorial/, DIR/frontiers/  Tutorial/sounds and frontiers/sounds, where the client also looks for a file;
     //   DIR/zones/zoneNNN.dat       each zone's sounds.dat, from zones/, Tutorial/zones, frontiers/zones, phousing/zones;
-    //   DIR/zones.dat               zones/zones.mpk's zones.dat (each region's entry_music).
+    //   DIR/zones.dat               zones/zones.mpk's zones.dat (each region's entry_music);
+    //   DIR/soundsets.csv           each model's cc_creatures row and each weapon's cc_weapons row (SoundSets).
     private static int SoundsCmd(string[] args)
     {
         string client = args[1];
@@ -47,6 +48,14 @@ internal static partial class Cli
             }
         }
 
+        if (FindInstallFile(client, "gamedata.mpk") is string gamedata)
+        {
+            using MpkArchive g = MpkArchive.Open(gamedata);
+            var sets = DaocAssets.Sound.SoundSets.FromTables(System.Text.Encoding.Latin1.GetString(g.Extract("monsters.csv")),
+                System.Text.Encoding.Latin1.GetString(g.Extract("objects.csv")));
+            File.WriteAllText(Path.Combine(outDir, "soundsets.csv"), sets.ToCsv());
+            Console.WriteLine($"sounds: {sets.Creatures} models with a creature sound set, {sets.Weapons} with a weapon sound set");
+        }
         if (FindInstallFile(client, "zones/zones.mpk") is string zonesMpk)
         {
             using MpkArchive mpk = MpkArchive.Open(zonesMpk);

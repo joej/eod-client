@@ -30,6 +30,9 @@ public partial class WorldView
 
     private void OnCombatAnimated(CombatAnimation c)
     {
+        int? healthBefore = c.DefenderId == SelfId ? _vitals?.HealthPercent
+            : _entities.TryGetValue(c.DefenderId, out Entity? was) ? was.Health : null;
+        CombatSound(c, healthBefore);
         if (_entities.TryGetValue(c.DefenderId, out Entity? defender))
             defender.Health = c.DefenderHealth;
         if (c.DefenderId == SelfId && c.AttackerId != 0)

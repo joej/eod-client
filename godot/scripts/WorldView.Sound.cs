@@ -7,9 +7,19 @@
 //   - S→C 0xD3: a crafting result's sound, or a cc_sounds id; 0xC9: a cc_sounds id, at its spot when it has a radius;
 //   - S→C 0x99: the door's open or close sound (cc_doors row = the packet's sound byte), at the door;
 //   - attack mode on: combat music (mp3_Combat1 or 2 at random; not in region 27, the tutorial, nor while it already
-//     plays); attack mode off or your own death fades it out.
+//     plays); attack mode off or your own death fades it out;
+//   - S→C 0xBC: at the attacker as the attack starts, its weapon's "use" (cc_weapons column 5, 6 for a style) or, with no
+//     weapon, its creature's "attack vocal" (cc_creatures column 0); at the defender at the hit time, the weapon's
+//     "parried" (16) or "blocked" (17), or on a hit its "hits body" light, medium or styled (9, 10, 11) and the defender's
+//     pain light, medium or heavy (creatures 1, 2, 3), light below 10 % of health lost. With no weapon the weapon row is
+//     the attacker's creature column 14 ("unarmed set"). Weapons of stance 5, 6 and 8 make no attack sound;
+//   - a death (0xAE, or 0xA2 type 0 without one): the creature's "death vocal" (column 4), 2D for your own;
+//   - footsteps: the creature's "move on dirt" (column 7) for each step on the ground; wading steps (cc_sounds
+//     994–997) and swim strokes (1002–1005) for your own; entering water (19) and leaving it (221).
 // Ours: the weather is always clear (no 0x92 yet), the character is never under water for ambience, and 0xD3 type 3
-// plays 2D (its position's layout isn't known).
+// plays 2D (its position's layout isn't known). Ours until daoc-re answers how retail times them: a step every half of
+// the figure's run or walk stride travelled (strides.csv), a swim stroke every half run stride, footsteps for every
+// figure on the ground within its sound's r2.
 
 using DaocAssets.Sound;
 using DaocAssets.Zone;
@@ -28,6 +38,14 @@ public partial class WorldView
     private readonly Dictionary<(int Region, int Line), GameAudio.Voice> _ambientShots = [];
     private bool _combatMusic;
     private static IniFile? _zonesDat;
+    private static SoundSets? _soundSets;
+    private const int AttackVocal = 0, PainLight = 1, PainMedium = 2, PainHeavy = 3, DeathVocal = 4, MoveOnDirt = 7, UnarmedSet = 14;
+    private const int WeaponUse = 5, WeaponStyleUse = 6, HitLight = 9, HitMedium = 10, HitStyled = 11, WeaponParried = 16, WeaponBlocked = 17;
+    private const int EnterWater = 19, LeaveWater = 221;
+    private float _stepTravel;
+    private Vector3 _stepFrom;
+    private bool _wasSwimming;
+    private readonly Dictionary<ushort, (Vector3 From, float Travel)> _entitySteps = [];
 
     private static GameAudio? Audio => GameAudio.Instance;
 
@@ -43,7 +61,12 @@ public partial class WorldView
         {
             if (d.VictimId == _world.Position.ObjectId)
                 CombatMusic(false);
+            DeathSound(d.VictimId);
         };
+        string sets = System.IO.Path.Combine(_libraryPath ?? "", "sounds", "soundsets.csv");
+        if (_soundSets is null && System.IO.File.Exists(sets))
+            _soundSets = SoundSets.FromCsv(System.IO.File.ReadAllText(sets));
+        _stepFrom = _body.Position;
         TreeExiting += StopAmbience;
         PlayEntryMusic(audio);
     }
@@ -110,11 +133,132 @@ public partial class WorldView
         }
     }
 
+    // --- figures: combat, deaths, steps ----------------------------------------------------------------------------------
+
+    private ushort ModelOf(ushort id) =>
+        id == SelfId ? (ushort)PlayerModel : _entities.TryGetValue(id, out Entity? e) ? e.Model : (ushort)0;
+
+    private Vector3? WhereIs(ushort id) =>
+        id == SelfId ? _body.Position : _entities.TryGetValue(id, out Entity? e) && IsInstanceValid(e.Node) ? e.Node.Position : null;
+
+    private string? CreatureSound(ushort id, int column) =>
+        Audio is GameAudio audio && _soundSets?.Creature(ModelOf(id)) is int row ? audio.Tables.Creatures.Get(row, column) : null;
+
+    // Plays a figure's sound at it (2D for your own character: it is where you hear from).
+    private void FigureSound(ushort id, string? sound)
+    {
+        if (sound is null || Audio is not GameAudio audio)
+            return;
+        if (id == SelfId)
+            audio.Play(sound);
+        else if (WhereIs(id) is Vector3 at)
+            audio.Play(sound, at);
+    }
+
+    // S→C 0xBC's sounds; health is the defender's before this packet (null: unknown).
+    private void CombatSound(CombatAnimation c, int? healthBefore)
+    {
+        if (Audio is not GameAudio audio || _soundSets is null || c.AttackerId == 0)
+            return;
+        (int Row, int Stance)? weapon = c.WeaponModel != 0 ? _soundSets.Weapon(c.WeaponModel) : null;
+        int? weaponRow = weapon?.Row;
+        if (c.WeaponModel == 0 && int.TryParse(CreatureSound(c.AttackerId, UnarmedSet), out int unarmed))
+            weaponRow = unarmed;
+        bool styled = c.Result == CombatAnimation.StyledHit;
+        if (c.Swings)
+        {
+            if (c.WeaponModel == 0)
+                FigureSound(c.AttackerId, CreatureSound(c.AttackerId, AttackVocal));
+            else if (weapon is { } w && SoundSets.HasAttackSound(w.Stance))
+                FigureSound(c.AttackerId, audio.Tables.Weapons.Get(w.Row, styled ? WeaponStyleUse : WeaponUse));
+        }
+        string? impact = null, pain = null;
+        if (weaponRow is int wr)
+            impact = c.Result switch
+            {
+                CombatAnimation.Parried => audio.Tables.Weapons.Get(wr, WeaponParried),
+                CombatAnimation.Blocked => audio.Tables.Weapons.Get(wr, WeaponBlocked),
+                _ when c.IsHit => audio.Tables.Weapons.Get(wr, styled ? HitStyled : Light(c, healthBefore) ? HitLight : HitMedium),
+                _ => null,
+            };
+        if (c.IsHit)
+            pain = CreatureSound(c.DefenderId, styled ? PainHeavy : Light(c, healthBefore) ? PainLight : PainMedium);
+        if (impact is null && pain is null)
+            return;
+        ushort defender = c.DefenderId;
+        GetTree().CreateTimer(HitSeconds).Timeout += () =>
+        {
+            FigureSound(defender, impact);
+            FigureSound(defender, pain);
+        };
+    }
+
+    // Under 10 % of the defender's health lost: a light hit.
+    private static bool Light(CombatAnimation c, int? before) => before is not int b || b - c.DefenderHealth < 10;
+
+    private void DeathSound(ushort id) => FigureSound(id, CreatureSound(id, DeathVocal));
+
+    // Footsteps, swim strokes, and going into and out of the water.
+    private void UpdateSteps()
+    {
+        if (Audio is not GameAudio audio)
+            return;
+        if (_swimming != _wasSwimming)
+        {
+            _wasSwimming = _swimming;
+            audio.Play(_swimming ? EnterWater : LeaveWater);
+        }
+        Vector3 at = _body.Position;
+        float moved = new Vector2(at.X - _stepFrom.X, at.Z - _stepFrom.Z).Length() / RegionMetresPerUnit;
+        _stepFrom = at;
+        bool onFoot = !_airborne && !_climbing && !_dead;
+        if (moved > 0 && moved < 200 && (onFoot || _swimming))
+        {
+            _stepTravel += moved;
+            DaocAssets.Figures.Strides? strides = StridesOf((ushort)PlayerModel, catacombs: true);
+            bool running = _runningForward;
+            float step = (_swimming || running ? strides?.Run ?? 200 : strides?.Walk ?? 100) / 2f;
+            if (_stepTravel >= step)
+            {
+                _stepTravel = 0;
+                if (_swimming)
+                    audio.Play(1002 + Random.Shared.Next(4));
+                else if (_wading)
+                    audio.Play(994 + Random.Shared.Next(4));
+                else
+                    audio.Play(CreatureSound(SelfId, MoveOnDirt) ?? "");
+            }
+        }
+        foreach ((ushort id, Entity e) in _entities)
+        {
+            if (!IsInstanceValid(e.Node) || e.Dead)
+                continue;
+            Vector3 p = e.Node.Position;
+            (Vector3 from, float travel) = _entitySteps.GetValueOrDefault(id, (p, 0f));
+            float d = new Vector2(p.X - from.X, p.Z - from.Z).Length() / RegionMetresPerUnit;
+            if (d > 200 || !e.Grounded)
+                d = 0;
+            travel += d;
+            float stride = (Math.Abs(e.MoveSpeed) > 150 ? e.Strides?.Run ?? 200 : e.Strides?.Walk ?? 100) / 2f;
+            if (travel >= stride)
+            {
+                travel = 0;
+                if (p.DistanceTo(_body.Position) < 1000 * RegionMetresPerUnit && CreatureSound(id, MoveOnDirt) is string sound)
+                    audio.Play(sound, p);
+            }
+            _entitySteps[id] = (p, travel);
+        }
+        if (_entitySteps.Count > _entities.Count + 32)
+            foreach (ushort gone in _entitySteps.Keys.Where(k => !_entities.ContainsKey(k)).ToList())
+                _entitySteps.Remove(gone);
+    }
+
     // Each frame: the zone's ambience where the character stands.
     private void UpdateSound(double delta)
     {
         if (Audio is not GameAudio audio)
             return;
+        UpdateSteps();
         Zone zone = _world.Zone;
         if (zone.Id != _ambienceZone)
             LoadAmbience(zone.Id);

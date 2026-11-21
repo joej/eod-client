@@ -190,7 +190,12 @@ public partial class WorldView
         {
             _entities.Remove(objectId);
             if (!dying.Dead)
+            {
+                if (Audio?.Tables is not null && _soundSets?.Creature(dying.Model) is int row &&
+                    Audio.Tables.Creatures.Get(row, DeathVocal) is string vocal)
+                    Audio.Play(vocal, dying.Node.Position);   // no 0xAE came: its death sound now (WorldView.Sound)
                 DropEntity(dying, true);
+            }
             if (dying.Nameplate is not null && IsInstanceValid(dying.Nameplate))
                 dying.Nameplate.Visible = false;
             float y = dying.Node.Position.Y;
