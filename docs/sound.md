@@ -200,3 +200,27 @@ End Time, Weather, Environment Type`):
 the tables (`SoundTables`), resolves a name to the files it plays (`SoundPlanner`), reads `sounds.dat` (`ZoneSounds`)
 and runs a zone's ambience (`Ambience`); `godot/scripts/GameAudio.cs` plays them and `WorldView.Sound.cs` connects the
 packets. What is built and what is ours is in open question W52.
+
+How retail's client does it (daoc-re, 2026-11-21, from its code and data; nothing heard yet), and where we follow:
+- **Footsteps:** only your own figure (and your mount) makes them, in 2D, from the clip: one as the walk or run clip
+  passes its middle and one as it wraps. Wading plays a water step on both; swimming a stroke on the wrap only. Ours
+  takes the clip's time instead of its frame count, and a figure with no clips makes none.
+- **Distance:** full volume within r1, linear to silence at r2, nothing beyond. r1 and r2 belong to the file: the first
+  `cc_sounds` row naming it sets them (ours: the first in file order). A 3D sound pans by its angle from the listener's
+  heading; ours uses Godot's panning.
+- **Polygroups:** only cutoff 2 limits: a sound that takes its group past the limit (at most 10) stops the oldest.
+  Cutoff-1 groups never limit.
+- **sounds.dat:** volume is 0–127; weather 3 is snow (rain and snow come from the zone's temperature, not 0x92's fog);
+  environment 0 plays above and under water; start time 0 means always. A random line takes a turn each period; a
+  turn is skipped while its last sound still plays or within the region's spacing of any of its random sounds, then
+  the chance is rolled. The first turn is due at once with `instant_start=1`, else after 1 to period seconds. Beds start
+  at 1/128 and fade in and out over the region's fade time. A line whose sound doesn't resolve stays as a silent slot:
+  it still takes turns and still resets the spacing.
+- **Entry music:** only `[regionNNN]` entry_music (through proxy_region; default `mp3_Enter_Albion`); the `[zoneNNN]`
+  values are never played.
+- **Volumes:** four, as retail's options: music, sound, ambient music, ambient sound (sounds.dat `sound_type` 2 and 1).
+  A channel at 0 starts nothing. Retail's defaults aren't known; ours are 70 %, 80 %, 70 %, 80 %.
+- **Queues:** the interval runs from start to start; −1 waits for the end; `s_silenceN` waits N ms in place of it.
+- **Names:** exact, case-sensitive, and only in the name tables (never by file name). Member lists have their whitespace
+  removed; `*NN` replaces the last len(NN) characters of the previous member; a member that doesn't resolve is left out.
+  `s_null` is built in.

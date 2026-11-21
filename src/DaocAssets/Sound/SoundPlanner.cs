@@ -2,8 +2,9 @@
 //
 // What one sound name plays (roadmap M12): a cc_sounds row by name or id, a g_ group (one member at random), a q_ queue
 // (its members in turn), an l_ loop (its start, then its body), each resolved down to the sound files and when each
-// starts. Ours, until daoc-re answers (W52): a queue interval is the time from one member's start to the next's
-// (−1: from its end); "s_null" plays nothing and takes no time.
+// starts. As retail's client does (daoc-re 2026-11-21): a queue interval runs from one member's start to the next's;
+// −1 starts the next when the last ends; "s_silenceN" waits N ms in place of the interval; the first member starts at
+// once. "s_null" plays nothing and takes no time. Ours: interval 0 starts every member together (retail: one a frame).
 
 namespace DaocAssets.Sound;
 
@@ -44,7 +45,7 @@ public sealed class SoundPlanner(SoundTables tables, Random? rng = null)
     // Adds what name plays from time at; returns when it ends (for end-to-end queues).
     private double Add(string name, double at, List<PlannedSound> plan, Func<SoundRow, double> length, int depth)
     {
-        if (depth > MaxDepth || name.Length == 0 || name.Equals("s_null", StringComparison.OrdinalIgnoreCase))
+        if (depth > MaxDepth || name.Length == 0 || name == SoundTables.Null)
             return at;
         if (Row(name) is SoundRow row)
         {
@@ -78,14 +79,12 @@ public sealed class SoundPlanner(SoundTables tables, Random? rng = null)
         return at;
     }
 
-    /// <summary>"s_silence(250)" → 250 ms; null for anything else.</summary>
+    /// <summary>"s_silence250" or "s_silence(250)" → 250 ms; null for anything else.</summary>
     internal static double? Silence(string member)
     {
-        if (!member.StartsWith("s_silence", StringComparison.OrdinalIgnoreCase))
+        if (!member.StartsWith("s_silence", StringComparison.Ordinal))
             return null;
-        int open = member.IndexOf('('), close = member.IndexOf(')');
-        return open > 0 && close > open && SoundRange.Parse(member[(open + 1)..close]) is SoundRange r
-            ? (r.Min + r.Max) / 2
-            : 0;
+        string n = member["s_silence".Length..].Trim('(', ')');
+        return SoundRange.Parse(n) is SoundRange r ? (r.Min + r.Max) / 2 : 0;
     }
 }

@@ -5,12 +5,15 @@
 // library (make sounds: library/sounds), as its tables say:
 //   - a name (a cc_sounds row, g_ group, q_ queue, l_ loop; SoundPlanner) becomes one or more players, each with its
 //     row's rate (pitch), volume and pan picked at random within the row's ranges, and its offset (a delay);
-//   - positional sounds play at a spot, fading out linearly from the row's r1 to r2 (units);
-//   - a polygroup (cc_sounds POLYGROUPS) caps how many of its sounds play at once;
+//   - positional sounds play at a spot, at full volume within the file's r1, fading linearly to silence at r2 (units);
+//   - a polygroup (cc_sounds POLYGROUPS) with cutoff 2 stops its oldest sounds when a new one takes it past its limit;
+//     other cutoffs never limit (retail never counts their voices);
+//   - four volumes, as retail's options: music, sound effects, ambient music, ambient sound; a channel at 0 starts
+//     nothing;
 //   - music (mp3_) plays on its own channel and crossfades.
-// Ours, until daoc-re answers (W52): the fade from r1 to r2 is linear and silent beyond r2, heard from the camera; a full
-// polygroup with cutoff 1 stops its oldest sound for the new one, any other cutoff drops the new one; a 2D sound's pan
-// is a position left or right of the camera; title music loops, the rest plays once.
+// As retail (daoc-re 2026-11-21) except, ours: sounds are heard from the camera; a positional sound pans by Godot's
+// 3D panning (retail: by the angle from the listener's heading, centred within 20 units); a 2D sound's pan is a
+// position left or right of the camera; a stolen voice fades over 0.15 s; title music loops, the rest plays once.
 
 using DaocAssets.Sound;
 using Godot;
@@ -19,7 +22,15 @@ namespace EodClient;
 
 public partial class GameAudio : Node
 {
-    public const string MusicBus = "Music", EffectsBus = "Effects";
+    public const string MusicBus = "Music", EffectsBus = "Effects", AmbientMusicBus = "AmbientMusic", AmbientSoundBus = "AmbientSound";
+
+    /// <summary>The bus a sounds.dat region plays on, by its sound_type (1 ambient sfx, 2 ambient music, 3 effect).</summary>
+    public static string BusOf(ZoneSoundRegion region) => region.SoundType switch
+    {
+        ZoneSoundRegion.AmbientMusic => AmbientMusicBus,
+        ZoneSoundRegion.SoundEffect => EffectsBus,
+        _ => AmbientSoundBus,
+    };
     private const float MetresPerUnit = 0.025f;
     private const float StealFade = 0.15f;    // seconds: a stolen voice fades this fast (ours)
     private const float PanDistance = 2f;     // metres: how far to the side a fully panned 2D sound is placed (ours)
@@ -62,8 +73,8 @@ public partial class GameAudio : Node
             GD.Print("[sound] no library/sounds (make sounds): silent");
             return null;
         }
-        EnsureBus(MusicBus);
-        EnsureBus(EffectsBus);
+        foreach (string bus in (string[])[MusicBus, EffectsBus, AmbientMusicBus, AmbientSoundBus])
+            EnsureBus(bus);
         Instance = new GameAudio(dir);
         Instance.ApplyVolumes();
         GD.Print($"[sound] {Instance.Tables.Sounds.Count} sounds from {dir}");
@@ -90,9 +101,17 @@ public partial class GameAudio : Node
     public void ApplyVolumes()
     {
         bool mute = OS.GetCmdlineUserArgs().Contains("--mute");
-        AudioServer.SetBusVolumeDb(AudioServer.GetBusIndex(MusicBus), Mathf.LinearToDb(mute ? 0 : ClientSettings.MusicVolume));
-        AudioServer.SetBusVolumeDb(AudioServer.GetBusIndex(EffectsBus), Mathf.LinearToDb(mute ? 0 : ClientSettings.EffectsVolume));
+        foreach (string bus in (string[])[MusicBus, EffectsBus, AmbientMusicBus, AmbientSoundBus])
+            AudioServer.SetBusVolumeDb(AudioServer.GetBusIndex(bus), Mathf.LinearToDb(mute ? 0 : Level(bus)));
     }
+
+    private static float Level(string bus) => bus switch
+    {
+        MusicBus => ClientSettings.MusicVolume,
+        AmbientMusicBus => ClientSettings.AmbientMusicVolume,
+        AmbientSoundBus => ClientSettings.AmbientSoundVolume,
+        _ => ClientSettings.EffectsVolume,
+    };
 
     // --- sounds -------------------------------------------------------------------------------------------------------
 
@@ -130,16 +149,14 @@ public partial class GameAudio : Node
     public Voice? Play(string name, Vector3? at = null, float volume = 1f, bool loop = false, bool ignoreOffset = false,
         string bus = EffectsBus)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            return null;
+        if (string.IsNullOrWhiteSpace(name) || Level(bus) <= 0)
+            return null;   // retail starts nothing on a channel set to 0
         if (Planner.Loop(name) is SoundLoop l)
             (name, loop) = (l.Body, true);
         List<PlannedSound> plan = Planner.Plan(name, Length);
         if (plan.Count == 0)
             return null;
         string? group = plan[0].Row.Polygroup;
-        if (group is not null && !MakeRoom(group))
-            return null;
         var voice = new Voice { Polygroup = group, Started = _now, Looping = loop, At = at, R1 = plan[0].Row.R1, R2 = plan[0].Row.R2 };
         foreach (PlannedSound p in plan)
         {
@@ -148,24 +165,22 @@ public partial class GameAudio : Node
             voice.Waiting++;
         }
         _voices.Add(voice);
+        if (group is not null)
+            KeepToLimit(group);
         return voice;
     }
 
     /// <summary>Plays a cc_sounds id.</summary>
     public Voice? Play(int id, Vector3? at = null, float volume = 1f) => Play(id.ToString(), at, volume);
 
-    // A free voice in the group, stealing the oldest when its cutoff allows (ours: cutoff 1 steals, others drop the new).
-    private bool MakeRoom(string group)
+    // A cutoff-2 group past its limit: its oldest voices stop (TutorialVO, limit 1: the new line cuts the one playing).
+    private void KeepToLimit(string group)
     {
-        if (!Tables.Polygroups.TryGetValue(group, out Polygroup? g) || g.Limit <= 0)
-            return true;
+        if (!Tables.Polygroups.TryGetValue(group, out Polygroup? g) || !g.Limits)
+            return;
         List<Voice> playing = _voices.Where(v => !v.Finished && !v.StopAtZero && v.Polygroup == group).OrderBy(v => v.Started).ToList();
-        if (playing.Count < g.Limit)
-            return true;
-        if (g.Cutoff != 1)
-            return false;
-        playing[0].Stop(StealFade);
-        return true;
+        for (int i = 0; i < playing.Count - g.Limit; i++)
+            playing[i].Stop(StealFade);
     }
 
     private double Length(SoundRow row) =>

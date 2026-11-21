@@ -14,12 +14,12 @@
 //     pain light, medium or heavy (creatures 1, 2, 3), light below 10 % of health lost. With no weapon the weapon row is
 //     the attacker's creature column 14 ("unarmed set"). Weapons of stance 5, 6 and 8 make no attack sound;
 //   - a death (0xAE, or 0xA2 type 0 without one): the creature's "death vocal" (column 4), 2D for your own;
-//   - footsteps: the creature's "move on dirt" (column 7) for each step on the ground; wading steps (cc_sounds
-//     994–997) and swim strokes (1002–1005) for your own; entering water (19) and leaving it (221).
-// Ours: the weather is always clear (no 0x92 yet), the character is never under water for ambience, and 0xD3 type 3
-// plays 2D (its position's layout isn't known). Ours until daoc-re answers how retail times them: a step every half of
-// the figure's run or walk stride travelled (strides.csv), a swim stroke every half run stride, footsteps for every
-// figure on the ground within its sound's r2.
+//   - footsteps, for your own figure only and in 2D, as retail (daoc-re 2026-11-21): two a cycle of the walk, run,
+//     back, strafe or swim clip, as it passes its middle and as it wraps. On the ground both are the creature's "move
+//     on dirt" (column 7); wading, both are a water step (cc_sounds 994–997); swimming, only the wrap is a stroke
+//     (1002–1005). Entering water plays 19 and leaving it 221.
+// Ours: the weather is always clear (no 0x92 yet), the character is never under water for ambience, 0xD3 type 3
+// plays 2D (its position's layout isn't known), and a figure without clips (a capsule) makes no steps.
 
 using DaocAssets.Sound;
 using DaocAssets.Zone;
@@ -42,10 +42,11 @@ public partial class WorldView
     private const int AttackVocal = 0, PainLight = 1, PainMedium = 2, PainHeavy = 3, DeathVocal = 4, MoveOnDirt = 7, UnarmedSet = 14;
     private const int WeaponUse = 5, WeaponStyleUse = 6, HitLight = 9, HitMedium = 10, HitStyled = 11, WeaponParried = 16, WeaponBlocked = 17;
     private const int EnterWater = 19, LeaveWater = 221;
-    private float _stepTravel;
-    private Vector3 _stepFrom;
     private bool _wasSwimming;
-    private readonly Dictionary<ushort, (Vector3 From, float Travel)> _entitySteps = [];
+    private string? _stepClip;
+    private double _stepPhase;
+    private static readonly HashSet<string> StepClips = ["walk", "run", "back", "strafe_left", "strafe_right", "swim", "swim_back"];
+    private const int WadeStep = 994, SwimStroke = 1002;
 
     private static GameAudio? Audio => GameAudio.Instance;
 
@@ -66,7 +67,6 @@ public partial class WorldView
         string sets = System.IO.Path.Combine(_libraryPath ?? "", "sounds", "soundsets.csv");
         if (_soundSets is null && System.IO.File.Exists(sets))
             _soundSets = SoundSets.FromCsv(System.IO.File.ReadAllText(sets));
-        _stepFrom = _body.Position;
         TreeExiting += StopAmbience;
         PlayEntryMusic(audio);
     }
@@ -198,7 +198,7 @@ public partial class WorldView
 
     private void DeathSound(ushort id) => FigureSound(id, CreatureSound(id, DeathVocal));
 
-    // Footsteps, swim strokes, and going into and out of the water.
+    // Your own footsteps and swim strokes, from the clip's cycle, and going into and out of the water.
     private void UpdateSteps()
     {
         if (Audio is not GameAudio audio)
@@ -208,49 +208,29 @@ public partial class WorldView
             _wasSwimming = _swimming;
             audio.Play(_swimming ? EnterWater : LeaveWater);
         }
-        Vector3 at = _body.Position;
-        float moved = new Vector2(at.X - _stepFrom.X, at.Z - _stepFrom.Z).Length() / RegionMetresPerUnit;
-        _stepFrom = at;
-        bool onFoot = !_airborne && !_climbing && !_dead;
-        if (moved > 0 && moved < 200 && (onFoot || _swimming))
+        string? clip = _bodyAnim is { } anim && anim.IsPlaying() && StepClips.Contains(_bodyClip) && !_airborne && !_dead
+            ? _bodyClip : null;
+        if (clip is null || _bodyAnim!.CurrentAnimationLength <= 0)
         {
-            _stepTravel += moved;
-            DaocAssets.Figures.Strides? strides = StridesOf((ushort)PlayerModel, catacombs: true);
-            bool running = _runningForward;
-            float step = (_swimming || running ? strides?.Run ?? 200 : strides?.Walk ?? 100) / 2f;
-            if (_stepTravel >= step)
-            {
-                _stepTravel = 0;
-                if (_swimming)
-                    audio.Play(1002 + Random.Shared.Next(4));
-                else if (_wading)
-                    audio.Play(994 + Random.Shared.Next(4));
-                else
-                    audio.Play(CreatureSound(SelfId, MoveOnDirt) ?? "");
-            }
+            _stepClip = null;
+            return;
         }
-        foreach ((ushort id, Entity e) in _entities)
+        double phase = _bodyAnim.CurrentAnimationPosition / _bodyAnim.CurrentAnimationLength;
+        if (clip != _stepClip)
+            (_stepClip, _stepPhase) = (clip, phase);
+        bool middle = _stepPhase < 0.5 && phase >= 0.5, wrap = phase < _stepPhase && phase < 0.5;
+        _stepPhase = phase;
+        if (!middle && !wrap)
+            return;
+        if (_swimming)
         {
-            if (!IsInstanceValid(e.Node) || e.Dead)
-                continue;
-            Vector3 p = e.Node.Position;
-            (Vector3 from, float travel) = _entitySteps.GetValueOrDefault(id, (p, 0f));
-            float d = new Vector2(p.X - from.X, p.Z - from.Z).Length() / RegionMetresPerUnit;
-            if (d > 200 || !e.Grounded)
-                d = 0;
-            travel += d;
-            float stride = (Math.Abs(e.MoveSpeed) > 150 ? e.Strides?.Run ?? 200 : e.Strides?.Walk ?? 100) / 2f;
-            if (travel >= stride)
-            {
-                travel = 0;
-                if (p.DistanceTo(_body.Position) < 1000 * RegionMetresPerUnit && CreatureSound(id, MoveOnDirt) is string sound)
-                    audio.Play(sound, p);
-            }
-            _entitySteps[id] = (p, travel);
+            if (wrap)
+                audio.Play(SwimStroke + Random.Shared.Next(4));
         }
-        if (_entitySteps.Count > _entities.Count + 32)
-            foreach (ushort gone in _entitySteps.Keys.Where(k => !_entities.ContainsKey(k)).ToList())
-                _entitySteps.Remove(gone);
+        else if (_wading)
+            audio.Play(WadeStep + Random.Shared.Next(4));
+        else if (CreatureSound(SelfId, MoveOnDirt) is string step)
+            audio.Play(step);
     }
 
     // Each frame: the zone's ambience where the character stands.
@@ -268,24 +248,21 @@ public partial class WorldView
         int hhmm = GameMillisOfDay is uint ms ? (int)(ms / 3_600_000 * 100 + ms / 60_000 % 60) : 1200;
         const int clear = 1;
         const bool underwater = false;
-        foreach (AmbientShot shot in _ambience.Step(delta, x - zone.X, y - zone.Y, hhmm, clear, underwater, MusicHeard(audio)))
+        bool StillPlaying(int r, int l) => _ambientShots.TryGetValue((r, l), out GameAudio.Voice? last) && !last.Finished;
+        foreach (AmbientShot shot in _ambience.Step(delta, x - zone.X, y - zone.Y, hhmm, clear, underwater, MusicHeard(audio), StillPlaying))
         {
-            if (_ambientShots.TryGetValue((shot.Region, shot.Line), out GameAudio.Voice? last) && !last.Finished)
-                continue;   // ours: a random sound doesn't start again while it still plays
             ZoneSoundRegion region = _ambience.Regions[shot.Region];
-            if (audio.Play(region.Sounds[shot.Line].Sound, volume: shot.Volume, ignoreOffset: region.IgnoreRandomOffset,
-                    bus: region.IsMusic ? GameAudio.MusicBus : GameAudio.EffectsBus) is GameAudio.Voice v)
+            if (audio.Play(region.Sounds[shot.Line].Sound, volume: shot.Volume, bus: GameAudio.BusOf(region)) is GameAudio.Voice v)
                 _ambientShots[(shot.Region, shot.Line)] = v;
         }
         var heard = new HashSet<(int, int)>();
-        foreach (AmbientShot loop in _ambience.Loops(hhmm, clear, underwater))
+        foreach (AmbientShot loop in _ambience.Loops())
         {
             heard.Add((loop.Region, loop.Line));
             if (!_ambientLoops.TryGetValue((loop.Region, loop.Line), out GameAudio.Voice? v) || v.Finished)
             {
                 ZoneSoundRegion region = _ambience.Regions[loop.Region];
-                v = audio.Play(region.Sounds[loop.Line].Sound, loop: true, ignoreOffset: true,
-                    bus: region.IsMusic ? GameAudio.MusicBus : GameAudio.EffectsBus);
+                v = audio.Play(region.Sounds[loop.Line].Sound, loop: true, ignoreOffset: true, bus: GameAudio.BusOf(region));
                 if (v is null)
                     continue;
                 _ambientLoops[(loop.Region, loop.Line)] = v;
@@ -294,7 +271,7 @@ public partial class WorldView
         }
         foreach (((int, int) key, GameAudio.Voice v) in _ambientLoops.Where(kv => !heard.Contains(kv.Key)).ToList())
         {
-            v.Stop(0.5f);
+            v.Stop(0.1f);   // the bed has already faded to nothing
             _ambientLoops.Remove(key);
         }
     }

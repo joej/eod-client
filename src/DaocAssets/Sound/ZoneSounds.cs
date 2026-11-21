@@ -3,9 +3,11 @@
 // A zone's ambient sound regions (zones/zoneNNN/sounds.dat; roadmap M12, docs/sound.md). Each [SoundRegionNN] has its
 // settings, up to 128 SoundNN lines and its shapes. The file's own header gives a line as "Type, Sound, Period, Chance,
 // Volume, Start Time, End Time, Weather, Environment Type": type 1 a random one-shot, 2 a loop; the sound a cc_sounds id
-// or a structure name; period in seconds (a range, "2-6"); chance in %; volume 0–100; start and end HHMM (0, 0 always;
-// may wrap past midnight); weather 0 any, 1 clear, 2 rain, 3 fog; with version=2 an environment, 1 above water and
-// 2 underwater. Shapes are zone-local units: "0, left, top, right, bottom" or "1, x, y, radius"; an xShape is silent.
+// or a structure name (digits: a cc_sounds ID#, "0530" = 530); period in seconds (a range, "2-6", re-rolled each turn);
+// chance in %, 0–100; volume 0–127; start and end HHMM (start 0: always; may wrap past midnight); weather 0 any,
+// 1 clear, 2 rain, 3 snow; with version=2 an environment, 0 any, 1 above water, 2 underwater (default 1). Type 3 and
+// the line's last number aren't read (retail: a separate path, and a special case; daoc-re 2026-11-21). Shapes are
+// zone-local units: "0, x1, y1, x2, y2" (x1 < x ≤ x2, y1 < y ≤ y2) or "1, x, y, radius"; an xShape is an area of silence.
 
 using DaocAssets.Zone;
 
@@ -16,12 +18,20 @@ public sealed record ZoneSoundLine(int Kind, string Sound, SoundRange PeriodS, f
 {
     public const int Random = 1, Loop = 2;
 
-    /// <summary>Whether the line plays at game time hhmm (0, 0: always; a range may wrap past midnight).</summary>
-    public bool PlaysAt(int hhmm) =>
-        (Start == 0 && End == 0) || (Start <= End ? hhmm >= Start && hhmm <= End : hhmm >= Start || hhmm <= End);
+    public const int MaxVolume = 127;
 
-    /// <summary>Whether the line plays in this weather (0 any, 1 clear, 2 rain, 3 fog).</summary>
+    /// <summary>Whether the line plays at game time hhmm (start 0: always; a range may wrap past midnight).</summary>
+    public bool PlaysAt(int hhmm) =>
+        Start == 0 || (Start < End ? hhmm >= Start && hhmm <= End : hhmm >= Start || hhmm <= End);
+
+    /// <summary>Whether the line plays in this weather (1 clear, 2 rain, 3 snow; a line's 0 plays in any).</summary>
     public bool PlaysIn(int weather) => Weather == 0 || Weather == weather;
+
+    /// <summary>Whether the line plays above water or under it (environment 0 either, 1 above, 2 under).</summary>
+    public bool PlaysUnder(bool underwater) => Environment == 0 || (Environment == 2) == underwater;
+
+    /// <summary>The line's level, 0–1 (its 0–127).</summary>
+    public float Level => Math.Clamp(Volume / MaxVolume, 0, 1);
 }
 
 /// <summary>A rectangle (Radius 0) or a circle, zone-local units.</summary>
@@ -29,7 +39,7 @@ public readonly record struct ZoneSoundShape(bool Circle, float X1, float Y1, fl
 {
     public bool Contains(float x, float y) => Circle
         ? (x - X1) * (x - X1) + (y - Y1) * (y - Y1) <= Radius * Radius
-        : x >= Math.Min(X1, X2) && x <= Math.Max(X1, X2) && y >= Math.Min(Y1, Y2) && y <= Math.Max(Y1, Y2);
+        : x > X1 && x <= X2 && y > Y1 && y <= Y2;
 
     internal static ZoneSoundShape? Parse(string? text)
     {
@@ -44,10 +54,12 @@ public readonly record struct ZoneSoundShape(bool Circle, float X1, float Y1, fl
 
 public sealed record ZoneSoundRegion(string Name, bool ZoneWide, float FadeTime, float RandomSpacing, bool FadeOnMp3,
     bool IgnoreRandomOffset, int SoundType, int Version, IReadOnlyList<ZoneSoundLine> Sounds,
-    IReadOnlyList<ZoneSoundShape> Shapes, IReadOnlyList<ZoneSoundShape> Silent)
+    IReadOnlyList<ZoneSoundShape> Shapes, IReadOnlyList<ZoneSoundShape> Silent, bool InstantStart = false)
 {
-    /// <summary>sound_type 2: ambient music (one part per region at a time).</summary>
-    public bool IsMusic => SoundType == 2;
+    public const int AmbientSfx = 1, AmbientMusic = 2, SoundEffect = 3;
+
+    /// <summary>sound_type 2: ambient music.</summary>
+    public bool IsMusic => SoundType == AmbientMusic;
 
     /// <summary>Whether a zone-local point is in the region (in a shape, outside every xShape).</summary>
     public bool Contains(float x, float y) =>
@@ -79,7 +91,8 @@ public static class ZoneSounds
             }
             regions.Add(new ZoneSoundRegion(keys.GetValueOrDefault("Name") ?? section, Int(keys, "zone_wide_sounds", 0) == 1,
                 Float(keys, "fade_time", 3), Float(keys, "random_sound_spacing", 5), Int(keys, "fade_on_mp3", 0) == 1,
-                Int(keys, "ignore_random_offset", 0) == 1, Int(keys, "sound_type", 1), version, sounds, shapes, silent));
+                Int(keys, "ignore_random_offset", 0) == 1, Int(keys, "sound_type", 1), version, sounds, shapes, silent,
+                Int(keys, "instant_start", 0) == 1));
         }
         return regions;
     }
@@ -107,10 +120,13 @@ public static class ZoneSounds
 
 public static class RegionMusic
 {
+    public const int EnterAlbion = 2;
+
     /// <summary>
     /// The music for entering region <paramref name="region"/>: zones.dat [regionNNN] entry_music, a cc_mp3s id (2 =
-    /// mp3_Enter_Albion), taken from its proxy_region when it has one; null for none (0) or no entry. Ours, until daoc-re
-    /// answers: the region's value only, not a [zoneNNN] one; dr_entry_music (Darkness Rising) isn't used.
+    /// mp3_Enter_Albion, the default when the key is missing), taken from its proxy_region when it has one; null for 0.
+    /// As retail (daoc-re 2026-11-21): only the region's value; the [zoneNNN] entry_music values are never played.
+    /// dr_entry_music overrides it only with Darkness Rising, which a 1.65 server doesn't have.
     /// </summary>
     public static int? EntryMusic(IniFile zonesDat, int region)
     {
@@ -122,7 +138,10 @@ public static class RegionMusic
                 region = proxy;
                 continue;
             }
-            return int.TryParse(zonesDat.Get(section, "entry_music")?.Trim(), out int id) && id != 0 ? id : null;
+            string? value = zonesDat.Get(section, "entry_music")?.Trim();
+            if (value is null)
+                return EnterAlbion;
+            return int.TryParse(value, out int id) && id != 0 ? id : null;
         }
         return null;
     }

@@ -151,7 +151,21 @@ public static class ClientSettings
         set => SaveIn("sound", "music", value);
     }
 
-    /// <summary>Sound effects and ambience volume, 0–1 (ours: 0.8).</summary>
+    /// <summary>Ambient music volume (sounds.dat sound_type 2), 0–1 (ours: 0.7; retail's default: unknown).</summary>
+    public static float AmbientMusicVolume
+    {
+        get => Mathf.Clamp(Load().GetValue("sound", "ambient_music", 0.7f).AsSingle(), 0, 1);
+        set => SaveIn("sound", "ambient_music", value);
+    }
+
+    /// <summary>Ambient sound volume (sounds.dat sound_type 1), 0–1 (ours: 0.8; retail's default: unknown).</summary>
+    public static float AmbientSoundVolume
+    {
+        get => Mathf.Clamp(Load().GetValue("sound", "ambient_sound", 0.8f).AsSingle(), 0, 1);
+        set => SaveIn("sound", "ambient_sound", value);
+    }
+
+    /// <summary>Sound effects volume, 0–1 (ours: 0.8).</summary>
     public static float EffectsVolume
     {
         get => Mathf.Clamp(Load().GetValue("sound", "effects", 0.8f).AsSingle(), 0, 1);

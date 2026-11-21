@@ -5,7 +5,11 @@
 // random; "s_null" is a silent choice; "*02" is the previous member's name with its trailing number replaced), q_ queues
 // (members in turn, an interval apart; "s_silence(n)" waits n ms), l_ loops (start, body, stop), mp3_ music. The sheets
 // per thing (creatures, weapons, spells, doors, events, interface) are rows of such names, by the row's number.
-// A field of "*" or nothing takes the "#,0,s_default" row's value. Names are matched case-insensitively.
+// A field of "*" or nothing takes the "#,0,s_default" row's value. As retail's client does (daoc-re 2026-11-21): names
+// match exactly (case-sensitive) and only in the name tables, never by file name; a member list has its whitespace
+// removed; "*NN" replaces the last len(NN) characters of the previous member's name; a member that resolves to nothing
+// is left out of its list when the tables load ("s_null" is built in and stays, a silent choice); r1 and r2 belong to
+// the file, taken from the first row that names it.
 
 using System.Globalization;
 
@@ -58,8 +62,18 @@ public readonly record struct SoundRange(float Min, float Max)
 public sealed record SoundRow(int Id, string Name, string File, SoundRange Rate, SoundRange Volume, SoundRange Pan,
     SoundRange OffsetMs, float R1, float R2, string? Polygroup);
 
-/// <summary>A cc_sounds POLYGROUPS row: at most Limit voices at once; Cutoff decides what gives way (W52).</summary>
-public sealed record Polygroup(string Name, int Limit, int Cutoff);
+/// <summary>
+/// A cc_sounds POLYGROUPS row: at most Limit voices (capped at 10). Only a cutoff-2 group limits anything: starting a
+/// sound past its limit stops its oldest ones. A cutoff-1 group would refuse new sounds, but retail never counts its
+/// voices, so it never does (daoc-re 2026-11-21).
+/// </summary>
+public sealed record Polygroup(string Name, int Limit, int Cutoff)
+{
+    public const int Steals = 2, MaxLimit = 10;
+
+    /// <summary>Whether starting sounds in the group stops its oldest ones past the limit.</summary>
+    public bool Limits => Cutoff == Steals && Limit > 0;
+}
 
 /// <summary>A cc_queues row: members in turn; IntervalMs between them (−1: end to end).</summary>
 public sealed record SoundQueue(string Name, IReadOnlyList<string> Members, SoundRange IntervalMs);
@@ -69,14 +83,15 @@ public sealed record SoundLoop(string Name, string? Start, string Body, string? 
 
 public sealed class SoundTables
 {
-    private readonly Dictionary<string, SoundRow> _byName = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, SoundRow> _byName = new(StringComparer.Ordinal);
     private readonly Dictionary<int, SoundRow> _byId = [];
-    private readonly Dictionary<string, IReadOnlyList<string>> _groups = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, SoundQueue> _queues = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, SoundLoop> _loops = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> _mp3Files = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IReadOnlyList<string>> _groups = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SoundQueue> _queues = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SoundLoop> _loops = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _mp3Files = new(StringComparer.Ordinal);
     private readonly Dictionary<int, string> _mp3Ids = [];
-    private readonly Dictionary<string, Polygroup> _polygroups = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Polygroup> _polygroups = new(StringComparer.Ordinal);
+    public const string Null = "s_null";
 
     /// <summary>Every cc_sounds row, by name.</summary>
     public IReadOnlyDictionary<string, SoundRow> Sounds => _byName;
@@ -123,6 +138,7 @@ public sealed class SoundTables
                 t._mp3Files[f[2].Trim()] = f[3].Trim();
                 t._mp3Ids[id] = f[2].Trim();
             }
+        t.DropUnresolved();
         t.Music = SoundSheet.Parse(text("cc_music.csv"), nameColumn: false);
         t.Creatures = SoundSheet.Parse(text("cc_creatures.csv"));
         t.Weapons = SoundSheet.Parse(text("cc_weapons.csv"));
@@ -140,7 +156,7 @@ public sealed class SoundTables
         foreach (string[] f in Rows(csv, keepMarked: true))
         {
             if (f[0] == "#" && f.Length > 5 && f[1].Length == 0 && f[2].Length > 0)
-                _polygroups[f[2].Trim()] = new Polygroup(f[2].Trim(), Int(f[4], 0), Int(f[5], 0));
+                _polygroups[f[2].Trim()] = new Polygroup(f[2].Trim(), Math.Min(Polygroup.MaxLimit, Int(f[4], 0)), Int(f[5], 0));
             else if (f[0] == "#" && f.Length > 2 && f[2].Trim().Equals("s_default", StringComparison.OrdinalIgnoreCase))
                 defaults = f;
             else if (f[0].Length == 0 && f.Length > 3 && int.TryParse(f[1], out _))
@@ -148,15 +164,20 @@ public sealed class SoundTables
         }
         string Field(string[] f, int i) =>
             i < f.Length && f[i].Trim() is { Length: > 0 } v && v != "*" ? v : i < defaults.Length ? defaults[i].Trim() : "";
+        // r1/r2 per file: the first row naming the file sets them (retail stores them when it first meets the file name;
+        // that this is the first row in file order rather than the first played is inferred).
+        var ranges = new Dictionary<string, (float R1, float R2)>(StringComparer.OrdinalIgnoreCase);
         foreach (string[] f in rows)
         {
+            (float r1, float r2) = ranges.TryGetValue(f[3].Trim(), out var known)
+                ? known
+                : ranges[f[3].Trim()] = (SoundRange.Num(Field(f, 8)) ?? 0, SoundRange.Num(Field(f, 9)) ?? 1000);
             var row = new SoundRow(int.Parse(f[1], CultureInfo.InvariantCulture), f[2].Trim(), f[3].Trim(),
                 SoundRange.Parse(Field(f, 4)) ?? new(1, 1),
                 SoundRange.Parse(Field(f, 5)) ?? new(1, 1),
                 SoundRange.ParsePan(Field(f, 6)) ?? new(0, 0),
                 SoundRange.Parse(Field(f, 7)) ?? new(0, 0),
-                SoundRange.Num(Field(f, 8)) ?? 0,
-                SoundRange.Num(Field(f, 9)) ?? 1000,
+                r1, r2,
                 Blank(Field(f, 12)));
             // Most rows (2,000 of 4,226) have id 0 and are reached by name only; two ids appear twice, and the first row
             // (the file lists the newest version first) wins (ours).
@@ -165,6 +186,25 @@ public sealed class SoundTables
             if (row.Name.Length > 0)
                 _byName.TryAdd(row.Name, row);
         }
+    }
+
+    // A member that resolves to nothing leaves its group or queue, as retail does when its tables load (resolved here
+    // after every table is read; retail's order: inferred). Loop parts that resolve to nothing are dropped.
+    private void DropUnresolved()
+    {
+        bool Resolves(string m) => m == Null || SoundPlanner.Silence(m) is not null || Resolves1(m);
+        bool Resolves1(string m) => (int.TryParse(m, out int id) ? Sound(id) : Sound(m)) is not null ||
+                                    _groups.ContainsKey(m) || _queues.ContainsKey(m) || _loops.ContainsKey(m);
+        foreach ((string name, IReadOnlyList<string> members) in _groups.ToList())
+            _groups[name] = members.Where(Resolves).ToList();
+        foreach ((string name, SoundQueue q) in _queues.ToList())
+            _queues[name] = q with { Members = q.Members.Where(Resolves).ToList() };
+        foreach ((string name, SoundLoop l) in _loops.ToList())
+            _loops[name] = l with
+            {
+                Start = l.Start is string a && Resolves1(a) ? a : null,
+                Stop = l.Stop is string b && Resolves1(b) ? b : null,
+            };
     }
 
     public SoundRow? Sound(int id) => _byId.GetValueOrDefault(id);
@@ -230,20 +270,23 @@ public sealed class SoundTables
         return [.. fields];
     }
 
-    /// <summary>A member list: "s_A_01, *02, *03" → s_A_01, s_A_02, s_A_03.</summary>
+    /// <summary>
+    /// A member list, whitespace removed: "s_A_01, *02, *03" → s_A_01, s_A_02, s_A_03 ("*NN" replaces the last len(NN)
+    /// characters of the previous member's name).
+    /// </summary>
     internal static IReadOnlyList<string> Members(string list)
     {
         var members = new List<string>();
-        string? last = null;
         foreach (string part in list.Split(','))
         {
-            string m = part.Trim();
+            string m = string.Concat(part.Where(c => !char.IsWhiteSpace(c)));
             if (m.Length == 0)
                 continue;
-            if (m[0] == '*' && last is not null)
-                m = last.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9') + m[1..];
-            else
-                last = m;
+            if (m[0] == '*' && members.Count > 0)
+            {
+                string last = members[^1], tail = m[1..];
+                m = last[..Math.Max(0, last.Length - tail.Length)] + tail;
+            }
             members.Add(m);
         }
         return members;

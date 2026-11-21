@@ -195,7 +195,8 @@ public partial class SettingsDialog : AcceptDialog
         });
     }
 
-    // Sound (M12): music, and everything else (effects and ambience), each 0–100 %, applied as the slider moves.
+    // Sound (M12): retail's four volumes (music, sound, ambient music, ambient sound), each 0–100 %, applied as the slider
+    // moves. At 0 a channel starts nothing.
     private static Control SoundPanel()
     {
         var grid = new GridContainer { Name = "Sound", Columns = 3 };
@@ -220,7 +221,9 @@ public partial class SettingsDialog : AcceptDialog
             grid.AddChild(shown);
         }
         Row("Music", ClientSettings.MusicVolume, v => ClientSettings.MusicVolume = v);
-        Row("Sound effects", ClientSettings.EffectsVolume, v => ClientSettings.EffectsVolume = v);
+        Row("Sound", ClientSettings.EffectsVolume, v => ClientSettings.EffectsVolume = v);
+        Row("Ambient music", ClientSettings.AmbientMusicVolume, v => ClientSettings.AmbientMusicVolume = v);
+        Row("Ambient sound", ClientSettings.AmbientSoundVolume, v => ClientSettings.AmbientSoundVolume = v);
         return grid;
     }
 

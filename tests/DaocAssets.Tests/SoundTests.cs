@@ -23,12 +23,14 @@ public sealed class SoundTests
         ,10,s_A_01,a1.wav,1.0 - 1.1,*,.9L-.9R,300-349,*,4500,*,*,*,*,*
         ,11,s_A_02,a2.wav,*,*,*,*,*,*,*,*,*,*,*
         ,12,s_B,b.wav,*,*,*,*,*,*,*,*,*,*,*
+        ,13,s_B_Again,b.wav,*,*,*,*,50,9000,*,*,*,*,*
         """;
 
     private const string Groups = """
         ;,group ID,group members,repeat,usage,notes
         ,g_A,"s_A_01, *02",100,spells,
         ,g_Maybe,"s_null, s_B",100,,
+        ,g_Gaps,"s_B, s_Missing, S_B, s_click",100,,
         """;
 
     private const string Queues = """
@@ -58,14 +60,18 @@ public sealed class SoundTests
         Assert.Equal(new SoundRange(0, 0), bed.Pan);       // C
         Assert.Equal(1000, bed.R2);
         Assert.Equal("ambient_sfx", bed.Polygroup);
-        Assert.Same(bed, t.Sound("S_BED_PRAIRIE"));        // names any case
+        Assert.Null(t.Sound("S_BED_PRAIRIE"));             // names match exactly, as retail's
+        Assert.Equal((0f, 1000f), (t.Sound(13)!.R1, t.Sound(13)!.R2));   // r1/r2 are b.wav's, from its first row
         SoundRow a = t.Sound("s_A_01")!;
         Assert.Equal(new SoundRange(1.0f, 1.1f), a.Rate);
         Assert.Equal(new SoundRange(-0.9f, 0.9f), a.Pan);
         Assert.Equal(new SoundRange(300, 349), a.OffsetMs);
         Assert.Equal(4500, a.R2);
         Assert.Null(t.Sound(2)!.Polygroup);
-        Assert.Equal(new Polygroup("TutorialVO", 1, 2), t.Polygroups["tutorialvo"]);
+        Assert.Equal(new Polygroup("TutorialVO", 1, 2), t.Polygroups["TutorialVO"]);
+        Assert.True(t.Polygroups["TutorialVO"].Limits);     // cutoff 2 steals
+        Assert.False(t.Polygroups["ambient_sfx"].Limits);   // cutoff 1 never limits in retail
+        Assert.Equal(["s_B", "s_click"], t.Group("g_Gaps"));  // members that resolve to nothing are left out
     }
 
     [Fact]
@@ -77,7 +83,7 @@ public sealed class SoundTests
         Assert.Null(t.Doors.Get(2, 0));
         Assert.Equal("mp3_Region_AlbionTown1", t.Music.Get(6, 0));
         Assert.Equal("mp3_Enter_Albion", t.Mp3Name(2));
-        Assert.Equal("play.mp3", t.Mp3File("mp3_enter_albion"));
+        Assert.Equal("play.mp3", t.Mp3File("mp3_Enter_Albion"));
     }
 
     [Fact]
@@ -85,6 +91,8 @@ public sealed class SoundTests
     {
         Assert.Equal(["s_A_01", "s_A_02", "s_A_03"], SoundTables.Members("s_A_01, *02, *03"));
         Assert.Equal(["s_x", "g_y"], SoundTables.Members(" s_x ,g_y,"));
+        Assert.Equal(["s_B_9", "s_B10"], SoundTables.Members("s_B_9, *10"));   // the last len(NN) characters replaced
+        Assert.Equal(["s_AB_1"], SoundTables.Members("s_A B_1"));              // all whitespace removed
         Assert.Equal(["a", "b,c", ""], SoundTables.Split("a,\"b,c\","));
     }
 
@@ -138,6 +146,7 @@ public sealed class SoundTests
         Assert.Equal(5, global.FadeTime);
         ZoneSoundLine loop = global.Sounds.Single();
         Assert.Equal((ZoneSoundLine.Loop, "412", 18f), (loop.Kind, loop.Sound, loop.Volume));
+        Assert.Equal(18f / 127, loop.Level, 4);   // volume is 0–127
         Assert.True(loop.PlaysAt(1234));
 
         ZoneSoundRegion river = regions[1];
@@ -159,6 +168,8 @@ public sealed class SoundTests
         zone_wide_sounds=1
         Sound00=2, 412, 0, 100, 50, 0, 0, 0
         Sound01=2, 413, 0, 100, 50, 1900, 0500, 0
+        Sound02=2, 414, 0, 100, 127, 0, 0, 0, 0
+        version=2
         [SoundRegion01]
         fade_time=0
         random_sound_spacing=5
@@ -168,16 +179,20 @@ public sealed class SoundTests
         """);
 
     [Fact]
-    public void ALoopFadesInWithItsRegionAndKeepsToItsHours()
+    public void ALoopFadesInAndOutByItselfAndKeepsToItsHours()
     {
         var a = new Ambience(Ambient, new Random(3));
         a.Step(1, 5000, 5000, 1200, 1, false, false);
-        Assert.Equal(0.5f, a.Gain(0), 3);   // half of the 2 s fade
-        Assert.Equal([(0, 0, 0.25f)], a.Loops(1200, 1, false).Select(s => (s.Region, s.Line, s.Volume)));
+        float half = Ambience.BedStart + 0.5f;   // from almost silent, half of the 2 s fade
+        Assert.Equal([0, 2], a.Loops().Select(s => s.Line));
+        Assert.Equal(half * 50 / 127, a.Loops().First().Volume, 4);
         a.Step(5, 5000, 5000, 2300, 1, false, false);
-        Assert.Equal([0, 1], a.Loops(2300, 1, false).Select(s => s.Line));   // the night bed too
-        Assert.Empty(a.Loops(2300, 1, underwater: true));                    // version 1 lines are above water
-        Assert.Equal(0, a.Gain(1));                                          // outside the circle
+        Assert.Equal([0, 1, 2], a.Loops().Select(s => s.Line));    // the night bed too
+        a.Step(1, 5000, 5000, 1200, 1, false, false);
+        Assert.Equal(0.5f, a.BedGain(0, 1), 3);                     // past its hours: fading out
+        a.Step(5, 5000, 5000, 1200, 1, underwater: true, false);
+        Assert.Equal([2], a.Loops().Select(s => s.Line));          // environment 0 plays under water too
+        Assert.False(a.Heard(1));                                   // outside the circle
     }
 
     [Fact]
@@ -195,6 +210,23 @@ public sealed class SoundTests
         Assert.Empty(Enumerable.Range(0, 300).SelectMany(_ => b.Step(0.1, 900, 900, 1200, 1, false, false)));
         var c = new Ambience(Ambient, new Random(3));
         Assert.All(Enumerable.Range(0, 300).SelectMany(_ => c.Step(0.1, 10, 10, 1200, 1, false, false)), s => Assert.Equal(0, s.Line));
+    }
+
+    [Fact]
+    public void ARandomLineSkipsWhileItStillPlaysAndWaitsForItsFirstTurn()
+    {
+        // Period 2, chance 100: the first turn comes after 1 to 2 s, then every 2 s, unless the last sound still plays.
+        var a = new Ambience(Ambient, new Random(5));
+        var times = new List<int>();
+        for (int i = 0; i < 400; i++)
+            if (a.Step(0.1, 10, 10, 1200, 1, false, false, stillPlaying: (_, _) => i < 200).Count > 0)
+                times.Add(i);
+        Assert.NotEmpty(times);
+        Assert.True(times[0] >= 200, $"first at {times[0]}");   // nothing while the previous sound plays
+        Assert.InRange(new Ambience(Ambient, new Random(5)).Steps(0.1, 10, 10).First(), 10, 21);
+
+        var instant = ZoneSounds.Parse("[SoundRegion00]\ninstant_start=1\nzone_wide_sounds=1\nSound00=1, 417, 30, 100, 127, 0, 0, 0\n");
+        Assert.Single(new Ambience(instant).Step(0.1, 0, 0, 1200, 1, false, false));
     }
 
     [Fact]
@@ -231,7 +263,7 @@ public sealed class SoundTests
         Assert.Equal(2, RegionMusic.EntryMusic(zonesDat, 1));
         Assert.Equal(6, RegionMusic.EntryMusic(zonesDat, 30));
         Assert.Null(RegionMusic.EntryMusic(zonesDat, 50));
-        Assert.Null(RegionMusic.EntryMusic(zonesDat, 99));
+        Assert.Equal(RegionMusic.EnterAlbion, RegionMusic.EntryMusic(zonesDat, 99));   // no entry_music: retail's default
     }
 
     [Fact]
@@ -316,5 +348,16 @@ public sealed class SoundTests
         double jumps = s.Zip(s.Skip(w.Channels)).Average(p => Math.Abs(p.First - p.Second));
         double level = s.Average(v => Math.Abs((double)v));
         Assert.True(jumps < level * 1.5, $"mean step {jumps:F0} against mean level {level:F0}");
+    }
+}
+
+internal static class AmbienceTestSteps
+{
+    /// <summary>The step numbers at which an ambience plays a random line, the listener held at (x, y) at noon.</summary>
+    public static IEnumerable<int> Steps(this Ambience a, double dt, float x, float y)
+    {
+        for (int i = 0; i < 1000; i++)
+            if (a.Step(dt, x, y, 1200, 1, false, false).Count > 0)
+                yield return i;
     }
 }
