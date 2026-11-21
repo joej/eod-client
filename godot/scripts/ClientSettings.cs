@@ -165,6 +165,16 @@ public static class ClientSettings
         set => SaveIn("sound", "ambient_sound", value);
     }
 
+    /// <summary>
+    /// Which zone sounds play (make sounds with CLASSIC_CLIENT / CURRENT_CLIENT): "classic" (the zones as classic DAoC
+    /// wrote them, the default) or "current" (retail 1.130's). Without the set in the library, the install's own.
+    /// </summary>
+    public static string ZoneSoundSet
+    {
+        get => Load().GetValue("sound", "zone_sounds", "classic").AsString() is "current" ? "current" : "classic";
+        set => SaveIn("sound", "zone_sounds", value);
+    }
+
     /// <summary>Sound effects volume, 0–1 (ours: 0.8).</summary>
     public static float EffectsVolume
     {

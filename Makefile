@@ -46,6 +46,11 @@ TSV     := src/DaocProtocol/World/zones.tsv
 KNOWN   := tools/zonecheck-known.txt
 MPK     := tools/AssetExtract/bin/Debug/net10.0/mpk
 CLIENT  ?= $(shell . $(PRIV)/play.conf 2>/dev/null; echo "$$CLIENT")
+# Optional, for the two zone sound sets (make sounds; ZoneSoundSets): an install from before the cc_ sound tables, with
+# sounds/sndfiles.csv (CLASSIC_CLIENT), and a retail install (CURRENT_CLIENT). Without them the client plays this
+# install's zone sounds as they are.
+CLASSIC_CLIENT ?= $(shell . $(PRIV)/play.conf 2>/dev/null; echo "$$CLASSIC_CLIENT")
+CURRENT_CLIENT ?= $(shell . $(PRIV)/play.conf 2>/dev/null; echo "$$CURRENT_CLIENT")
 
 # --- what each output is made from -----------------------------------------------------------------
 A          := src/DaocAssets
@@ -225,9 +230,10 @@ $(LOADING): $(CLIENT)/gamedata.mpk $(A)/Zone/LoadingScreens.cs $(A)/Zone/IniFile
 SOUNDS := $(LIB)/sounds/.sounds.done
 .PHONY: sounds
 sounds: $(SOUNDS)
-$(SOUNDS): $(CLIENT)/sounds/cc_sounds.csv $(CLIENT)/zones/zones.mpk $(CLIENT)/gamedata.mpk $(wildcard $(A)/Sound/*.cs) $(CLI_SRC) $(X)/Cli.Sounds.cs $(X)/Cli.Loading.cs | $(TOOL)
+$(SOUNDS): $(CLIENT)/sounds/cc_sounds.csv $(CLIENT)/zones/zones.mpk $(CLIENT)/gamedata.mpk $(wildcard $(A)/Sound/*.cs) $(CLI_SRC) $(X)/Cli.Sounds.cs $(X)/Cli.Loading.cs \
+            $(if $(CLASSIC_CLIENT),$(wildcard $(CLASSIC_CLIENT)/sounds/sndfiles.csv)) $(if $(CURRENT_CLIENT),$(wildcard $(CURRENT_CLIENT)/sounds/cc_sounds.csv)) | $(TOOL)
 	@mkdir -p $(@D)
-	$(MPK) sounds $(CLIENT) --out $(@D)
+	$(MPK) sounds $(CLIENT) --out $(@D) $(if $(CLASSIC_CLIENT),--classic "$(CLASSIC_CLIENT)") $(if $(CURRENT_CLIENT),--current "$(CURRENT_CLIENT)")
 	@touch $@
 
 MAPS := $(LIB)/maps/.maps.done

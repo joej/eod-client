@@ -195,8 +195,9 @@ public partial class SettingsDialog : AcceptDialog
         });
     }
 
-    // Sound (M12): retail's four volumes (music, sound, ambient music, ambient sound), each 0–100 %, applied as the slider
-    // moves. At 0 a channel starts nothing.
+    // Sound (M12): retail's four volumes (music, sound, ambient music, ambient sound), each in retail's steps (Off, 1–9,
+    // Full), applied as the slider moves; at Off a channel starts nothing. Then which zone sounds play: Classic or
+    // Current (ZoneSoundSets; the install's own when make sounds built neither).
     private static Control SoundPanel()
     {
         var grid = new GridContainer { Name = "Sound", Columns = 3 };
@@ -205,16 +206,17 @@ public partial class SettingsDialog : AcceptDialog
         void Row(string label, float value, System.Action<float> set)
         {
             grid.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(160, 0) });
+            static string Step(double v) => v <= 0 ? "Off" : v >= 10 ? "Full" : $"{v:0}";
             var slider = new HSlider
             {
-                MinValue = 0, MaxValue = 100, Step = 1, Value = value * 100, CustomMinimumSize = new Vector2(200, 0),
+                MinValue = 0, MaxValue = 10, Step = 1, Value = System.Math.Round(value * 10), CustomMinimumSize = new Vector2(200, 0),
                 SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
             };
-            var shown = new Label { Text = $"{value * 100:0}%", CustomMinimumSize = new Vector2(48, 0) };
+            var shown = new Label { Text = Step(slider.Value), CustomMinimumSize = new Vector2(48, 0) };
             slider.ValueChanged += v =>
             {
-                set((float)v / 100);
-                shown.Text = $"{v:0}%";
+                set((float)v / 10);
+                shown.Text = Step(v);
                 GameAudio.Instance?.ApplyVolumes();
             };
             grid.AddChild(slider);
@@ -224,6 +226,18 @@ public partial class SettingsDialog : AcceptDialog
         Row("Sound", ClientSettings.EffectsVolume, v => ClientSettings.EffectsVolume = v);
         Row("Ambient music", ClientSettings.AmbientMusicVolume, v => ClientSettings.AmbientMusicVolume = v);
         Row("Ambient sound", ClientSettings.AmbientSoundVolume, v => ClientSettings.AmbientSoundVolume = v);
+        grid.AddChild(new Label { Text = "Zone sounds", CustomMinimumSize = new Vector2(160, 0) });
+        var sets = new OptionButton { TooltipText = "Classic: the zones as classic DAoC wrote them. Current: retail's today." };
+        sets.AddItem("Classic");
+        sets.AddItem("Current");
+        sets.Selected = ClientSettings.ZoneSoundSet == "current" ? 1 : 0;
+        sets.ItemSelected += i =>
+        {
+            ClientSettings.ZoneSoundSet = i == 1 ? "current" : "classic";
+            ClientSettings.NotifyChanged(display: false);
+        };
+        grid.AddChild(sets);
+        grid.AddChild(new Control());
         return grid;
     }
 

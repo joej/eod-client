@@ -41,6 +41,9 @@ public partial class GameAudio : Node
     private readonly string[] _folders;
     public SoundTables Tables { get; }
     public SoundPlanner Planner { get; }
+
+    /// <summary>The early client's sound table (library/sounds/classic), for the classic zone sounds; null without it.</summary>
+    public ClassicSoundFiles? Classic { get; }
     private readonly Dictionary<string, AudioStream?> _streams = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Pending> _pending = [];
     private readonly List<Voice> _voices = [];
@@ -61,6 +64,9 @@ public partial class GameAudio : Node
         _folders = [dir, System.IO.Path.Combine(dir, "tutorial"), System.IO.Path.Combine(dir, "frontiers")];
         Tables = SoundTables.Load(dir);
         Planner = new SoundPlanner(Tables, _rng);
+        string sndfiles = System.IO.Path.Combine(dir, ClassicSoundFiles.Folder, "sndfiles.csv");
+        if (System.IO.File.Exists(sndfiles))
+            Classic = ClassicSoundFiles.Parse(System.IO.File.ReadAllText(sndfiles, System.Text.Encoding.Latin1));
         Name = "GameAudio";
     }
 
@@ -153,7 +159,19 @@ public partial class GameAudio : Node
             return null;   // retail starts nothing on a channel set to 0
         if (Planner.Loop(name) is SoundLoop l)
             (name, loop) = (l.Body, true);
-        List<PlannedSound> plan = Planner.Plan(name, Length);
+        return PlayPlan(Planner.Plan(name, Length), at, volume, loop, ignoreOffset, bus);
+    }
+
+    /// <summary>Plays what a zone sound set resolved a line to: a classic row as it is, or a name as <see cref="Play(string, Vector3?, float, bool, bool, string)"/>.</summary>
+    public Voice? Play(ZoneSound sound, Vector3? at = null, float volume = 1f, bool loop = false, string bus = AmbientSoundBus)
+    {
+        if (sound.Classic is SoundRow row)
+            return Level(bus) <= 0 ? null : PlayPlan([new PlannedSound(row, 0)], at, volume, loop, ignoreOffset: true, bus);
+        return sound.Name is string name ? Play(name, at, volume, loop, ignoreOffset: loop, bus) : null;
+    }
+
+    private Voice? PlayPlan(List<PlannedSound> plan, Vector3? at, float volume, bool loop, bool ignoreOffset, string bus)
+    {
         if (plan.Count == 0)
             return null;
         string? group = plan[0].Row.Polygroup;

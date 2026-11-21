@@ -229,6 +229,43 @@ public sealed class SoundTests
         Assert.Single(new Ambience(instant).Step(0.1, 0, 0, 1200, 1, false, false));
     }
 
+    // An early install's sounds/sndfiles.csv: 412 is also in cc_sounds (another file), 526 and 99 only here, 506 removed.
+    private const string SndFiles = """
+        Sound Files,,min ,max,1=streamed,1=frontiers,,
+        ID,filename,distance,distance,0=cached,0=all clients,name,desc
+        412,ambloop2.wav,0.0,1000.0,1,,,<ambient>
+        526,hooves01.wav,0.0,4000.0,1,,,distant horse hooves
+        506,,,,,,,(removed : insloop6.wav)
+        """;
+
+    [Fact]
+    public void ZoneSoundSetsResolveEveryLineTheyCan()
+    {
+        var planner = new SoundPlanner(Tables(groups: Groups + "\n,g_WoodStress_Heavy(c),\"s_B\",100,,"));
+        ClassicSoundFiles classic = ClassicSoundFiles.Parse(SndFiles);
+        Assert.Equal(("classic/hooves01.wav", 0f, 4000f), (classic.Row(526)!.File, classic.Row(526)!.R1, classic.Row(526)!.R2));
+        Assert.Null(classic.Row(506));   // no file: removed
+
+        // Classic: its own table first, cc_sounds for numbers it lacks. Current: the other way round.
+        Assert.Equal("classic/ambloop2.wav", ZoneSoundSets.Resolve("412", planner, classic, classicFirst: true).Classic!.File);
+        Assert.Equal("412", ZoneSoundSets.Resolve("412", planner, classic, classicFirst: false).Name);
+        Assert.Equal("10", ZoneSoundSets.Resolve("10", planner, classic, classicFirst: true).Name);
+        Assert.NotNull(ZoneSoundSets.Resolve("526", planner, classic, classicFirst: false).Classic);   // a classic number in a current file
+        // A near miss of a real group plays the group; nothing at all is left out.
+        Assert.Equal("g_WoodStress_Heavy(c)", ZoneSoundSets.Resolve("g_Wood_StressHeavy(c)", planner, classic, true).Name);
+        Assert.False(ZoneSoundSets.Resolve("506", planner, classic, true).Plays);
+
+        IReadOnlyList<ZoneSoundRegion> regions = ZoneSounds.Parse("""
+            [SoundRegion00]
+            zone_wide_sounds=1
+            Sound00=1, 526, 10, 50, 64, 0, 0, 0
+            Sound01=1, 506, 10, 50, 64, 0, 0, 0
+            Sound02=2, 412, 0, 100, 64, 0, 0, 0
+            """);
+        Assert.Equal(["526", "412"], ZoneSoundSets.Playable(regions, planner, classic, classicFirst: true)[0].Sounds.Select(l => l.Sound));
+        Assert.Equal((3, 2), ZoneSoundSets.Count(regions, planner, classic, classicFirst: true));
+    }
+
     [Fact]
     public void SoundSetsComeFromTheModelAndObjectTables()
     {

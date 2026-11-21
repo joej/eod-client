@@ -33,6 +33,7 @@ public partial class WorldView
 {
     private const ushort TutorialRegion = 27;
     private Ambience? _ambience;
+    private Dictionary<(int Region, int Line), ZoneSound>? _ambientSounds;   // a sound set's resolution of each line
     private ushort _ambienceZone = ushort.MaxValue;
     private readonly Dictionary<(int Region, int Line), GameAudio.Voice> _ambientLoops = [];
     private readonly Dictionary<(int Region, int Line), GameAudio.Voice> _ambientShots = [];
@@ -68,6 +69,9 @@ public partial class WorldView
         if (_soundSets is null && System.IO.File.Exists(sets))
             _soundSets = SoundSets.FromCsv(System.IO.File.ReadAllText(sets));
         TreeExiting += StopAmbience;
+        _ambienceSet = ClientSettings.ZoneSoundSet;
+        ClientSettings.Changed += OnSoundSetting;
+        TreeExiting += () => ClientSettings.Changed -= OnSoundSetting;
         PlayEntryMusic(audio);
     }
 
@@ -252,7 +256,7 @@ public partial class WorldView
         foreach (AmbientShot shot in _ambience.Step(delta, x - zone.X, y - zone.Y, hhmm, clear, underwater, MusicHeard(audio), StillPlaying))
         {
             ZoneSoundRegion region = _ambience.Regions[shot.Region];
-            if (audio.Play(region.Sounds[shot.Line].Sound, volume: shot.Volume, bus: GameAudio.BusOf(region)) is GameAudio.Voice v)
+            if (PlayAmbient(audio, region, shot, loop: false) is GameAudio.Voice v)
                 _ambientShots[(shot.Region, shot.Line)] = v;
         }
         var heard = new HashSet<(int, int)>();
@@ -262,7 +266,7 @@ public partial class WorldView
             if (!_ambientLoops.TryGetValue((loop.Region, loop.Line), out GameAudio.Voice? v) || v.Finished)
             {
                 ZoneSoundRegion region = _ambience.Regions[loop.Region];
-                v = audio.Play(region.Sounds[loop.Line].Sound, loop: true, ignoreOffset: true, bus: GameAudio.BusOf(region));
+                v = PlayAmbient(audio, region, loop, loop: true);
                 if (v is null)
                     continue;
                 _ambientLoops[(loop.Region, loop.Line)] = v;
@@ -279,15 +283,56 @@ public partial class WorldView
     // fade_on_mp3: music from the music channel (not the ambience's own sound_type 2 parts).
     private static bool MusicHeard(GameAudio audio) => audio.MusicPlaying;
 
+    // A line as its sound set resolved it, or (the install's own zone sounds) by its name.
+    private GameAudio.Voice? PlayAmbient(GameAudio audio, ZoneSoundRegion region, AmbientShot shot, bool loop)
+    {
+        string bus = GameAudio.BusOf(region);
+        float volume = loop ? 1f : shot.Volume;   // a bed's level is set each frame (FadeTo)
+        if (_ambientSounds is not null && _ambientSounds.TryGetValue((shot.Region, shot.Line), out ZoneSound z))
+            return audio.Play(z, volume: volume, loop: loop, bus: bus);
+        return audio.Play(region.Sounds[shot.Line].Sound, volume: volume, loop: loop, ignoreOffset: loop, bus: bus);
+    }
+
+    // The zone's sounds.dat: from the chosen sound set (library/sounds/classic or current, ZoneSoundSets), keeping only
+    // the lines that play, else the install's own as retail plays them (lines that resolve to nothing stay silent slots).
     private void LoadAmbience(ushort zone)
     {
         StopAmbience();
         _ambienceZone = zone;
-        string path = System.IO.Path.Combine(_libraryPath ?? "", "sounds", "zones", $"zone{zone:000}.dat");
-        _ambience = System.IO.File.Exists(path)
-            ? new Ambience(ZoneSounds.Parse(System.IO.File.ReadAllText(path, System.Text.Encoding.Latin1)))
-            : null;
-        GD.Print($"[sound] zone {zone} ambience: {(_ambience is null ? "none" : $"{_ambience.Regions.Count} regions")}");
+        string sounds = System.IO.Path.Combine(_libraryPath ?? "", "sounds");
+        string set = ClientSettings.ZoneSoundSet;
+        string fromSet = System.IO.Path.Combine(sounds, set, "zones", $"zone{zone:000}.dat");
+        string own = System.IO.Path.Combine(sounds, "zones", $"zone{zone:000}.dat");
+        _ambientSounds = null;
+        _ambience = null;
+        if (System.IO.File.Exists(fromSet) && Audio is GameAudio audio)
+        {
+            bool classicFirst = set == ZoneSoundSets.Classic;
+            IReadOnlyList<ZoneSoundRegion> regions = ZoneSoundSets.Playable(
+                ZoneSounds.Parse(System.IO.File.ReadAllText(fromSet, System.Text.Encoding.Latin1)), audio.Planner, audio.Classic, classicFirst);
+            _ambientSounds = [];
+            for (int r = 0; r < regions.Count; r++)
+                for (int l = 0; l < regions[r].Sounds.Count; l++)
+                    _ambientSounds[(r, l)] = ZoneSoundSets.Resolve(regions[r].Sounds[l].Sound, audio.Planner, audio.Classic, classicFirst);
+            _ambience = new Ambience(regions);
+        }
+        else if (System.IO.File.Exists(own))
+        {
+            set = "install";
+            _ambience = new Ambience(ZoneSounds.Parse(System.IO.File.ReadAllText(own, System.Text.Encoding.Latin1)));
+        }
+        GD.Print($"[sound] zone {zone} ambience ({set}): {(_ambience is null ? "none" : $"{_ambience.Regions.Count} regions")}");
+    }
+
+    private string _ambienceSet = "";
+
+    // Settings → Sound changed the zone sound set: the zone's ambience again, from the other set.
+    private void OnSoundSetting(bool display)
+    {
+        if (ClientSettings.ZoneSoundSet == _ambienceSet)
+            return;
+        _ambienceSet = ClientSettings.ZoneSoundSet;
+        _ambienceZone = ushort.MaxValue;
     }
 
     private void StopAmbience()

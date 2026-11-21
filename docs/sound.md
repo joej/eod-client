@@ -224,3 +224,27 @@ How retail's client does it (daoc-re, 2026-11-21, from its code and data; nothin
 - **Names:** exact, case-sensitive, and only in the name tables (never by file name). Member lists have their whitespace
   removed; `*NN` replaces the last len(NN) characters of the previous member; a member that doesn't resolve is left out.
   `s_null` is built in.
+
+## Classic and current zone sounds (2026-11-21)
+
+Two installs write the zones' `sounds.dat` for different tables:
+- **Classic.** An early client (before the `cc_*` tables; here a 2004 install) numbers its sounds in
+  `sounds/sndfiles.csv` (id, file, two distances). The OpenDAoC install's `sounds.dat` files are of this kind. Today's
+  `cc_sounds.csv` dropped or renumbered some of those numbers: 526–533 distant horses, 574–579 the capitals' distant
+  music, 120 and 176 brook and shore. So with today's tables alone those lines are silent, in retail 1.127 too.
+- **Current.** Retail 1.130's `sounds.dat` files are rewritten for today's numbers (49 zones differ; daoc-re's
+  comparison), but still use a few classic ones.
+
+`make sounds` with `CLASSIC_CLIENT` (an install with `sounds/sndfiles.csv`) and `CURRENT_CLIENT` (a retail install),
+for example in `private/play.conf`, builds both sets into the library (`mpk sounds … --classic DIR --current DIR`).
+Settings → Sound → Zone sounds picks one (Classic by default); without them the client plays the install's own files
+as retail does.
+- A number: the set's own table first (classic: `sndfiles.csv`; current: `cc_sounds.csv`), then the other. A classic
+  sound plays its file plainly (rate 1, full volume, centred), heard fully to its first distance and fading to its
+  second.
+- A name: the tables, then a small alias list of the install's near misses of real groups (`ZoneSoundSets.Aliases`;
+  ours).
+- A line that still resolves to nothing is left out, so it doesn't hold back its region's random sounds. Today only 506
+  (an insect loop the 2004 table itself marks removed). A zone whose classic file plays nothing takes its current one.
+- `soundcheck.md` reports each set: lines that play, those left out, and that every classic file decodes.
+
