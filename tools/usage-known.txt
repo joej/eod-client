@@ -45,12 +45,12 @@ movie/*	intro movies (Bink) and their player
 *.ini	retail's default settings per screen size (our client has its own settings)
 light/*	legacy palette and translucency tables, not referenced by the client (docs/world-coverage.md)
 charman/*	the random name generator and old character-creation texts (docs/world-coverage.md; character screen)
-shaders/*	a shader a model material can name (docs/world-coverage.md; M13)
+shaders/*	a shader a model material can name (docs/world-coverage.md; M17)
 stylemap/*	weapon swing trails, blob shadow, ground-target ring, a cloak template (docs/world-coverage.md; M10)
 water/*	the shader water's parts (docs/world-coverage.md)
-zones/trees/*	SpeedTree trees and treemap.csv (open question W5; M13)
-zones/textures/grass*	the regions' grass (docs/world-coverage.md; M13)
-zones/textures/*.csv	the regions' grass tables (docs/world-coverage.md; M13)
+zones/trees/*	SpeedTree trees and treemap.csv (open question W5; M17)
+zones/textures/grass*	the regions' grass (docs/world-coverage.md; M17)
+zones/textures/*.csv	the regions' grass tables (docs/world-coverage.md; M17)
 fonts/*	retail's bitmap fonts; our interface uses its own (M9)
 icons/*.cur	mouse cursors
 icons/classic/*	the old icon set (user.dat ClassicIcons; docs/world-coverage.md)
@@ -62,15 +62,15 @@ zones/zone#/dat#.mpk : *.old	developer leftovers (fixtures.old, nifs.old)
 zones/zone#/dat#.mpk : *.xls	developer leftovers (city.xls)
 zones/terraintex/*.db	Windows thumbnail cache
 tutorial/zones/zone#/dat#.mpk : *.csv	the zone's csv archive holds the same files and is read first, as the client does (ZoneArchive)
-zones/terraintex/*.tga	grass placement maps (grassmap, grassmapB, grassmapW; M13 grass)
-zones/terraintex/*.pcx	a grass placement map (grassmap.pcx; M13 grass)
+zones/terraintex/*.tga	grass placement maps (grassmap, grassmapB, grassmapW; M17 grass)
+zones/terraintex/*.pcx	a grass placement map (grassmap.pcx; M17 grass)
 # Placed by daoc-re, 2026-11-16 (private/inbox/2026-11-16-unplaced-files-from-daoc-re.md): most are named by data (csv/ini
 # rows, texture names inside models), not by the client's code.
 zones/zone#/nifs/*_p#.npk : *.nif	five city patch archives holding only statue.nif: the client looks for <piece>_p00.nif, so they do nothing (retail packaging errors; AssetIndex.ReadPatches skips them)
 zones/zone#/dat#.mpk : *.tga	snowmap.tga: a zone's snow layer on the terrain, blend not traced (open question W62)
 zones/zone#/dat#.mpk : *.bmp	zone 202's shadow.bmp: the client reads only shadow.pcx, so that zone has no ground shading
 zones/textures/*.nif	amb_* models: named by nothing (leftovers)
-zones/textures/*.dds	grass_*.dds: the regions' grass, named by zones.dat (M13); amb_textures.dds: named by nothing
+zones/textures/*.dds	grass_*.dds: the regions' grass, named by zones.dat (M17); amb_textures.dds: named by nothing
 figures/skins/skin#.mpk : *.tga	bump and gloss maps: rows in skins.csv, but no use in rendering found
 *.dat	gf*.dat: default graphics settings per graphics-card class; keyboard/main/menu/paths/user.dat: settings; login/eula.dat: the login screen; color/darkness.dat: named by nothing; unins000.dat: the installer
 localdata.mpk : *.dat	an unused copy of loading.dat; the client reads gamedata.mpk's (as we do)

@@ -14,7 +14,7 @@ S 0xFC | 0 | character screen: overview
 S 0xB1 | 0 | world entry: region list
 S 0x20 | 0 | world entry: position and object id
 S 0x2D | 0 | world entry: game open reply
-S 0x2B | 0 | world entry: player init finished (not read; nothing follows from it)
+S 0x2B | 0 | world entry: the end of the player-init burst (not read: we wait on 0x2D; see W68)
 S 0x29 | 0 | keep-alive: ping reply
 S 0xA4 | 0 | quit
 S 0xB7 | 0 | region change

@@ -29,6 +29,17 @@ one.
 - **Mostly playing (M8–M12).** Moving between zones, combat you can see and participate in, your
   character's vitals and inventory, targeting and basic interaction, dungeons and cities — enough that the game reads as the game, within the
   1.65 ruleset OpenDAoC serves.
+- **Playable (M13–M16; owner, 2026-11-21).** A client faithful to classic DAoC that a person plays with,
+  instead of the retail client, in four steps:
+  1. **Minimal playable (M13):** a character goes from level 1 to 20 in PvE, killing mobs, dealing with
+     other players and with the world and its NPCs, and doing quests.
+  2. **Retail minimal playable (M14):** the same on the official servers: our client does their encryption
+     and speaks their protocol version.
+  3. **Late PvE and battlegrounds (M15):** past level 20, the rest of 1.65's PvE, and the battlegrounds.
+  4. **PvP and RvR (M16):** a client tested in the frontiers against other players.
+
+  `docs/packet-coverage.md` (`tools/packetcoverage.py`) measures where we stand against these tiers, packet
+  by packet, from everything OpenDAoC can send and accepts. Modernising (M17) comes after them.
 
 Scope for the milestones below: **client protocol 1.127**, against **OpenDAoC** (encryption off);
 **no game assets shipped** — everything is converted at runtime from the player's own DAoC install.
@@ -317,8 +328,9 @@ then any of the 98 heightmap zones. Walking across a zone boundary, dungeons and
 ## The path to mostly playing (post-MVP)
 
 These come **after** the MVP (M4–M7). Order is the intended sequence, but each is independently
-valuable. M13 (asset quality tiers) comes last (owner, 2026-11-08): the classic game first, complete
-with its own sound, intro movie and pregame screens, then the better-looking versions.
+valuable. M17 (asset quality tiers) comes last (owner, 2026-11-08, and again 2026-11-21): the classic game
+first, complete with its own sound, intro movie and pregame screens, and playable (M13–M16), then the
+better-looking versions.
 
 ### M8 — Move through the world ✅
 **Done** 2026-11-07 · shot 2026-11-07_23_swimming-the-river-below-prydwen
@@ -614,9 +626,72 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
 - **Done when:** a day passes visibly in Camelot Hills, a spell shows its effect, the zone has its
   ambient sound and music, a fight sounds like one, and the intro plays at start.
 
-### M13 — Asset quality tiers and community reskin packs
+### M13 — Minimal playable: level 1 to 20
+*Play a character from level 1 to 20 against OpenDAoC with nothing but this client.*
+The rest of what PvE to level 20 needs, from `docs/packet-coverage.md`'s tier P1 (2026-11-21: 47 of its 83 packets
+handled). Each item below lists the packets it needs; the window rows are in `docs/ui-windows.md`. In order:
+- **Line-of-sight answers** (S→C 0xD0 → C→S 0xD0): OpenDAoC asks the client whether an NPC can see its target before
+  the NPC casts or shoots, and acts on the answer. We never answer yet.
+- **Merchants:** the item pages (0x17), buying (0x78) and selling (0x79), and what an item sells for (0xE0), with a
+  quantity chooser.
+- **Trainers:** the train window (asked with C→S 0x7B; S→C 0x7B lists the specialisations, points and costs) and
+  training (0x53).
+- **Casting:** the cast animation and bar (0x72), interruptions (0x73), the effect on the target (0x1B; the effects
+  themselves are M12's), concentration buffs (0x75, 0x76), and cancelling a buff (0xF8). Effect icons (0x7F) with M10.
+- **Loot and items:** picking up from the ground (0xB5), the Nearest Loot key, and destroying an item (0x80).
+- **Quests:** the journal (0x83), choosing a reward (0x40) and abandoning a quest (0x4F); the offer and reward
+  dialogs.
+- **Other players:** trade (0xEA, 0xEB), the friends list (0xC5, 0xC6), /assist (0xF6), a figure's level and guild
+  changing (0xEE); emotes (0xF9) come with M10.
+- **Horse routes:** riding a horse to its destination (0x4E, 0xC8 both ways).
+- **Pets** (Cabalist, Theurgist, Enchanter and more have them early): the pet window and its commands (0x88, 0x8A).
+- **Character creation:** the server's name checks (0xCB → 0xC3 or 0xCC).
+- **Done when:** a new character, created in this client, reaches level 20 against OpenDAoC without the retail client:
+  trained, equipped from merchants and loot, a quest or more done, a group joined and a trade made. Live, with every
+  tier-P1 row of `docs/packet-coverage.md` handled or explained.
+
+### M14 — Retail minimal playable
+*The same character's play on the official servers.*
+The official servers speak protocol 1.130 (not 1.127) and encrypt every packet, and they serve today's game rather
+than 1.65's.
+- **Encryption, client side.** The server sends its RSA public key in 0x22. The client makes a random session key,
+  sends it RSA-encrypted (the second 0xF4), and runs the modified RC4 both ways (CLAUDE.md, "Encryption"). Nothing
+  secret is needed: only the server's public key, which it sends.
+- **Protocol 1.130** beside 1.127, never in place of it: what changed, from retail captures (the groundwork is in
+  "Later: the live (1.130) client" below).
+- **Retail's packets.** `docs/packet-coverage.md` is measured against OpenDAoC, so packets only the official servers
+  send need their own inventory, from retail captures.
+- **Today's content** where it changes what a level 1–20 character meets (newer classes, races and zones, and their
+  windows), drawn from the user's own install as everything else is.
+- **Done when:** a character on an official server goes from level 1 to 20 as in M13, with this client.
+
+### M15 — Late PvE and battlegrounds
+*Past level 20: the rest of 1.65's PvE, and the battlegrounds.*
+Tier P2 of `docs/packet-coverage.md` (none handled yet), and the battlegrounds' part of P3.
+- **The battlegrounds** (Thidranki and the rest): small frontiers with keeps to claim, doors, guards and PvP. The keeps
+  already draw (M11); this adds claiming (0x62), the keep interactions (0x61, 0x6F) and the war map (0x48, 0x49, 0x4A).
+- **Late PvE:** illusions and shape changes (0x8D), ground-target spells (0xEC both ways), looking for a group (0x84,
+  0x85, 0x86), boats (0x12), the starter help (0xF7), the bonuses window (0xCA), the spell-effects filter (0xDC).
+- **Crafting** (0xED; the crafting window), **guilds** (names over players 0xDE, emblems 0xE2), and **housing** (the
+  housing packets, `phousing/`'s 410 models, consignment merchants and the market explorer).
+- **Done when:** a character goes from 20 to 50 in PvE, crafts, joins a guild, visits a house, and fights in a
+  battleground for a keep.
+
+### M16 — PvP and RvR
+*A client tested in the frontiers, against other players.*
+Tier P3 of `docs/packet-coverage.md`, and what no packet list shows.
+- **Keeps and siege:** hookpoints (0x63, 0x64, 0x65), siege weapons (0xE3, 0xF5), realm bonuses (0x66), ship
+  hookpoints (0xE4); doors, damage and raised towers are drawn already (M11).
+- **Fighting players:** ranged combat, combat styles and spells between players, and what it needs at scale: many
+  players in view at once, a combat log, frame rate under load.
+- **Tested:** against many clients at once (the bot server fork, catastrophic-impact, can supply them), and in a real
+  fight with real players.
+- **Done when:** a character takes part in a keep siege in the frontiers with others, from start to finish, on this
+  client.
+
+### M17 — Asset quality tiers and community reskin packs
 *Classic by default; progressively better by choice — and others can contribute whole new looks.*
-After the classic game is complete (M8–M12), building on the models M7 brings. The asset library
+After the classic game is complete and playable (M8–M16), building on the models M7 brings. The asset library
 was built for this from the start
 (convert-once flat library + an `overrides/` layer that wins at load time; see
 `docs/project` asset-library notes): "enhanced" is just a better-named-the-same asset layered over the
@@ -701,10 +776,9 @@ Enabling work (do the small part before override content piles up):
   reskin that drops in without code changes.
 
 ### Further out (unscheduled)
-Tracked so they're planned, not stumbled into: **character creation in the Godot UI** (the protocol
-side is done); **map and minimap**; **group, guild, quest and trade windows**; **mounts** (the server
-already sends 0x4E ControlledHorse at world entry); **housing** (`phousing/`: 410 NIFs); **RvR
-frontiers, keeps, doors and sieges** (`frontiers/`); **the tutorial** (`Tutorial/`: region 27, one zone per
+Now scheduled (2026-11-21): group, guild, quest and trade windows and horse routes in M13; guilds and housing in
+M15; RvR frontiers, keeps and sieges in M15 and M16. Tracked so they're planned, not stumbled into: **character creation in the Godot UI** (the protocol
+side is done); **map and minimap**; **the tutorial** (`Tutorial/`: region 27, one zone per
 realm (27 Constantine's Sound, 28 Grenlock's Sound, 29 Lamfhota's Sound) with its own models, maps and
 recorded voice-over the server plays line by line, `docs/sound.md`; converted since 2026-11-08). Retail
 starts every new character there, in a small town with trainers, quests and guides, and nothing is lost by
@@ -754,7 +828,9 @@ first packet (RSA-wrapped session key, modified RC4), and no published tool turn
 the way launchers do for 1.127 (`docs/future-work.md`). Until that's solved, 1.130 work stays
 server-side (make OpenDAoC serve the live client correctly) and analysis (captures, opcode mapping).
 
-Also out of scope for now, as genuine tangents: sound, a polished UI, and retail-server interop.
+Two directions, kept apart: **the retail client on OpenDAoC** (above: the server side, captures and opcode maps), and
+**this client on the official servers** (M14), where our client does the encryption itself, so the key-transport
+blocker above doesn't apply. Both need the 1.130 protocol.
 
 ---
 

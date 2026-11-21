@@ -50,7 +50,7 @@ change; a packet without a tier shows as `?`.
 | S→C | 0x28 | SessionID | shown | session id | SendSessionID (1) |
 | S→C | 0x29 | PingReply | shown | keep-alive: ping reply | SendPingReply (1) |
 | S→C | 0x2A | LoginGranted | shown | login granted | SendLoginGranted (3) |
-| S→C | 0x2B | CharacterInitFinished | — | world entry: player init finished (not read; nothing follows from it) | SendPlayerInitFinished (1) |
+| S→C | 0x2B | CharacterInitFinished | — | world entry: the end of the player-init burst (not read: we wait on 0x2D; see W68) | SendPlayerInitFinished (1) |
 | S→C | 0x2C | LoginDenied | shown | login denied | SendLoginDenied (28) |
 | S→C | 0x2D | GameOpenReply | shown | world entry: game open reply | SendGameOpenReply (1) |
 | S→C | 0x7E | Time | shown | game time | SendTime (2) |
