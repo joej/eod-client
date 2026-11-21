@@ -266,9 +266,20 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         PositionAndObjectId position = PositionAndObjectId.Parse((await ExpectAsync(cancellationToken, PositionAndObjectId.Code).ConfigureAwait(false)).Payload);
         await ExpectAsync(cancellationToken, WorldInitRequest.EndOfBurstCode).ConfigureAwait(false);
 
-        await connection.SendAsync(PlayerInitRequest.Code, PlayerInitRequest.Payload(), cancellationToken).ConfigureAwait(false);
-        await connection.SendAsync(GameOpenRequest.Code, GameOpenRequest.Payload(), cancellationToken).ConfigureAwait(false);
-        await ExpectAsync(cancellationToken, GameOpenRequest.ReplyCode).ConfigureAwait(false);
+        // As retail (daoc-re, W68): 0xE8, wait for 0x2B; only then 0xBF, wait for 0x2D. Each wait is 10 s, and either
+        // failing means retail doesn't enter the game. Ours: retail also sends 0xAC LeaveWorld then, which OpenDAoC has
+        // no handler for, so we don't.
+        try
+        {
+            await connection.SendAsync(PlayerInitRequest.Code, PlayerInitRequest.Payload(), cancellationToken).ConfigureAwait(false);
+            await ExpectAsync(cancellationToken, PlayerInitRequest.ReplyCode).ConfigureAwait(false);
+            await connection.SendAsync(GameOpenRequest.Code, GameOpenRequest.Payload(), cancellationToken).ConfigureAwait(false);
+            await ExpectAsync(cancellationToken, GameOpenRequest.ReplyCode).ConfigureAwait(false);
+        }
+        catch (TimeoutException e)
+        {
+            throw new TimeoutException("You cannot enter the game at this time.", e);
+        }
 
         World = new WorldPosition(position, ZoneAt(position));
         State = SessionState.InWorld;

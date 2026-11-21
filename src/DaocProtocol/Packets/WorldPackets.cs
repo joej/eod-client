@@ -52,10 +52,14 @@ public static class WorldInitRequest
     public static byte[] Payload(Realm realm, int slot) => [CharacterSlot.ToWire(realm, slot)];
 }
 
-/// <summary>0xE8: the server ignores the payload; the recorded client sends <c>01</c>. Answered with 0x2B among others.</summary>
+/// <summary>
+/// 0xE8: the server ignores the payload; the recorded client sends <c>01</c>. The server's answer ends with S→C 0x2B
+/// CharacterInitFinished (one byte the client ignores); retail waits for it before it sends 0xBF (daoc-re, W68).
+/// </summary>
 public static class PlayerInitRequest
 {
     public const byte Code = 0xE8;
+    public const byte ReplyCode = 0x2B;
 
     public static byte[] Payload() => [0x01];
 }

@@ -163,8 +163,8 @@ payloads with a port of the server's reader.
   for create) in 0x9D RegionListRequest (→ 0xB1; server reads only the slot byte) and 0xD4
   WorldInitRequest. 0xD4 converts the slot with the account's current realm, so list that realm last.
 - Our order: 9D → B1, 10 → 28, D4 → burst containing 0x20 PositionAndObjectID and ending with
-  0x4E ControlledHorse, then E8 PlayerInit and BF GameOpen → 0x2D. (The recorded client sent E8
-  and BF right after D4; OpenDAoC's 0xD4 handler is async, so we wait for the burst.)
+  0x4E ControlledHorse, then E8 PlayerInit → 0x2B, and only then BF GameOpen → 0x2D, as retail does
+  (W68). (The recorded client sent E8 right after D4; OpenDAoC's 0xD4 handler is async, so we wait for the burst.)
 - 0x20 (1.124+): x, y, z f32 LE, object id u16 BE, heading u16 BE, dungeon offsets 2 × u16,
   region (skin) u16, flags u8 (0x80 diving), then 5 bytes. Live: Eodarms at (574797, 530161, 2896),
   region 1, heading 3116 = DB Direction 7212 & 0x0FFF.

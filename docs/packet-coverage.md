@@ -16,7 +16,7 @@ change; a packet without a tier shows as `?`.
 | Tier | Direction | Packets | Handled | Missing |
 |---|---|---|---|---|
 | 0 | C→S | 12 | 12 | 0 |
-| 0 | S→C | 16 | 15 | 1 |
+| 0 | S→C | 16 | 16 | 0 |
 | P1 | C→S | 34 | 16 | 18 |
 | P1 | S→C | 49 | 31 | 18 |
 | P2 | C→S | 21 | 0 | 21 |
@@ -50,7 +50,7 @@ change; a packet without a tier shows as `?`.
 | S→C | 0x28 | SessionID | shown | session id | SendSessionID (1) |
 | S→C | 0x29 | PingReply | shown | keep-alive: ping reply | SendPingReply (1) |
 | S→C | 0x2A | LoginGranted | shown | login granted | SendLoginGranted (3) |
-| S→C | 0x2B | CharacterInitFinished | — | world entry: the end of the player-init burst (not read: we wait on 0x2D; see W68) | SendPlayerInitFinished (1) |
+| S→C | 0x2B | CharacterInitFinished | shown | world entry: the end of the player-init burst; 0xBF waits for it (W68) | SendPlayerInitFinished (1) |
 | S→C | 0x2C | LoginDenied | shown | login denied | SendLoginDenied (28) |
 | S→C | 0x2D | GameOpenReply | shown | world entry: game open reply | SendGameOpenReply (1) |
 | S→C | 0x7E | Time | shown | game time | SendTime (2) |

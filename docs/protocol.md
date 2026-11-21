@@ -88,15 +88,17 @@ C→S FC overview, realm 1–3    S→C FC CharacterOverview
 C→S 9D RegionListRequest      S→C B1 region list
 C→S 10 CharacterSelectRequest S→C 2A, 28
 C→S D4 WorldInitRequest       S→C burst: … 20 PositionAndObjectID … ends with 4E
-C→S E8 PlayerInitRequest
+C→S E8 PlayerInitRequest      S→C … ends with 2B CharacterInitFinished
 C→S BF GameOpenRequest        S→C 2D GameOpenReply                ← in the world
 C→S A9 PositionUpdate every 2 s (0.2 s moving), A3 PingRequest every 5 s (S→C 29 PingReply)
 C→S AF "&quit"                S→C … A4 Quit after the quit timer
 C→S FC overview, realm 1–3    S→C FC CharacterOverview           ← back at the character screen
 ```
 
-The recorded client sends E8 and BF straight after D4; we wait for the burst first because
-OpenDAoC's D4 handler loads the character asynchronously. The recorded client also sends a second
+The recorded client sends E8 straight after D4; we wait for the burst first because
+OpenDAoC's D4 handler loads the character asynchronously. As retail does, we send BF only once E8's 2B
+has arrived, and wait for 2D; 2B's byte means nothing to the client. Retail gives up when either reply takes
+more than 10 s ("You cannot enter the game at this time."), and so do we. The recorded client also sends a second
 0xF4 (a 256-byte key block, ignored by the server) and pings between steps.
 
 ## Login

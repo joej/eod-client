@@ -206,7 +206,7 @@ public class ClientSessionTests
         // Salisbury Plains (zone 1) is in Camelot Hills' region 1: the server answers with 0x04.
         await using var server = new FakeServer(Recording(p => IsJump(p)
             ? [new ServerPacket(CharacterJump.Code, new CharacterJump(560000, 570000, 0x4167, 1000, 2048, 0).ToBytes())]
-            : WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+            : WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await InWorld(server);
         await using (connection)
         {
@@ -246,7 +246,7 @@ public class ClientSessionTests
             }
             if (p.Code == WorldInitRequest.Code && moved)
                 return [PositionPacket(455000, 488000, 3000, region: 200, heading: 100), new ServerPacket(WorldInitRequest.EndOfBurstCode, [0])];
-            return WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null);
+            return WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null);
         }));
         var (connection, session) = await InWorld(server);
         await using (connection)
@@ -276,7 +276,7 @@ public class ClientSessionTests
         {
             if (p.Code == WorldInitRequest.Code && ++worldInits == 2)
                 return [PositionPacket(455000, 488000, 3000, region: 200, heading: 100), new ServerPacket(WorldInitRequest.EndOfBurstCode, [0])];
-            return WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null);
+            return WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null);
         }));
         var (connection, session) = await InWorld(server);
         await using (connection)
@@ -331,7 +331,7 @@ public class ClientSessionTests
                 answered = true;
                 return [new ServerPacket(CharacterJump.Code, new CharacterJump(560000, 570000, 0x4167, 1000, 0, 0).ToBytes())];
             }
-            return WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null);
+            return WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null);
         }));
         var (connection, session) = await InWorld(server);
         await using (connection)
@@ -366,7 +366,7 @@ public class ClientSessionTests
         // A player without GM rights gets a chat line, not a move.
         await using var server = new FakeServer(Recording(p => IsJump(p)
             ? [new ServerPacket(ChatMessage.Code, [0, 0, 0, 0, 0, 0, 0, 0])]
-            : WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+            : WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await InWorld(server);
         await using (connection)
         {
@@ -384,7 +384,7 @@ public class ClientSessionTests
         // Not just a timeout: any end to the wait must leave Relocating, or 0xA9 stays held back.
         await using var server = new FakeServer(Recording(p => IsJump(p)
             ? []
-            : WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+            : WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await InWorld(server);
         await using (connection)
         {
@@ -399,6 +399,7 @@ public class ClientSessionTests
     {
         RegionListRequest.Code => [Recorded[7], Recorded[8]],
         WorldInitRequest.Code => [.. Recorded[10..37]],
+        PlayerInitRequest.Code => [Recorded[229]],   // 0x2B
         GameOpenRequest.Code => [Recorded[237]],
         PingRequest.Code => [Ping],
         _ => null,
@@ -407,7 +408,7 @@ public class ClientSessionTests
     [Fact]
     public async Task EntersTheWorldAndKeepsTheSessionAlive()
     {
-        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await Connect(server);
         await using (connection)
         {
@@ -437,12 +438,33 @@ public class ClientSessionTests
     }
 
     [Fact]
+    public async Task GameOpenWaitsForTheInitFinishedReply()
+    {
+        // Retail sends 0xBF only once 0xE8's 0x2B has arrived (W68). A server that never sends 0x2B: no 0xBF, and the
+        // entry fails with retail's words.
+        await using var server = new FakeServer(Recording(p => p.Code == PlayerInitRequest.Code ? []
+            : WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await session.GetCharactersAsync(Realm.Albion);
+            session.ReplyTimeout = TimeSpan.FromMilliseconds(300);
+            var e = await Assert.ThrowsAsync<TimeoutException>(() => session.EnterWorldAsync(Realm.Albion, slot: 0));
+            Assert.Equal("You cannot enter the game at this time.", e.Message);
+        }
+        Assert.Contains(server.Received, p => p.Code == PlayerInitRequest.Code);
+        Assert.DoesNotContain(server.Received, p => p.Code == GameOpenRequest.Code);
+    }
+
+    [Fact]
     public async Task TheWorldPacketsPassedOverDuringEntryAreKeptForTheWorldView()
     {
         // The recorded entry burst (0xD4 -> packets 10-36) holds more than the 0x20 and 0x4E the session
         // waits for: object creates and state the world view must see. Until 2026-11-03 they were
         // dropped, so NPCs announced during entry never appeared as themselves.
-        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await Connect(server);
         await using (connection)
         {
@@ -463,7 +485,7 @@ public class ClientSessionTests
     [Fact]
     public async Task MoveToSendsOneUpdateAtTheNewPositionAndAdvancesWorld()
     {
-        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await Connect(server);
         await using (connection)
         {
@@ -493,7 +515,7 @@ public class ClientSessionTests
     public async Task TheKeepAliveRepeatsASittingOrSwimmingPostureButNotAJumpOrAStrafe()
     {
         // Others read a posture from every 0xA9: a keep-alive without the sit bit would stand us up every 2 s.
-        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await Connect(server);
         await using (connection)
         {
@@ -599,7 +621,7 @@ public class ClientSessionTests
     [Fact]
     public async Task WalkingOverAZoneBorderReportsTheNewZoneAndAGapKeepsTheLast()
     {
-        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await Connect(server);
         await using (connection)
         {
@@ -659,7 +681,7 @@ public class ClientSessionTests
                 answered = true;
                 return [new ServerPacket(QuitReply.Code, [0x00, 0x01])];
             }
-            return WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null);
+            return WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null);
         }));
         var (connection, session) = await Connect(server);
         await using (connection)
@@ -696,7 +718,7 @@ public class ClientSessionTests
         // 0xA4 with 1 first: leave the game, not the character screen. Nothing is listed afterwards.
         await using var server = new FakeServer(Recording(p =>
             p.Code == CommandRequest.Code ? [new ServerPacket(QuitReply.Code, [0x01, 0x01])]
-            : WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+            : WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await InWorld(server);
         await using (connection)
         {
@@ -720,7 +742,7 @@ public class ClientSessionTests
     {
         await using var server = new FakeServer(Recording(p =>
             p.Code == CommandRequest.Code ? []
-            : WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+            : WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await InWorld(server);
         await using (connection)
         {
@@ -741,7 +763,7 @@ public class ClientSessionTests
         // A /quit typed as text: the world drained the 0xA4, and hands it over. The session lists the
         // realm (the server's state moves to the character screen) and is back at the character screen.
         await using var server = new FakeServer(Recording(p =>
-            WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+            WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await InWorld(server);
         await using (connection)
         {
@@ -761,7 +783,7 @@ public class ClientSessionTests
         await using var server = new FakeServer(Recording(p =>
             p.Code == CommandRequest.Code ? [new ServerPacket(ChatMessage.Code, [0, 0, 0, 0, 0, 0, 0, 0])]
             : p.Code == SitRequest.Code ? []
-            : WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+            : WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await InWorld(server);
         await using (connection)
         {
@@ -786,7 +808,7 @@ public class ClientSessionTests
     [Fact]
     public async Task KeepAlivePingsFromTheCharacterScreenAndFollowsIntoTheWorld()
     {
-        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await Connect(server);
         await using (connection)
         {
@@ -821,7 +843,7 @@ public class ClientSessionTests
     {
         // Retail rates: 0xA9 every ~2 s standing still, but none extra while movement updates go out;
         // pings keep their own rate whatever the position interval.
-        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code ? [] : null)));
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PositionUpdate.Code ? [] : null)));
         var (connection, session) = await InWorld(server);
         await using (connection)
         {
