@@ -225,6 +225,14 @@ $(LOADING): $(CLIENT)/gamedata.mpk $(A)/Zone/LoadingScreens.cs $(A)/Zone/IniFile
 	@mkdir -p $(@D)
 	$(MPK) loading $(CLIENT) --out $(@D)
 
+# --- trees: the install's tree model names (treemap.csv), which the client's line-of-sight ray passes through (M13) --
+TREES := $(LIB)/trees.txt
+.PHONY: trees
+trees: $(TREES)
+$(TREES): $(CLIENT)/zones/trees/treemap.mpk $(A)/Zone/TreeMap.cs $(CLI_SRC) $(X)/Cli.Trees.cs $(X)/Cli.Loading.cs | $(TOOL)
+	@mkdir -p $(@D)
+	$(MPK) trees $(CLIENT) --out $(@D)
+
 # --- maps: the zone and region map pictures and their layout (ui/maps), for the map window (M) -------------
 # --- sounds: the install's sound files, their tables, each zone's sounds.dat and zones.dat, copied (M12) ---------------
 SOUNDS := $(LIB)/sounds/.sounds.done
@@ -258,7 +266,7 @@ $(ICONS): $(wildcard $(CLIENT)/icons/*.bmp $(CLIENT)/icons/*.BMP $(CLIENT)/Icons
 dungeons: $(foreach z,$(DUNGEONS),zone$(z))
 
 .PHONY: zones check-zones
-zones: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(OBJECTS) $(STRIDES) $(KEEPS) $(LOADING) $(MAPS) $(ICONS) $(SOUNDS)
+zones: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(OBJECTS) $(STRIDES) $(KEEPS) $(LOADING) $(MAPS) $(ICONS) $(SOUNDS) $(TREES)
 
 $(ZONEDIR)/summary.md: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),$(ZONEDIR)/zone$(z)/zonecheck.md)
 	@{ echo "# Zone check, every converted zone (outdoor, cities and dungeons)"; echo; \

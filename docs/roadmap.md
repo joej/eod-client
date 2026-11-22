@@ -630,8 +630,10 @@ format work like the NIF audit, not reverse engineering. Capital cities may be a
 *Play a character from level 1 to 20 against OpenDAoC with nothing but this client.*
 The rest of what PvE to level 20 needs, from `docs/packet-coverage.md`'s tier P1 (2026-11-21: 47 of its 83 packets
 handled). Each item below lists the packets it needs; the window rows are in `docs/ui-windows.md`. In order:
-- **Line-of-sight answers** (S→C 0xD0 → C→S 0xD0): OpenDAoC asks the client whether an NPC can see its target before
-  the NPC casts or shoots, and acts on the answer. We never answer yet.
+- **Line-of-sight answers** (S→C 0xD0 → C→S 0xD0): OpenDAoC asks the client whether one figure can see another before
+  a mob aggroes, while an NPC fights or casts, and during the player's casts, and acts on the answer.
+  *Built 2026-11-22:* answered as the retail client does (docs/protocol.md "Line of sight"). Unanswered, aggressive mobs
+  never came for a player of this client: OpenDAoC adds a player to the aggro list only on an answer "in sight".
 - **Merchants:** the item pages (0x17), buying (0x78) and selling (0x79), and what an item sells for (0xE0), with a
   quantity chooser.
 - **Trainers:** the train window (asked with C→S 0x7B; S→C 0x7B lists the specialisations, points and costs) and

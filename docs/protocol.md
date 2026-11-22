@@ -458,6 +458,25 @@ it: C→S 0xAF `00 "&whis keyword"`. Retail also puts the target in every 0xA9 (
 action flags 0x80, plus 0x30 while a target is in view. *Verified live 2026-11-07* with Master Visur at
 Prydwen Keep (eodtest2): target, examine, his destinations, and [towns] answered with the town list.
 
+### Line of sight
+
+OpenDAoC has no world geometry, so it asks a nearby player's client whether one figure can see another before a mob
+aggroes (`check_los_before_aggro`, on by default), while an NPC fights, and during the player's casts
+(`check_los_during_player_cast`, on):
+
+```
+S→C 0xD0 CheckLOSRequest     u16 BE source object id, u16 BE target object id, u16 0, u16 0
+C→S 0xD0 CheckLOSResponse    u16 BE source, u16 BE target (as asked), u8 1 = in sight / 0 = not, 3 bytes 0
+```
+
+The server reads the answer's fifth byte as bit 0x100 of a u16 and waits `los_check_timeout` (1.5 s) for it; with no
+answer it counts as not in sight, and an NPC asks again. The client answers at once with a ray from 4/5 of the source's
+height to 4/5 of the target's (64 units if unknown) through the world: terrain, solid zone models (fixtures.csv's
+Collide set), doors and climb surfaces block it; figures, water and trees (the models in `zones/trees/treemap.csv`, even
+solid ones) don't. Like the retail client, it doesn't answer when either id isn't a figure
+it has loaded (a player, an NPC or itself), answers "in sight" for a figure with no model in the scene yet, and "not in
+sight" while the world is loading.
+
 ### Other players
 
 OpenDAoC doesn't send another player in view by itself (only in a few cases: stealth ending, a player arriving). A

@@ -108,15 +108,6 @@ public partial class WorldView
         SendTarget(_target, examine: true);
     }
 
-    // A ray through the solid world from 4/5 of our height to 4/5 of the other's (RE/76 "Line of sight").
-    private bool InSight(Entity e)
-    {
-        if (!IsInsideTree() || !e.Node.IsInsideTree())
-            return true;
-        Vector3 from = _body.GlobalPosition + Vector3.Up * EyeUnits * RegionMetresPerUnit;
-        Vector3 to = e.Node.GlobalPosition + Vector3.Up * EyeUnits * e.SizeScale * RegionMetresPerUnit;
-        var ray = PhysicsRayQueryParameters3D.Create(from, to);
-        ray.CollisionMask = ~NotSolid;
-        return GetWorld3D().DirectSpaceState.IntersectRay(ray).Count == 0;
-    }
+    // A ray through the solid world from 4/5 of our height to 4/5 of the other's (RE/76 "Line of sight"; WorldView.Sight).
+    private bool InSight(Entity e) => !IsInsideTree() || Clear(EyeOf(SelfId), EyeOf(e));
 }

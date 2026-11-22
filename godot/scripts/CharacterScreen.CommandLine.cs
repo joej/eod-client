@@ -112,7 +112,7 @@ public partial class CharacterScreen
             }
             ok = _world.ClosedReason is null;
             GD.Print($"in world {staySeconds.Value} s: {_world.Packets} packets, {_world.Pings} ping replies, " +
-                     $"{_world.Entities} live entities, {_world.ChatMessages} chat/system messages, " +
+                     $"{_world.Entities} live entities, {_world.ChatMessages} chat/system messages, {_world.Sight}, " +
                      (ok ? "still connected" : $"disconnected: {_world.ClosedReason}"));
             if (ok)
             {

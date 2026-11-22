@@ -354,3 +354,33 @@ public static class InteractRequest
     public static byte[] Payload(float x, float y, ushort sessionId, ushort objectId) =>
         new PayloadWriter().U32BE((uint)x).U32BE((uint)y).U16BE(sessionId).U16BE(objectId).ToArray();
 }
+
+/// <summary>
+/// S→C 0xD0 CheckLOSRequest: the server asks whether <c>Source</c> can see <c>Target</c> (u16 BE object ids, then two
+/// u16 zeros; OpenDAoC <c>LosCheckHandler.StartLosCheck</c>). It asks for mob aggro, NPC attacks and casts, and the
+/// player's own casts, and waits up to <c>los_check_timeout</c> (1.5 s by default) for <see cref="LosCheckReply"/>;
+/// without one it counts as not in sight, and an NPC asks again. Retail reads only the ids.
+/// </summary>
+public sealed record LosCheck(ushort Source, ushort Target)
+{
+    public const byte Code = 0xD0;
+
+    public static LosCheck Parse(ReadOnlySpan<byte> payload)
+    {
+        var r = new PayloadReader(payload);
+        return new LosCheck(r.U16BE(), r.U16BE());
+    }
+}
+
+/// <summary>
+/// C→S 0xD0, the answer to <see cref="LosCheck"/>, as retail 1.130 sends it (daoc-re RE/93): the two ids as asked, one
+/// byte 1 = in sight or 0 = not, then three bytes retail leaves unwritten (we send zeros). OpenDAoC's
+/// <c>CheckLosResponseHandler</c> reads the byte as bit 0x100 of a u16 BE. Retail sends no answer when either id isn't a
+/// figure it has loaded.
+/// </summary>
+public static class LosCheckReply
+{
+    public const byte Code = 0xD0;
+    public static byte[] Payload(ushort source, ushort target, bool inSight) =>
+        new PayloadWriter().U16BE(source).U16BE(target).U8(inSight ? (byte)1 : (byte)0).U8(0).U8(0).U8(0).ToArray();
+}

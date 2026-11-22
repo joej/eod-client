@@ -276,6 +276,8 @@ public partial class WorldView
             // trees, campfire logs): no walls and nothing to stand on, as retail makes an object solid only when the
             // column is set (daoc-re RE/69).
             MakeSolid(inst, placement.Collide != 0);
+            if (placement.Collide != 0 && TreeModels(libraryDir).Contains(System.IO.Path.GetFileNameWithoutExtension(glb).ToLowerInvariant()))
+                MarkTree(inst);
             parts.Placed++;
             yield return true;
         }

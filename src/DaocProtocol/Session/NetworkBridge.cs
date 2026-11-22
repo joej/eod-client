@@ -54,6 +54,9 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
     /// <summary>A door opened or closed (0x99 DoorState).</summary>
     public event Action<DoorState>? DoorChanged;
 
+    /// <summary>The server asks whether one object can see another (0xD0); the client answers with LosCheckReply.</summary>
+    public event Action<LosCheck>? LosCheckAsked;
+
     /// <summary>Area music or a level-up fanfare (0xEF RegionSound).</summary>
     public event Action<RegionSound>? RegionSoundArrived;
 
@@ -273,6 +276,9 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
                     break;
                 case DoorState.Code:
                     DoorChanged?.Invoke(DoorState.Parse(packet.Payload));
+                    break;
+                case LosCheck.Code:
+                    LosCheckAsked?.Invoke(LosCheck.Parse(packet.Payload));
                     break;
                 case RegionSound.Code:
                     RegionSoundArrived?.Invoke(RegionSound.Parse(packet.Payload));

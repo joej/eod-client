@@ -17,8 +17,8 @@ change; a packet without a tier shows as `?`.
 |---|---|---|---|---|
 | 0 | C→S | 12 | 12 | 0 |
 | 0 | S→C | 16 | 16 | 0 |
-| P1 | C→S | 34 | 16 | 18 |
-| P1 | S→C | 49 | 31 | 18 |
+| P1 | C→S | 34 | 17 | 17 |
+| P1 | S→C | 49 | 32 | 17 |
 | P2 | C→S | 21 | 0 | 21 |
 | P2 | S→C | 19 | 0 | 19 |
 | P3 | C→S | 5 | 0 | 5 |
@@ -92,7 +92,7 @@ change; a packet without a tier shows as `?`.
 | C→S | 0xC7 | PlayerSitRequest | sent | sit and stand | PlayerSitRequest (PlayerInGame) |
 | C→S | 0xC8 | PlayerDismountRequest | — | horse routes: dismounting | PlayerDismountRequestHandler (PlayerInGame) |
 | C→S | 0xCB | DuplicateNameCheck | — | character creation: name check | DuplicateNameCheckRequestHandler (LoggedIn) |
-| C→S | 0xD0 | CheckLosRequest | — | line-of-sight answers | CheckLosResponseHandler (PlayerInGame) |
+| C→S | 0xD0 | CheckLosRequest | sent | line-of-sight answers | CheckLosResponseHandler (PlayerInGame) |
 | C→S | 0xD5 | CreatePlayerRequest | sent | asking for an unknown player | PlayerCreationRequestHandler (PlayerInGame) |
 | C→S | 0xD8 | DetailRequest | sent | delve requests | DetailDisplayHandler (PlayerInGame) |
 | C→S | 0xDD | PlayerMoveItem | sent | moving items | PlayerMoveItemRequestHandler (PlayerInGame) |
@@ -135,7 +135,7 @@ change; a packet without a tier shows as `?`.
 | S→C | 0xC8 | Riding | — | horse routes: riding, others' mounts | SendRiding (4) |
 | S→C | 0xC9 | SoundEffect | shown | sounds at a spot | SendSoundEffect (16) |
 | S→C | 0xCC | DupNameCheckReply | — | character creation: name taken | SendDupNameCheckReply (1) |
-| S→C | 0xD0 | CheckLOSRequest | — | line-of-sight checks the server asks of the client (NPC casters and archers wait on the answer) | LosCheckHandler.cs (1) |
+| S→C | 0xD0 | CheckLOSRequest | shown | line-of-sight checks the server asks of the client (mob aggro, NPC attacks and casts, the player's casts wait on the answer) | LosCheckHandler.cs (1) |
 | S→C | 0xD3 | PlaySound | shown | sounds | SendPlaySound (12) |
 | S→C | 0xD8 | DelveInfo | shown | delve (spell, style, item details) | SendDelveInfo (16) |
 | S→C | 0xD9 | ObjectCreate | shown | ground objects appear | SendObjectCreate (1) |

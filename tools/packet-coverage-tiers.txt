@@ -96,7 +96,7 @@ S 0x1B | P1 | spells: the effect on the target (140 call sites)
 S 0x75 | P1 | casting: concentration buffs list
 C 0x76 | P1 | casting: drop a concentration buff
 C 0xF8 | P1 | effects: cancel a buff
-S 0xD0 | P1 | line-of-sight checks the server asks of the client (NPC casters and archers wait on the answer)
+S 0xD0 | P1 | line-of-sight checks the server asks of the client (mob aggro, NPC attacks and casts, the player's casts wait on the answer)
 C 0xD0 | P1 | line-of-sight answers
 S 0x83 | P1 | quests: journal entries
 C 0x40 | P1 | quests: choosing a reward

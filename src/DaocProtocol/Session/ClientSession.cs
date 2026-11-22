@@ -612,6 +612,14 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         return connection.SendAsync(CreatePlayerRequest.Code, CreatePlayerRequest.Payload(sessionId), cancellationToken);
     }
 
+    /// <summary>Answer the server's line-of-sight question (S→C 0xD0) about <paramref name="source"/> seeing
+    /// <paramref name="target"/>.</summary>
+    public Task AnswerLosCheckAsync(ushort source, ushort target, bool inSight, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(LosCheckReply.Code, LosCheckReply.Payload(source, target, inSight), cancellationToken);
+    }
+
     /// <summary>Selects <paramref name="objectId"/> (0 clears the target): C->S 0xB0 with the flags of
     /// <see cref="TargetRequest.Payload"/>. Examined, the server answers in chat. Sending the same target again with
     /// <paramref name="examine"/> is a Consider.</summary>

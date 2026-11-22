@@ -456,6 +456,7 @@ public partial class WorldView : Node3D
         _bridge.ObjectRemoved += OnObjectRemoved;   // (id, type): type 0 may leave a corpse
         _bridge.ObjectSpawned += OnWorldObject;
         _bridge.DoorChanged += OnDoorChanged;
+        _bridge.LosCheckAsked += OnLosCheckAsked;
         ListenForKeeps();
         SetTorch(ClientSettings.Torch);   // as the last session left it (retail's torchmode)
         _bridge.ChatReceived += OnChatReceived;
