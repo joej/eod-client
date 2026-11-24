@@ -2,8 +2,9 @@
 //
 // Moving objects: boats and siege weapons. Layout ported (field order only) from OpenDAoC-Core @f0aaa1e, GPL-3.0:
 // PacketLib168.SendMovingObjectCreate (S→C 0x12), read as the retail 1.130 client reads it (daoc-re RE/98, 2026-11-24).
-// OpenDAoC sends every GameMovingObject (GameBoat, and GameSiegeWeapon with its rams, catapults, ballistas, trebuchets and
-// cauldrons) with this packet instead of 0xDA when it comes into view.
+// OpenDAoC sends every GameMovingObject (GameBoat, GameTaxiBoat, GameSiegeWeapon with its rams, catapults, ballistas and
+// cauldrons, and the master-level GameFont, GameMine and GameStorm) with this packet instead of 0xDA when it comes into
+// view, all with type 2 (the vehicle bit) except the ram (0x9602).
 
 using DaocProtocol.Net;
 

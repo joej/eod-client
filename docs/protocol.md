@@ -544,8 +544,9 @@ points). OpenDAoC's trainer interaction can also hand out a free level (its free
 
 ### Boats and siege weapons
 
-OpenDAoC sends a moving object (a boat, or any siege weapon: ram, catapult, ballista, trebuchet, cauldron) with S→C 0x12
-instead of 0xDA when it comes into view. As the retail client reads it (daoc-re, from 1.130's code):
+OpenDAoC sends every moving object with S→C 0x12 instead of 0xDA when it comes into view: boats (GameBoat, GameTaxiBoat),
+siege weapons (ram, catapult, ballista, cauldron) and the master-level fonts, mines and storms (GameFont, GameMine,
+GameStorm). As the retail client reads it (daoc-re, from 1.130's code):
 
 ```
 S→C 0x12 MovingObjectCreate  u16 BE oid, u16 BE object tint/emblem (OpenDAoC 0), u16 BE heading, s16 BE z, u32 BE x, y,
@@ -555,8 +556,10 @@ S→C 0x12 MovingObjectCreate  u16 BE oid, u16 BE object tint/emblem (OpenDAoC 0
 flags   0x01 floating (not grounded), 0x02 vehicle, 0x04 + 0x08 lootable (Nearest Loot), 0x10 / 0x20 / 0x40 realm 1 / 2 / 3
 ```
 
-OpenDAoC writes its flags as a u16, the object's type | realm | level × 0x200 (type 2 for a boat, 0x9602 for a ram); the
-retail client reads only the low byte, so the type and level are lost and the vehicle bit and realm are what count. What
+OpenDAoC writes its flags as a u16, the object's type | realm | level × 0x200, with type 2 for all of them except the ram
+(0x9602); the retail client reads only the low byte, so the type and level are lost and the vehicle bit and realm are what
+count: every one of them, fonts, mines and storms included, is a vehicle to the client (0xA1 moves it, a repeat is
+ignored, the look bytes are read). What
 the object is (ship, ram, catapult) comes from its objects.csv row alone (the crafted oaken ram: 2601 "Medium Siege Ram",
 `siege_ram_medium`), drawn at scale 1. It is a ground object: a name plate only when the row has Show Name (the rams
 don't), click targets (0xB0), right click interacts (0x7A), double click picks up (0xB5); never a Target Enemy / Friend
@@ -1003,7 +1006,7 @@ instead.
 | 0xE3 siege animation | Sets the target's health % from byte +0x19 | 0 during Loading | Not handled | Not built |
 | 0x7B trainer, champion type 2 | Kind 3 = spell id, 2 = style id, others icon id | Icons for all kinds; link bytes 0 | Not handled | Not built |
 | 0x17/0x1F merchant, market | Item names at most 47 bytes; a longer one drops the page | No limit | 0x17 handled (merchant window, M13) | Ours keeps the page and the whole name; 0x1F (market) not handled |
-| 0x12 moving object flags | Bytes 18–19 are read raw and only byte 19 is used: 0x01 floating, 0x02 vehicle, 0x04 + 0x08 lootable, 0x10 / 0x20 / 0x40 realm. Byte 18 is never read. What the object is comes from its model (an objects.csv row) | Writes a u16 BE: its type (2 boat, 0x9602 ram; DOL's comment: 0x7D42 catapult, 0x9602–0x9622 ballista) \| realm \| level × 0x200, so byte 18 holds the type's high byte or'd with the level, and the type's low bits overlap the realm bits | Reads byte 19 only (`MovingObjectCreate`); keeps byte 18 as `Unread` | ✅ checked 2026-11-24 with a crafted ram (0x9612: vehicle + Albion). Harmless today: OpenDAoC's types all have 0x02 and no realm bits in their low byte. Where DOL's type values came from, and whether any retail server sends byte 18, is open (no retail 0x12 seen) |
+| 0x12 moving object flags | Bytes 18–19 are read raw and only byte 19 is used: 0x01 floating, 0x02 vehicle, 0x04 + 0x08 lootable, 0x10 / 0x20 / 0x40 realm. Byte 18 is never read. What the object is comes from its model (an objects.csv row) | Writes a u16 BE: its type (2 for every moving object, boats, siege weapons and master-level fonts, mines and storms, except 0x9602 for the ram; DOL's comment, not what the code sends: 0x7D42 catapult, 0x9602–0x9622 ballista) \| realm \| level × 0x200, so byte 18 holds the type's high byte or'd with the level, and the type's low bits overlap the realm bits | Reads byte 19 only (`MovingObjectCreate`); keeps byte 18 as `Unread` | ✅ checked 2026-11-24 with a crafted ram (0x9612: vehicle + Albion). Harmless today: OpenDAoC's types all have 0x02 and no realm bits in their low byte. Where DOL's type values came from, and whether any retail server sends byte 18, is open (no retail 0x12 seen) |
 | 0x75 concentration list | Each entry's u16 is a **spell id**; the icon comes from that spells.csv row | Writes the effect's `Icon` | Reads it as a spell id (`ConcentrationEntry.Spell`) | Follows retail. Not checked live (no concentration caster yet): with OpenDAoC's icons the window may show other icons until the server sends spell ids |
 
 Client features the server could use later: NPC create (0xDA) flags2 0x40 (face and hair from a number, not the
