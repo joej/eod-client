@@ -24,9 +24,10 @@ public static class UseRequest
     /// <summary>C→S 0x7D: a list spell (its level, its line's number), or a style or ability listed in a line.</summary>
     public const byte SpellCode = 0x7D;
 
-    /// <summary>Flag word bits as OpenDAoC reads them: strafing, a target in view (0x2000 or 0x8000), a ground
-    /// target in view. What retail sets with a target is unconfirmed (open question C12).</summary>
-    public const ushort Strafing = 0x4000, TargetInView = 0x2000, GroundTargetInView = 0x1000;
+    /// <summary>Flag word bits as OpenDAoC reads them (a big-endian u16): strafing, a target in view, a ground target in
+    /// view. OpenDAoC accepts 0x2000 or 0x8000 for a target in view; retail sets both (daoc-re, 2026-11-09), so we do.
+    /// Not yet seen in a recording with a target (open question C12).</summary>
+    public const ushort Strafing = 0x4000, TargetInView = 0xA000, GroundTargetInView = 0x1000;
 
     public static byte[] Payload(float x, float y, float z, float speed, ushort heading, ushort flags, byte first, byte second) =>
         new PayloadWriter().F32LE(x).F32LE(y).F32LE(z).F32LE(speed).U16BE((ushort)(heading & 0x0FFF)).U16BE(flags)

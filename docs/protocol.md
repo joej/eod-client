@@ -460,9 +460,10 @@ Prydwen Keep (eodtest2): target, examine, his destinations, and [towns] answered
 
 ### Line of sight
 
-OpenDAoC has no world geometry, so it asks a nearby player's client whether one figure can see another before a mob
-aggroes (`check_los_before_aggro`, on by default), while an NPC fights, and during the player's casts
-(`check_los_during_player_cast`, on):
+OpenDAoC has no world geometry for sight (its optional navmeshes describe walkable floor and serve NPC pathing), so it
+takes the client's word in two ways. It asks a nearby player's client whether one figure can see another before a mob
+aggroes (`check_los_before_aggro`, on by default), while an NPC casts or shoots, and at the end of a player's
+direct-damage and bolt spells:
 
 ```
 S→C 0xD0 CheckLOSRequest     u16 BE source object id, u16 BE target object id, u16 0, u16 0
@@ -476,6 +477,11 @@ Collide set), doors and climb surfaces block it; figures, water and trees (the m
 solid ones) don't. Like the retail client, it doesn't answer when either id isn't a figure
 it has loaded (a player, an NPC or itself), answers "in sight" for a figure with no model in the scene yet, and "not in
 sight" while the world is loading.
+
+The other way is the client's **target in view** bits: 0x30 in 0xA9's action flags, and 0xA000 in the flag word of the
+use requests (0x71, 0x7D, 0xBB; OpenDAoC reads it big-endian and tests 0xA000). OpenDAoC starts a player's spell on them
+and allows a range attack only with them. The client sets them only while it has a target and its line-of-sight ray
+reaches it (the same ray as above); ourselves, or a target that isn't a loaded figure, count as in view.
 
 ### Other players
 

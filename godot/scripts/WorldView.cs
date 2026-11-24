@@ -991,6 +991,8 @@ public partial class WorldView : Node3D
         GroundKeeps();
         ProbeCorpses();
         UpdatePlayer(delta);
+        AnswerLosChecks();
+        UpdateTargetInView();
         if (_chase)
             CheckJumpPoints();
         if (_pendingClick is Vector2 click)

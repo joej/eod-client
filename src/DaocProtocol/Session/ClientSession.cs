@@ -104,6 +104,15 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     /// </summary>
     public bool IsDead { get; set; }
 
+    /// <summary>
+    /// The current target is in view: set by the front end from its line-of-sight ray. Every 0xA9 and use request carries
+    /// the "target in view" bits only while a target is set and this is true, which OpenDAoC trusts for the player's spells
+    /// and range attacks. True by default, for front ends with no world geometry.
+    /// </summary>
+    public bool TargetInView { get; set; } = true;
+
+    private bool SendsTargetInView => TargetId != 0 && TargetInView;
+
     /// <summary>The player's torch is lit: 0xA9 carries action bit 0x80, which the server relays to others.</summary>
     public bool TorchLit { get; set; }
 
@@ -463,7 +472,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
             PositionUpdate.Payload(p.X, p.Y, p.Z, connection.SessionId, objectId: TargetId, world.Zone.Id,
                 PositionUpdate.Heading(p.Heading, onGround), speed,
                 verticalSpeed, stateFlags,
-                actionFlags: (byte)((TorchLit ? PositionUpdate.Torch : 0) | (TargetId != 0 ? PositionUpdate.TargetInView : 0)),
+                actionFlags: (byte)((TorchLit ? PositionUpdate.Torch : 0) | (SendsTargetInView ? PositionUpdate.TargetInView : 0)),
                 health: IsDead ? (byte)0 : HealthPercent,
                 landed: landed),
             cancellationToken);
@@ -756,7 +765,7 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
             return Task.CompletedTask;
         PositionAndObjectId p = world.Position;
         // OpenDAoC reads "target in view" from the flag word; retail sent 0 without a target (C12).
-        ushort flags = TargetId != 0 ? UseRequest.TargetInView : (ushort)0;
+        ushort flags = SendsTargetInView ? UseRequest.TargetInView : (ushort)0;
         return connection.SendAsync(code, UseRequest.Payload(p.X, p.Y, p.Z, MoveSpeed, p.Heading, flags, first, second),
             cancellationToken);
     }

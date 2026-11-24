@@ -581,6 +581,38 @@ public class ClientSessionTests
     }
 
     [Fact]
+    public async Task TargetInViewIsSentOnlyWhileTheFrontEndSeesTheTarget()
+    {
+        await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code
+            or TargetRequest.Code or UseRequest.SlotCode ? [] : null)));
+        var (connection, session) = await Connect(server);
+        await using (connection)
+        {
+            await session.LoginAsync("rustdaoc", "secret");
+            await session.OpenCharacterScreenAsync();
+            await session.GetCharactersAsync(Realm.Albion);
+            await session.EnterWorldAsync(Realm.Albion, slot: 0);
+
+            await session.SetTargetAsync(0x1234);
+            await session.MoveToAsync(561000f, 511700f, 2344f, heading: 2048);   // in view (the default)
+            await session.UseSlotAsync(40);
+            session.TargetInView = false;                                         // a wall in the way
+            await session.MoveToAsync(561001f, 511700f, 2344f, heading: 2048);
+            await session.UseSlotAsync(40);
+        }
+
+        await server.ClosedAsync();
+        Assert.Null(server.Error);
+        var moves = server.Received.Where(p => p.Code == PositionUpdate.Code).ToList();
+        var uses = server.Received.Where(p => p.Code == UseRequest.SlotCode).ToList();
+        Assert.Equal(PositionUpdate.Payload(561000f, 511700f, 2344f, 1, objectId: 0x1234, zoneId: 0, heading: 0x1000 | 2048, actionFlags: 0x30), moves[^2].Payload);
+        Assert.Equal(PositionUpdate.Payload(561001f, 511700f, 2344f, 1, objectId: 0x1234, zoneId: 0, heading: 0x1000 | 2048, actionFlags: 0), moves[^1].Payload);
+        // The flag word at 18 as OpenDAoC reads it (big-endian; target in view = 0xA000 & word != 0).
+        Assert.Equal(0xA000, (uses[0].Payload[18] << 8) | uses[0].Payload[19]);
+        Assert.Equal(0, (uses[1].Payload[18] << 8) | uses[1].Payload[19]);
+    }
+
+    [Fact]
     public async Task WhileDeadEachPositionUpdateSaysSoAndReleaseIsACommand()
     {
         await using var server = new FakeServer(Recording(p => WorldEntry(p) ?? (p.Code is PlayerInitRequest.Code or PositionUpdate.Code

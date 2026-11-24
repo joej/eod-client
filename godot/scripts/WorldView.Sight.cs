@@ -12,6 +12,11 @@
 // (fixtures.csv Collide set; library/trees.txt, `make trees`) still stops the player walking, so the ray passes through
 // it. Fixtures with Collide 0 have no collider at all, as retail leaves them untested too. Retail decides per hit by node
 // name (RE/34's click rules); ours is the collision layers.
+// Rays are cast in the physics frame only: from _Process (where packets are drained) IntersectRay sometimes finds no hit,
+// which would answer "in sight" through a wall. So a question waits for the next physics frame (ours; retail answers inside
+// the packet handler), at most 1/60 s.
+// The same ray sets the "target in view" bit the client sends in each 0xA9 and use request, which OpenDAoC trusts for a
+// player's spells and range attacks (SpellHandler, RangeAttackComponent): retail sets it only while the target is in view.
 
 using Godot;
 using DaocProtocol.Packets;
@@ -25,15 +30,42 @@ public partial class WorldView
     /// <summary>For the headless summary: line-of-sight questions answered, how many "not in sight", trees passed.</summary>
     public string Sight => $"{_losAnswered} line-of-sight answer(s) ({_losBlocked} not in sight, {_losTrees} tree(s) passed)";
 
-    private void OnLosCheckAsked(LosCheck check)
+    private readonly System.Collections.Generic.List<LosCheck> _losAsked = [];
+    private double _targetViewAt;
+
+    private void OnLosCheckAsked(LosCheck check) => _losAsked.Add(check);
+
+    // Physics frame: answer the questions asked since the last one.
+    private void AnswerLosChecks()
     {
-        if (_session is not { } session || !IsFigure(check.Source) || !IsFigure(check.Target))
+        if (_losAsked.Count == 0)
             return;
-        bool inSight = IsInsideTree() && Clear(EyeOf(check.Source), EyeOf(check.Target));
-        _losAnswered++;
-        _losBlocked += inSight ? 0 : 1;
-        _ = Send(() => session.AnswerLosCheckAsync(check.Source, check.Target, inSight), "line of sight");
+        LosCheck[] asked = [.. _losAsked];
+        _losAsked.Clear();
+        if (_session is not { } session)
+            return;
+        foreach (LosCheck check in asked)
+        {
+            if (!IsFigure(check.Source) || !IsFigure(check.Target))
+                continue;
+            bool inSight = IsInsideTree() && Clear(EyeOf(check.Source), EyeOf(check.Target));
+            _losAnswered++;
+            _losBlocked += inSight ? 0 : 1;
+            _ = Send(() => session.AnswerLosCheckAsync(check.Source, check.Target, inSight), "line of sight");
+        }
     }
+
+    // Physics frame, ten times a second: is the current target in view? Ourselves, or a target that isn't a figure we have
+    // (ours): yes. Read by the session for every 0xA9 and use request.
+    private void UpdateTargetInView()
+    {
+        if (_session is not { } session || _seconds - _targetViewAt < TargetViewInterval)
+            return;
+        _targetViewAt = _seconds;
+        session.TargetInView = _target == 0 || _target == SelfId || !_entities.TryGetValue(_target, out Entity? e) || InSight(e);
+    }
+
+    private const double TargetViewInterval = 0.1;
 
     private bool IsFigure(ushort id) => id == SelfId || _entities.ContainsKey(id);
 
