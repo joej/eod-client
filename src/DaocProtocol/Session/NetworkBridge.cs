@@ -188,6 +188,25 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
     /// <summary>The server asks something (0x81): a group invite, a script's yes/no question, a notice.</summary>
     public event Action<Dialog>? DialogArrived;
 
+    /// <summary>A figure starts casting (0x72): the cast bar when it's the character, the cast animation for anyone.</summary>
+    public event Action<SpellCast>? SpellCastStarted;
+
+    /// <summary>A figure's cast was interrupted (0x73).</summary>
+    public event Action<SpellInterrupt>? SpellInterrupted;
+
+    /// <summary>A spell landed or was resisted (0x1B).</summary>
+    public event Action<SpellEffect>? SpellLanded;
+
+    /// <summary>The character's concentration buffs (0x75, the whole list each time).</summary>
+    public event Action<ConcentrationList>? ConcentrationChanged;
+
+    /// <summary>The character's effect icons changed (0x7F with its redraw flag set); <see cref="Effects"/> holds the slots.</summary>
+    public event Action<IReadOnlyDictionary<byte, EffectIcon>>? EffectsChanged;
+
+    /// <summary>The character's effect icons by slot, as last sent (0x7F sends only the slots that changed).</summary>
+    public IReadOnlyDictionary<byte, EffectIcon> Effects => _effects;
+    private readonly SortedDictionary<byte, EffectIcon> _effects = new();
+
     /// <summary>The server answered a keep-alive (0x29), echoing our timestamp (Environment.TickCount when sent): for the
     /// overlay's count and the lag meter's round trip (PingRequest.RoundTrip).</summary>
     public event Action<uint>? PingReplied;
@@ -393,6 +412,30 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
                     Delves.Add(record);
                     DelveArrived?.Invoke(record);
                     break;
+                case SpellCast.Code:
+                    SpellCastStarted?.Invoke(SpellCast.Parse(packet.Payload));
+                    break;
+                case SpellInterrupt.Code:
+                    SpellInterrupted?.Invoke(SpellInterrupt.Parse(packet.Payload));
+                    break;
+                case SpellEffect.Code:
+                    SpellLanded?.Invoke(SpellEffect.Parse(packet.Payload));
+                    break;
+                case ConcentrationList.Code:
+                    ConcentrationChanged?.Invoke(ConcentrationList.Parse(packet.Payload));
+                    break;
+                case EffectIcons.Code:
+                {
+                    EffectIcons icons = EffectIcons.Parse(packet.Payload);
+                    foreach (EffectIcon icon in icons.Changed)
+                        if (icon.IsEmpty)
+                            _effects.Remove(icon.Slot);
+                        else
+                            _effects[icon.Slot] = icon;
+                    if (icons.Redraw)   // retail keeps the slots but redraws nothing when the flag is 0
+                        EffectsChanged?.Invoke(_effects);
+                    break;
+                }
                 case Dialog.Code:
                     DialogArrived?.Invoke(Dialog.Parse(packet.Payload));
                     break;

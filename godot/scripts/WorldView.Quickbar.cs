@@ -112,6 +112,8 @@ public partial class WorldView
 
     // "skill:<name>" (a skill, ability, style or spell, found by name), "slot:<n>" (an inventory slot),
     // "cmd:<text>" (a command or a line to say).
+    private (string Key, long Ms) _lastSlotUse = ("", 0);
+
     private void UseQuickbarEntry(string entry)
     {
         if (_session is null || entry.Length == 0)
@@ -167,6 +169,12 @@ public partial class WorldView
             return _bridge.Inventory[slot] is InventoryItem item ? ItemPicture(item) : SlotPicture.None;
         if (EntryIcon(entry) is not var (kind, number))
             return SlotPicture.None;
+        return KindPicture(kind, number);
+    }
+
+    // A picture by its table: an icons.csv id, or a spells.csv, styles.csv or objects.csv row.
+    private SlotPicture KindPicture(IconKind kind, int number)
+    {
         _iconTable ??= LoadIconTable();
         if (_iconTable.Resolve(kind, number) is not IconPicture p)
             return SlotPicture.None;
@@ -315,7 +323,15 @@ public partial class WorldView
 
         private string Entry(int slot) => ClientSettings.QuickbarSlot(_view.PlayerName, KeyOf(slot));
 
-        public void Use(int slot) => _view.UseQuickbarEntry(Entry(slot));
+        // Retail drops a use of the same slot within 250 ms of the last (daoc-re RE/97).
+        public void Use(int slot)
+        {
+            long now = System.Environment.TickCount64;
+            if (_view._lastSlotUse.Key == KeyOf(slot) && now - _view._lastSlotUse.Ms < 250)
+                return;
+            _view._lastSlotUse = (KeyOf(slot), now);
+            _view.UseQuickbarEntry(Entry(slot));
+        }
 
         public void TurnTo(int page)
         {

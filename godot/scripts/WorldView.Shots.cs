@@ -396,7 +396,33 @@ public partial class WorldView
         int walk = System.Array.IndexOf(args, "--walkto");
         if (walk >= 0 && walk + 2 < args.Length && float.TryParse(args[walk + 1], System.Globalization.CultureInfo.InvariantCulture, out float wx)
             && float.TryParse(args[walk + 2], System.Globalization.CultureInfo.InvariantCulture, out float wy))
-            (_walkPoint, _walkUntil, _shotOnArrival) = (ToGodot(wx, wy, 0), _seconds + 300, args.Contains("--shot-on-arrival"));
+        {
+            // --walkto-at SECONDS: start walking then rather than at once (e.g. to move during a cast).
+            int wat = System.Array.IndexOf(args, "--walkto-at");
+            double walkAt = wat >= 0 && wat + 1 < args.Length && double.TryParse(args[wat + 1], System.Globalization.CultureInfo.InvariantCulture, out double wAt) ? wAt : 0;
+            bool shot = args.Contains("--shot-on-arrival");
+            if (walkAt <= 0)
+                (_walkPoint, _walkUntil, _shotOnArrival) = (ToGodot(wx, wy, 0), _seconds + 300, shot);
+            else
+                GetTree().CreateTimer(walkAt).Timeout += () =>
+                    (_walkPoint, _walkUntil, _shotOnArrival) = (ToGodot(wx, wy, 0), _seconds + 300, shot);
+        }
+        // --cancel-effect NAME [--cancel-at SECONDS, default 20]: cancel the character's effect of that name (C→S 0xF8), as
+        // a click on its icon would.
+        int ce = System.Array.IndexOf(args, "--cancel-effect");
+        if (ce >= 0 && ce + 1 < args.Length)
+        {
+            string effect = args[ce + 1];
+            int cat = System.Array.IndexOf(args, "--cancel-at");
+            double cancelAt = cat >= 0 && cat + 1 < args.Length && double.TryParse(args[cat + 1], System.Globalization.CultureInfo.InvariantCulture, out double cAt) ? cAt : 20;
+            GetTree().CreateTimer(cancelAt).Timeout += () =>
+            {
+                var icon = _bridge.Effects.Values.FirstOrDefault(i => i.Name.Equals(effect, System.StringComparison.OrdinalIgnoreCase));
+                GD.Print(icon is null ? $"[effects] --cancel-effect: no \"{effect}\"" : $"[effects] cancelling {icon.Name} (tooltip {icon.TooltipId})");
+                if (icon is not null && _session is not null)
+                    _ = _session.CancelEffectAsync(icon.TooltipId);
+            };
+        }
         // --map: open the map window; --map-region: on the region map.
         if (args.Contains("--map") || args.Contains("--map-region"))
         {

@@ -87,6 +87,17 @@ public sealed class MonsterTables
     private static readonly (string Clip, int Column)[] CreatureCombatSlotColumns = SlotColumns(CreatureCombatSlots);
     private static (string, int)[] SlotColumns(int[] slots) => slots.Select(slot => ($"c{slot}", slot + 2)).ToArray();
 
+    // anims.csv slots that spells.csv's Anim1/2/3 name (daoc-re RE/78: Anim1 when the cast starts, Anim2 and Anim3 queued
+    // after it), played as clips named "a<slot>": Cast Start/Mid/End (16-18), the instrument and gesture sets (22-52), and
+    // the later casting sets (117-125, 154-163), plus the few single ones (67, 73, 77, 147). Measured 2026-11-24: every
+    // non-zero Anim1-3 value in the 1.127 spells.csv except idle (8) and the 543-546 ids past anims.csv's 186 slots.
+    // An empty cell gives no clip here: the client falls back to the walk, as retail does (column 0 of the row).
+    internal static readonly int[] CastSlots = [16, 17, 18, 22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 33, 34, 35, 36, 37,
+        38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 67, 73, 77, 117, 118, 119, 120, 121, 122, 123, 124,
+        125, 147, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163];
+    private static readonly (string Clip, int Column)[] CastSlotColumns =
+        CastSlots.Select(slot => ($"a{slot}", slot + 2)).ToArray();
+
     // anims.csv slot 76 (column 78) "Run Flinch": the flinch of a defender on the run.
     private const int RunFlinchColumn = 78;
 
@@ -255,6 +266,7 @@ public sealed class MonsterTables
         {
             Add(a, ClipColumns);
             Add(a, [("run_flinch", RunFlinchColumn)]);
+            Add(a, CastSlotColumns);
             // In water: each base clip's "Swim Alt" (animnifs.csv column 14), e.g. the human idle 329 -> 1739
             // "Underwater Swim Idle", run 381 -> 1847 "Atlantis Swim", backward 332 -> 1854 "Swim backwards".
             foreach ((string clip, int col) in SwimColumns)

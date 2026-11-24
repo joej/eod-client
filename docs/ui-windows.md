@@ -98,9 +98,9 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 | `stats_combat_window` | Weapon skill, damage, speed | 0x16 / 0xFB | — | M10 |
 | `stats_spec_abil_window` | Specialisations, abilities, trade skills | 0x16 skills | Built 2026-11-11 as the stats panel's Skills page | M10 |
 | `stats_spells_window`, spell and style sheets (built-in) | Spell lines and combat styles, to cast or drag to a quickbar | 0x16 spell lines and skills; 0xD8 delve text | Built 2026-11-11 as the stats panel's Styles and Spells pages: lists with icons (double-click uses, drag to a quickbar, right-click opens `mini_info`). The panel's tab strip (`stats_index`) has word tabs | M10 |
-| `concentration_window` | Your concentration buffs | 0x75 | — | M10 |
+| `concentration_window` | Your concentration buffs | 0x75; 0xAD concentration %; C→S 0x76 | Built 2026-11-24 at the skin's size: icon and whom each buff is on, the yellow bar, a double-click drops one (inferred); hidden by default, Interface Elements → Concentration | M13 |
 | `quiver_window` | Arrows in the quiver | 0x02 | — | M10 |
-| Effect icons (built-in?) | Active buffs and debuffs with timers | 0x7F UpdateIcons | — | M10 |
+| Effect icons (built-in) | Active buffs and debuffs with timers | 0x7F UpdateIcons; C→S 0xF8 | Built 2026-11-24: slots 0–74 as 32 × 32 icons in a 10 × 4 grid at default.ini's place, countdowns as the quickbar writes them, Shift + right-click cancels. Not yet: the Width/Height/Oldest First options | M13 |
 | `mini_info`, `info` | An item's details, small (`mini_info`) and full (`info`) | none for `mini_info` (0x02 data); 0xD8 → 0xC4 for `info`; 0xD8 types 100–102 repair, craft, salvage | Built 2026-11-11 for inventory items: right-click selects and opens it (again to close), the skin's layout (con-coloured name, icon, 7 lines), INFO / SALVAGE / REPAIR / CRAFT, a use entry per use spell; INFO fills the `info` window from 0xC4. Spells and styles since 2026-11-11 (right-click on their pages): "Magical Ability" / "Combat Style", the level, a spell's target and concentration, a style's opening; INFO shows the 0xD8 record's text in the client's wording (a style's to-hit and defence words in colour, its fired spell after it). Not yet for quickbar icons or abilities; `info` isn't resizable | M10 |
 | `title_window` | Titles to choose | 0xC4 (titles) | — | later |
 

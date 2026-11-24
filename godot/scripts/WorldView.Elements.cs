@@ -46,7 +46,7 @@ public partial class WorldView
                 ("Title Window", null, null), ("Mount Window", null, null),
             ]),
             ("Groups & Buffs", [
-                ("Concentration", null, null), ("Group Benefits", null, null), ("Floating Group", null, null),
+                ("Concentration", () => _showConcentration, () => _showConcentration = Flip("concentration", _showConcentration)), ("Group Benefits", null, null), ("Floating Group", null, null),
                 ("Mini-Group", null, null), ("Social Window", null, null), ("Mini-Friends", null, null),
             ]),
             ("Maps & Journals", [
@@ -164,6 +164,8 @@ public partial class WorldView
     {
         if (_commandWindow is not null && IsInstanceValid(_commandWindow))
             _commandWindow.Visible = _showCommand;
+        if (_concWindow is not null && IsInstanceValid(_concWindow))
+            _concWindow.Visible = _showConcentration;
         if (_menuBar is not null && IsInstanceValid(_menuBar))
             _menuBar.Visible = _session is not null && _showMenuBar;
         foreach ((Button b, System.Func<bool> on) in _elementButtons)

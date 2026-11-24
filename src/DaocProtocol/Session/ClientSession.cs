@@ -725,6 +725,20 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
             BuyRequest.Payload(world.Position.X, world.Position.Y, connection.SessionId, item, count, windowType), cancellationToken);
     }
 
+    /// <summary>Drops a concentration buff (C→S 0x76), by its index in the last 0x75 list.</summary>
+    public Task DropConcentrationAsync(byte index, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(ConcentrationDrop.Code, ConcentrationDrop.Payload(index), cancellationToken);
+    }
+
+    /// <summary>Cancels one of the character's own effects (C→S 0xF8), by its 0x7F tooltip id.</summary>
+    public Task CancelEffectAsync(ushort tooltipId, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(EffectCancel.Code, EffectCancel.Payload(tooltipId), cancellationToken);
+    }
+
     /// <summary>
     /// Crafts the recipe <paramref name="recipeId"/> (C→S 0xED). The server answers in chat and, if it starts, with a
     /// progress bar; nothing comes back for an unknown id.

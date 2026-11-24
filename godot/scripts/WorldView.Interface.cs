@@ -43,6 +43,7 @@ public partial class WorldView
             BuildDialog(overlay);
             BuildMerchantWindow(overlay);
             BuildTrainWindow(overlay);
+            BuildEffectWindows(overlay);
             BuildElementWindows(overlay);
         }
         ScaleChatAndNpc(s / ChatDesignScale);

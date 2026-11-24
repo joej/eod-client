@@ -17,10 +17,10 @@ change; a packet without a tier shows as `?`.
 |---|---|---|---|---|
 | 0 | C→S | 12 | 12 | 0 |
 | 0 | S→C | 16 | 16 | 0 |
-| P1 | C→S | 34 | 22 | 12 |
-| P1 | S→C | 49 | 34 | 15 |
-| P2 | C→S | 21 | 0 | 21 |
-| P2 | S→C | 19 | 0 | 19 |
+| P1 | C→S | 34 | 24 | 10 |
+| P1 | S→C | 51 | 40 | 11 |
+| P2 | C→S | 21 | 1 | 20 |
+| P2 | S→C | 20 | 0 | 20 |
 | P3 | C→S | 5 | 0 | 5 |
 | P3 | S→C | 15 | 6 | 9 |
 | dev | C→S | 1 | 0 | 1 |
@@ -70,7 +70,7 @@ change; a packet without a tier shows as `?`.
 | C→S | 0x53 | TrainHandler | sent | trainers: train a specialisation | PlayerTrainRequestHandler (PlayerInGame) |
 | C→S | 0x71 | UseSlot | sent | using an item | UseSlotHandler (PlayerInGame) |
 | C→S | 0x74 | PlayerAttackRequest | sent | attack | PlayerAttackRequestHandler (PlayerInGame) |
-| C→S | 0x76 | RemoveConcentrationEffect | — | casting: drop a concentration buff | RemoveConcentrationEffectHandler (PlayerInGame) |
+| C→S | 0x76 | RemoveConcentrationEffect | sent | casting: drop a concentration buff | RemoveConcentrationEffectHandler (PlayerInGame) |
 | C→S | 0x78 | BuyRequest | sent | merchants: buy | PlayerBuyRequestHandler (PlayerInGame) |
 | C→S | 0x79 | SellRequest | sent | merchants: sell | PlayerSellRequestHandler (PlayerInGame) |
 | C→S | 0x7A | ObjectInteractRequest | sent | talk to / interact with | ObjectInteractRequestHandler (PlayerInGame) |
@@ -98,21 +98,22 @@ change; a packet without a tier shows as `?`.
 | C→S | 0xDD | PlayerMoveItem | sent | moving items | PlayerMoveItemRequestHandler (PlayerInGame) |
 | C→S | 0xE0 | PlayerAppraiseItemRequest | sent | merchants: what an item sells for | PlayerAppraiseItemRequestHandler (PlayerInGame) |
 | C→S | 0xEB | ModifyTrade | — | trade with players | PlayerModifyTradeHandler (PlayerInGame) |
-| C→S | 0xF8 | PlayerCancelsEffect | — | effects: cancel a buff | PlayerCancelsEffectHandler (PlayerInGame) |
+| C→S | 0xF8 | PlayerCancelsEffect | sent | effects: cancel a buff | PlayerCancelsEffectHandler (PlayerInGame) |
 | S→C | 0x02 | InventoryUpdate | shown | inventory | SendInventoryItemsPartialUpdate (3), SendInventorySlotsUpdateRange (6) |
 | S→C | 0x15 | EquipmentUpdate | shown | others' equipment | SendLivingEquipmentUpdate (15) |
 | S→C | 0x16 | VariousUpdate | shown | skills, spell lines, player info, group list | SendGroupWindowUpdate (3), SendNonHybridSpellLines (3), SendUpdateCraftingSkills (20), SendUpdatePlayer (105), SendUpdatePlayerSkills (18), SendUpdateWeaponAndArmorStats (22) |
 | S→C | 0x17 | MerchantWindow | shown | merchants: their item pages | SendMerchantWindow (23) |
-| S→C | 0x1B | SpellEffectAnimation | — | spells: the effect on the target (140 call sites) | SendSpellEffectAnimation (140) |
+| S→C | 0x1B | SpellEffectAnimation | shown | spells: the effect on the target (140 call sites) | SendSpellEffectAnimation (140) |
 | S→C | 0x4B | PlayerCreate172 | shown | players appear | SendPlayerCreate (8) |
 | S→C | 0x4C | VisualEffect | shown | quest markers over NPCs and other effects | SendBlinkPanel (2), SendHexEffect (0), SendMinotaurRelicBarUpdate (3), SendMinotaurRelicWindow (4), SendNPCsQuestEffect (7), SendPlayerBanner (0), SendPlayerFreeLevelUpdate (3), SendPlayerTitleUpdate (1), SendRegionColorScheme (1), SendRvRGuildBanner (5), SendVampireEffect (1), SendWarlockChamberEffect (3) |
 | S→C | 0x4E | ControlledHorse | shown | horse routes: the horse you ride (counted as handled, but read today only as the end of world entry) | SendControlledHorse (2), SendSetControlledHorse (9) |
 | S→C | 0x70 | GroupMemberUpdate | shown | group members' bars | SendGroupMembersIconsUpdate (3), SendGroupMembersMapUpdate (1), SendGroupMembersUpdate (3) |
-| S→C | 0x72 | SpellCastAnimation | — | casting: the cast animation and bar | SendSpellCastAnimation (25) |
-| S→C | 0x73 | InterruptSpellCast | — | casting: interrupted | SendInterruptAnimation (7) |
+| S→C | 0x72 | SpellCastAnimation | shown | casting: the cast animation and bar | SendSpellCastAnimation (25) |
+| S→C | 0x73 | InterruptSpellCast | shown | casting: interrupted | SendInterruptAnimation (7) |
 | S→C | 0x74 | AttackMode | shown | attack mode | SendAttackMode (4) |
-| S→C | 0x75 | ConcentrationList | — | casting: concentration buffs list | SendConcentrationList (3) |
+| S→C | 0x75 | ConcentrationList | shown | casting: concentration buffs list | SendConcentrationList (3) |
 | S→C | 0x7B | TrainerWindow | shown | trainers: the train window (specs, points, costs) | SendChampionTrainerWindow (2), SendCustomTrainerWindow (0), SendTrainerWindow (8) |
+| S→C | 0x7F | UpdateIcons | shown | effects: the buff and debuff icons (found 2026-11-24, after a coverage-tool fix) | SendUpdateIcons (4) |
 | S→C | 0x81 | Dialog | shown | dialogs (group invites, script questions) | SendCustomDialog (144), SendDialogBox (10), SendGroupInviteCommand (2), SendGuildInviteCommand (1), SendGuildLeaveCommand (1), SendHousePayRentDialog (1), SendQuestAbortCommand (1), SendQuestSubscribeCommand (93), SendQuestWindow (4) |
 | S→C | 0x83 | QuestEntry | — | quests: journal entries | SendQuestPacket (2), SendTaskInfo (1) |
 | S→C | 0x88 | PetWindow | — | pets (Cabalist, Theurgist, Enchanter and more start pets early) | SendPetWindow (3) |
@@ -140,6 +141,7 @@ change; a packet without a tier shows as `?`.
 | S→C | 0xD8 | DelveInfo | shown | delve (spell, style, item details) | SendDelveInfo (16) |
 | S→C | 0xD9 | ObjectCreate | shown | ground objects appear | SendObjectCreate (1) |
 | S→C | 0xDA | NPCCreate | shown | NPCs appear | SendNPCCreate (7) |
+| S→C | 0xE1 | ObjectDelete | shown | objects removed (players) | SendObjectDelete (5) |
 | S→C | 0xEA | TradeWindow | — | trade with players | SendCloseTradeWindow (3), SendTradeWindow (3) |
 | S→C | 0xEE | ObjectDataUpdate | — | a figure's level, guild and last name changing (PacketLib171.SendLivingDataUpdate) | SendLivingDataUpdate (2) |
 | S→C | 0xEF | RegionSound | shown | area music, level-up sound | SendLevelUpSound (3), SendRegionEnterSound (1) |
@@ -173,14 +175,14 @@ change; a packet without a tier shows as `?`.
 | C→S | 0xDC | ClientFilterSettings | — | the spell-effects filter (EffectsFlag) | ClientFilterSettingsHandler (PlayerInGame) |
 | C→S | 0xE2 | EmblemDialogResponse | — | guild emblem | EmblemDialogReponseHandler (PlayerInGame) |
 | C→S | 0xEC | PlayerGroundTarget | — | ground target | PlayerGroundTargetHandler (PlayerInGame) |
-| C→S | 0xED | CraftRequest | — | crafting | MakeProductHandler (PlayerInGame) |
+| C→S | 0xED | CraftRequest | sent | crafting | MakeProductHandler (PlayerInGame) |
 | S→C | 0x03 | HouseUserPermissions | — | housing | SendHouseUsersPermissions (1) |
 | S→C | 0x05 | HousingPermissions | — | housing | HousePermissionsRequestHandler.cs (1) |
 | S→C | 0x08 | HouseEnter | — | housing | SendEnterHouse (2) |
 | S→C | 0x09 | HousingItem | — | housing | HousingPickupItemHandler.cs (1), SendFurniture (3) |
 | S→C | 0x0A | HouseExit | — | housing | SendExitHouse (1) |
 | S→C | 0x0F | HouseTogglePoints | — | housing | SendToggleHousePoints (1) |
-| S→C | 0x12 | MovingObjectCreate | — | boats | SendMovingObjectCreate (3) |
+| S→C | 0x12 | MovingObjectCreate | — | boats and siege rams (moving objects) | SendMovingObjectCreate (3) |
 | S→C | 0x18 | HouseDecorationRotate | — | housing | HousingDecorationRotateRequestHandler.cs (1) |
 | S→C | 0x1E | ConsignmentMerchantMoney | — | housing: consignment merchant | SendConsignmentMerchantMoney (2) |
 | S→C | 0x1F | MarketExplorerWindow | — | housing: market explorer | SendMarketExplorerWindow (3) |
@@ -189,6 +191,7 @@ change; a packet without a tier shows as `?`.
 | S→C | 0x92 | Weather | — | weather (the look; no gameplay effect) | SendWeather (2) |
 | S→C | 0xD1 | HouseCreate | — | housing | SendHouse (2), SendRemoveHouse (1) |
 | S→C | 0xD2 | HouseChangeGarden | — | housing | SendGarden (5), SendHouseOccupied (4) |
+| S→C | 0xDB | ModelChange | — | a figure's model and size changing (SendModelAndSizeChange: shapeshifts, illusions) | SendModelAndSizeChange (3) |
 | S→C | 0xDE | ObjectGuildID | — | guild names over players | SendObjectGuildID (17) |
 | S→C | 0xE2 | EmblemDialogue | — | guild emblem | SendEmblemDialogue (2) |
 | S→C | 0xEC | ChangeGroundTarget | — | ground target (ground-target spells) | SendChangeGroundTarget (1) |

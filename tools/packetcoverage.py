@@ -62,11 +62,14 @@ def server(tree):
         cls = m.group(1) if m and m.group(1).startswith("PacketLib") else None
     chain.append(pk / "Server" / "AbstractPacketLib.cs")
     # name -> codes. The most-derived definition wins; one that calls base.Name() also writes what its base writes.
-    methods, open_base = {}, set()
+    # Overloads in the same file count together (PacketLib1110's SendUpdateIcons(IList, ref int) only calls its other
+    # overload, which writes 0x7F).
+    methods, open_base, defined_in = {}, set(), {}
     for f in chain:
         for name, body in bodies(read(f)):
-            if not name.startswith("Send") or (name in methods and name not in open_base):
+            if not name.startswith("Send") or (name in methods and name not in open_base and defined_in[name] != f):
                 continue
+            defined_in[name] = f
             codes = {s2c[c] for c in re.findall(r"eServerPackets\.(\w+)", body) if c in s2c}
             methods[name] = methods.get(name, set()) | codes
             if re.search(r"\bbase\." + name + r"\s*\(", body):

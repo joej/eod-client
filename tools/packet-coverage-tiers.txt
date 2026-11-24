@@ -42,6 +42,7 @@ S 0xA1 | P1 | NPC movement and health
 S 0xA9 | P1 | other players' movement
 S 0xBA | P1 | other players turning
 S 0xA2 | P1 | objects removed, corpses
+S 0xE1 | P1 | objects removed (players)
 S 0x15 | P1 | others' equipment
 S 0x99 | P1 | doors
 S 0xAF | P1 | chat and system messages
@@ -96,6 +97,7 @@ S 0x1B | P1 | spells: the effect on the target (140 call sites)
 S 0x75 | P1 | casting: concentration buffs list
 C 0x76 | P1 | casting: drop a concentration buff
 C 0xF8 | P1 | effects: cancel a buff
+S 0x7F | P1 | effects: the buff and debuff icons (found 2026-11-24, after a coverage-tool fix)
 S 0xD0 | P1 | line-of-sight checks the server asks of the client (mob aggro, NPC attacks and casts, the player's casts wait on the answer)
 C 0xD0 | P1 | line-of-sight answers
 S 0x83 | P1 | quests: journal entries
@@ -123,6 +125,7 @@ C 0xCB | P1 | character creation: name check
 
 # --- post-20 PvE, battlegrounds, the rest of 1.65 life (P2)
 S 0x8D | P2 | illusions and shape changes (model change)
+S 0xDB | P2 | a figure's model and size changing (SendModelAndSizeChange: shapeshifts, illusions)
 S 0x92 | P2 | weather (the look; no gameplay effect)
 S 0xDE | P2 | guild names over players
 S 0xE2 | P2 | guild emblem
@@ -136,7 +139,7 @@ C 0xED | P2 | crafting
 C 0xCA | P2 | the bonuses window
 C 0xDC | P2 | the spell-effects filter (EffectsFlag)
 S 0xF7 | P2 | the starter help window
-S 0x12 | P2 | boats
+S 0x12 | P2 | boats and siege rams (moving objects)
 S 0x03 | P2 | housing
 S 0x05 | P2 | housing
 S 0x08 | P2 | housing

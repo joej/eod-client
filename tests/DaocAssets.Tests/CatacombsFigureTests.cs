@@ -114,6 +114,23 @@ public sealed class CatacombsFigureTests
     }
 
     [Fact]
+    public void AFigureCarriesTheSpellCastClipsBySlot()
+    {
+        // anims.csv Cast Start/Mid/End (slots 16-18, columns 18-20) and 1H Circ Start (32, column 34); slot 19 (Sit Down,
+        // column 21) is no cast slot here, and an empty cast cell gives no clip.
+        var anims = Enumerable.Repeat("", 35).ToArray();
+        (anims[0], anims[1], anims[10], anims[18], anims[19], anims[34]) = ("233", "Cata Briton Male", "2630", "2650", "2651", "2660");
+        MonsterTables tables = Tables("x,,0\nID,name,Walk\n" + string.Join(',', anims),
+            "id\nID,name,file\n2630,Idle,Cat_I_H.kfa\n2650,Cast start,Cat_CastS.kfa\n2651,Cast mid,Cat_CastM.kfa\n2660,Circ,Cat_Circ.kfa");
+        Assert.Equal(
+            new Dictionary<string, string>
+            {
+                ["idle"] = "Cat_I_H.kfa", ["a16"] = "Cat_CastS.kfa", ["a17"] = "Cat_CastM.kfa", ["a32"] = "Cat_Circ.kfa",
+            },
+            tables.ResolveCatacombs(32)!.Clips);
+    }
+
+    [Fact]
     public void ACatacombsFigureCarriesItsSitClips()
     {
         // anims.csv: Sit Down (column 21) and Sit Idle (22), played while the quit timer runs; Stand Up (23) isn't used.

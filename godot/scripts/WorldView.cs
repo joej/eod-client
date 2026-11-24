@@ -466,6 +466,8 @@ public partial class WorldView : Node3D
         _bridge.ChatReceived += OnChatReceived;
         SubscribeDeath();
         _bridge.CombatAnimated += OnCombatAnimated;
+        SubscribeCasting();
+        SubscribeEffects();
         SubscribeCharacter();
         SubscribeStats();
         _bridge.PingReplied += OnPingReplied;
@@ -519,6 +521,7 @@ public partial class WorldView : Node3D
         BuildDialog(overlay);
         BuildMerchantWindow(overlay);
         BuildTrainWindow(overlay);
+        BuildEffectWindows(overlay);
         BuildElementWindows(overlay);
         _builtScale = UiScale;
         ScaleChatAndNpc(_builtScale / ChatDesignScale);

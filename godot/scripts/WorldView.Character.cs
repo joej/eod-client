@@ -82,10 +82,24 @@ public partial class WorldView
             return;
         }
         double wait = _bridge.Skills.CooldownLeft(use.Name, System.Environment.TickCount64);
+        // Retail checks a spell's recast itself: more than 1 s left, it says so and sends nothing (daoc-re RE/97; how it
+        // words the time is ours). Skills and styles go to the server, which answers.
+        if (use.Code == DaocProtocol.Packets.UseRequest.SpellCode && wait > 1)
+        {
+            AppendChat($"You must wait {RecastWait(wait)} to recast this type of spell.", new Color(0.8f, 0.8f, 0.6f));
+            return;
+        }
         if (wait > 0)
             AppendChat($"{use.Name}: ready in {wait:0} s (asking anyway).", new Color(0.8f, 0.8f, 0.6f));
         GD.Print($"[world] using {use.Name}: 0x{use.Code:X2} {use.First} {use.Second}");
         _ = _session.UseAsync(use);
+    }
+
+    private static string RecastWait(double seconds)
+    {
+        int s = (int)Math.Ceiling(seconds);
+        return s >= 60 ? $"{s / 60} minute{(s / 60 == 1 ? "" : "s")} {s % 60} second{(s % 60 == 1 ? "" : "s")}"
+            : $"{s} second{(s == 1 ? "" : "s")}";
     }
 
     private static string Money(MoneyUpdate m) =>

@@ -815,6 +815,38 @@ what it sets with a target is open (C12). We send 0x2000 whenever a target is se
 …", "A crystal shield covers you"), 0xBB used Sprint (index 0, type 1: "You prepare to sprint!"); at world
 entry the server sends 0xD6 with 0 seconds for every skill and list spell, both kinds.*
 
+### Casting, effects and concentration
+
+```
+S→C 0x72 SpellCastAnimation  u16 BE caster id, u16 BE spell (a spells.csv row), u16 BE cast time (×100 ms; 0 instant), u16 0
+S→C 0x73 InterruptSpellCast  u16 BE caster id, u16 BE animation tag (OpenDAoC: 1)
+S→C 0x1B SpellEffectAnimation u16 BE caster, spell, target, bolt time (×100 ms), u8 pulse, u8 result (1 hit, 0 resisted,
+                             2 hit without buildup, 3 resisted without buildup, 4 resisted, seen twice as far), u16 (unread)
+S→C 0x7F UpdateIcons         u8 count, u8 -, u8 redraw (0: stored, not drawn), u8 -, then the changed slots only:
+                             u8 slot, u8 source (0xFF: the u16 is an icon id, else a spells.csv row), u8 immunity,
+                             u16 BE icon, u16 BE seconds left (0: no timer), u16 BE tooltip id, u8 negative, pascal name
+                             (empty: the slot is cleared)
+S→C 0x75 ConcentrationList   u8 count, 3 bytes, then per buff u8 index, u8 0, u8 concentration, u16 BE spell, pascal name,
+                             pascal owner; each one replaces the list
+C→S 0x76 RemoveConcentration 4 bytes: the row (0–49), 3 unwritten
+C→S 0xF8 PlayerCancelsEffect 4 bytes: u16 BE tooltip id from 0x7F, 2 unwritten
+```
+
+How the retail client uses them (daoc-re, from 1.130's code): there is **no cast bar**: 0x72 plays the spell's
+animations, effects and sounds on the caster, ours as anyone's, and the client prints nothing of its own for 0x72, 0x1B
+or 0x73 (OpenDAoC's "You begin casting …" lines are its own chat). Before sending 0x7D the client drops a second use of
+the same quickbar slot within 250 ms, and refuses a spell whose line's recast has more than 1 s left ("You must wait …
+to recast this type of spell."); it has no "already casting" check. The effect icons (slots 0–74, 32 × 32, a grid set
+in the options) count down locally from each slot's seconds; Shift + right-click on one sends 0xF8, buffs and debuffs
+alike. The concentration window lists each buff's icon and whom it is on, with 0xAD's concentration percent as its bar;
+0x75 never opens it.
+
+OpenDAoC sends 0x73 when the caster moves during a cast ("You move and interrupt your spellcast!"), and a cast asked
+during another is queued by the server ("You prepare this spell as a follow up!"). *Verified live 2026-11-24
+(Spellcheck): 0x72 with 2800 ms for Ruby Shield (Enhanced), its 0x1B (result 1, bolt 0) and a 0x7F slot (1200 s, tooltip
+4); moving mid-cast gave 0x73; 0xF8 with tooltip 4 ended the buff ("Your crystal shield fades.") and the server cleared
+its slot. At world entry a saved buff comes back as a 0x1B and a 0x7F.*
+
 ## Attack mode
 
 **C→S 0x74** (`PlayerAttackRequestHandler`): `u8 start` (1 attack, 0 stop), `u8 asked` (0 when the

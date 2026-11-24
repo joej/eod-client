@@ -645,6 +645,12 @@ handled). Each item below lists the packets it needs; the window rows are in `do
   trained live. Still open: icon clicks, sliders past the character's level, the colours, Esc.
 - **Casting:** the cast animation and bar (0x72), interruptions (0x73), the effect on the target (0x1B; the effects
   themselves are M12's), concentration buffs (0x75, 0x76), and cancelling a buff (0xF8). Effect icons (0x7F) with M10.
+  *Built 2026-11-24:* as retail 1.130 does it (docs/protocol.md "Casting, effects and concentration"): no cast bar (retail
+  has none); the caster plays the spell's three cast animations (spells.csv, carried by the figures), an interrupt stops
+  them; the effect icons (0x7F) with their countdowns, Shift + right-click cancels; the concentration window, a
+  double-click drops a buff; the recast check and the 250 ms quickbar repeat drop. Cast, interrupt and cancel live.
+  Still open: which concentration gesture drops (retail's in-game test), the icons' tint and order options; the effects
+  and sounds are M12's.
 - **Loot and items:** picking up from the ground (0xB5), the Nearest Loot key, and destroying an item (0x80).
 - **Quests:** the journal (0x83), choosing a reward (0x40) and abandoning a quest (0x4F); the offer and reward
   dialogs.
