@@ -40,7 +40,7 @@ public partial class WorldView
     private Label? _dialogText;
     private Button? _dialogYes, _dialogNo, _dialogOk;
     private Dialog? _dialog;
-    private System.Action? _dialogLocalYes;   // a question the client asks itself (no server answer): run on YES
+    private System.Action? _dialogLocalYes;   // a question the client asks itself (no server answer): run on ACCEPT
     private bool _groupSubscribed;
     private bool _acceptDialogs;   // --accept-dialogs
 
@@ -237,13 +237,13 @@ public partial class WorldView
         _dialogYes = _dialogWindow.Button("ACCEPT", new Vector2(69, 76), 58, () => AnswerDialog(true), 16);
         _dialogNo = _dialogWindow.Button("DECLINE", new Vector2(129, 76), 58, () => AnswerDialog(false), 16);
         _dialogOk = _dialogWindow.Button("OK", new Vector2(99, 76), 58, () => AnswerDialog(true), 16);
-        _dialogOk.Visible = false;   // one set at a time: YES / NO, or OK
+        _dialogOk.Visible = false;   // one set at a time: ACCEPT / DECLINE, or OK
         overlay.AddChild(_dialogWindow);
         if (_dialog is Dialog open)
             ShowDialog(open);
     }
 
-    // localYes: a question of the client's own, run on YES (answered at once with --accept-dialogs, like the server's).
+    // localYes: a question of the client's own, run on ACCEPT (answered at once with --accept-dialogs, like the server's).
     private void ShowDialog(Dialog d, System.Action? localYes = null, string yes = "ACCEPT", string no = "DECLINE")
     {
         if (_dialogWindow is null || !IsInstanceValid(_dialogWindow))
@@ -262,10 +262,11 @@ public partial class WorldView
             AnswerDialog(true);
     }
 
-    // A YES / NO question of the client's own (retail's "buy anyway"); nothing goes to the server but what YES does.
+    // A question of the client's own (retail's destroy, drop and "buy anyway": the small dialog in mode 1, ACCEPT /
+    // DECLINE; daoc-re RE/85); nothing goes to the server but what ACCEPT does.
     private void AskYesNo(string text, System.Action onYes)
     {
-        ShowDialog(new Dialog(0, 0, 0, 0, YesNo: true, Wrap: true, text), onYes, "YES", "NO");
+        ShowDialog(new Dialog(0, 0, 0, 0, YesNo: true, Wrap: true, text), onYes);
     }
 
     private void AnswerDialog(bool yes)
