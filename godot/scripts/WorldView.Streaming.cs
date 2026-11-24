@@ -93,6 +93,18 @@ public partial class WorldView
 
     private ushort _streamHere;
 
+    // The zone at a point whose ground is coming but isn't built yet: streaming, the zone converted, not yet added. A zone
+    // that isn't converted never gets ground, so it isn't pending (the character falls or keeps its height as before).
+    private ushort? GroundPending(Vector3 at)
+    {
+        if (!_streaming)
+            return null;
+        (float rx, float ry, _) = ToRegion(at);
+        if (Zones.Find(_world.Position.RegionId, rx, ry) is not Zone zone || _zones.ContainsKey(zone.Id))
+            return null;
+        return ConvertedZoneDir(zone.Id) is null ? null : zone.Id;
+    }
+
     // Metres from a point (Godot X/Z) to a zone's rectangle; 0 inside.
     private static float DistanceTo(Zone zone, Vector3 at)
     {

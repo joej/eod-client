@@ -208,6 +208,21 @@ public partial class WorldView
         }
         Vector3 at = _body.Position;
         float dt = (float)delta;
+        // The zone under the character is on its way but not built yet (a move by the server, or walking faster than
+        // zones stream in): no ground isn't "nothing below" yet, so hold it where it is until the zone is in (W69).
+        if (GroundPending(at) is ushort pending)
+        {
+            if (_heldFor != pending)
+                GD.Print($"[world] holding: the ground of zone {pending} isn't loaded yet");
+            _heldFor = pending;
+            (_airborne, _verticalSpeed, _groundHit) = (false, 0, false);
+            return;
+        }
+        if (_heldFor is ushort held)
+        {
+            GD.Print($"[world] zone {held}'s ground is in: released at {ToRegion(at)}");
+            _heldFor = null;
+        }
         float? floor = FloorBelow(at);
         if (floor is not null && Swim(at, floor.Value, dt))
             return;
@@ -369,7 +384,8 @@ public partial class WorldView
     private float _landLeft;                  // seconds of the land clip still to show before the idle
     private const float LandTime = 0.8f;      // Cat_JU_H_B is standing again by about 1 s (the rest holds)
     private float _fallTop;                   // the highest point of the current fall or jump
-    private Vector3? _lastStood;              // where the character last stood on a floor
+    private Vector3? _lastStood;              // where the character last stood on a floor (forgotten on a move by the server)
+    private ushort? _heldFor;                 // held in place until this zone's ground is built (W69)
     private double _jumpAgainAt;              // the jump cooldown's end
     private double _ceilingLogAt;
     private bool Falling => _airborne && _fallTop - _body.Position.Y > FallHeight;
@@ -450,6 +466,11 @@ public partial class WorldView
         PositionAndObjectId p = moved.Position;
         _body.Position = ToGodot(p.X, p.Y, p.Z);
         _lastJumpCheck = null;   // a move by the server, not a step through a doorway
+        // A fall with no floor must never take the character back across the move (W69: it put Quitcheck back at Prydwen,
+        // 100,000 units from where the server had moved it), and the zone it's now in loads first.
+        _lastStood = null;
+        (_airborne, _jumping, _verticalSpeed) = (false, false, 0);
+        Stream(0, force: true);
         _bodyYaw = YawFromHeading(p.Heading);
         _body.Rotation = new Vector3(0, _bodyYaw, 0);
     }
