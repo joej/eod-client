@@ -542,6 +542,30 @@ target ("You spend N points and specialize further in …"), then sends new poin
 row, or 50 + a realm ability's index). Verified live 2026-11-24 (Quitcheck at Captain Falron: Crossbows 2 → 3 for 3
 points). OpenDAoC's trainer interaction can also hand out a free level (its free-level feature).
 
+### Boats and siege weapons
+
+OpenDAoC sends a moving object (a boat, or any siege weapon: ram, catapult, ballista, trebuchet, cauldron) with S→C 0x12
+instead of 0xDA when it comes into view. As the retail client reads it (daoc-re, from 1.130's code):
+
+```
+S→C 0x12 MovingObjectCreate  u16 BE oid, u16 BE object tint/emblem (OpenDAoC 0), u16 BE heading, s16 BE z, u32 BE x, y,
+                             u16 BE model (objects.csv row; 0xFFFF none, > 5499 → 0), u8 not read, u8 flags,
+                             u16 BE vehicle emblem, u16 BE figurehead (1–14), u8 hull tint, u8 trim tint, u8, u8 (bit 0:
+                             emblem + 0x10000), pascal name (≤ 47 bytes), u8 (non-zero: a u32 BE id follows)
+flags   0x01 floating (not grounded), 0x02 vehicle, 0x04 + 0x08 lootable (Nearest Loot), 0x10 / 0x20 / 0x40 realm 1 / 2 / 3
+```
+
+OpenDAoC writes its flags as a u16, the object's type | realm | level × 0x200 (type 2 for a boat, 0x9602 for a ram); the
+retail client reads only the low byte, so the type and level are lost and the vehicle bit and realm are what count. What
+the object is (ship, ram, catapult) comes from its objects.csv row alone (the crafted oaken ram: 2601 "Medium Siege Ram",
+`siege_ram_medium`), drawn at scale 1. It is a ground object: a name plate only when the row has Show Name (the rams
+don't), click targets (0xB0), right click interacts (0x7A), double click picks up (0xB5); never a Target Enemy / Friend
+candidate. With the vehicle bit, 0xA1 moves it like an NPC and resets its realm from 0xA1's realm bits each time. 0xA2
+type 0 removes it at once, except a player boat (objects.csv Player Boat Flag), which stays 20 s first. A second 0x12 with
+the same oid and model is ignored; another figure with that oid is replaced. *Verified live 2026-11-24 (Testjoe, a GM,
+crafting an oaken ram in Cotswold): 0x12 with model 2601, flags word 0x9612 (byte 19: 0x12, vehicle + Albion), emblem 0,
+drawn as the medium siege ram, targeted "the oaken ram", friendly.*
+
 ### Other players
 
 OpenDAoC doesn't send another player in view by itself (only in a few cases: stealth ending, a player arriving). A

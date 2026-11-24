@@ -20,7 +20,7 @@ change; a packet without a tier shows as `?`.
 | P1 | C→S | 34 | 24 | 10 |
 | P1 | S→C | 51 | 40 | 11 |
 | P2 | C→S | 21 | 1 | 20 |
-| P2 | S→C | 20 | 0 | 20 |
+| P2 | S→C | 20 | 1 | 19 |
 | P3 | C→S | 5 | 0 | 5 |
 | P3 | S→C | 15 | 6 | 9 |
 | dev | C→S | 1 | 0 | 1 |
@@ -182,7 +182,7 @@ change; a packet without a tier shows as `?`.
 | S→C | 0x09 | HousingItem | — | housing | HousingPickupItemHandler.cs (1), SendFurniture (3) |
 | S→C | 0x0A | HouseExit | — | housing | SendExitHouse (1) |
 | S→C | 0x0F | HouseTogglePoints | — | housing | SendToggleHousePoints (1) |
-| S→C | 0x12 | MovingObjectCreate | — | boats and siege rams (moving objects) | SendMovingObjectCreate (3) |
+| S→C | 0x12 | MovingObjectCreate | shown | boats and siege weapons (moving objects) | SendMovingObjectCreate (3) |
 | S→C | 0x18 | HouseDecorationRotate | — | housing | HousingDecorationRotateRequestHandler.cs (1) |
 | S→C | 0x1E | ConsignmentMerchantMoney | — | housing: consignment merchant | SendConsignmentMerchantMoney (2) |
 | S→C | 0x1F | MarketExplorerWindow | — | housing: market explorer | SendMarketExplorerWindow (3) |

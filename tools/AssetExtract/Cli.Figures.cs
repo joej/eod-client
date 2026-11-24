@@ -387,12 +387,12 @@ internal static partial class Cli
             if (r.Origin == AssetOrigin.Missing) absent++;
             else if (r.GlbPath is null) { failed++; Console.Error.WriteLine($"  {nif}: {r.Error}"); }
         }
-        var table = new System.Text.StringBuilder("model,glb,solid\n");
+        var table = new System.Text.StringBuilder("model,glb,solid,showname,boat\n");
         int placed = 0;
         foreach ((int model, DaocAssets.Figures.ObjectModel m) in models.OrderBy(kv => kv.Key))
             if (stems[m.Model] is string stem)
             {
-                table.Append(DaocAssets.Figures.WorldObjects.Row(model, stem, m.Solid)).Append('\n');
+                table.Append(DaocAssets.Figures.WorldObjects.Row(model, stem, m)).Append('\n');
                 placed++;
             }
         File.WriteAllText(Path.Combine(modelsDir, "objects.csv"), table.ToString());

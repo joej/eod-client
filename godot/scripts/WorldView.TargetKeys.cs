@@ -53,9 +53,10 @@ public partial class WorldView
     // Normal realm rules only: PvP and PvE servers pick differently (RE/76), not handled.
     // Our realm unknown: monsters are enemies and every realm's people friends (as the target window's buttons take it).
     // A peaceful NPC (0xDA flags 0x10) is never an enemy: ours, retail's use of that bit isn't traced.
+    // Boats and siege weapons are objects: never a candidate for either key (daoc-re RE/98).
     private bool IsEnemy(Entity e) =>
-        !e.Dead && !e.Peaceful && (PlayerRealm == Realm.None ? e.Realm == 0 : e.Realm != (int)PlayerRealm);
-    private bool IsFriend(Entity e) => e.Realm != 0 && (PlayerRealm == Realm.None || e.Realm == (int)PlayerRealm);
+        !e.Vehicle && !e.Dead && !e.Peaceful && (PlayerRealm == Realm.None ? e.Realm == 0 : e.Realm != (int)PlayerRealm);
+    private bool IsFriend(Entity e) => !e.Vehicle && e.Realm != 0 && (PlayerRealm == Realm.None || e.Realm == (int)PlayerRealm);
 
     private void TargetNearest(ControlAction key)
     {

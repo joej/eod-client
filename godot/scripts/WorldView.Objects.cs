@@ -22,6 +22,21 @@ public partial class WorldView
     // The object's model, placed; null when there's no library or the model isn't drawable (logged once per object).
     private Node3D? PlaceWorldObject(ObjectCreate o)
     {
+        if (ObjectTemplate(o.Model) is not var (template, entry, glb))
+            return null;
+        var node = (Node3D)template.Duplicate();
+        node.Name = $"object{o.ObjectId}";
+        node.Position = ToGodot(o.X, o.Y, o.Z);
+        node.Rotation = new Vector3(0, -Mathf.DegToRad((o.Heading & 0x0FFF) * 360f / 4096f), 0);
+        node.SetMeta("glb", glb);   // for the wall log and the inspect readout
+        _entityRoot.AddChild(node);
+        MakeSolid(node, entry.Solid && !_inDungeon, drawnWalls: true);   // server objects are solid only outdoors (daoc-re, W55)
+        return node;
+    }
+
+    // An objects.csv model's converted template (models/objects.csv → <glb>.glb), loaded once; null without one.
+    private (Node3D Template, DaocAssets.Figures.ObjectModel Entry, string Glb)? ObjectTemplate(ushort model)
+    {
         string lib = _libraryPath ?? "";
         if (lib.Length == 0)
             return null;
@@ -32,7 +47,7 @@ public partial class WorldView
                 ? DaocAssets.Figures.WorldObjects.ReadTable(Godot.FileAccess.GetFileAsString(table)) : [];
             GD.Print($"[object] {_objectModels.Count} drawable object models{(_objectModels.Count == 0 ? " (run make objects)" : "")}");
         }
-        if (!_objectModels.TryGetValue(o.Model, out DaocAssets.Figures.ObjectModel entry))
+        if (!_objectModels.TryGetValue(model, out DaocAssets.Figures.ObjectModel entry))
             return null;
         string glb = entry.Model;
         if (!_objectTemplates.TryGetValue(glb, out Node3D? template))
@@ -41,16 +56,7 @@ public partial class WorldView
             template = Godot.FileAccess.FileExists(path) ? ModelTexturing.LoadGlb(path, TexDirs("items")) : null;
             _objectTemplates[glb] = template;
         }
-        if (template is null)
-            return null;
-        var node = (Node3D)template.Duplicate();
-        node.Name = $"object{o.ObjectId}";
-        node.Position = ToGodot(o.X, o.Y, o.Z);
-        node.Rotation = new Vector3(0, -Mathf.DegToRad((o.Heading & 0x0FFF) * 360f / 4096f), 0);
-        node.SetMeta("glb", glb);   // for the wall log and the inspect readout
-        _entityRoot.AddChild(node);
-        MakeSolid(node, entry.Solid && !_inDungeon, drawnWalls: true);   // server objects are solid only outdoors (daoc-re, W55)
-        return node;
+        return template is null ? null : (template, entry, glb);
     }
 
     private void DrawWorldObject(ObjectCreate o)

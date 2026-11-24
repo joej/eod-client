@@ -66,6 +66,17 @@ public partial class WorldView
             e.Destination = u.HasDestination && !e.Dead
                 ? ZoneLocalToGodot(u.DestinationX, u.DestinationY, u.DestinationZ, u.DestinationZoneSkin) : null;
             e.Follow = u.TargetId;
+            if (e.Vehicle)
+            {
+                // Retail resets a vehicle's realm from every 0xA1 (0 when the bits are clear), and its 0x10 / 0x20 flags
+                // replace 0x12's floating bit (daoc-re RE/98).
+                e.GroundedAtSpawn = true;
+                if (e.Realm != u.Realm)
+                {
+                    e.Realm = u.Realm;
+                    RestylePlate(u.ObjectId);
+                }
+            }
             // Flying (0x20) or underwater (0x10): its height is its own.
             e.Grounded = e.GroundedAtSpawn && !u.Flying && !u.Underwater;
             TurnTo(e, yaw, blend: true);   // NPCs always turn over 500 ms
@@ -124,6 +135,42 @@ public partial class WorldView
         }
         if (!drawn)
             GD.Print($"[entity] {npc.ObjectId} \"{npc.Name}\": no figure for model {npc.ModelId} (sent {npc.Model}): a capsule");
+    }
+
+    // 0x12: a boat or siege weapon, as the retail client takes it (daoc-re RE/98): a ground object (kind 0) whose model is an
+    // objects.csv row, drawn from the converted object model at scale 1. The vehicle bit lets 0xA1 move it like an NPC.
+    // The same oid again with the same model, as a vehicle, is ignored (OpenDAoC sends the ram twice at a login); another
+    // figure with that oid is replaced. A name plate only when the objects.csv row has Show Name; grounded unless flagged
+    // floating. Left click targets it, right click interacts (0x7A). It is never a Target Enemy / Friend candidate.
+    // Not built: the look bytes (emblem, figurehead at "bowsprit", hull and trim tints, the object's tint; OpenDAoC sends
+    // 0 for all), its sound set, idle / run / siege load / fire animations and effect (objects.csv 21, 53-60, 55), riders
+    // (0xC8 seats), double-click pick-up (0xB5, with loot), Nearest Loot, Target Object.
+    private void OnMovingObject(MovingObjectCreate o)
+    {
+        if (_entities.TryGetValue(o.ObjectId, out Entity? known) && known.Vehicle && known.ObjectModel == o.ModelRow)
+            return;
+        _hiddenNpcs.Remove(o.ObjectId);
+        if (_worldObjects.Remove(o.ObjectId))
+            RemoveWorldObjectNode(o.ObjectId);   // a ground object with that oid is replaced
+        ushort row = o.ModelRow;
+        DaocAssets.Figures.ObjectModel? entry = row is not 0xFFFF && ObjectTemplate(row) is var (_, en, _) ? en : null;
+        bool drawn = SpawnEntity(o.ObjectId, ToGodot(o.X, o.Y, o.Z), YawFromHeading(o.HeadingOnly), RealmColor(o.Realm),
+            objectModel: row is 0xFFFF ? (ushort)0 : row, pickable: true);
+        GD.Print($"[entity] {o.ObjectId} \"{o.Name}\": {(o.Vehicle ? "vehicle" : "object")}, model {o.Model}, flags 0x{o.Flags:X2} " +
+                 $"(realm {o.Realm}{(o.Floating ? ", floating" : "")}{(o.Lootable ? ", lootable" : "")}), emblem {o.Emblem}" +
+                 (drawn ? "" : row is 0xFFFF ? ": no model (0xFFFF)" : ": no object model, a capsule"));
+        if (!_entities.TryGetValue(o.ObjectId, out Entity? e))
+            return;
+        if (row is 0xFFFF)
+            e.Node.Visible = false;   // exists, but nothing to draw
+        e.Vehicle = o.Vehicle;
+        (e.ObjectModel, e.PlayerBoat) = (row, entry?.PlayerBoat == true);
+        e.Grounded = e.GroundedAtSpawn = !o.Floating;
+        e.ProbedAt = new Vector3(float.NaN, 0, 0);
+        (e.Name, e.Realm) = (o.Name, o.Realm);
+        e.NameColor = PlateColour(e, false);
+        if (entry?.ShowName == true && o.Name.Length > 0)
+            e.Nameplate = Nameplate(e.Node, HeadHeight(e), o.Name, "", e.NameColor, ClientSettings.NameKinds.Monsters);
     }
 
     private void OnPlayerSpawned(PlayerCreate p)
@@ -185,6 +232,24 @@ public partial class WorldView
 
     private void OnObjectRemoved(ushort objectId, ushort type)
     {
+        if (_entities.TryGetValue(objectId, out Entity? vehicle) && vehicle.Vehicle)
+        {
+            // A boat or siege weapon: no corpse. Type 0 leaves a player boat for 20 s, stopped (retail: it fades or sinks
+            // meanwhile, inferred; ours: it just stays), anything else goes at once (daoc-re RE/98).
+            if (type == RemoveObject.WithDeathEffect && vehicle.PlayerBoat)
+            {
+                (vehicle.MoveSpeed, vehicle.Destination) = (0, null);
+                Node3D node = vehicle.Node;
+                GetTree().CreateTimer(20).Timeout += () =>
+                {
+                    if (_entities.TryGetValue(objectId, out Entity? still) && still.Node == node)
+                        OnObjectRemoved(objectId);
+                };
+                return;
+            }
+            OnObjectRemoved(objectId);
+            return;
+        }
         if (type == RemoveObject.WithDeathEffect && _entities.TryGetValue(objectId, out Entity? dying) && !dying.IsPlayer
             && dying.Node.Position.DistanceTo(_body.Position) <= CorpseMaxUnits * RegionMetresPerUnit)
         {
@@ -264,8 +329,9 @@ public partial class WorldView
 
     // look: a player (drawn with its Catacombs figure, dressed in its face and hair); null for an NPC.
     // Returns whether it is drawn as a figure (false: a capsule).
+    // objectModel: an objects.csv model instead (a boat or siege weapon, 0x12), drawn from its converted object model.
     private bool SpawnEntity(ushort objectId, Vector3 pos, float yaw, Color color, ushort model = 0, byte size = 50,
-        CharacterLook? look = null, bool pickable = true)
+        CharacterLook? look = null, bool pickable = true, ushort objectModel = 0)
     {
         // Free any node we already have for this id before replacing it. This happens normally: an
         // entity first seen via a bare 0xA1 update spawns grey (OnObjectMoved), then its 0xDA/0x4B
@@ -280,7 +346,15 @@ public partial class WorldView
         Node3D? dressed = null;
         bool figured = false;
         float figureScale = 1f;
-        if (model != 0 && ((look is not null ? Figure(model, catacombs: true) : null) ?? Figure(model)) is { } figure)
+        if (objectModel != 0 && ObjectTemplate(objectModel) is var (objectTemplate, _, objectGlb))
+        {
+            figured = true;
+            var inst = (Node3D)objectTemplate.Duplicate();
+            inst.Rotation = new Vector3(0, Mathf.Pi, 0);   // as a figure: entities face -Z
+            inst.SetMeta("glb", objectGlb);
+            node.AddChild(inst);
+        }
+        else if (model != 0 && ((look is not null ? Figure(model, catacombs: true) : null) ?? Figure(model)) is { } figure)
         {
             // The server's model id is the client's monsters.csv row; mpk figures converted it to
             // models/model<id>.glb. Size 50 is normal; the table's own scale applies on top.

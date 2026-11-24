@@ -142,6 +142,9 @@ public partial class WorldView : Node3D
         public float ServerY;         // the height the server last sent (Godot metres)
         public int Realm;             // 0 none (monsters), 1 Albion, 2 Midgard, 3 Hibernia
         public bool IsPlayer;
+        public bool Vehicle;          // a boat or siege weapon (0x12): a ground object that 0xA1 moves (kind 0, vehicle bit)
+        public ushort ObjectModel;    // a vehicle's objects.csv row
+        public bool PlayerBoat;       // its objects.csv row has the Player Boat Flag: 0xA2 type 0 removes it after 20 s
         public bool Peaceful;         // an NPC the server flags as not attackable (0xDA flags 0x10)
         public bool Pickable = true;  // false: the server says it can't be targeted (a marker or effect, e.g. a teleporter's ring)
         public bool Grounded;         // stands on the ground under it, whatever height the server sends
@@ -437,6 +440,7 @@ public partial class WorldView : Node3D
         _bridge = new NetworkBridge(message => GD.PrintErr(message), _session?.Delves);
         _bridge.ObjectMoved += OnObjectMoved;
         _bridge.NpcSpawned += OnNpcSpawned;
+        _bridge.MovingObjectSpawned += OnMovingObject;
         _bridge.PlayerSpawned += OnPlayerSpawned;
         _bridge.EquipmentChanged += OnEquipmentChanged;
         _bridge.PlayerMoved += OnPlayerMoved;

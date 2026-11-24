@@ -188,6 +188,9 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
     /// <summary>The server asks something (0x81): a group invite, a script's yes/no question, a notice.</summary>
     public event Action<Dialog>? DialogArrived;
 
+    /// <summary>A boat or siege weapon comes into view (0x12).</summary>
+    public event Action<MovingObjectCreate>? MovingObjectSpawned;
+
     /// <summary>A figure starts casting (0x72): the cast bar when it's the character, the cast animation for anyone.</summary>
     public event Action<SpellCast>? SpellCastStarted;
 
@@ -411,6 +414,9 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
                     DelveRecord record = DelveRecord.Parse(packet.Payload);
                     Delves.Add(record);
                     DelveArrived?.Invoke(record);
+                    break;
+                case MovingObjectCreate.Code:
+                    MovingObjectSpawned?.Invoke(MovingObjectCreate.Parse(packet.Payload));
                     break;
                 case SpellCast.Code:
                     SpellCastStarted?.Invoke(SpellCast.Parse(packet.Payload));

@@ -139,7 +139,7 @@ C 0xED | P2 | crafting
 C 0xCA | P2 | the bonuses window
 C 0xDC | P2 | the spell-effects filter (EffectsFlag)
 S 0xF7 | P2 | the starter help window
-S 0x12 | P2 | boats and siege rams (moving objects)
+S 0x12 | P2 | boats and siege weapons (moving objects)
 S 0x03 | P2 | housing
 S 0x05 | P2 | housing
 S 0x08 | P2 | housing
