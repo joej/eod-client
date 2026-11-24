@@ -726,6 +726,16 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     }
 
     /// <summary>
+    /// Crafts the recipe <paramref name="recipeId"/> (C→S 0xED). The server answers in chat and, if it starts, with a
+    /// progress bar; nothing comes back for an unknown id.
+    /// </summary>
+    public Task CraftAsync(ushort recipeId, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(CraftRequest.Code, CraftRequest.Payload(recipeId), cancellationToken);
+    }
+
+    /// <summary>
     /// TRAIN at the targeted trainer (C→S 0x53, <see cref="TrainerState.Request"/>): every line's and realm ability's target
     /// level. The server answers in chat, with the new points (0x91) and a new trainer window.
     /// </summary>

@@ -88,7 +88,7 @@ public partial class WorldView
         int kw = System.Array.IndexOf(args, "--keyword");
         if (kw >= 0 && kw + 1 < args.Length)
             _devKeyword = args[kw + 1];
-        // --target NAME|nearest: select that creature (the nearest of that name, or the nearest of any) 4 s in, as a
+        // --target NAME|nearest|self: select that creature (the nearest of that name, or the nearest of any) 4 s in, as a
         // click would: to check the target windows. --target-at SECONDS picks another time (after a --command /jump).
         int ta = System.Array.IndexOf(args, "--target");
         if (ta >= 0 && ta + 1 < args.Length)
@@ -98,6 +98,12 @@ public partial class WorldView
             double targetAt = tat >= 0 && tat + 1 < args.Length && double.TryParse(args[tat + 1], System.Globalization.CultureInfo.InvariantCulture, out double tAt) ? tAt : 4.0;
             GetTree().CreateTimer(targetAt).Timeout += () =>
             {
+                if (name == "self")   // --target self: ourselves (GM commands that act on the target)
+                {
+                    GD.Print($"[target] --target: self (#{SelfId})");
+                    SetTarget(SelfId);
+                    return;
+                }
                 ushort found = _entities.Where(kv => kv.Value.Name.Length > 0 && (name == "nearest"
                         || kv.Value.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase)))
                     .OrderBy(kv => kv.Value.Node.Position.DistanceTo(_body.Position)).Select(kv => kv.Key).FirstOrDefault();
@@ -316,6 +322,29 @@ public partial class WorldView
                 else
                     _ = SendTravel(command);
             };
+        }
+        // --craft ID[,ID...]: from --craft-at SECONDS (default 10) after entering, send each recipe id (C→S 0xED) 15 s
+        // apart, so one craft can finish before the next.
+        int craftArg = System.Array.IndexOf(args, "--craft");
+        if (craftArg >= 0 && craftArg + 1 < args.Length)
+        {
+            int cat = System.Array.IndexOf(args, "--craft-at");
+            double craftAt = cat >= 0 && cat + 1 < args.Length && double.TryParse(args[cat + 1], System.Globalization.CultureInfo.InvariantCulture, out double cAt) ? cAt : 10.0;
+            string[] ids = args[craftArg + 1].Split(',', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries);
+            for (int k = 0; k < ids.Length; k++)
+            {
+                if (!ushort.TryParse(ids[k], out ushort recipe))
+                {
+                    GD.PrintErr($"[world] --craft: not a recipe id: {ids[k]}");
+                    continue;
+                }
+                GetTree().CreateTimer(craftAt + 15.0 * k).Timeout += () =>
+                {
+                    GD.Print($"[world] --craft: {recipe}");
+                    if (_session is not null)
+                        _ = _session.CraftAsync(recipe);
+                };
+            }
         }
         // --npc MODEL[:STATE][,MODEL...] spawns Albion NPCs with those models 5 m apart in front of the character, through the
         // same path a server's 0xDA takes (OnNpcSpawned): to check a creature as the game draws it, offline.
