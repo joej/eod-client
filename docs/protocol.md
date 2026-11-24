@@ -974,7 +974,7 @@ after a quit is accepted.
 Some server packets are written by OpenDAoC differently from how the retail 1.127/1.130 client reads them. The rule
 for our client: **read each packet as the retail client does** (fixes are planned on the server side), and tolerate
 what the server sends today where that costs nothing. This table maps each known difference to our code; it is static
-knowledge, not yet checked live, unless the last column says so. Updated 2026-11-14.
+knowledge, not yet checked live, unless the last column says so. Updated 2026-11-24.
 
 **Short packets.** The retail client reads into a buffer it never clears, so a packet shorter than its layout reads
 leftovers rather than failing. Ours never reads past the end: `PayloadReader` throws, and `NetworkBridge` drops the
@@ -1003,6 +1003,8 @@ instead.
 | 0xE3 siege animation | Sets the target's health % from byte +0x19 | 0 during Loading | Not handled | Not built |
 | 0x7B trainer, champion type 2 | Kind 3 = spell id, 2 = style id, others icon id | Icons for all kinds; link bytes 0 | Not handled | Not built |
 | 0x17/0x1F merchant, market | Item names at most 47 bytes; a longer one drops the page | No limit | 0x17 handled (merchant window, M13) | Ours keeps the page and the whole name; 0x1F (market) not handled |
+| 0x12 moving object flags | Bytes 18–19 are read raw and only byte 19 is used: 0x01 floating, 0x02 vehicle, 0x04 + 0x08 lootable, 0x10 / 0x20 / 0x40 realm. Byte 18 is never read. What the object is comes from its model (an objects.csv row) | Writes a u16 BE: its type (2 boat, 0x9602 ram; DOL's comment: 0x7D42 catapult, 0x9602–0x9622 ballista) \| realm \| level × 0x200, so byte 18 holds the type's high byte or'd with the level, and the type's low bits overlap the realm bits | Reads byte 19 only (`MovingObjectCreate`); keeps byte 18 as `Unread` | ✅ checked 2026-11-24 with a crafted ram (0x9612: vehicle + Albion). Harmless today: OpenDAoC's types all have 0x02 and no realm bits in their low byte. Where DOL's type values came from, and whether any retail server sends byte 18, is open (no retail 0x12 seen) |
+| 0x75 concentration list | Each entry's u16 is a **spell id**; the icon comes from that spells.csv row | Writes the effect's `Icon` | Reads it as a spell id (`ConcentrationEntry.Spell`) | Follows retail. Not checked live (no concentration caster yet): with OpenDAoC's icons the window may show other icons until the server sends spell ids |
 
 Client features the server could use later: NPC create (0xDA) flags2 0x40 (face and hair from a number, not the
 name) and 0x20 (a water mob, not targetable from above the water), which our `NpcCreate.Flags2` doesn't read yet;
