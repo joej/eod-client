@@ -725,6 +725,24 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
             BuyRequest.Payload(world.Position.X, world.Position.Y, connection.SessionId, item, count, windowType), cancellationToken);
     }
 
+    /// <summary>
+    /// TRAIN at the targeted trainer (C→S 0x53, <see cref="TrainerState.Request"/>): every line's and realm ability's target
+    /// level. The server answers in chat, with the new points (0x91) and a new trainer window.
+    /// </summary>
+    public Task TrainAsync(TrainerState trainer, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(TrainRequest.Code, trainer.Request(), cancellationToken);
+    }
+
+    /// <summary>Asks for the trainer window (C→S 0x7B, retail's /train). OpenDAoC answers only at the character's trainer
+    /// (or anywhere for a GM).</summary>
+    public Task RequestTrainerWindowAsync(CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(TrainWindowRequest.Code, TrainWindowRequest.Payload(), cancellationToken);
+    }
+
     /// <summary>Sells the item in backpack slot <paramref name="slot"/> (the whole stack) to the targeted merchant (C→S 0x79).</summary>
     public Task SellAsync(ushort slot, CancellationToken cancellationToken = default) =>
         SendMerchantSlot(SellRequest.Code, slot, cancellationToken);

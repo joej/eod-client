@@ -515,6 +515,33 @@ row is "name [price]", the price by window type (coins with zero parts left out 
 really wish to buy it?" itself for an unusable item; the server never sends that question. Buy and sell wait 250 ms
 after the last one; appraise doesn't. The window closes beyond 256 units of the merchant; closing sends nothing.
 
+### Trainers
+
+A right-click on the character's class trainer (or `/train`, C→S 0x7B with one byte 0) makes OpenDAoC send the trainer
+window as a burst of S→C 0x7B, each `u8 count, u8 points, u8 code, u8 0` and then by code (OpenDAoC's order 0, 1, 4…,
+3, 5):
+
+```
+code 0  count × (u8 index, u8 level, u8 level + 1, pascal name)          the trainable lines
+code 1  count × (u8 index, u8 level, u8 cost, pascal name)               realm abilities (the old window's list)
+code 4  u8 start index, then count pascal names                          skill names, numbered across all lines
+code 3  50 bytes: spec points gained at levels 1–50 (OpenDAoC: 0 then 255s), then count × (u8 line index, u8 n,
+        u8 autotrain = free levels, n × (u8 level (0 = 50), u16 BE icon, u8 page, u8 b4, u8 b5,
+        [u16 BE when b4 = 200], u16 BE id))                              what each line gives at which level
+code 5  count × (u8 level, u8 0, u8 max, max × u8 cost of each level, pascal name)   realm abilities and costs
+C→S 0x53 TrainRequest (264 bytes, u32 BE): 8 line indices (code 3's; first unused 0xFFFFFFFF, later 0), 8 target levels
+        (absolute; unchanged lines send their current level), 50 realm ability target levels (code 5 order)
+```
+
+How the retail client reads it (daoc-re, from 1.130's code): codes 0 and 1 open the window; the points byte is ignored
+and the Available figures come from 0x91; a line's current level is code 0's third byte − 1 (an entry with 0 there gets
+no slider; at most 8 sliders); code 3 block i pairs with the i-th slider line. A level costs its own number in points,
+levels up to the autotrain byte free. TRAIN sends every line, unchecked; the server trains each changed line up to its
+target ("You spend N points and specialize further in …"), then sends new points (0x91) and a new window. The
+/RESPEC buttons send the chat commands `&respec all` / `realm` / `buy`; clicking a line's name asks 0xD8 type 9 (id the
+row, or 50 + a realm ability's index). Verified live 2026-11-24 (Quitcheck at Captain Falron: Crossbows 2 → 3 for 3
+points). OpenDAoC's trainer interaction can also hand out a free level (its free-level feature).
+
 ### Other players
 
 OpenDAoC doesn't send another player in view by itself (only in a few cases: stealth ending, a player arriving). A

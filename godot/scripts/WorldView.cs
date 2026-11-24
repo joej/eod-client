@@ -458,7 +458,9 @@ public partial class WorldView : Node3D
         _bridge.DoorChanged += OnDoorChanged;
         _bridge.LosCheckAsked += OnLosCheckAsked;
         _bridge.MerchantPageReceived += OnMerchantPage;
+        _bridge.TrainerWindowReceived += OnTrainerWindow;
         _bridge.MoneyChanged += ShowMerchantMoney;
+        _bridge.PointsChanged += _ => CallDeferred(nameof(ShowTrainPoints));   // after WorldView.Character keeps them
         ListenForKeeps();
         SetTorch(ClientSettings.Torch);   // as the last session left it (retail's torchmode)
         _bridge.ChatReceived += OnChatReceived;
@@ -516,6 +518,7 @@ public partial class WorldView : Node3D
         BuildItemWindows(overlay);
         BuildDialog(overlay);
         BuildMerchantWindow(overlay);
+        BuildTrainWindow(overlay);
         BuildElementWindows(overlay);
         _builtScale = UiScale;
         ScaleChatAndNpc(_builtScale / ChatDesignScale);
@@ -890,6 +893,8 @@ public partial class WorldView : Node3D
                 CloseMiniInfo();
             else if (_merchantWindow is { Visible: true })
                 CloseMerchant();
+            else if (_trainWindow is { Visible: true })
+                CloseTrainer();
             else if (_statsPanel is { Visible: true })
                 _statsPanel.Visible = false;
             else if (_mapWindow.Visible)
@@ -1052,6 +1057,7 @@ public partial class WorldView : Node3D
         UpdateSound(delta);
         UpdateChat();
         UpdateMerchantRange();
+        UpdateTrainerRange();
         _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)
         {

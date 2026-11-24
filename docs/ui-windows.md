@@ -131,7 +131,7 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 |---|---|---|---|---|
 | `quest_window`, `new_quest_journal_window` | Quest journal | 0x83 QuestEntry | — (NPC quest glyphs 0x4C shown) | later |
 | `new_quest_window`, `new_quest_finish_window` | Offer and reward dialogs | Quest offer/reward packets (to identify in OpenDAoC) | — | later |
-| `training_window`, `train`, `daoc_subclass_window` | Train specialisations and realm abilities | 0x7B TrainerWindow; 0x91 points | — | later |
+| `training_window` (`train` is legacy, never opened in 1.130), `daoc_subclass_window` | Train specialisations and realm abilities | 0x7B TrainerWindow; 0x91 points; C→S 0x53, 0x7B | ✅ `training_window` built 2026-11-24 (WorldView.Trainer) | M13 |
 
 ### Pets, mounts, realm war (later)
 

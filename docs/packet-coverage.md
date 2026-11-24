@@ -17,8 +17,8 @@ change; a packet without a tier shows as `?`.
 |---|---|---|---|---|
 | 0 | C→S | 12 | 12 | 0 |
 | 0 | S→C | 16 | 16 | 0 |
-| P1 | C→S | 34 | 20 | 14 |
-| P1 | S→C | 49 | 33 | 16 |
+| P1 | C→S | 34 | 22 | 12 |
+| P1 | S→C | 49 | 34 | 15 |
 | P2 | C→S | 21 | 0 | 21 |
 | P2 | S→C | 19 | 0 | 19 |
 | P3 | C→S | 5 | 0 | 5 |
@@ -67,14 +67,14 @@ change; a packet without a tier shows as `?`.
 |---|---|---|---|---|---|
 | C→S | 0x40 | QuestRewardChosen | — | quests: choosing a reward | QuestRewardChosenHandler (PlayerInGame) |
 | C→S | 0x4F | RemoveQuestRequest | — | quests: abandoning one | QuestRemoveRequestHandler (PlayerInGame) |
-| C→S | 0x53 | TrainHandler | — | trainers: train a specialisation | PlayerTrainRequestHandler (PlayerInGame) |
+| C→S | 0x53 | TrainHandler | sent | trainers: train a specialisation | PlayerTrainRequestHandler (PlayerInGame) |
 | C→S | 0x71 | UseSlot | sent | using an item | UseSlotHandler (PlayerInGame) |
 | C→S | 0x74 | PlayerAttackRequest | sent | attack | PlayerAttackRequestHandler (PlayerInGame) |
 | C→S | 0x76 | RemoveConcentrationEffect | — | casting: drop a concentration buff | RemoveConcentrationEffectHandler (PlayerInGame) |
 | C→S | 0x78 | BuyRequest | sent | merchants: buy | PlayerBuyRequestHandler (PlayerInGame) |
 | C→S | 0x79 | SellRequest | sent | merchants: sell | PlayerSellRequestHandler (PlayerInGame) |
 | C→S | 0x7A | ObjectInteractRequest | sent | talk to / interact with | ObjectInteractRequestHandler (PlayerInGame) |
-| C→S | 0x7B | TrainWindowHandler | — | trainers: asking for the train window | PlayerTrainRequestHandler (PlayerInGame) |
+| C→S | 0x7B | TrainWindowHandler | sent | trainers: asking for the train window | PlayerTrainRequestHandler (PlayerInGame) |
 | C→S | 0x7D | UseSpell | sent | casting a spell | UseSpellHandler (PlayerInGame) |
 | C→S | 0x80 | DestroyItemRequest | — | items: destroying one | DestroyItemRequestHandler (PlayerInGame) |
 | C→S | 0x82 | DialogResponse | sent | answering dialogs | DialogResponseHandler (PlayerInGame) |
@@ -112,7 +112,7 @@ change; a packet without a tier shows as `?`.
 | S→C | 0x73 | InterruptSpellCast | — | casting: interrupted | SendInterruptAnimation (7) |
 | S→C | 0x74 | AttackMode | shown | attack mode | SendAttackMode (4) |
 | S→C | 0x75 | ConcentrationList | — | casting: concentration buffs list | SendConcentrationList (3) |
-| S→C | 0x7B | TrainerWindow | — | trainers: the train window (specs, points, costs) | SendChampionTrainerWindow (2), SendCustomTrainerWindow (0), SendTrainerWindow (8) |
+| S→C | 0x7B | TrainerWindow | shown | trainers: the train window (specs, points, costs) | SendChampionTrainerWindow (2), SendCustomTrainerWindow (0), SendTrainerWindow (8) |
 | S→C | 0x81 | Dialog | shown | dialogs (group invites, script questions) | SendCustomDialog (144), SendDialogBox (10), SendGroupInviteCommand (2), SendGuildInviteCommand (1), SendGuildLeaveCommand (1), SendHousePayRentDialog (1), SendQuestAbortCommand (1), SendQuestSubscribeCommand (93), SendQuestWindow (4) |
 | S→C | 0x83 | QuestEntry | — | quests: journal entries | SendQuestPacket (2), SendTaskInfo (1) |
 | S→C | 0x88 | PetWindow | — | pets (Cabalist, Theurgist, Enchanter and more start pets early) | SendPetWindow (3) |

@@ -51,6 +51,11 @@ public partial class WorldView
             case "/face":
                 FaceTarget();
                 return true;
+            case "/train":
+                // Retail's /train asks for the trainer window (C→S 0x7B, one byte 0).
+                if (_session is { } session)
+                    _ = Send(() => session.RequestTrainerWindowAsync(), "train window");
+                return true;
             case "/clock":
                 ClientSettings.ShowClock = !ClientSettings.ShowClock;
                 ClientSettings.NotifyChanged(false);   // the clock window follows the setting

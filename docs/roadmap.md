@@ -641,6 +641,8 @@ handled). Each item below lists the packets it needs; the window rows are in `do
   lockout, the Sell key). Still open: double click, right click and drag in the list.
 - **Trainers:** the train window (asked with C→S 0x7B; S→C 0x7B lists the specialisations, points and costs) and
   training (0x53).
+  *Built 2026-11-24:* the training window at the stock skin's layout, by retail's rules (docs/protocol.md "Trainers");
+  trained live. Still open: icon clicks, sliders past the character's level, the colours, Esc.
 - **Casting:** the cast animation and bar (0x72), interruptions (0x73), the effect on the target (0x1B; the effects
   themselves are M12's), concentration buffs (0x75, 0x76), and cancelling a buff (0xF8). Effect icons (0x7F) with M10.
 - **Loot and items:** picking up from the ground (0xB5), the Nearest Loot key, and destroying an item (0x80).

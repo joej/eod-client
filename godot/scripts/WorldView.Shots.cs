@@ -109,6 +109,10 @@ public partial class WorldView
                     SetTarget(found);
             };
         }
+        // --train LINE: with --interact TRAINER, raise LINE (a specialisation's name) by one level once the window arrives.
+        int trainArg = System.Array.IndexOf(args, "--train");
+        if (trainArg >= 0 && trainArg + 1 < args.Length)
+            _devTrain = args[trainArg + 1];
         // --buy-sell: with --interact MERCHANT, once its window opens buy the cheapest usable item, appraise it and sell it back.
         _devBuySell = System.Array.IndexOf(args, "--buy-sell") >= 0;
         int ia = System.Array.IndexOf(args, "--interact");
