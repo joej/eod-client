@@ -827,7 +827,23 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
     public Task MoveItemAsync(ushort to, ushort from, ushort count = 0, CancellationToken cancellationToken = default)
     {
         Require(SessionState.InWorld);
-        return connection.SendAsync(MoveItemRequest.Code, MoveItemRequest.Payload(to, from, count), cancellationToken);
+        return connection.SendAsync(MoveItemRequest.Code, MoveItemRequest.Payload(to, from, count, connection.SessionId),
+            cancellationToken);
+    }
+
+    /// <summary>Picks up the current target (C→S 0xB5): the server goes by the target, and answers in chat.</summary>
+    public Task PickUpAsync(CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(PickUpRequest.Code, PickUpRequest.Payload(), cancellationToken);
+    }
+
+    /// <summary>Destroys the item in an inventory slot (C→S 0x80); the server answers in chat.</summary>
+    public Task DestroyItemAsync(ushort slot, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        return connection.SendAsync(DestroyItemRequest.Code, DestroyItemRequest.Payload(connection.SessionId, slot),
+            cancellationToken);
     }
 
     private Task SendUseAsync(byte code, byte first, byte second, CancellationToken cancellationToken)

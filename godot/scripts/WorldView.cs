@@ -142,6 +142,8 @@ public partial class WorldView : Node3D
         public float ServerY;         // the height the server last sent (Godot metres)
         public int Realm;             // 0 none (monsters), 1 Albion, 2 Midgard, 3 Hibernia
         public bool IsPlayer;
+        public bool GroundObject;     // a ground object (retail's kind 0): 0xD9 objects and 0x12 vehicles; not a figure
+        public bool Lootable;         // a ground object Nearest Loot may pick
         public bool Vehicle;          // a boat or siege weapon (0x12): a ground object that 0xA1 moves (kind 0, vehicle bit)
         public ushort ObjectModel;    // a vehicle's objects.csv row
         public bool PlayerBoat;       // its objects.csv row has the Player Boat Flag: 0xA2 type 0 removes it after 20 s
@@ -854,6 +856,14 @@ public partial class WorldView : Node3D
             if (_session is not null && _closedReason is null)
                 _ = SendTravel("/sprint");
         }
+        else if (KeyBindings.Pressed(@event, ControlAction.Get) && !ChatInputActive)
+        {
+            GetKey();   // pick up the target, unchecked (WorldView.Loot)
+        }
+        else if (KeyBindings.Pressed(@event, ControlAction.Destroy) && !ChatInputActive)
+        {
+            DestroySelected();   // the selected backpack item, after the client's question (WorldView.Loot)
+        }
         else if (KeyBindings.Pressed(@event, ControlAction.Sell) && !ChatInputActive)
         {
             Sell();   // the selected inventory item to the targeted merchant, window open or not (retail)
@@ -1022,7 +1032,10 @@ public partial class WorldView : Node3D
             // A creature or player under the cursor is targeted; empty ground or scenery clears the target (retail), and
             // the dev inspect readout describes what was hit.
             if (PickEntity(click) is ushort picked)
+            {
                 SetTarget(picked);
+                ClickedEntity(picked);   // a second click on a ground object picks it up (WorldView.Loot)
+            }
             else
             {
                 SetTarget(0);

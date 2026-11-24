@@ -15,7 +15,7 @@ namespace EodClient;
 
 public partial class WorldView
 {
-    private const float EnemyRange = 1200, FriendRange = 1500;   // region units, horizontal
+    private const float EnemyRange = 1200, FriendRange = 1500, ObjectRange = 1500;   // region units, horizontal
     private const double CycleSeconds = 1.5;
     private const float EyeUnits = 64 * 0.8f;   // line of sight runs between 4/5 of each figure's height (64 if unknown)
 
@@ -32,6 +32,10 @@ public partial class WorldView
             TargetNearest(ControlAction.TargetEnemy);
         else if (KeyBindings.Pressed(e, ControlAction.TargetFriend))
             TargetNearest(ControlAction.TargetFriend);
+        else if (KeyBindings.Pressed(e, ControlAction.TargetObject))
+            TargetNearest(ControlAction.TargetObject);
+        else if (KeyBindings.Pressed(e, ControlAction.NearestLoot))
+            TargetNearest(ControlAction.NearestLoot);
         else if (KeyBindings.Pressed(e, ControlAction.Consider))
             Consider();
         else if (KeyBindings.Pressed(e, ControlAction.LastAttacker))
@@ -53,21 +57,30 @@ public partial class WorldView
     // Normal realm rules only: PvP and PvE servers pick differently (RE/76), not handled.
     // Our realm unknown: monsters are enemies and every realm's people friends (as the target window's buttons take it).
     // A peaceful NPC (0xDA flags 0x10) is never an enemy: ours, retail's use of that bit isn't traced.
-    // Boats and siege weapons are objects: never a candidate for either key (daoc-re RE/98).
+    // Ground objects (0xD9 items, 0x12 boats and siege weapons) are never a candidate for either key (daoc-re RE/76, RE/98).
     private bool IsEnemy(Entity e) =>
-        !e.Vehicle && !e.Dead && !e.Peaceful && (PlayerRealm == Realm.None ? e.Realm == 0 : e.Realm != (int)PlayerRealm);
-    private bool IsFriend(Entity e) => !e.Vehicle && e.Realm != 0 && (PlayerRealm == Realm.None || e.Realm == (int)PlayerRealm);
+        !e.GroundObject && !e.Dead && !e.Peaceful && (PlayerRealm == Realm.None ? e.Realm == 0 : e.Realm != (int)PlayerRealm);
+    private bool IsFriend(Entity e) => !e.GroundObject && e.Realm != 0 && (PlayerRealm == Realm.None || e.Realm == (int)PlayerRealm);
 
+    // Target Enemy, Target Friend, Target Object (ground objects but graves, 1500) and Nearest Loot (lootable ground
+    // objects, 1500), each with its own "none" line (RE/76 "Keys").
     private void TargetNearest(ControlAction key)
     {
-        bool enemy = key == ControlAction.TargetEnemy;
-        float range = enemy ? EnemyRange : FriendRange;
+        CloseMiniInfo();   // every press closes the item window (RE/76, RE/99)
+        (string kind, float range, System.Func<Entity, bool> fits, string none) = key switch
+        {
+            ControlAction.TargetEnemy => ("enemy", EnemyRange, (System.Func<Entity, bool>)IsEnemy, "No enemy target in range."),
+            ControlAction.TargetFriend => ("friend", FriendRange, (System.Func<Entity, bool>)IsFriend, "No friendly target in range."),
+            ControlAction.TargetObject => ("object", ObjectRange, (System.Func<Entity, bool>)(e => e.GroundObject
+                && !e.Name.EndsWith("'s Grave", System.StringComparison.Ordinal)), "No object target in range."),
+            _ => ("loot", ObjectRange, (System.Func<Entity, bool>)(e => e.GroundObject && e.Lootable), "No lootable object in range."),
+        };
         var found = new List<(float Distance, ushort Id)>();
-        if (!enemy)
+        if (key == ControlAction.TargetFriend)
             found.Add((0, SelfId));   // retail's Target Friend includes you; there is no target-self key
         foreach ((ushort id, Entity e) in _entities)
         {
-            if (!e.Pickable || (enemy ? !IsEnemy(e) : !IsFriend(e)))
+            if (!e.Pickable || !fits(e))
                 continue;
             Vector3 d = e.Node.Position - _body.Position;
             d.Y = 0;
@@ -80,9 +93,9 @@ public partial class WorldView
         (_lastPickKey, _lastPickAt) = (key, _seconds);
         if (found.Count == 0)
         {
-            GD.Print($"[target] {(enemy ? "enemy" : "friend")} key: none in range");
+            GD.Print($"[target] {kind} key: none in range");
             SetTarget(0);
-            AppendChat(enemy ? "No enemy target in range." : "No friendly target in range.", LocalReply);
+            AppendChat(none, LocalReply);
             return;
         }
         int at = 0;
@@ -93,7 +106,7 @@ public partial class WorldView
                 at = (now + 1) % found.Count;   // past the farthest: back to the nearest (ours; retail's wrap isn't traced)
         }
         ushort pick = found[at].Id;
-        GD.Print($"[target] {(enemy ? "enemy" : "friend")} key: {(pick == SelfId ? PlayerName : _entities[pick].Name)} (#{pick}), " +
+        GD.Print($"[target] {kind} key: {(pick == SelfId ? PlayerName : _entities[pick].Name)} (#{pick}), " +
             $"{found[at].Distance:0} units, {at + 1} of {found.Count}");
         SetTarget(pick, examine: false);
     }

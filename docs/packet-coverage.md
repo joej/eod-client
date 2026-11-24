@@ -17,7 +17,7 @@ change; a packet without a tier shows as `?`.
 |---|---|---|---|---|
 | 0 | C→S | 12 | 12 | 0 |
 | 0 | S→C | 16 | 16 | 0 |
-| P1 | C→S | 34 | 24 | 10 |
+| P1 | C→S | 34 | 26 | 8 |
 | P1 | S→C | 51 | 40 | 11 |
 | P2 | C→S | 21 | 1 | 20 |
 | P2 | S→C | 20 | 1 | 19 |
@@ -76,7 +76,7 @@ change; a packet without a tier shows as `?`.
 | C→S | 0x7A | ObjectInteractRequest | sent | talk to / interact with | ObjectInteractRequestHandler (PlayerInGame) |
 | C→S | 0x7B | TrainWindowHandler | sent | trainers: asking for the train window | PlayerTrainRequestHandler (PlayerInGame) |
 | C→S | 0x7D | UseSpell | sent | casting a spell | UseSpellHandler (PlayerInGame) |
-| C→S | 0x80 | DestroyItemRequest | — | items: destroying one | DestroyItemRequestHandler (PlayerInGame) |
+| C→S | 0x80 | DestroyItemRequest | sent | items: destroying one | DestroyItemRequestHandler (PlayerInGame) |
 | C→S | 0x82 | DialogResponse | sent | answering dialogs | DialogResponseHandler (PlayerInGame) |
 | C→S | 0x87 | InviteToGroup | sent | group invite | InviteToGroupHandler (PlayerInGame) |
 | C→S | 0x8A | PetWindow | — | pet commands | PetWindowHandler (PlayerInGame) |
@@ -85,7 +85,7 @@ change; a packet without a tier shows as `?`.
 | C→S | 0xA5 | ObjectUpdateRequest | — | asking for an object the client doesn't know | ObjectUpdateRequestHandler (PlayerInGame) |
 | C→S | 0xAF | CommandHandler | sent | chat and slash commands | PlayerCommandHandler (PlayerInGame) |
 | C→S | 0xB0 | PlayerTarget | sent | targeting | PlayerTargetHandler (PlayerInGame) |
-| C→S | 0xB5 | PickUpRequest | — | loot: picking up from the ground | PlayerPickUpRequestHandler (PlayerInGame) |
+| C→S | 0xB5 | PickUpRequest | sent | loot: picking up from the ground | PlayerPickUpRequestHandler (PlayerInGame) |
 | C→S | 0xBA | PlayerHeadingUpdate | — | turning on the spot (check retail: 0xA9 carries the heading) | PlayerHeadingUpdateHandler (PlayerInGame) |
 | C→S | 0xBB | UseSkill | sent | using a skill or style | UseSkillHandler (PlayerInGame) |
 | C→S | 0xBE | CreateObjectRequest | sent | asking for an unknown object | CreateObjectRequestHandler (PlayerInGame) |

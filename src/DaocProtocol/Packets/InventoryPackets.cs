@@ -142,12 +142,14 @@ public sealed record Encumbrance(ushort Max, ushort Carried)
     public byte[] ToBytes() => new PayloadWriter().U16BE(Max).U16BE(Carried).ToArray();
 }
 
-/// <summary>C→S 0xDD PlayerMoveItem: u16 BE 0, u16 BE to-slot, u16 BE from-slot, u16 BE count (a stack's share; 0 the
-/// whole item). The server answers with 0x02 for both slots, or a chat line saying why not.</summary>
+/// <summary>C→S 0xDD PlayerMoveItem: u16 BE session id (retail; OpenDAoC doesn't read it), u16 BE to-slot, u16 BE
+/// from-slot, u16 BE count (a stack's share; 0 the whole item). To slot 1 drops it on the ground (<see cref="Ground"/>).
+/// The server answers with 0x02 for both slots, or a chat line saying why not.</summary>
 public static class MoveItemRequest
 {
     public const byte Code = 0xDD;
+    public const ushort Ground = 1;
 
-    public static byte[] Payload(ushort to, ushort from, ushort count = 0) =>
-        new PayloadWriter().U16BE(0).U16BE(to).U16BE(from).U16BE(count).ToArray();
+    public static byte[] Payload(ushort to, ushort from, ushort count = 0, ushort sessionId = 0) =>
+        new PayloadWriter().U16BE(sessionId).U16BE(to).U16BE(from).U16BE(count).ToArray();
 }

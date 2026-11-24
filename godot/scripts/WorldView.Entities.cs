@@ -44,6 +44,33 @@ public partial class WorldView
     {
         _worldObjects[o.ObjectId] = o;
         DrawWorldObject(o);
+        RegisterGroundObject(o);
+    }
+
+    // Nearest Loot's candidates: a 0xD9 object whose flags byte has 0x04 (it sets both of retail's loot fields; 0x12 needs
+    // 0x04 and 0x08), as OpenDAoC marks a drop its player may take; 0x08 (a keep banner) isn't loot (daoc-re RE/99).
+    private static bool IsLootable(ObjectCreate o) => (o.FlagsByte & 0x04) != 0;
+
+    // A 0xD9 object can be targeted, as retail's ground objects (kind 0) can (daoc-re RE/76): left click targets it,
+    // right click interacts, double click picks it up, Target Object and Nearest Loot find it. It stays where it was
+    // placed (0xA1 doesn't move it). Doors (an id after the name) keep their own handling. A name plate only with
+    // objects.csv Show Name.
+    private void RegisterGroundObject(ObjectCreate o)
+    {
+        if (_entities.Remove(o.ObjectId, out Entity? old))
+            old.Node.QueueFree();   // an NPC or capsule with that oid is replaced
+        if (o.ExtraId is not null || !_objectNodes.TryGetValue(o.ObjectId, out Node3D? node))
+            return;
+        var e = new Entity
+        {
+            Node = node, ServerY = node.Position.Y, TargetYaw = node.Rotation.Y, LastUpdate = _seconds, Model = o.Model,
+            GroundObject = true, Lootable = IsLootable(o), Name = o.Name, Pickable = true, Realm = o.Realm,
+        };
+        _entities[o.ObjectId] = e;
+        AddObjectPickShape(node, o.ObjectId);
+        e.NameColor = PlateColour(e, false);
+        if (ObjectTemplate(o.Model) is var (_, entry, _) && entry.ShowName && o.Name.Length > 0)
+            e.Nameplate = Nameplate(node, HeadHeight(e), o.Name, "", e.NameColor, ClientSettings.NameKinds.Monsters);
     }
 
     private void OnObjectMoved(ObjectUpdate u)
@@ -163,7 +190,7 @@ public partial class WorldView
             return;
         if (row is 0xFFFF)
             e.Node.Visible = false;   // exists, but nothing to draw
-        e.Vehicle = o.Vehicle;
+        (e.GroundObject, e.Vehicle, e.Lootable) = (true, o.Vehicle, o.Lootable);
         (e.ObjectModel, e.PlayerBoat) = (row, entry?.PlayerBoat == true);
         e.Grounded = e.GroundedAtSpawn = !o.Floating;
         e.ProbedAt = new Vector3(float.NaN, 0, 0);

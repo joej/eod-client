@@ -85,6 +85,34 @@ public partial class WorldView
         node.AddChild(body);
     }
 
+    // A pick shape for a ground object: a box round its model's meshes (a capsule when it has none).
+    private static void AddObjectPickShape(Node3D node, ushort objectId)
+    {
+        Aabb? box = null;
+        foreach (Node n in node.FindChildren("*", "MeshInstance3D", true, false))
+        {
+            var mesh = (MeshInstance3D)n;
+            Transform3D toRoot = Transform3D.Identity;
+            for (Node? p = mesh; p is Node3D p3 && p != node; p = p.GetParent())
+                toRoot = p3.Transform * toRoot;
+            Aabb b = toRoot * mesh.GetAabb();
+            box = box is Aabb a ? a.Merge(b) : b;
+        }
+        if (box is not Aabb bounds || bounds.Size.LengthSquared() < 1e-6f)
+        {
+            AddPickShape(node, objectId, 50);
+            return;
+        }
+        var body = new StaticBody3D { CollisionLayer = EntityLayer, CollisionMask = 0 };
+        body.SetMeta("entity", objectId);
+        body.AddChild(new CollisionShape3D
+        {
+            Shape = new BoxShape3D { Size = bounds.Size.Max(new Vector3(0.2f, 0.2f, 0.2f)) },
+            Position = bounds.GetCenter(),
+        });
+        node.AddChild(body);
+    }
+
     // The entity under a screen point, or null.
     private ushort? PickEntity(Vector2 screen)
     {

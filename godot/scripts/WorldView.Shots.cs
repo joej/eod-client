@@ -407,6 +407,15 @@ public partial class WorldView
                 GetTree().CreateTimer(walkAt).Timeout += () =>
                     (_walkPoint, _walkUntil, _shotOnArrival) = (ToGodot(wx, wy, 0), _seconds + 300, shot);
         }
+        // --drop-item SLOT [--drop-at SECONDS, default 4]: drop that inventory item on the ground, as dragging it out over
+        // the world does (with its question; --accept-dialogs answers it).
+        int di = System.Array.IndexOf(args, "--drop-item");
+        if (di >= 0 && di + 1 < args.Length && byte.TryParse(args[di + 1], out byte dropSlot))
+        {
+            int dat = System.Array.IndexOf(args, "--drop-at");
+            double dropAt = dat >= 0 && dat + 1 < args.Length && double.TryParse(args[dat + 1], System.Globalization.CultureInfo.InvariantCulture, out double dAt) ? dAt : 4;
+            GetTree().CreateTimer(dropAt).Timeout += () => DropItem(dropSlot);
+        }
         // --cancel-effect NAME [--cancel-at SECONDS, default 20]: cancel the character's effect of that name (C→S 0xF8), as
         // a click on its icon would.
         int ce = System.Array.IndexOf(args, "--cancel-effect");

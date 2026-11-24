@@ -671,6 +671,7 @@ public class ClientSessionTests
             // West of both, south of Black Mtns. South: no zone. The last one stays.
             await session.MoveToAsync(548000f, 549000f, 2344f, heading: 0);
             Assert.Equal("Salisbury Plains", session.World.Zone.Name);
+            await server.WaitForAsync(p => p.Code == PositionUpdate.Code, count: 3);   // all three read before the check
         }
 
         Assert.Null(server.Error);

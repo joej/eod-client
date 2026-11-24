@@ -265,10 +265,23 @@ public partial class WorldView
             }
         }
 
+        private bool _dragging;
+
+        // A drag that no window took, let go over the world: drop the item on the ground (WorldView.Loot).
+        public override void _Notification(int what)
+        {
+            if (what != NotificationDragEnd || !_dragging)
+                return;
+            _dragging = false;
+            if (!GetViewport().GuiIsDragSuccessful())
+                _view.DropOnGround(Slot, GetViewport().GetMousePosition());
+        }
+
         public override Variant _GetDragData(Vector2 atPosition)
         {
             if (_item is null || Slot == InventorySlot.PaperDoll)
                 return default;
+            _dragging = true;
             SetDragPreview(new TextureRect
             {
                 Texture = _icon.Texture, Size = new Vector2(32, 32), ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,

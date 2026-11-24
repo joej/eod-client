@@ -542,6 +542,30 @@ target ("You spend N points and specialize further in …"), then sends new poin
 row, or 50 + a realm ability's index). Verified live 2026-11-24 (Quitcheck at Captain Falron: Crossbows 2 → 3 for 3
 points). OpenDAoC's trainer interaction can also hand out a free level (its free-level feature).
 
+### Loot: picking up, dropping, destroying
+
+```
+S→C 0xD9 ObjectCreate        an item on the ground is a ground object; its flags as the client reads them (only the low byte
+                             of OpenDAoC's u16): 0x01 floating, 0x02 vehicle, 0x04 lootable, 0x08 (a keep banner), 0x10 /
+                             0x20 / both realm 1 / 2 / 3, 0x40 attached to a figure, 0x80 raised 1000 units
+C→S 0xB5 PickUpRequest       1 byte (meaningless; we send 0): pick up the current target
+C→S 0x80 DestroyItemRequest  u16 BE session id, u16 unwritten, u16 BE inventory slot, u16 unwritten
+C→S 0xDD PlayerMoveItem      to slot 1 (the ground), from slot, count 0: drop an item
+```
+
+How the retail client uses them (daoc-re, from 1.130's code): a double click on the current target, when it is a ground
+object (any: an item, a banner, a vehicle), sends 0xB5, and so does the Get key (G), unchecked; the server picks up the
+target. OpenDAoC's handler reads x, y and two ids past the packet's end but goes by the target too. Nearest Loot (F7 /
+H) targets the nearest ground object with the loot flag (in 0xD9, 0x04 alone: OpenDAoC's drops for their owner count;
+in 0x12, 0x04 and 0x08), Target Object (F8 / Shift+H) any ground object but a grave, both within 1500 units 2-D in line
+of sight, cycling within 1.5 s. Destroy (Shift+D) asks "Do you really wish to destroy this item?" about the selected
+inventory item, weapons and worn items included (the server refuses those); dragging an inventory item out over the
+world asks "Do you really wish to drop this item?". Both check the selection again on ACCEPT ("You no longer have the
+proper item selected!"). The client says nothing of its own on a pick-up. *Verified live 2026-11-24 (Testjoe, a GM):
+dropped a ferrite ram cladding ("You drop the ferrite ram cladding on the ground!"), F7 targeted it 30 units away, G
+picked it up ("You get a ferrite ram cladding and put it in your backpack."); Shift+D destroyed two catapult stones
+("You destroy the catapult stone.").*
+
 ### Boats and siege weapons
 
 OpenDAoC sends every moving object with S→C 0x12 instead of 0xDA when it comes into view: boats (GameBoat, GameTaxiBoat),

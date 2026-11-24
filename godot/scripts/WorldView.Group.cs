@@ -128,7 +128,7 @@ public partial class WorldView
                     GD.Print($"[world] group: {(g.InGroup ? string.Join(", ", g.Members.Select(m => $"{m.Name} ({m.ClassName} {m.Level})")) : "none")}");
                 logged = g.Members.Count;
             };
-            _bridge.DialogArrived += ShowDialog;
+            _bridge.DialogArrived += d => ShowDialog(d);
         }
     }
 
@@ -243,14 +243,15 @@ public partial class WorldView
             ShowDialog(open);
     }
 
-    private void ShowDialog(Dialog d)
+    // localYes: a question of the client's own, run on YES (answered at once with --accept-dialogs, like the server's).
+    private void ShowDialog(Dialog d, System.Action? localYes = null, string yes = "ACCEPT", string no = "DECLINE")
     {
         if (_dialogWindow is null || !IsInstanceValid(_dialogWindow))
             return;
         _dialog = d;
-        _dialogLocalYes = null;
-        _dialogYes!.Text = "ACCEPT";
-        _dialogNo!.Text = "DECLINE";
+        _dialogLocalYes = localYes;
+        _dialogYes!.Text = yes;
+        _dialogNo!.Text = no;
         _dialogText!.Text = d.Text;
         _dialogText.AutowrapMode = d.Wrap ? TextServer.AutowrapMode.WordSmart : TextServer.AutowrapMode.Off;
         _dialogYes!.Visible = _dialogNo!.Visible = d.YesNo;
@@ -264,10 +265,7 @@ public partial class WorldView
     // A YES / NO question of the client's own (retail's "buy anyway"); nothing goes to the server but what YES does.
     private void AskYesNo(string text, System.Action onYes)
     {
-        ShowDialog(new Dialog(0, 0, 0, 0, YesNo: true, Wrap: true, text));
-        _dialogLocalYes = onYes;
-        _dialogYes!.Text = "YES";
-        _dialogNo!.Text = "NO";
+        ShowDialog(new Dialog(0, 0, 0, 0, YesNo: true, Wrap: true, text), onYes, "YES", "NO");
     }
 
     private void AnswerDialog(bool yes)

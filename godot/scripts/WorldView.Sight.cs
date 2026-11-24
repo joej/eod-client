@@ -67,7 +67,9 @@ public partial class WorldView
 
     private const double TargetViewInterval = 0.1;
 
-    private bool IsFigure(ushort id) => id == SelfId || _entities.ContainsKey(id);
+    // Ground objects (items, doors, boats, siege weapons) aren't figures: retail sends no answer for them (line-of-sight
+    // note; for vehicles inferred).
+    private bool IsFigure(ushort id) => id == SelfId || (_entities.TryGetValue(id, out Entity? e) && !e.GroundObject);
 
     // Nothing solid between a and b. Either missing (a figure with no scene node): yes.
     private bool Clear(Vector3? a, Vector3? b)

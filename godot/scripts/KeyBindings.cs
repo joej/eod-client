@@ -16,7 +16,7 @@ public enum ControlAction
 {
     Forward, Back, TurnLeft, TurnRight, StrafeLeft, StrafeRight, Jump, Sprint, AutoRun, AttackMode, Map, Torch, ResetCamera, ToggleInterface,
     TargetEnemy, TargetFriend, Consider, TargetGroup1, TargetGroup2, TargetGroup3, TargetGroup4, TargetGroup5, TargetGroup6,
-    TargetGroup7, TargetGroup8, LastAttacker, Sell,
+    TargetGroup7, TargetGroup8, LastAttacker, Sell, NearestLoot, TargetObject, Destroy, Get,
 }
 
 public static class KeyBindings
@@ -37,7 +37,7 @@ public static class KeyBindings
     // One preset: movement, then retail's defaults for the other actions (keyboard.dat, daoc-re 2026-11-13).
     private static Dictionary<ControlAction, (Key[] Keys, MouseButton[] Buttons)> Layout(Key forward, Key back, Key[] turnLeft,
         Key[] turnRight, Key strafeLeft, Key strafeRight, Key[] runlock, Key sprint, Key combat, Key torch, Key resetCamera,
-        Key targetFriend, bool rpgTargets) => new()
+        Key targetFriend, bool rpgTargets, Key[] nearestLoot, Key[] targetObject, Key get) => new()
     {
         [ControlAction.Forward] = K(forward), [ControlAction.Back] = K(back),
         [ControlAction.TurnLeft] = K(turnLeft), [ControlAction.TurnRight] = K(turnRight),
@@ -49,6 +49,10 @@ public static class KeyBindings
         [ControlAction.TargetEnemy] = K(Key.Tab), [ControlAction.TargetFriend] = K(targetFriend),
         [ControlAction.LastAttacker] = K(Shift(Key.Tab)),
         [ControlAction.Sell] = K(Shift(Key.S)),   // every preset (keyboard note, slot 29)
+        // Nearest Loot (slot 72) and Target Object (26) by preset; Destroy (38) Shift+D in every one.
+        [ControlAction.NearestLoot] = K(nearestLoot), [ControlAction.TargetObject] = K(targetObject),
+        [ControlAction.Destroy] = K(Shift(Key.D)),
+        [ControlAction.Get] = K(get),   // slot 21: G, or = in FPS
         [ControlAction.Consider] = rpgTargets ? K(Key.F6) : K(),
         [ControlAction.TargetGroup1] = rpgTargets ? K(Key.F1) : K(), [ControlAction.TargetGroup2] = rpgTargets ? K(Key.F2) : K(),
         [ControlAction.TargetGroup3] = rpgTargets ? K(Key.F3) : K(), [ControlAction.TargetGroup4] = rpgTargets ? K(Key.F4) : K(),
@@ -61,13 +65,13 @@ public static class KeyBindings
 
     private static readonly Dictionary<string, Dictionary<ControlAction, (Key[] Keys, MouseButton[] Buttons)>> Tables = new()
     {
-        ["rpg"] = Layout(Key.W, Key.S, [Key.A], [Key.D], Key.Q, Key.E, [Key.Numlock], Key.V, Key.Quoteleft, Key.T, Key.Kp5, Ctrl(Key.Tab), true),
+        ["rpg"] = Layout(Key.W, Key.S, [Key.A], [Key.D], Key.Q, Key.E, [Key.Numlock], Key.V, Key.Quoteleft, Key.T, Key.Kp5, Ctrl(Key.Tab), true, [Key.F7], [Key.F8], Key.G),
         // MMO and FPS: Runlock is T / Y with NumLock as the second bind (Run Lock 2).
-        ["mmo"] = Layout(Key.W, Key.S, TurnL, TurnR, Key.A, Key.D, [Key.T, Key.Numlock], Key.F, Key.X, Shift(Key.Y), Key.Z, Ctrl(Key.Tab), false),
-        ["fps"] = Layout(Key.E, Key.D, TurnL, TurnR, Key.S, Key.F, [Key.Y, Key.Numlock], Key.G, Key.C, Shift(Key.Y), Key.X, Key.Quoteleft, false),
+        ["mmo"] = Layout(Key.W, Key.S, TurnL, TurnR, Key.A, Key.D, [Key.T, Key.Numlock], Key.F, Key.X, Shift(Key.Y), Key.Z, Ctrl(Key.Tab), false, [Key.H], [Shift(Key.H)], Key.G),
+        ["fps"] = Layout(Key.E, Key.D, TurnL, TurnR, Key.S, Key.F, [Key.Y, Key.Numlock], Key.G, Key.C, Shift(Key.Y), Key.X, Key.Quoteleft, false, [], [Shift(Key.Minus)], Key.Equal),
         // 2001 manual: arrows, and the mouse buttons walk (right forward, left back); the rest as RPG.
         ["classic"] = Layout(Key.Up, Key.Down, [Key.Left], [Key.Right], Key.Q, Key.W, [Key.Numlock], Key.V, Key.Quoteleft, Key.T, Key.Kp5,
-            Ctrl(Key.Tab), true),
+            Ctrl(Key.Tab), true, [Key.F7], [Key.F8], Key.G),
     };
 
     static KeyBindings()
@@ -105,6 +109,8 @@ public static class KeyBindings
         ControlAction.ResetCamera => "Reset camera", ControlAction.ToggleInterface => "Toggle interface",
         ControlAction.TargetEnemy => "Target enemy", ControlAction.TargetFriend => "Target friend",
         ControlAction.Consider => "Consider", ControlAction.LastAttacker => "Last attacker", ControlAction.Sell => "Sell",
+        ControlAction.NearestLoot => "Nearest loot", ControlAction.TargetObject => "Target object", ControlAction.Destroy => "Destroy item",
+        ControlAction.Get => "Get (pick up)",
         >= ControlAction.TargetGroup1 and <= ControlAction.TargetGroup8 => $"Target group {a - ControlAction.TargetGroup1 + 1}",
         _ => a.ToString(),
     };

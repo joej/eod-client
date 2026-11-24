@@ -240,28 +240,65 @@ public sealed record PlayerCreate(
 }
 
 /// <summary>
-/// 0xD9 ObjectCreate (PacketLib171.SendObjectCreate): a static world object (door, item, banner)
-/// enters view. X/Y are region-global BIG-endian u32 integers.
+/// 0xD9 ObjectCreate (PacketLib171.SendObjectCreate): a ground object (an item lying on the ground, a banner, a cart, a
+/// door that isn't part of a zone model) enters view: u16 BE oid, u16 BE emblem (a GameStaticItem's), u16 BE heading, u16
+/// BE z, u32 BE x, y, u16 BE model (an objects.csv row), u16 BE flags, u32 (OpenDAoC 0, "new in 1.71"), pascal name, then
+/// a byte, and when it isn't 0 a u32 BE id (OpenDAoC: 4 and the door id, for a door). OpenDAoC's flags: realm × 0x10,
+/// 0x01 underwater, 0x04 an item the player may pick up (a GameStaticItemTimed it owns: a mob's drop), 0x08 a keep banner.
 /// </summary>
 public sealed record ObjectCreate(
     ushort ObjectId, ushort Heading, ushort Z, uint X, uint Y, ushort Model, string Name)
 {
     public const byte Code = 0xD9;
 
+    public ushort Emblem { get; init; }
+
+    /// <summary>The flags as written (OpenDAoC: a u16). The retail client reads only the low byte, <see cref="FlagsByte"/>.</summary>
+    public ushort Flags { get; init; }
+
+    /// <summary>Bytes 20–23 (OpenDAoC 0); the retail client reads only byte 20's 0x02 (the emblem's 0x10000).</summary>
+    public uint Unknown { get; init; }
+
+    /// <summary>The flags byte as retail reads it (daoc-re RE/99): 0x01 floating, 0x02 vehicle, 0x04 lootable, 0x08 (a keep
+    /// banner; not loot), 0x10 / 0x20 / both realm 1 / 2 / 3, 0x40 attached to a figure, 0x80 raised 1000 units.</summary>
+    public byte FlagsByte => (byte)Flags;
+
+    public bool Lootable => (FlagsByte & 0x04) != 0;
+
+    public int Realm => (FlagsByte >> 4) & 0x3;
+
+    /// <summary>The id after the name (a door's), when its flag byte isn't 0.</summary>
+    public uint? ExtraId { get; init; }
+
     public static ObjectCreate Parse(ReadOnlySpan<byte> payload)
     {
         var r = new PayloadReader(payload);
         ushort objectId = r.U16BE();
-        r.Skip(2);              // emblem
+        ushort emblem = r.U16BE();
         ushort heading = r.U16BE();
         ushort z = r.U16BE();
         uint x = r.U32BE();
         uint y = r.U32BE();
         ushort model = r.U16BE();
-        r.Skip(2);              // flag
-        r.Skip(4);              // unknown ("new in 1.71"; present on 171+)
+        ushort flags = r.U16BE();
+        uint unknown = r.U32BE();   // present on 171+
         string name = r.StringU8();
-        return new ObjectCreate(objectId, heading, z, x, y, model, name);
+        uint? extra = r.Remaining > 0 && r.U8() != 0 && r.Remaining >= 4 ? r.U32BE() : null;
+        return new ObjectCreate(objectId, heading, z, x, y, model, name)
+        {
+            Emblem = emblem, Flags = flags, Unknown = unknown, ExtraId = extra,
+        };
+    }
+
+    public byte[] ToBytes()
+    {
+        var w = new PayloadWriter().U16BE(ObjectId).U16BE(Emblem).U16BE(Heading).U16BE(Z).U32BE(X).U32BE(Y).U16BE(Model)
+            .U16BE(Flags).U32BE(Unknown).StringU8(Name);
+        if (ExtraId is uint id)
+            w.U8(4).U32BE(id);
+        else
+            w.U8(0);
+        return w.ToArray();
     }
 }
 

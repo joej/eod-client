@@ -652,6 +652,10 @@ handled). Each item below lists the packets it needs; the window rows are in `do
   Still open: which concentration gesture drops (retail's in-game test), the icons' tint and order options; the effects
   and sounds are M12's.
 - **Loot and items:** picking up from the ground (0xB5), the Nearest Loot key, and destroying an item (0x80).
+  *Built 2026-11-24:* as retail 1.130 does it (docs/protocol.md "Loot"): ground objects (0xD9) are targetable; double
+  click or Get (G) picks the target up, Nearest Loot (F7) and Target Object (F8) find them, Destroy (Shift+D) and dragging
+  an item out over the world ask first, then destroy (0x80) or drop (0xDD). Dropped, found, picked up and destroyed
+  live. Still open: double click checked only offline.
 - **Quests:** the journal (0x83), choosing a reward (0x40) and abandoning a quest (0x4F); the offer and reward
   dialogs.
 - **Other players:** trade (0xEA, 0xEB), the friends list (0xC5, 0xC6), /assist (0xF6), a figure's level and guild
