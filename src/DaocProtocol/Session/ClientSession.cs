@@ -713,6 +713,36 @@ public sealed class ClientSession(DaocConnection connection, ClientVersion? vers
         SendUseAsync(UseRequest.SlotCode, slot, type, cancellationToken);
 
     /// <summary>
+    /// Buys <paramref name="count"/> of the targeted merchant's item <paramref name="item"/> (page × 30 + index; for a
+    /// stacked item, packs) with C→S 0x78. The server answers in chat, with the new money and an inventory update.
+    /// </summary>
+    public Task BuyAsync(ushort item, byte count, byte windowType = MerchantWindowType.Normal, CancellationToken cancellationToken = default)
+    {
+        Require(SessionState.InWorld);
+        if (World is not WorldPosition world)
+            return Task.CompletedTask;
+        return connection.SendAsync(BuyRequest.Code,
+            BuyRequest.Payload(world.Position.X, world.Position.Y, connection.SessionId, item, count, windowType), cancellationToken);
+    }
+
+    /// <summary>Sells the item in backpack slot <paramref name="slot"/> (the whole stack) to the targeted merchant (C→S 0x79).</summary>
+    public Task SellAsync(ushort slot, CancellationToken cancellationToken = default) =>
+        SendMerchantSlot(SellRequest.Code, slot, cancellationToken);
+
+    /// <summary>Asks the targeted merchant what the item in <paramref name="slot"/> would sell for (C→S 0xE0); the
+    /// answer comes in chat.</summary>
+    public Task AppraiseAsync(ushort slot, CancellationToken cancellationToken = default) =>
+        SendMerchantSlot(SellRequest.AppraiseCode, slot, cancellationToken);
+
+    private Task SendMerchantSlot(byte code, ushort slot, CancellationToken cancellationToken)
+    {
+        Require(SessionState.InWorld);
+        if (World is not WorldPosition world)
+            return Task.CompletedTask;
+        return connection.SendAsync(code, SellRequest.Payload(world.Position.X, world.Position.Y, connection.SessionId, slot), cancellationToken);
+    }
+
+    /// <summary>
     /// Asks for the details of something (C→S 0xD8, <see cref="DetailRequest"/>): type 1 an inventory item by slot, which
     /// the server answers with a 0xC4 text window; 100 / 101 / 102 repair, self-craft or salvage the item in that slot.
     /// </summary>

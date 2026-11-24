@@ -40,6 +40,7 @@ public partial class WorldView
     private Label? _dialogText;
     private Button? _dialogYes, _dialogNo, _dialogOk;
     private Dialog? _dialog;
+    private System.Action? _dialogLocalYes;   // a question the client asks itself (no server answer): run on YES
     private bool _groupSubscribed;
     private bool _acceptDialogs;   // --accept-dialogs
 
@@ -247,6 +248,9 @@ public partial class WorldView
         if (_dialogWindow is null || !IsInstanceValid(_dialogWindow))
             return;
         _dialog = d;
+        _dialogLocalYes = null;
+        _dialogYes!.Text = "ACCEPT";
+        _dialogNo!.Text = "DECLINE";
         _dialogText!.Text = d.Text;
         _dialogText.AutowrapMode = d.Wrap ? TextServer.AutowrapMode.WordSmart : TextServer.AutowrapMode.Off;
         _dialogYes!.Visible = _dialogNo!.Visible = d.YesNo;
@@ -257,6 +261,15 @@ public partial class WorldView
             AnswerDialog(true);
     }
 
+    // A YES / NO question of the client's own (retail's "buy anyway"); nothing goes to the server but what YES does.
+    private void AskYesNo(string text, System.Action onYes)
+    {
+        ShowDialog(new Dialog(0, 0, 0, 0, YesNo: true, Wrap: true, text));
+        _dialogLocalYes = onYes;
+        _dialogYes!.Text = "YES";
+        _dialogNo!.Text = "NO";
+    }
+
     private void AnswerDialog(bool yes)
     {
         if (_dialog is not Dialog d)
@@ -264,6 +277,13 @@ public partial class WorldView
         _dialog = null;
         if (_dialogWindow is not null)
             _dialogWindow.Visible = false;
+        if (_dialogLocalYes is { } local)
+        {
+            _dialogLocalYes = null;
+            if (yes)
+                local();
+            return;
+        }
         GD.Print($"[world] dialog {d.DialogCode} answered {(yes ? "yes" : "no")}");
         if (_session is not null)
             _ = Send(() => _session.AnswerDialogAsync(d, yes), "dialog answer");

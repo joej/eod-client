@@ -107,6 +107,8 @@ public partial class WorldView
         if (id == _target)
             return;
         ushort old = _target;
+        if (id != _target && _merchantWindow is { Visible: true })
+            CloseMerchant();   // retail: a change of target closes the merchant window (RE/76)
         _target = id;
         _statsDirty = true;   // the Group page marks the targeted member and dims its buttons by the target
         // Retail draws no ring: the target's plate turns white at full opacity, and a target pick closes the item window

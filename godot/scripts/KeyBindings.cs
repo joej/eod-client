@@ -16,7 +16,7 @@ public enum ControlAction
 {
     Forward, Back, TurnLeft, TurnRight, StrafeLeft, StrafeRight, Jump, Sprint, AutoRun, AttackMode, Map, Torch, ResetCamera, ToggleInterface,
     TargetEnemy, TargetFriend, Consider, TargetGroup1, TargetGroup2, TargetGroup3, TargetGroup4, TargetGroup5, TargetGroup6,
-    TargetGroup7, TargetGroup8, LastAttacker,
+    TargetGroup7, TargetGroup8, LastAttacker, Sell,
 }
 
 public static class KeyBindings
@@ -48,6 +48,7 @@ public static class KeyBindings
         // Targeting: Tab and Shift+Tab (Last Attacker) in every preset; Consider and the group keys only in RPG (MMO and FPS leave them unbound).
         [ControlAction.TargetEnemy] = K(Key.Tab), [ControlAction.TargetFriend] = K(targetFriend),
         [ControlAction.LastAttacker] = K(Shift(Key.Tab)),
+        [ControlAction.Sell] = K(Shift(Key.S)),   // every preset (keyboard note, slot 29)
         [ControlAction.Consider] = rpgTargets ? K(Key.F6) : K(),
         [ControlAction.TargetGroup1] = rpgTargets ? K(Key.F1) : K(), [ControlAction.TargetGroup2] = rpgTargets ? K(Key.F2) : K(),
         [ControlAction.TargetGroup3] = rpgTargets ? K(Key.F3) : K(), [ControlAction.TargetGroup4] = rpgTargets ? K(Key.F4) : K(),
@@ -103,7 +104,7 @@ public static class KeyBindings
         ControlAction.AttackMode => "Attack mode", ControlAction.Map => "Map", ControlAction.Torch => "Torch",
         ControlAction.ResetCamera => "Reset camera", ControlAction.ToggleInterface => "Toggle interface",
         ControlAction.TargetEnemy => "Target enemy", ControlAction.TargetFriend => "Target friend",
-        ControlAction.Consider => "Consider", ControlAction.LastAttacker => "Last attacker",
+        ControlAction.Consider => "Consider", ControlAction.LastAttacker => "Last attacker", ControlAction.Sell => "Sell",
         >= ControlAction.TargetGroup1 and <= ControlAction.TargetGroup8 => $"Target group {a - ControlAction.TargetGroup1 + 1}",
         _ => a.ToString(),
     };

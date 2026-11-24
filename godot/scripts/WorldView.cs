@@ -457,6 +457,8 @@ public partial class WorldView : Node3D
         _bridge.ObjectSpawned += OnWorldObject;
         _bridge.DoorChanged += OnDoorChanged;
         _bridge.LosCheckAsked += OnLosCheckAsked;
+        _bridge.MerchantPageReceived += OnMerchantPage;
+        _bridge.MoneyChanged += ShowMerchantMoney;
         ListenForKeeps();
         SetTorch(ClientSettings.Torch);   // as the last session left it (retail's torchmode)
         _bridge.ChatReceived += OnChatReceived;
@@ -513,6 +515,7 @@ public partial class WorldView : Node3D
         BuildStatsPanel(overlay);
         BuildItemWindows(overlay);
         BuildDialog(overlay);
+        BuildMerchantWindow(overlay);
         BuildElementWindows(overlay);
         _builtScale = UiScale;
         ScaleChatAndNpc(_builtScale / ChatDesignScale);
@@ -841,6 +844,10 @@ public partial class WorldView : Node3D
             if (_session is not null && _closedReason is null)
                 _ = SendTravel("/sprint");
         }
+        else if (KeyBindings.Pressed(@event, ControlAction.Sell) && !ChatInputActive)
+        {
+            Sell();   // the selected inventory item to the targeted merchant, window open or not (retail)
+        }
         else if (KeyBindings.Pressed(@event, ControlAction.Map) && !ChatInputActive)
         {
             ToggleMap();
@@ -881,6 +888,8 @@ public partial class WorldView : Node3D
                 _infoWindow.Visible = false;
             else if (_miniInfo is { Visible: true })
                 CloseMiniInfo();
+            else if (_merchantWindow is { Visible: true })
+                CloseMerchant();
             else if (_statsPanel is { Visible: true })
                 _statsPanel.Visible = false;
             else if (_mapWindow.Visible)
@@ -1042,6 +1051,7 @@ public partial class WorldView : Node3D
         UpdateDoors();
         UpdateSound(delta);
         UpdateChat();
+        UpdateMerchantRange();
         _highlight.AlbedoColor = new Color(1f, 0f, 1f, 0.15f + 0.15f * Mathf.Sin((float)_seconds * 4f));
         if (_shotAt >= 0 && _seconds >= _shotAt)
         {

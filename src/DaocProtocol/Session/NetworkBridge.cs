@@ -165,6 +165,9 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
     /// <summary>The character's own items, slot by slot.</summary>
     public Inventory Inventory { get; } = new();
 
+    /// <summary>One page of the targeted merchant's items (0x17; OpenDAoC sends every page at once on an interact).</summary>
+    public event Action<MerchantPage>? MerchantPageReceived;
+
     /// <summary>How much the character carries and can carry (0xBD).</summary>
     public event Action<Encumbrance>? EncumbranceChanged;
 
@@ -363,6 +366,9 @@ public sealed class NetworkBridge(Action<string>? log = null, DelveCache? delves
                 case InventoryUpdate.Code:
                     if (Inventory.Apply(InventoryUpdate.Parse(packet.Payload)))
                         InventoryChanged?.Invoke(Inventory);
+                    break;
+                case MerchantPage.Code:
+                    MerchantPageReceived?.Invoke(MerchantPage.Parse(packet.Payload));
                     break;
                 case Encumbrance.Code:
                     EncumbranceChanged?.Invoke(Encumbrance.Parse(packet.Payload));

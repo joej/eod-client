@@ -483,6 +483,38 @@ use requests (0x71, 0x7D, 0xBB; OpenDAoC reads it big-endian and tests 0xA000). 
 and allows a range attack only with them. The client sets them only while it has a target and its line-of-sight ray
 reaches it (the same ray as above); ourselves, or a target that isn't a loaded figure, count as in view.
 
+### Merchants
+
+A right-click on a merchant (0x7A) makes OpenDAoC send its items, one S→C 0x17 per page that has any (up to 5 pages of
+30), all at once. A merchant whose item list is empty gets nothing at all; one with no list gets a single empty page 0.
+
+```
+S→C 0x17 MerchantWindow   u8 count, u8 window type (0 normal, 1 bounty points, 2 item currency, 3+ housing), u8 page,
+                          then count × item: u8 index on the page, u8 level, u8 value 1, u8 value 2, u8 hand << 6,
+                          u8 damage type << 6 | object type, u8 can use (0 = can't), u16 LE weight,
+                          u32 LE price (copper), u16 LE model, name (u32 LE length counting a trailing 0, bytes, 0)
+                          (an empty page: count 0, type, page 0, then one more 0)
+C→S 0x78 BuyRequest       u32 BE x, u32 BE y (whole units), u16 BE session id, u16 BE item = page × 30 + index,
+                          u8 how many (1–100; packs for arrows, bolts, poisons and generic stacks), u8 window type
+                          (the last 0x17's), 2 bytes the retail client leaves unwritten (we send 0)
+C→S 0x79 SellRequest      u32 BE x, u32 BE y, u16 BE session id, u16 BE inventory slot (the selected item's)
+C→S 0xE0 AppraiseItem     the same as 0x79
+```
+
+Value 1 is a weapon's DPS × 10 or armour's AF, a stack's pack size, a shield's size; value 2 the speed or absorption.
+The server reads x, y and the session id and ignores them; it buys from and sells to the player's current target,
+checks money and distance, and answers in chat (type 0x14 Merchant: "You just bought …", "… offers you N copper for …",
+"… gives you N copper for …"; type 0x12 "You need N copper to buy this."), with 0xFA money and an 0x02 inventory update.
+A sale sells the whole stack. Verified live 2026-11-24 (Ydenia Philpott, Cotswold: bought a rowan lute for 80c, appraised
+at 40c, sold back for 40c).
+
+How the retail client reads it (daoc-re, from 1.130's code): each 0x17 replaces its page and opens the window; "Page x
+of y" takes y from the last 0x17's page + 1, so pages must come in order; a page above 4 overruns the client's table. A
+row is "name [price]", the price by window type (coins with zero parts left out and no mithril, "FREE" at 0; "N bp",
+"N x", "N gbp", "N m"). The five coin boxes show the player's own money. BUY asks "You cannot use this item. Do you
+really wish to buy it?" itself for an unusable item; the server never sends that question. Buy and sell wait 250 ms
+after the last one; appraise doesn't. The window closes beyond 256 units of the merchant; closing sends nothing.
+
 ### Other players
 
 OpenDAoC doesn't send another player in view by itself (only in a few cases: stealth ending, a player arriving). A
@@ -887,7 +919,7 @@ instead.
 | 0xD2 garden | Byte 5 bit 0 = house occupied | 0x80 / 0x00 | Not handled | Not built (housing) |
 | 0xE3 siege animation | Sets the target's health % from byte +0x19 | 0 during Loading | Not handled | Not built |
 | 0x7B trainer, champion type 2 | Kind 3 = spell id, 2 = style id, others icon id | Icons for all kinds; link bytes 0 | Not handled | Not built |
-| 0x17/0x1F merchant, market | Item names at most 47 bytes; a longer one drops the page | No limit | Not handled | Not built (merchant window, M10): keep the page, truncate the name |
+| 0x17/0x1F merchant, market | Item names at most 47 bytes; a longer one drops the page | No limit | 0x17 handled (merchant window, M13) | Ours keeps the page and the whole name; 0x1F (market) not handled |
 
 Client features the server could use later: NPC create (0xDA) flags2 0x40 (face and hair from a number, not the
 name) and 0x20 (a water mob, not targetable from above the water), which our `NpcCreate.Flags2` doesn't read yet;

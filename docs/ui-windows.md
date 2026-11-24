@@ -108,7 +108,7 @@ shows it, even if not yet the retail window), **—** (nothing yet).
 
 | Window | Shows / does | Server data | Ours | Milestone |
 |---|---|---|---|---|
-| `merchant_window` | A merchant's pages of items; buy/sell | 0x17 MerchantWindow; 0xFA money | — (talking to merchants works; their window is the open M9 item) | M10 |
+| `merchant_window` | A merchant's pages of items; buy/sell | 0x17 MerchantWindow; 0xFA money | ✅ built 2026-11-24 (WorldView.Merchant; retail's rules from daoc-re) | M13 |
 | Trade window (built-in?) | Player-to-player trade | 0xEA TradeWindow | — | later |
 | `vault_window` | Bank vault | 0x02 (vault) | — | later |
 | `minicraft_window` | Craft, repair, salvage progress | 0x16 crafting; timer | — | later |
@@ -286,7 +286,7 @@ fullscreen key, retail's Camera Toggle: it moves when Camera Toggle is built.
 | 71 | Use Item Secondary | Shift+U | Shift+U | Shift+U | press | Use the selected item (secondary use). | — | ❌ | |
 | 65 | Craft | Shift+C | Shift+C | Shift+C | press | Craft with the selected backpack item ("You must select an item in your backpack!"). | — | ❌ | |
 | 21 | Get | G | G | = | press | Get: pick up the target or nearby item. | — | ❌ | |
-| 29 | Sell | Shift+S | Shift+S | Shift+S | press | Sell the selected backpack item to the open merchant. 1 s lockout ("You must wait one more second to interact again!"). | — | ❌ | |
+| 29 | Sell | Shift+S | Shift+S | Shift+S | press | Sell the selected inventory item to the targeted merchant, window open or not. 250 ms lockout shared with BUY ("You must wait one more second to interact again!"; daoc-re 2026-11-24). | Shift+S in every preset, rebindable | ✅ | |
 | **Camera** | | | | | | | | | |
 | 14 | Reset Camera | Num 5 | Z | X | held | Reset the camera behind the character. | Num 5 / Z / X, rebindable; classic layout D or Home | ✅ | |
 | 61 | Pan Camera | none | none | none | held | Pan: orbit the camera around the character without turning it. | — | ❌ | |

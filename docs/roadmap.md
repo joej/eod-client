@@ -636,6 +636,9 @@ handled). Each item below lists the packets it needs; the window rows are in `do
   never came for a player of this client: OpenDAoC adds a player to the aggro list only on an answer "in sight".
 - **Merchants:** the item pages (0x17), buying (0x78) and selling (0x79), and what an item sells for (0xE0), with a
   quantity chooser.
+  *Built 2026-11-24:* the merchant window at the stock skin's layout (docs/protocol.md "Merchants"); bought, appraised and
+  sold back live; it behaves as retail's does (the client's own question before buying an unusable item, the buy/sell
+  lockout, the Sell key). Still open: double click, right click and drag in the list.
 - **Trainers:** the train window (asked with C→S 0x7B; S→C 0x7B lists the specialisations, points and costs) and
   training (0x53).
 - **Casting:** the cast animation and bar (0x72), interruptions (0x73), the effect on the target (0x1B; the effects

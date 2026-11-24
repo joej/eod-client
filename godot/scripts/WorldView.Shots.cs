@@ -109,11 +109,16 @@ public partial class WorldView
                     SetTarget(found);
             };
         }
+        // --buy-sell: with --interact MERCHANT, once its window opens buy the cheapest usable item, appraise it and sell it back.
+        _devBuySell = System.Array.IndexOf(args, "--buy-sell") >= 0;
         int ia = System.Array.IndexOf(args, "--interact");
         if (ia >= 0 && ia + 1 < args.Length)
         {
             string name = args[ia + 1];
-            GetTree().CreateTimer(3.0).Timeout += () =>
+            // --interact-at SECONDS: later than the default 3 s (after a --command /jump).
+            int iat = System.Array.IndexOf(args, "--interact-at");
+            double interactAt = iat >= 0 && iat + 1 < args.Length && double.TryParse(args[iat + 1], System.Globalization.CultureInfo.InvariantCulture, out double iAt) ? iAt : 3.0;
+            GetTree().CreateTimer(interactAt).Timeout += () =>
             {
                 ushort found = _entities.Where(kv => kv.Value.Name.Equals(name, System.StringComparison.OrdinalIgnoreCase))
                     .OrderBy(kv => kv.Value.Node.Position.DistanceTo(_body.Position)).Select(kv => kv.Key).FirstOrDefault();
