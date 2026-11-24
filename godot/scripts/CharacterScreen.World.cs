@@ -118,7 +118,10 @@ public partial class CharacterScreen
                 _loading?.SetRegion(world.Position.RegionId);
             _loading?.SetProgress(0.3);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            // Headless nothing is drawn and frame_post_draw never comes: waiting for it left the old view running (in
+            // the old region, sending its old position under the new region's number) for the rest of the session.
+            if (DisplayServer.GetName() != "headless")
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             if (OS.GetCmdlineUserArgs().Contains("--loading-shot") && LibraryDir() is string lib)
             {
                 // Dev: the loading screen as drawn, next to the other progress shots.
