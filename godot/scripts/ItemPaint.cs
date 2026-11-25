@@ -19,7 +19,8 @@ public static class ItemPaint
 {
     private static readonly System.Collections.Generic.Dictionary<string, System.Text.Json.JsonElement?> Tables = new();
     private static readonly System.Collections.Generic.Dictionary<int, ImageTexture> Patterns = new();
-    private static Shader? _shader;
+    // One per lighting mode (ClassicLighting.Header).
+    private static readonly System.Collections.Generic.Dictionary<bool, Shader> _shaders = [];
 
     private static System.Text.Json.JsonElement? Table(string path)
     {
@@ -45,10 +46,10 @@ public static class ItemPaint
         {
             var mi = (MeshInstance3D)n;
             for (int s = 0; s < (mi.Mesh?.GetSurfaceCount() ?? 0); s++)
-                if (mi.GetActiveMaterial(s)?.Duplicate() is BaseMaterial3D m)
+                if (ClassicLighting.Source(mi.GetActiveMaterial(s))?.Duplicate() is BaseMaterial3D m)
                 {
                     m.AlbedoColor *= dye;
-                    mi.SetSurfaceOverrideMaterial(s, m);
+                    mi.SetSurfaceOverrideMaterial(s, ClassicLighting.Wrap(m));
                 }
         }
     }
@@ -61,11 +62,13 @@ public static class ItemPaint
     public static ShaderMaterial Material(string coloursPath, Texture2D? surface, Emblem? emblem, bool itemLayout,
         Color tint, params string[] dirs)
     {
-        _shader ??= new Shader
+        if (!_shaders.TryGetValue(ClassicLighting.On, out Shader? shader))
+            _shaders[ClassicLighting.On] = shader = new Shader
         {
-            Code = """
+            Code = $$"""
                 shader_type spatial;
                 render_mode cull_back;
+                {{ClassicLighting.Header}}
                 uniform sampler2D surface_tex : filter_linear_mipmap_anisotropic, repeat_enable;
                 uniform sampler2D pattern_tex : filter_linear, repeat_enable;
                 uniform sampler2D logo_tex : filter_linear_mipmap, repeat_disable;
@@ -77,6 +80,7 @@ public static class ItemPaint
                 varying vec4 extra_uv;
                 void vertex() {
                     extra_uv = CUSTOM0;
+                    CLASSIC_VERTEX(vec3(1.0), vec3(0.0625))
                 }
                 void fragment() {
                     vec2 surface_uv = item_layout ? extra_uv.xy : UV;
@@ -91,10 +95,11 @@ public static class ItemPaint
                     }
                     ALBEDO = pow(clamp(c, 0.0, 1.0), vec3(2.2));
                     ROUGHNESS = 1.0;
+                    CLASSIC_FRAGMENT
                 }
                 """,
         };
-        var m = new ShaderMaterial { Shader = _shader };
+        var m = new ShaderMaterial { Shader = shader };
         if (surface is not null)
             m.SetShaderParameter("surface_tex", surface);
         m.SetShaderParameter("has_surface", surface is not null);

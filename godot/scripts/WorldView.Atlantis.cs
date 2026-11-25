@@ -23,11 +23,16 @@ public partial class WorldView
     // Decoded layer images by library path, shared by every zone that uses them.
     private static readonly Dictionary<string, Image?> AtlantisImages = [];
 
-    private static readonly Shader AtlantisShader = new()
-    {
-        Code = """
+    // One per lighting mode (ClassicLighting.Header); the classic one is lit per vertex like the rest of the world.
+    private static readonly Dictionary<bool, Shader> AtlantisShaders = [];
+
+    private static Shader AtlantisShader => AtlantisShaders.TryGetValue(ClassicLighting.On, out Shader? made) ? made
+        : AtlantisShaders[ClassicLighting.On] = new Shader { Code = AtlantisCode(ClassicLighting.Header) };
+
+    private static string AtlantisCode(string lighting) => $$"""
             shader_type spatial;
             render_mode cull_disabled;
+            {{lighting}}
             uniform sampler2DArray layers : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
             uniform sampler2DArray masks : filter_linear, repeat_disable;
             uniform int count;
@@ -40,6 +45,14 @@ public partial class WorldView
             uniform vec2 flip;
             uniform sampler2D shade : hint_default_white, filter_linear, repeat_disable;
             uniform vec2 patch_at;
+            void vertex() {
+                // Classic: the ground shading is the patch's vertex colour, inside the light as retail has it (daoc-re
+                // RE/100 §8: the layers multiplied once by the lit colour); Modern multiplies it in per pixel below.
+                vec2 local_v = mix(UV, vec2(1.0) - UV, flip);
+                vec2 cell_v = (patch_at + local_v) * 32.0;
+                float shade_v = textureLod(shade, (cell_v + 0.5) / vec2(textureSize(shade, 0)), 0.0).r;
+                CLASSIC_VERTEX(vec3(shade_v), vec3(0.0625))
+            }
             void fragment() {
                 // The tile's UVs, mirrored back where the zone mirrors its classic tiles (flip_x / flip_y).
                 vec2 local = mix(UV, vec2(1.0) - UV, flip);
@@ -58,13 +71,15 @@ public partial class WorldView
                     colour = mix(colour, c, w);
                 }
                 // The ground shading: texel i sits on heightmap cell i (32 cells per patch), as a vertex colour would.
+                #ifndef CLASSIC_LIGHT
                 vec2 cell = (patch_at + local) * 32.0;
                 colour *= texture(shade, (cell + 0.5) / vec2(textureSize(shade, 0))).r;
+                #endif
                 ALBEDO = colour;
                 ROUGHNESS = 1.0;
+                CLASSIC_FRAGMENT
             }
-            """,
-    };
+            """;
 
     // Puts the Atlantis material on each tile of a zone's terrain that has layers; true if it did.
     private static IEnumerable<bool> AtlantisSteps(ZoneParts parts, Node3D terrain, string libraryDir)

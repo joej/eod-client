@@ -65,7 +65,7 @@ public static class ModelTexturing
             for (int s = 0; s < mesh.GetSurfaceCount(); s++)
             {
                 // The active material is the glTF-imported one; its resource name is the texture stem.
-                if (mi.GetActiveMaterial(s) is not BaseMaterial3D material)
+                if (ClassicLighting.Source(mi.GetActiveMaterial(s)) is not BaseMaterial3D material)
                     continue;
                 string stem = material.ResourceName;
                 if (string.IsNullOrEmpty(stem))
@@ -99,7 +99,7 @@ public static class ModelTexturing
                     textured++;
                     continue;
                 }
-                mi.SetSurfaceOverrideMaterial(s, copy);
+                mi.SetSurfaceOverrideMaterial(s, ClassicLighting.Wrap(copy));
                 textured++;
             }
         }
@@ -130,13 +130,15 @@ public static class ModelTexturing
                 continue;
             for (int s = 0; s < mesh.GetSurfaceCount(); s++)
             {
-                if (mi.GetActiveMaterial(s) is not BaseMaterial3D material)
+                if (ClassicLighting.Source(mi.GetActiveMaterial(s)) is not BaseMaterial3D material)
                     continue;   // a shader material: an additive effect, left as it is
                 Godot.Collections.Dictionary? marks = material.HasMeta(LayersMeta) ? material.GetMeta(LayersMeta).AsGodotDictionary() : null;
                 if (marks is not null && marks.TryGetValue("keepsMaterial", out Variant keep) && keep.AsBool())
                     continue;
                 var m = (BaseMaterial3D)material.Duplicate();
-                m.AlbedoColor = new Color(1, 1, 1, material.AlbedoColor.A);
+                // White diffuse, still doubled where a detail map is applied (Detail2X).
+                m.AlbedoColor = HasDetailMap(marks) && m.DetailEnabled ? new Color(2, 2, 2, material.AlbedoColor.A)
+                    : new Color(1, 1, 1, material.AlbedoColor.A);
                 Color glow = DungeonGlow;
                 if (fix.KeepEmissive)
                     glow = marks is not null && marks.TryGetValue("emissive", out Variant e)
@@ -154,7 +156,7 @@ public static class ModelTexturing
                     m.EmissionOperator = BaseMaterial3D.EmissionOperatorEnum.Multiply;
                 }
                 m.VertexColorUseAsAlbedo = fix.KeepVertexColours && marks is not null && marks.ContainsKey("vertexColors");
-                mi.SetSurfaceOverrideMaterial(s, m);
+                mi.SetSurfaceOverrideMaterial(s, ClassicLighting.Wrap(m));
             }
         }
     }
@@ -210,13 +212,24 @@ public static class ModelTexturing
     // DAoC's extra texture layers, as Godot's material detail layer (its own UV set, multiplied):
     // the dark map (mostly baked shading; the moss and rock of Domnann's standing stones), else the
     // detail map. Vertex colours, where the model says to use them, tint the base colour.
+    // The retail client multiplies a dark map plainly (MODULATE) but a detail map twice over (MODULATE2X: colour =
+    // lit x base x detail x 2, alpha likewise; daoc-re RE/100), so a neutral detail map is mid grey (elm1's elmdetail
+    // averages 126): multiplied once it halved every detail-mapped model (the trees were near black). Godot's detail
+    // layer multiplies once, so the material colour doubles, alpha too (a cut-out leaf keeps half the alpha it needs).
+
+    /// <summary>A detail-mapped material's colour, doubled as retail's MODULATE2X stage does.</summary>
+    private static Color Detail2X(Color c) => new(c.R * 2, c.G * 2, c.B * 2, c.A * 2);
+
+    private static bool HasDetailMap(Godot.Collections.Dictionary? layers) =>
+        layers is not null && layers.ContainsKey("detail") && !layers.ContainsKey("dark");
     private static void ApplyLayers(BaseMaterial3D copy, Material original, System.Collections.Generic.List<string> dirs,
         System.Collections.Generic.Dictionary<string, ImageTexture?> cache)
     {
         if (!original.HasMeta(LayersMeta))
             return;
         Godot.Collections.Dictionary layers = original.GetMeta(LayersMeta).AsGodotDictionary();
-        string? layer = layers.TryGetValue("dark", out Variant d) ? d.AsString()
+        bool dark = layers.TryGetValue("dark", out Variant d);
+        string? layer = dark ? d.AsString()
             : layers.TryGetValue("detail", out Variant t) ? t.AsString() : null;
         if (layer is not null && LoadTexture(dirs, layer, cache) is { } tex)
         {
@@ -224,6 +237,8 @@ public static class ModelTexturing
             copy.DetailAlbedo = tex;
             copy.DetailUVLayer = BaseMaterial3D.DetailUV.UV2;
             copy.DetailBlendMode = BaseMaterial3D.BlendModeEnum.Mul;
+            if (!dark)
+                copy.AlbedoColor = Detail2X(copy.AlbedoColor);
         }
         // A decal (a figure's face over its hair skin): mixed over the base by the decal's own alpha.
         else if (layers.TryGetValue("decal", out Variant dc) && LoadTexture(dirs, dc.AsString(), cache) is { } decal)
@@ -327,7 +342,7 @@ public static class ModelTexturing
                 continue;
             for (int s = 0; s < mesh.GetSurfaceCount(); s++)
             {
-                if (mi.GetActiveMaterial(s) is not BaseMaterial3D material || !material.HasMeta(LayersMeta)
+                if (ClassicLighting.Source(mi.GetActiveMaterial(s)) is not BaseMaterial3D material || !material.HasMeta(LayersMeta)
                     || !material.GetMeta(LayersMeta).AsGodotDictionary().TryGetValue("keepMaterial", out Variant name)
                     || pick(name.AsString()) is not var (baseName, dark, glow, overlay)
                     || baseName is null || LoadTexture(dirs, baseName, KeepTextureCache) is not { } tex)
@@ -360,7 +375,7 @@ public static class ModelTexturing
                 copy.EmissionEnergyMultiplier = 1f;
                 copy.EmissionTexture = tex;
                 copy.EmissionOperator = BaseMaterial3D.EmissionOperatorEnum.Multiply;
-                mi.SetSurfaceOverrideMaterial(s, copy);
+                mi.SetSurfaceOverrideMaterial(s, ClassicLighting.Wrap(copy));
                 done++;
             }
         }

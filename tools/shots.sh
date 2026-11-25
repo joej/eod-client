@@ -24,11 +24,12 @@ OUT="$PRIV/progress/shots/$LABEL"
 GODOT=${GODOT:-$(command -v godot-mono || command -v godot4-mono || command -v godot)}
 # Always build the client first (incremental): shots of stale code show nothing about the change.
 dotnet build "$REPO/godot/EodClient.csproj" -v q --nologo >/dev/null
+# SHOTS_ARGS="--time 21:00" passes extra client options (e.g. the game hour, to match a retail shot).
 # The world opens at the first pose's position (the zone and terrain around it load from there).
 read -r _ x y z _ < <(grep -v '^\s*#' "$POSES" | grep -v '^\s*$' | head -1)
 cd "$REPO"
 # "# keeps: FILE" in the poses file replays a keep packet file (`mpk keeps`): keeps the server would send.
 KEEPS=$(sed -n 's/^#[[:space:]]*keeps:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$POSES" | head -1)
 "$GODOT" --path godot -- --offline "$x" "$y" "$z" "$REGION" --zone "$Z/zone.csv" --library "$PRIV/library" \
-    --terrain "$Z/terrain.glb" ${KEEPS:+--keeps "$REPO/$KEEPS"} --shots "$POSES" --shots-out "$OUT" 2>&1 | grep -E '^\[shots\]|^\[keeps\]|ERROR' | grep -vE 'leaked at exit|Pages in use|never freed' || true
+    --terrain "$Z/terrain.glb" ${KEEPS:+--keeps "$REPO/$KEEPS"} --shots "$POSES" --shots-out "$OUT" ${SHOTS_ARGS:-} 2>&1 | grep -E '^\[shots\]|^\[keeps\]|ERROR' | grep -vE 'leaked at exit|Pages in use|never freed' || true
 echo "shots -> $OUT"

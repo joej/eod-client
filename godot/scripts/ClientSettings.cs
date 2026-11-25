@@ -294,6 +294,16 @@ public static class ClientSettings
         set => Save("classic_terrain", value);
     }
 
+    /// <summary>
+    /// Modern lighting: Godot's own (per-pixel, sun shadows) instead of Classic, the retail client's (per vertex, in display
+    /// space, no cast shadows; ClassicLighting). Off by default: classic first.
+    /// </summary>
+    public static bool ModernLighting
+    {
+        get => Load().GetValue("graphics", "modern_lighting", false).AsBool();
+        set => Save("modern_lighting", value);
+    }
+
     /// <summary>Where a game window was last dragged (its top-left, in skin pixels), or null: its default.</summary>
     public static Vector2? WindowPosition(string window)
     {

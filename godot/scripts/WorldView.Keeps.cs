@@ -240,6 +240,7 @@ public partial class WorldView
         foreach (MeshInstance3D mi in node.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>().ToList())
         {
             Material? m = mi.Mesh?.GetSurfaceCount() > 0 ? mi.GetActiveMaterial(0) : null;
+            m = ClassicLighting.Source(m) ?? m;
             string? branches = m is not null && m.HasMeta(ModelTexturing.LayersMeta)
                 && m.GetMeta(ModelTexturing.LayersMeta).AsGodotDictionary().TryGetValue("branches", out Variant b) ? b.AsString() : null;
             // A wall-climb volume ("sclimb") is solid only while the server marks the piece climbable (daoc-re's climbing note).

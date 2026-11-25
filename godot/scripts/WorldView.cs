@@ -328,6 +328,7 @@ public partial class WorldView : Node3D
     {
         PositionAndObjectId p = _world.Position;
         Vector3 at = ToGodot(p.X, p.Y, p.Z);
+        StartLighting();
 
         // Added first: its _Ready turns on wireframe generation, which must precede mesh loading.
         _dev = new DevOverlay();
@@ -345,7 +346,7 @@ public partial class WorldView : Node3D
         _sun = new DirectionalLight3D
         {
             RotationDegrees = new Vector3(-50, 30, 0),
-            ShadowEnabled = ClientSettings.SunShadows,
+            ShadowEnabled = ClientSettings.SunShadows && !ClassicLighting.On,
             // Shadows out to 250 m in four cascades: crisp near the player, cheap beyond.
             DirectionalShadowMaxDistance = 250f,
             DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
@@ -550,7 +551,7 @@ public partial class WorldView : Node3D
         _dev.AddToggle("Sun shadows", ClientSettings.SunShadows, on =>
         {
             ClientSettings.SunShadows = on;
-            _sun.ShadowEnabled = on && !_inDungeon;
+            _sun.ShadowEnabled = SunShadowsOn;
         });
         _dev.AddToggle("Terrain", true, on =>
         {
@@ -947,6 +948,7 @@ public partial class WorldView : Node3D
     public override void _ExitTree()
     {
         ClientSettings.Changed -= OnSettingsChanged;
+        StopLighting();
         // A zone still being built isn't in the tree, so nothing else frees it.
         if (_building is var (unfinished, _, _))
         {
@@ -1064,6 +1066,7 @@ public partial class WorldView : Node3D
 
     public override void _Process(double delta)
     {
+        UpdateLighting();
         UpdateHud();
         UpdateQuickbars();
         UpdateCompass();

@@ -23,6 +23,17 @@ public partial class WorldView
     //   --shot SECONDS             save a screenshot (as P does) after that many seconds in the world
     //   --view LABEL               view distance for this run (classic, x1.5, x2, x4), not saved
     private double _shotAt = -1;
+
+    // Every pose shot: retail's field of view. A pose whose camera stands on the character (a first-person shot matched with retail's, which hides your own body)
+    // doesn't show the character: offline, its stand-in capsule (a bright blue back stripe) filled the frame.
+    private void HideBodyAtCamera()
+    {
+        Vector3 d = _camera.GlobalPosition - _body.GlobalPosition;
+        d.Y = 0;
+        _body.Visible = d.Length() > 3f;
+        // Pose shots use retail's fixed field of view, whatever the player's setting, so they compare with retail's.
+        _camera.Fov = ClientSettings.RetailFieldOfView;
+    }
     private int _viewSetting;
 
     // --view LABEL: a view distance for this run only (the saved setting is untouched).
@@ -50,6 +61,7 @@ public partial class WorldView
             // Godot yaw 0 looks along -Z (north, since DAoC y runs south); DAoC-style yaw turns clockwise.
             _camYaw = -Mathf.DegToRad(c[3]);
             _camPitch = Mathf.DegToRad(c[4]);
+            HideBodyAtCamera();
         }
         // --keeps FILE: replay a keep packet file (`mpk keeps`) as if the server had sent it.
         int keepsArg = System.Array.IndexOf(args, "--keeps");
@@ -187,6 +199,16 @@ public partial class WorldView
                 (_gameTime, _gameTimeAt, _timeForced, _skyTimeAt) =
                     (new DaocProtocol.Packets.GameTime((uint)((hour * 60 + minutes) * 60_000), 24), _seconds, true, -1);
             }
+        }
+        // --light AMBIENT SUN [noshadow]: the two light strengths ApplySkyTime uses (to fit retail shots), and sun shadows off.
+        int lightAt = System.Array.IndexOf(args, "--light");
+        if (lightAt >= 0 && lightAt + 2 < args.Length && float.TryParse(args[lightAt + 1], System.Globalization.CultureInfo.InvariantCulture, out float la)
+            && float.TryParse(args[lightAt + 2], System.Globalization.CultureInfo.InvariantCulture, out float ls))
+        {
+            (_ambientEnergy, _sunEnergy) = (la, ls);
+            if (lightAt + 3 < args.Length && args[lightAt + 3] == "noshadow")
+                _sun.ShadowEnabled = false;
+            ApplySkyTime();
         }
         // --torch lights the character's torch on entering (to check its look).
         if (System.Array.IndexOf(args, "--torch") >= 0)
@@ -407,6 +429,19 @@ public partial class WorldView
                 GetTree().CreateTimer(walkAt).Timeout += () =>
                     (_walkPoint, _walkUntil, _shotOnArrival) = (ToGodot(wx, wy, 0), _seconds + 300, shot);
         }
+        // --inspect-at X Y [--inspect-time S, default 8] (repeatable): the inspect readout for that screen point (in pixels of
+        // the window), logged, as a left click on it shows it: which model, mesh and material a shot shows there.
+        int it = System.Array.IndexOf(args, "--inspect-time");
+        double inspectAt = it >= 0 && it + 1 < args.Length && double.TryParse(args[it + 1], System.Globalization.CultureInfo.InvariantCulture, out double iT) ? iT : 8;
+        for (int ii = System.Array.IndexOf(args, "--inspect-at"); ii >= 0 && ii + 2 < args.Length;
+             ii = System.Array.IndexOf(args, "--inspect-at", ii + 1))
+            if (float.TryParse(args[ii + 1], System.Globalization.CultureInfo.InvariantCulture, out float ix)
+                && float.TryParse(args[ii + 2], System.Globalization.CultureInfo.InvariantCulture, out float iy))
+                GetTree().CreateTimer(inspectAt).Timeout += () =>
+                {
+                    Inspect(new Vector2(ix, iy));
+                    GD.Print($"[inspect] at {ix:0},{iy:0}: {_dev.InspectText.Replace("\n", " | ")}");
+                };
         // --drop-item SLOT [--drop-at SECONDS, default 4]: drop that inventory item on the ground, as dragging it out over
         // the world does (with its question; --accept-dialogs answers it).
         int di = System.Array.IndexOf(args, "--drop-item");
@@ -494,6 +529,7 @@ public partial class WorldView
             _camera.GlobalPosition = ToGodot(c[0], c[1], c[2]);
             _camYaw = -Mathf.DegToRad(c[3]);
             _camPitch = Mathf.DegToRad(c[4]);
+            HideBodyAtCamera();
             _nextStatus = 0;   // the shot's status text is the pose's, not up to 0.25 s old
             await WaitForZones();   // the zones around the pose, streamed in
             for (int k = 0; k < 4; k++)

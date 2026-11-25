@@ -141,6 +141,8 @@ public partial class DevOverlay : CanvasLayer
         return l;
     }
 
+    public string InspectText => _inspect.Text;
+
     public void SetInspect(string text, bool found)
     {
         _inspect.Text = text;

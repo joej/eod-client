@@ -126,6 +126,17 @@ public partial class SettingsDialog : AcceptDialog
         classic.Toggled += on => ClientSettings.ClassicTerrain = on;
         grid.AddChild(classic);
 
+        // Classic lighting (retail's, per vertex, no cast shadows) or Godot's own. The world is lit when it's built, so it
+        // applies from the next world entered (or zone change).
+        grid.AddChild(new Label { Text = "Lighting" });
+        var modern = new CheckBox
+        {
+            Text = "Modern lighting", ButtonPressed = ClientSettings.ModernLighting, FocusMode = Control.FocusModeEnum.None,
+            TooltipText = "Off: the retail client's lighting (per vertex, no cast shadows). On: Godot's lighting with sun shadows. Applies to the next world entered.",
+        };
+        modern.Toggled += on => ClientSettings.ModernLighting = on;
+        grid.AddChild(modern);
+
         // Retail's ui_scale (1.0–4.0): every game window and its text together. Auto is retail's default, 1.0 (times a Retina display's density).
         grid.AddChild(new Label { Text = "Interface size" });
         var uiRow = new HBoxContainer();

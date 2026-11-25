@@ -325,7 +325,7 @@ public partial class WorldView
     private static bool CutOut(GodotObject collider) =>
         collider is Node n && n.GetParent() is MeshInstance3D mi
         && Enumerable.Range(0, mi.GetSurfaceOverrideMaterialCount()).Any(i =>
-            (mi.GetActiveMaterial(i) as BaseMaterial3D)?.Transparency is BaseMaterial3D.TransparencyEnum.AlphaScissor
+            ClassicLighting.Source(mi.GetActiveMaterial(i))?.Transparency is BaseMaterial3D.TransparencyEnum.AlphaScissor
                 or BaseMaterial3D.TransparencyEnum.Alpha);
 
     // Retail's ceiling check (daoc-re's player-collision note): straight up from 64 units above where the step started,

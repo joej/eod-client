@@ -122,7 +122,7 @@ public static class FigureLook
             if (tex is not null)
                 mat.AlbedoTexture = tex;
             Tinted(mat, colour);
-            mi.MaterialOverride = mat;
+            mi.MaterialOverride = ClassicLighting.Wrap(mat);
         }
         return " wearing " + string.Join(" ", chosen.Where(kv => kv.Value > 0)
             .Select(kv => $"{kv.Key} {kv.Value}{(textures.TryGetValue(kv.Key, out string? t) ? $"={t}" : "")}" +
@@ -222,12 +222,12 @@ public static class FigureLook
                     Texture2D? surface = swap ?? (ModelTexturing.Layer(imported, "detail") is { } detail ? ModelTexturing.Load(detail, dirs) : null);
                     mmi.MaterialOverride = ItemPaint.Material(coloursPath, surface, item.Emblem, itemLayout: true, dye, dirs);
                 }
-                else if ((swap is not null || dye != Colors.White) && mmi.GetActiveMaterial(0)?.Duplicate() is BaseMaterial3D mat)
+                else if ((swap is not null || dye != Colors.White) && ClassicLighting.Source(mmi.GetActiveMaterial(0))?.Duplicate() is BaseMaterial3D mat)
                 {
                     if (swap is not null)
                         mat.AlbedoTexture = swap;
                     mat.AlbedoColor *= dye;
-                    mmi.MaterialOverride = mat;
+                    mmi.MaterialOverride = ClassicLighting.Wrap(mat);
                 }
             }
             model.Transform = new Transform3D(new Basis(new Vector3(F(0), F(1), F(2)), new Vector3(F(3), F(4), F(5)), new Vector3(F(6), F(7), F(8))),
@@ -349,7 +349,7 @@ public static class FigureLook
             string name = mi.Name.ToString();
             if (Part(name, "head"))
             {
-                if (mi.GetActiveMaterial(0)?.Duplicate() is not BaseMaterial3D m)
+                if (ClassicLighting.Source(mi.GetActiveMaterial(0))?.Duplicate() is not BaseMaterial3D m)
                     continue;
                 if (face is not null) m.AlbedoTexture = face;
                 if (eyes is not null)
@@ -361,7 +361,7 @@ public static class FigureLook
                 }
                 if (skin is { } tint)
                     Tinted(m, tint);
-                mi.MaterialOverride = m;
+                mi.MaterialOverride = ClassicLighting.Wrap(m);
                 int shapes = mi.GetBlendShapeCount();
                 foreach ((int morph, float weight) in DaocAssets.Figures.CatacombsFigure.MorphWeights(sliders))
                     if (morph < shapes)
@@ -371,11 +371,11 @@ public static class FigureLook
             {
                 string styleNode = name.Split('_')[0];
                 mi.Visible = styleNode == node;
-                if (mi.Visible && colour is { } c && mi.GetActiveMaterial(0)?.Duplicate() is BaseMaterial3D m)
+                if (mi.Visible && colour is { } c && ClassicLighting.Source(mi.GetActiveMaterial(0))?.Duplicate() is BaseMaterial3D m)
                 {
                     if (Tex(c.GetProperty("tex")) is { } t) m.AlbedoTexture = t;
                     Tinted(m, Rgb(c.GetProperty("tint")));
-                    mi.MaterialOverride = m;
+                    mi.MaterialOverride = ClassicLighting.Wrap(m);
                 }
             }
         }

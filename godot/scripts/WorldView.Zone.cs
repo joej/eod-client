@@ -166,15 +166,17 @@ public partial class WorldView
                 // Both sides: a camera that dips under a slope still sees ground (the exported
                 // triangles face up, with normals from the heightmap, since 2026-11-03). Green only
                 // where no tile was applied.
-                if (mi.GetSurfaceOverrideMaterial(s) is ShaderMaterial)
+                Material? over = mi.GetSurfaceOverrideMaterial(s);
+                if (over is ShaderMaterial && ClassicLighting.Source(over) is null)
                     continue;   // an Atlantis patch
-                if (mi.GetSurfaceOverrideMaterial(s) is BaseMaterial3D tile)
+                if (ClassicLighting.Source(over) is BaseMaterial3D tile)
                 {
                     tile.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
                     // Each tile's UVs run exactly 0..1, edge to edge. With the default repeat, filtering
                     // and mipmaps at a tile's edge blend in the texture's OPPOSITE edge: thin lines
                     // along every tile border, clearest at low angles (W21). Clamp instead.
                     tile.TextureRepeat = false;
+                    mi.SetSurfaceOverrideMaterial(s, ClassicLighting.Rewrap(tile));
                 }
                 else
                     mi.SetSurfaceOverrideMaterial(s, green);
@@ -430,7 +432,7 @@ public partial class WorldView
             _environment.BackgroundMode = Godot.Environment.BGMode.Sky;
             _environment.Sky = new Sky { SkyMaterial = mat };
         }
-        _sun.ShadowEnabled = ClientSettings.SunShadows && !_inDungeon;
+        _sun.ShadowEnabled = SunShadowsOn;
         _environment.AmbientLightSource = Godot.Environment.AmbientSource.Color;
         ApplySkyTime();
 
@@ -450,6 +452,7 @@ public partial class WorldView
     private bool _inDungeon;   // the zone's sky.csv says "kind,dungeon": no sky, black fog
     private string _skyCondition = "clear";
     private float _skyEcliptic;   // degrees: how far the sun's path leans from overhead
+    private float _ambientEnergy = 1.15f, _sunEnergy = 1.85f;   // the fit below; --light overrides them (WorldView.Shots)
 
     private Color SkyColour(string key) => _skyValues is not null && _skyValues.TryGetValue(key, out string? v) && Floats(v) is { Length: >= 3 } f
         ? new Color(f[0], f[1], f[2], f.Length > 3 ? f[3] : 1f) : Colors.White;
@@ -485,9 +488,9 @@ public partial class WorldView
         Color ambient = Col("ambient"), sun = Col("sun");
         float ambientAmount = Num("ambient_amount", 0.5f), sunAmount = Num("sun_amount", 0.6f);
         _environment.AmbientLightColor = new Color(ambient.R * ambientAmount, ambient.G * ambientAmount, ambient.B * ambientAmount);
-        _environment.AmbientLightEnergy = 1.15f;
+        _environment.AmbientLightEnergy = _ambientEnergy;
         _sun.LightColor = new Color(sun.R * sunAmount, sun.G * sunAmount, sun.B * sunAmount);
-        _sun.LightEnergy = 1.85f;
+        _sun.LightEnergy = _sunEnergy;
         _environment.FogLightColor = _inDungeon ? Colors.Black : Col("fog");
         if (now is uint time)
         {
@@ -501,6 +504,10 @@ public partial class WorldView
             _skyMaterial.SetShaderParameter("sun_dir", new Vector3(de, du, ds));
             _skyMaterial.SetShaderParameter("sun_up", DaocAssets.Zone.SkyCycle.SunUp(time));
         }
+        // Classic lighting takes the same colours in display space, summed per vertex as retail does: the light shines
+        // along the sun's -Z, so +Z points toward it.
+        PushClassicLight(new Color(ambient.R * ambientAmount, ambient.G * ambientAmount, ambient.B * ambientAmount),
+            new Color(sun.R * sunAmount, sun.G * sunAmount, sun.B * sunAmount), _sun.Basis.Z);
     }
     // View distance: the zone's own (classic) times the player's setting. The camera's far plane and the
     // fog scale together, keeping the zone's fogged share, so a longer view still fades out the way the

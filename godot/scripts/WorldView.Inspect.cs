@@ -135,7 +135,7 @@ public partial class WorldView
     private static string DescribeSurface(MeshInstance3D mi, int s)
     {
         bool uv = mi.Mesh is ArrayMesh am && (am.SurfaceGetFormat(s) & Mesh.ArrayFormat.FormatTexUV) != 0;
-        if (mi.GetActiveMaterial(s) is not BaseMaterial3D m)
+        if (ClassicLighting.Source(mi.GetActiveMaterial(s)) is not BaseMaterial3D m)
             return $"s{s}  (no material)  {(uv ? "uv" : "NO UV")}";
         string name = string.IsNullOrEmpty(m.ResourceName) ? "(unnamed)" : m.ResourceName;
         string tex = m.AlbedoTexture is null ? "NO TEXTURE" : "textured";

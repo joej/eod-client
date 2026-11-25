@@ -62,8 +62,11 @@ public partial class WorldView
     {
         if (_compassWindow is null || _compass is null)
             return;
-        // Our heading 0 faces south (DAoC's +Y) and turns through west: the bearing from north is 180° on.
-        _compass.Bearing = CompassBearing(HeadingFromYaw(_bodyYaw));
+        // Our heading 0 faces south (DAoC's +Y) and turns through west: the bearing from north is 180° on. In the dev
+        // free camera, the camera's own bearing (its yaw turns clockwise from north, negated), so a pose shot reads as
+        // the retail shot it is matched with.
+        _compass.Bearing = _chase ? CompassBearing(HeadingFromYaw(_bodyYaw))
+            : ((-Mathf.RadToDeg(_camYaw)) % 360f + 360f) % 360f;
     }
 
     /// <summary>Degrees clockwise from north (0 N, 90 E) for a DAoC heading (0 south, 1024 west).</summary>
