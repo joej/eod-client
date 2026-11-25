@@ -35,26 +35,22 @@ public sealed class SkyCycleTests
         Assert.True(set.East < -0.95f && MathF.Abs(set.Up) < 0.01f);
         Assert.Equal(0f, noon.East, 0.01f);
         Assert.Equal(75f, MathF.Asin(noon.Up) * 180 / MathF.PI, 0.1f);   // 90 - ecliptic
-        Assert.True(noon.South > 0);
+        Assert.True(noon.South < 0);   // leaning north (toward -y)
         Assert.True(SkyCycle.Disk(At(0), 15).Up < -0.9f);   // under the ground at midnight
         Assert.True(SkyCycle.SunUp(At(12)) && !SkyCycle.SunUp(At(18)) && !SkyCycle.SunUp(At(3)));
     }
 
+    // Retail 1.130's sun light, measured at five game times (daoc-re RE/79 §2): toward the sun = (0.830, -0.253, 0.497)
+    // (east, zone y, up) at 8:07, and 7° below the horizon at 5:32, still moving.
     [Theory]
-    [InlineData(6, 45)]
-    [InlineData(9, 67.5)]
-    [InlineData(12, 90)]
-    [InlineData(15, 112.5)]
-    [InlineData(17.99, 134.9)]
-    [InlineData(18, 135)]
-    [InlineData(23.9, 135)]
-    [InlineData(0, 45)]
-    [InlineData(5.9, 45)]
-    public void TheSunlightNeverDropsBelowFortyFiveDegreesAndHoldsAtNight(float hour, float angle)
+    [InlineData(8, 7, 0.830f, -0.253f, 0.497f)]
+    [InlineData(7, 19, 0.914f, -0.251f, 0.319f)]
+    [InlineData(5, 32, 0.961f, -0.251f, -0.114f)]
+    public void TheSunlightFollowsTheDiskAsRetailsLightDoes(int hour, int minute, float east, float south, float up)
     {
-        Assert.Equal(angle, SkyCycle.LightAngle(At(hour)), 0.1f);
-        var light = SkyCycle.Light(At(hour), 0);
-        Assert.Equal(MathF.Sin(angle * MathF.PI / 180), light.Up, 0.01f);
-        Assert.True(light.Up >= MathF.Sin(MathF.PI / 4) - 0.01f);
+        var light = SkyCycle.Light((uint)((hour * 60 + minute) * 60_000), 15);
+        Assert.Equal(east, light.East, 0.005f);
+        Assert.Equal(south, light.South, 0.005f);
+        Assert.Equal(up, light.Up, 0.005f);
     }
 }

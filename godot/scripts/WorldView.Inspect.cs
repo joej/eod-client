@@ -93,7 +93,12 @@ public partial class WorldView
             sb.AppendLine("model   terrain");
         }
         sb.AppendLine($"hit     x {hx:0} y {hy:0} z {hz:0}" + (face >= 0 ? $"  face {face}" : ""));
-        sb.AppendLine(ShadowCaster(hit["position"].AsVector3()));
+        // Which way the surface faces: the collision face's, and the drawn mesh's own normal at the nearest vertex (what
+        // lighting uses; they disagree when a mesh's normals point inward).
+        Vector3 at = hit["position"].AsVector3();
+        sb.AppendLine($"normal  face {Facing(hit["normal"].AsVector3())}" + (mesh is not null && NearestVertexNormal(mesh, at) is Vector3 vn
+            ? $", mesh {Facing(vn)}" : ""));
+        sb.AppendLine(ShadowCaster(at));
 
         if (mesh is null || mesh.Mesh is null)
         {
@@ -141,5 +146,37 @@ public partial class WorldView
         string tex = m.AlbedoTexture is null ? "NO TEXTURE" : "textured";
         string alpha = m.Transparency == BaseMaterial3D.TransparencyEnum.Disabled ? "" : $"  {m.Transparency}".ToLowerInvariant();
         return $"s{s}  {name}  {tex}  {(uv ? "uv" : "NO UV")}  #{m.AlbedoColor.ToHtml(false)}{alpha}";
+    }
+
+    // A world normal as DAoC directions: east (+X), south (+Z, DAoC's y) and up, and the nearest compass point.
+    private static string Facing(Vector3 n)
+    {
+        n = n.Normalized();
+        string[] points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+        string compass = Mathf.Abs(n.Y) > 0.9f ? (n.Y > 0 ? "up" : "down")
+            : points[(int)Mathf.PosMod(Mathf.Round(Mathf.RadToDeg(Mathf.Atan2(n.X, -n.Z)) / 45f), 8)];
+        return $"{compass} (east {n.X:0.00}, south {n.Z:0.00}, up {n.Y:0.00})";
+    }
+
+    // The drawn mesh's normal at the vertex nearest a world point (world space), or null.
+    private static Vector3? NearestVertexNormal(MeshInstance3D mi, Vector3 world)
+    {
+        if (mi.Mesh is not ArrayMesh am)
+            return null;
+        Vector3 local = mi.GlobalTransform.AffineInverse() * world;
+        (float d, Vector3 n)? best = null;
+        for (int s = 0; s < am.GetSurfaceCount(); s++)
+        {
+            Godot.Collections.Array arrays = am.SurfaceGetArrays(s);
+            if (arrays[(int)Mesh.ArrayType.Vertex].Obj is not Vector3[] verts || arrays[(int)Mesh.ArrayType.Normal].Obj is not Vector3[] normals)
+                continue;
+            for (int v = 0; v < verts.Length && v < normals.Length; v++)
+            {
+                float d = verts[v].DistanceSquaredTo(local);
+                if (best is null || d < best.Value.d)
+                    best = (d, normals[v]);
+            }
+        }
+        return best is { } b ? (mi.GlobalTransform.Basis * b.n).Normalized() : null;
     }
 }

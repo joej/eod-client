@@ -494,9 +494,9 @@ public partial class WorldView
         _environment.FogLightColor = _inDungeon ? Colors.Black : Col("fog");
         if (now is uint time)
         {
-            // East = +X, up = +Y, south = +Z (DAoC's y). The light, retail's, never lower than 45 degrees and still at night
-            // (the night's light colour comes from the same lights section); the disk on its own path, drawn while up.
-            // The light shines along its -Z, away from where it comes from.
+            // East = +X, up = +Y, south = +Z (DAoC's y). The light comes from the sun disk, as retail's does (RE/79 §2),
+            // and keeps moving below the horizon at night (the night's light colour comes from the same lights section);
+            // the disk is drawn while up. The light shines along its -Z, away from where it comes from.
             var (east, up, south) = DaocAssets.Zone.SkyCycle.Light(time, _skyEcliptic);
             var toward = new Vector3(east, up, south);
             _sun.Basis = Basis.LookingAt(-toward, Mathf.Abs(toward.Y) > 0.99f ? Vector3.Forward : Vector3.Up);

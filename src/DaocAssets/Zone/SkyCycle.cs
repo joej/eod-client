@@ -4,8 +4,10 @@
 // between them by the time of day, linearly over 22.5 degrees of sun angle (daoc-re RE/73, RE/79):
 //   night until 4:30; night → dawn to 6:00; dawn → day to 7:30; day until 16:30; day → dusk to 18:00;
 //   dusk → night to 19:30; night.
-// The sun disk and the sun's light take different paths (RE/79): the disk rises due east at 6:00 and sets due west at
-// 18:00 on the sky file's tilted path; the light never drops below 45 degrees and holds still at night.
+// The sun's light comes from the sun disk itself (daoc-re RE/79 §2, corrected 2026-11-25 from retail 1.130's lights):
+// it rises due east at 6:00 and sets due west at 18:00 on the sky file's tilted path, 15 degrees an hour, leaning toward
+// -y (north), and keeps going below the horizon at night. (RE/79 first read a light that never dropped below 45 degrees
+// and held still at night; the client's lights show otherwise.)
 
 namespace DaocAssets.Zone;
 
@@ -42,36 +44,24 @@ public static class SkyCycle
 
     /// <summary>
     /// The direction toward the sun disk (east, up, south; unit length) on the sky file's tilted path (RE/79): x = cos θ,
-    /// sideways sin(ecliptic), up cos(ecliptic) sin θ, then normalised (the path as given isn't a unit circle). At noon it
-    /// stands 90 - ecliptic degrees up, leaning south (inferred: which side the lean takes isn't confirmed).
+    /// y = -sin(ecliptic), up cos(ecliptic) sin θ, then normalised (the path as given isn't a unit circle). At noon it
+    /// stands 90 - ecliptic degrees up, leaning north (toward -y; measured on retail 1.130, RE/79 §2), so a south-facing
+    /// wall never gets direct sun.
     /// </summary>
     public static (float East, float Up, float South) Disk(uint millisOfDay, float eclipticDegrees) =>
         OnPath(SunAngle(millisOfDay), eclipticDegrees);
 
     /// <summary>
-    /// The angle of the sun's directional light, degrees from the eastern horizon over the top (RE/79): by day
-    /// 90 - (90 - θ) / 2, so 45 at 6:00, 90 at noon, 135 at 18:00 and never below 45 degrees up; at night held at 135 until
-    /// midnight, then at 45 until dawn.
-    /// </summary>
-    public static float LightAngle(uint millisOfDay)
-    {
-        float theta = SunAngle(millisOfDay);
-        if (theta < 180)
-            return 90 - (90 - theta) / 2;
-        return theta < 270 ? 135 : 45;   // 18:00-24:00, then 0:00-6:00
-    }
-
-    /// <summary>
-    /// The direction toward the sun's light (east, up, south; unit length): <see cref="LightAngle"/> on the same tilted
-    /// path as the disk (inferred: the note gives the angle, not the plane).
+    /// The direction toward the sun's light (east, up, south; unit length): the disk's own (RE/79 §2: the client's light
+    /// matched this to three decimals at five game times), below the horizon at night too.
     /// </summary>
     public static (float East, float Up, float South) Light(uint millisOfDay, float eclipticDegrees) =>
-        OnPath(LightAngle(millisOfDay), eclipticDegrees);
+        Disk(millisOfDay, eclipticDegrees);
 
     private static (float East, float Up, float South) OnPath(float angleDegrees, float eclipticDegrees)
     {
         float t = angleDegrees * MathF.PI / 180, e = eclipticDegrees * MathF.PI / 180;
-        float east = MathF.Cos(t), south = MathF.Sin(e), up = MathF.Cos(e) * MathF.Sin(t);
+        float east = MathF.Cos(t), south = -MathF.Sin(e), up = MathF.Cos(e) * MathF.Sin(t);
         float n = MathF.Sqrt(east * east + south * south + up * up);
         return (east / n, up / n, south / n);
     }
