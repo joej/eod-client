@@ -83,9 +83,9 @@ public static class ModelTexturing
                 // Sharp at shallow angles (the ground under a chase camera) rather than blurred.
                 copy.TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic;
                 // Cut-out foliage: with MSAA, alpha to coverage smooths the leaves' cut edges instead
-                // of leaving them stair-stepped and shimmering.
+                // of leaving them stair-stepped and shimmering (not with the Manuscript look: ManuscriptLook.SetCutOutEdges).
                 if (copy.Transparency == BaseMaterial3D.TransparencyEnum.AlphaScissor)
-                    copy.AlphaAntialiasingMode = BaseMaterial3D.AlphaAntiAliasing.AlphaToCoverage;
+                    ManuscriptLook.SetCutOutEdges(copy, fresh: true);
                 ApplyLayers(copy, material, dirs, cache);
                 // An additive surface (the exporter's "additive" mark: the NIF blends onto ONE/DESTALPHA) adds its
                 // light to what is behind it, unlit, as glows and effects do (the teleporter's ground ring).

@@ -304,6 +304,16 @@ public static class ClientSettings
         set => Save("modern_lighting", value);
     }
 
+    /// <summary>
+    /// The Manuscript look: the world repainted as an illuminated manuscript (pigments, ink outlines, vellum;
+    /// WorldView.Manuscript). Off by default: the classic look.
+    /// </summary>
+    public static bool ManuscriptLook
+    {
+        get => Load().GetValue("graphics", "manuscript_look", false).AsBool();
+        set => Save("manuscript_look", value);
+    }
+
     /// <summary>Where a game window was last dragged (its top-left, in skin pixels), or null: its default.</summary>
     public static Vector2? WindowPosition(string window)
     {

@@ -137,6 +137,20 @@ public partial class SettingsDialog : AcceptDialog
         modern.Toggled += on => ClientSettings.ModernLighting = on;
         grid.AddChild(modern);
 
+        // The Manuscript look (pigments, ink outlines, vellum over the world); applies at once.
+        grid.AddChild(new Label { Text = "Look" });
+        var manuscript = new CheckBox
+        {
+            Text = "Manuscript", ButtonPressed = ClientSettings.ManuscriptLook, FocusMode = Control.FocusModeEnum.None,
+            TooltipText = "The world painted as an illuminated manuscript: pigment colours, ink outlines, vellum. Names, water, effects and the interface stay as they are.",
+        };
+        manuscript.Toggled += on =>
+        {
+            ClientSettings.ManuscriptLook = on;
+            ClientSettings.NotifyChanged(display: false);
+        };
+        grid.AddChild(manuscript);
+
         // Retail's ui_scale (1.0–4.0): every game window and its text together. Auto is retail's default, 1.0 (times a Retina display's density).
         grid.AddChild(new Label { Text = "Interface size" });
         var uiRow = new HBoxContainer();

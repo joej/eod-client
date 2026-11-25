@@ -91,7 +91,14 @@ public static class ClassicLighting
             BaseMaterial3D.TransparencyEnum.AlphaScissor or BaseMaterial3D.TransparencyEnum.AlphaHash => "scissor",
             _ => "opaque",
         };
-        bool coverage = alpha == "scissor" && b.AlphaAntialiasingMode != BaseMaterial3D.AlphaAntiAliasing.Off;
+        // Alpha to coverage takes its render mode as well as the edge, as Godot's own material writes it. Either way Godot
+        // draws such a cut-out in the transparent pass, after a screen read of the opaque scene (ManuscriptLook.SetCutOutEdges).
+        string coverage = alpha != "scissor" ? "" : b.AlphaAntialiasingMode switch
+        {
+            BaseMaterial3D.AlphaAntiAliasing.AlphaToCoverage => "alpha_to_coverage",
+            BaseMaterial3D.AlphaAntiAliasing.AlphaToCoverageAndToOne => "alpha_to_coverage_and_one",
+            _ => "",
+        };
         string filter = b.TextureFilter switch
         {
             BaseMaterial3D.TextureFilterEnum.Nearest => "filter_nearest",
@@ -143,6 +150,7 @@ public static class ClassicLighting
             : b.EmissionOperator == BaseMaterial3D.EmissionOperatorEnum.Multiply ? 1 : 2);
         if (glow && b.EmissionTexture is { } glowTex)
             m.SetShaderParameter("emission_tex", glowTex);
+        m.SetShaderParameter("classic_leaf", ManuscriptLook.Leaf(b.ResourceName));
         m.SetShaderParameter("scissor", b.AlphaScissorThreshold);
         m.SetShaderParameter("coverage_edge", b.AlphaAntialiasingEdge);
         m.RenderPriority = b.RenderPriority;
@@ -151,7 +159,7 @@ public static class ClassicLighting
 
     // What StandardMaterial3D draws for the features our materials use (Godot's generated shader, rewritten), lit the
     // classic way.
-    private static string Code(string cull, string alpha, bool coverage, string filter, string repeat)
+    private static string Code(string cull, string alpha, string coverage, string filter, string repeat)
     {
         string modes = alpha switch
         {
@@ -162,14 +170,14 @@ public static class ClassicLighting
         string alphaOut = alpha switch
         {
             "opaque" => "",
-            "scissor" => "ALPHA = a.a; ALPHA_SCISSOR_THRESHOLD = scissor;" + (coverage
+            "scissor" => "ALPHA = a.a; ALPHA_SCISSOR_THRESHOLD = scissor;" + (coverage != ""
                 ? " ALPHA_ANTIALIASING_EDGE = coverage_edge; ALPHA_TEXTURE_COORDINATE = base_uv * vec2(textureSize(albedo_tex, 0));"
                 : ""),
             _ => "ALPHA = a.a;",
         };
         return $$"""
             shader_type spatial;
-            render_mode {{modes}}, {{cull}}, diffuse_lambert;
+            render_mode {{modes}}, {{cull}}, diffuse_lambert{{(coverage != "" ? ", " + coverage : "")}};
             #define CLASSIC_LIGHT
             #include "{{IncludePath}}"
             uniform vec4 albedo_color : source_color = vec4(1.0);

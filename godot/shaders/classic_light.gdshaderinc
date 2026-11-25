@@ -35,6 +35,10 @@ global uniform float classic_units_per_metre;
 
 varying vec3 classic_lit;
 
+// Gold or silver leaf for the Manuscript look (ManuscriptLook.Leaf: 1 gold, 2 silver), passed on in the roughness the
+// scene writes for every pixel: Classic lighting has no use for roughness, and the look's screen pass reads it back.
+uniform int classic_leaf = 0;
+
 vec3 classic_linear(vec3 c) {
 	return mix(c / 12.92, pow((c + vec3(0.055)) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
 }
@@ -49,7 +53,7 @@ vec3 classic_vertex_light(vec3 normal, vec3 vertex, mat4 model, vec3 vc, vec3 em
 }
 
 #define CLASSIC_VERTEX(vc, emissive) classic_lit = classic_vertex_light(NORMAL, VERTEX, MODEL_MATRIX, vc, emissive);
-#define CLASSIC_FRAGMENT EMISSION += ALBEDO * classic_linear(classic_lit); AO = 0.0; AO_LIGHT_AFFECT = 0.0; SPECULAR = 0.0; ROUGHNESS = 1.0;
+#define CLASSIC_FRAGMENT EMISSION += ALBEDO * classic_linear(classic_lit); AO = 0.0; AO_LIGHT_AFFECT = 0.0; SPECULAR = 0.0; ROUGHNESS = classic_leaf == 1 ? 0.12 : classic_leaf == 2 ? 0.36 : 1.0;
 
 void light() {
 	if (!LIGHT_IS_DIRECTIONAL)

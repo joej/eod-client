@@ -70,7 +70,16 @@ public partial class WorldView
         int set = System.Array.IndexOf(args, "--shots");
         int dir = System.Array.IndexOf(args, "--shots-out");
         if (set >= 0 && set + 1 < args.Length && dir >= 0 && dir + 1 < args.Length)
+        {
+            // The window opens focused, so whatever the person types elsewhere would land here (a stray F10 opened
+            // Settings over a shot, Shift+F12 switched the render mode): a shot run takes no keyboard or mouse.
+            GetWindow().SetFlag(Window.Flags.NoFocus, true);
+            GetViewport().GuiDisableInput = true;
+            SetProcessInput(false);
+            SetProcessUnhandledInput(false);
+            SetProcessUnhandledKeyInput(false);
             _ = RunShotSet(ResolveArgPath(args[set + 1]), ResolveArgPath(args[dir + 1]));
+        }
         // --travel ZONE opens the travel window, types the zone number and goes (after 2 s and 5 s), to check
         // the window and the jump without a mouse.
         int travelArg = System.Array.IndexOf(args, "--travel");

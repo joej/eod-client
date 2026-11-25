@@ -433,6 +433,7 @@ public partial class WorldView : Node3D
         _camera = new Camera3D { Far = 8000f, Fov = ClientSettings.FieldOfView, KeepAspect = Camera3D.KeepAspectEnum.Width, Near = 4 * RegionMetresPerUnit };
         ClientSettings.Changed += OnSettingsChanged;
         _camArm.AddChild(_camera);
+        StartManuscript();
         // The SpringArm extends the camera along the pivot's +Z, so to sit BEHIND a body that faces
         // -Z the pivot yaw is the body yaw turned 180°. Matching them put the camera in front, looking
         // at the nose (so walking read as "backwards toward the camera").
@@ -941,6 +942,7 @@ public partial class WorldView : Node3D
         _camera.Fov = ClientSettings.FieldOfView;
         RestyleNames();
         ApplyInterfaceScale();
+        UpdateManuscript();
         if (display)
             ClientSettings.ApplyWindowMode();
     }
