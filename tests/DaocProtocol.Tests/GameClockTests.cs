@@ -59,4 +59,17 @@ public class GameClockTests
         // Rate 24: day 12 h / 24 = 30 real min, night 12 h / 30 = 24 real min; 54 real minutes in all.
         Assert.Equal(8 * Hour, GameClock.Advance(new GameTime(8 * Hour, 24), 54 * 60_000));
     }
+
+    [Fact]
+    public void TheSkyChasesAZonesFixedTimeTheShortWayRound()
+    {
+        // At rate 24 the chase runs 600 game seconds per real second: 10 game minutes.
+        Assert.Equal(8 * Hour + 600_000, GameClock.Chase(8 * Hour, 12 * Hour, 24, 1000));
+        Assert.Equal(12 * Hour, GameClock.Chase(8 * Hour, 12 * Hour, 24, 60_000));        // stops on the target
+        // 23:00 to 1:00 goes forward through midnight, 1:00 to 23:00 back through it.
+        Assert.Equal(23 * Hour + 600_000, GameClock.Chase(23 * Hour, 1 * Hour, 24, 1000));
+        Assert.Equal(1 * Hour - 600_000, GameClock.Chase(1 * Hour, 23 * Hour, 24, 1000));
+        Assert.Equal(GameClock.Day - 300_000, GameClock.Chase(300_000, 23 * Hour, 24, 1000));   // 0:05 back past midnight
+        Assert.Equal(19 * Hour, GameClock.Chase(19 * Hour, 19 * Hour, 24, 1000));
+    }
 }

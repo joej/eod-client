@@ -5,6 +5,10 @@
 // (DayNightCycleTimer.NIGHT_INCREMENT_FACTOR) and advances its own clock to match. Shown by the clock window as
 // retail's "h:mm AM" (daoc-re RE/74): hours 0–11 are AM written as they are ("0:05 AM"), 12 is "12:xx PM", 13–23 are
 // 1–11 PM.
+//
+// A zone can fix the sky's time of day (zones.dat override_time): the sky then shows that time while the clock text keeps
+// the real one, and on a zone change the sky's time moves to the new target the short way round the day at 25 times the
+// clock's rate, so the sky sweeps rather than snaps (client behaviour, RE/79).
 
 using DaocProtocol.Packets;
 
@@ -43,5 +47,26 @@ public static class GameClock
     {
         uint minutes = millisOfDay % Day / 60000, h = minutes / 60, m = minutes % 60;
         return h < 12 ? $"{h}:{m:00} AM" : $"{(h == 12 ? 12 : h - 12)}:{m:00} PM";
+    }
+
+    /// <summary>How many times the clock's rate the sky's time moves at while it chases a new target.</summary>
+    public const double ChaseFactor = 25;
+
+    /// <summary>
+    /// The sky's time of day after chasing <paramref name="target"/> for <paramref name="realMs"/> real milliseconds at
+    /// <see cref="ChaseFactor"/> times the day increment: the short way round the day, stopping on the target.
+    /// </summary>
+    public static uint Chase(uint sky, uint target, uint dayIncrement, double realMs)
+    {
+        long diff = ((long)target - sky) % Day;
+        if (diff < 0)
+            diff += Day;
+        if (diff > Day / 2)
+            diff -= Day;                                   // the short way: back
+        double step = realMs * Math.Max(1u, dayIncrement) * ChaseFactor;
+        if (Math.Abs(diff) <= step)
+            return target % Day;
+        long moved = sky + (long)Math.Round(diff > 0 ? step : -step);
+        return (uint)((moved % Day + Day) % Day);
     }
 }

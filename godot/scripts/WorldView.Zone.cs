@@ -447,7 +447,8 @@ public partial class WorldView
         _fogShare = Mathf.Clamp(FogNumber("fog.amount") / 100f, 0f, 1f);
         float clip = _zoneClip, amount = _fogShare;
         string name = kv.GetValueOrDefault("sky", "?");
-        GD.Print($"[world] sky: sky_{name} {condition}, zone view {clip:0} m, fogged share {amount:0.00}");
+        GD.Print($"[world] sky: sky_{name} {condition}, zone view {clip:0} m, fogged share {amount:0.00}" +
+            (SkyOverride is uint fixedTime ? $", fixed time {GameClock.Format(fixedTime)}" : ""));
         return name;
     }
 
@@ -471,7 +472,7 @@ public partial class WorldView
     {
         if (_skyValues is null || _skyMaterial is null)
             return;
-        uint? now = GameMillisOfDay;
+        uint? now = SkyMillisOfDay();
         (string from, string to, float t) = now is uint ms ? DaocAssets.Zone.SkyCycle.Blend(ms) : ("day", "day", 0f);
         string a = $"{_skyCondition}.{from}", b = $"{_skyCondition}.{to}";
         Color Col(string key) => SkyColour($"{a}.{key}").Lerp(SkyColour($"{b}.{key}"), t);

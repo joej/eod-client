@@ -1,0 +1,6 @@
+# Fixed camera poses in Sheeroe Hills (zone 216) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 216
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# The zone fixes its sky at 19:00 (zones.dat override_time): whatever the clock (SHOTS_ARGS="--time 12:00"), dusk.
+middle   385024 679936 8000   0   5   # zone middle, looking north over the hills
+west     385024 679936 8000 270   5   # toward the evening sun

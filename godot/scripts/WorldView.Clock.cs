@@ -38,7 +38,7 @@ public partial class WorldView
             {
                 if (_timeForced)
                     return;
-                (_gameTime, _gameTimeAt, _skyTimeAt) = (t, _seconds, -1);
+                (_gameTime, _gameTimeAt, _skyTimeAt, _skyTime) = (t, _seconds, -1, null);
                 GD.Print($"[world] game time {GameClock.Format(t.MillisOfDay)}, day increment {t.DayIncrement}");
             };
             ClientSettings.Changed += OnClockSetting;
@@ -59,10 +59,33 @@ public partial class WorldView
     private double _skyTimeAt = -1;
     private bool _timeForced;   // --time: a fixed start, the server's 0x7E ignored
 
+    // The time of day the sky shows, which also decides the night lamps and the zone sounds' day/night sets; only the clock
+    // text uses the real time (client behaviour). Usually the clock's; a zone with zones.dat override_time (its sky.csv
+    // "override_time", seconds) shows that time instead, while the clock text keeps the real one. On a zone change the sky's
+    // time chases the new target the short way round at 25 times the clock's rate (GameClock.Chase; RE/79), so the sky
+    // sweeps instead of snapping, and back to the clock on leaving. It snaps when there is nothing to chase from yet:
+    // entering the world, a new clock from the server (0x7E sets it outright), --time (ours: retail's first frame unknown).
+    private uint? _skyTime;
+    private double _skyChasedAt;
+
+    private uint? SkyOverride =>
+        _skyValues is not null && _skyValues.TryGetValue("override_time", out string? v) && uint.TryParse(v, out uint s) && s > 0
+            ? s % 86400 * 1000 : null;
+
+    private uint? SkyMillisOfDay()
+    {
+        if ((SkyOverride ?? GameMillisOfDay) is not uint target)
+            return null;
+        uint rate = _gameTime?.DayIncrement ?? 60;   // retail's rate before any 0x7E
+        uint sky = _skyTime is uint from ? GameClock.Chase(from, target, rate, (_seconds - _skyChasedAt) * 1000) : target;
+        (_skyTime, _skyChasedAt) = (sky, _seconds);
+        return sky;
+    }
+
     // The sky follows the clock: re-blended four times a second (a game minute takes 2.5 s at the usual rate).
     private void UpdateSkyTime()
     {
-        if (_gameTime is null || _seconds - _skyTimeAt < 0.25)
+        if (_gameTime is null && SkyOverride is null || _seconds - _skyTimeAt < 0.25)
             return;
         _skyTimeAt = _seconds;
         ApplySkyTime();

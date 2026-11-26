@@ -7,7 +7,8 @@ internal static partial class Cli
     // sky <dat<NNN>.mpk> --out DIR [--name albion] [--skympk zones/sky/sky.mpk] [--index index.json
     // --library LIBDIR] (name and sky.mpk default to the client's choice via zones.dat): the zone's sky as DIR/sky.csv ("key,value"; colours "r g b a" in 0..1): every
     // weather condition and time of day from sky_<name>.dat (canopy and cloud gradients, ambient and sun
-    // light, distance-fog colour), its cloud layers and sun, and SECTOR.DAT's [fog] clip and amount.
+    // light, distance-fog colour), its cloud layers and sun, SECTOR.DAT's [fog] clip and amount, and zones.dat's
+    // override_time (the zone's fixed sky time) when it has one.
     // The zones/ folder holding zones.mpk: this one, or the install's (two levels up from Tutorial/zones).
     private static string InstallZonesDir(string zonesDir)
     {
@@ -37,19 +38,29 @@ internal static partial class Cli
         // A tutorial zone (Tutorial/zones/zoneNNN) uses the install's zones/ for zones.mpk and the skies.
         string zonesDir = InstallZonesDir(Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(datMpk))!)!);
         skyMpk ??= Path.Combine(zonesDir, "sky", "sky.mpk");
+        string zoneFolder = Path.GetFileName(Path.GetDirectoryName(Path.GetFullPath(datMpk))!);
+        string zonesMpk = Path.Combine(zonesDir, "zones.mpk");
+        IniFile? zonesDat = null;
+        int zoneId = -1;
+        if (zoneFolder.StartsWith("zone", StringComparison.OrdinalIgnoreCase) && int.TryParse(zoneFolder.AsSpan(4), out zoneId)
+            && File.Exists(zonesMpk))
+        {
+            using MpkArchive zm = MpkArchive.Open(zonesMpk);
+            zonesDat = IniFile.Parse(System.Text.Encoding.Latin1.GetString(zm.Extract("zones.dat")));
+        }
         if (name is null)
         {
-            string zoneFolder = Path.GetFileName(Path.GetDirectoryName(Path.GetFullPath(datMpk))!);
-            string zonesMpk = Path.Combine(zonesDir, "zones.mpk");
-            if (!int.TryParse(zoneFolder.AsSpan(4), out int zoneId) || !File.Exists(zonesMpk))
+            if (zonesDat is null)
             {
                 Console.Error.WriteLine("sky: pass --name, or point at zones/zoneNNN/datNNN.mpk inside an install.");
                 return 2;
             }
-            using MpkArchive zm = MpkArchive.Open(zonesMpk);
-            var zonesDat = IniFile.Parse(System.Text.Encoding.Latin1.GetString(zm.Extract("zones.dat")));
             name = Path.GetFileNameWithoutExtension(ZoneSky.SkyFile(zonesDat, zoneId)).Replace("sky_", "", StringComparison.OrdinalIgnoreCase);
         }
+        // zones.dat [zoneNNN] override_time: the time of day (seconds) the sky shows in this zone whatever the clock says;
+        // 0 or missing = none (31 zones; client behaviour, RE/79).
+        int overrideTime = zonesDat is not null && int.TryParse(zonesDat.Get($"zone{zoneId:000}", "override_time")?.Trim(), out int ot)
+            && ot > 0 ? ot % 86400 : 0;
         if (outDir is null || (indexPath is null) != (libDir is null))
             return Usage();
 
@@ -77,6 +88,8 @@ internal static partial class Cli
         static string C(System.Numerics.Vector4 c) => FormattableString.Invariant($"{c.X:0.###} {c.Y:0.###} {c.Z:0.###} {c.W:0.###}");
         static string C3(System.Numerics.Vector3 c) => FormattableString.Invariant($"{c.X:0.###} {c.Y:0.###} {c.Z:0.###} 1");
         var lines = new List<string> { "key,value", $"sky,{name}" };
+        if (overrideTime > 0)
+            lines.Add($"override_time,{overrideTime}");
         // A dungeon has no outdoor sky, and its fog is black (daoc-re's dungeon note and its 2026-11-11 correction); the
         // sky file still gives the lights. Its own sky model (SECTOR.DAT [sky] skynif, zones 049 and 092) isn't drawn yet.
         if (dungeon)
@@ -122,7 +135,7 @@ internal static partial class Cli
         Directory.CreateDirectory(outDir);
         string csv = Path.Combine(outDir, "sky.csv");
         File.WriteAllLines(csv, lines);
-        Console.WriteLine($"Sky: sky_{name}.dat, {sky.CloudLayers.Count} cloud layer(s), fog clip {sector.Float("fog", "clip")} " +
+        Console.WriteLine($"Sky: sky_{name}.dat, {sky.CloudLayers.Count} cloud layer(s){(overrideTime > 0 ? $", fixed time {overrideTime / 3600}:{overrideTime / 60 % 60:00}" : "")}, fog clip {sector.Float("fog", "clip")} " +
             $"amount {sector.Float("fog", "amount")} -> {Path.GetFullPath(csv)}");
 
         if (indexPath is not null && libDir is not null)

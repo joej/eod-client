@@ -27,13 +27,15 @@ public partial class WorldView
 
     private void UpdateLamps(double delta)
     {
-        float target = GameMillisOfDay is uint ms && LampsLit(ms) ? 1f : 0f;
-        float level = !_lampsKnown && GameMillisOfDay is not null ? target
+        // The sky's time, not the clock's: a zone's override_time decides the lamps too (client behaviour).
+        uint? now = SkyMillisOfDay();
+        float target = now is uint ms && LampsLit(ms) ? 1f : 0f;
+        float level = !_lampsKnown && now is not null ? target
             : Mathf.MoveToward(_lampLevel, target, (float)delta / LampFadeSeconds);
-        _lampsKnown |= GameMillisOfDay is not null;
+        _lampsKnown |= now is not null;
         bool fading = level != _lampLevel;
         if (fading && level is 0f or 1f)
-            GD.Print($"[world] lamps {(level > 0 ? "on" : "off")} at {(GameMillisOfDay is uint t ? GameClock.Format(t) : "-")}");
+            GD.Print($"[world] lamps {(level > 0 ? "on" : "off")} at {(now is uint t ? GameClock.Format(t) : "-")} (sky time)");
         _lampLevel = level;
         // Applied while fading, and twice a second for lamps a newly streamed zone brought.
         if (!fading && _seconds - _lampsCheckedAt < 0.5)

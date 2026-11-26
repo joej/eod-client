@@ -249,7 +249,8 @@ public partial class WorldView
         if (_ambience is null)
             return;
         (float x, float y, _) = ToRegion(_body.Position);
-        int hhmm = GameMillisOfDay is uint ms ? (int)(ms / 3_600_000 * 100 + ms / 60_000 % 60) : 1200;
+        // The sky's time (a zone's override_time included), as the client's sounds.dat code reads it.
+        int hhmm = SkyMillisOfDay() is uint ms ? (int)(ms / 3_600_000 * 100 + ms / 60_000 % 60) : 1200;
         const int clear = 1;
         const bool underwater = false;
         bool StillPlaying(int r, int l) => _ambientShots.TryGetValue((r, l), out GameAudio.Voice? last) && !last.Finished;

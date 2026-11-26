@@ -61,12 +61,14 @@ MODEL_SRC  := $(COMMON_SRC) $(wildcard $(A)/Nif/*.cs)
 X          := tools/AssetExtract
 CLI_SRC    := $(X)/Program.cs $(X)/Options.cs $(X)/GlobalUsings.cs $(X)/AssetExtract.csproj
 # Zone files: the zone code (all of it but the world audit, which writes nothing here), the glTF
-# writer the terrain and water meshes go through, and the zone and sky commands, which hold the glue.
+# writer the terrain and water meshes go through, and the zone command, which holds the glue.
 ZONE_SRC   := $(COMMON_SRC) $(filter-out $(A)/Zone/ZoneAudit.cs,$(wildcard $(A)/Zone/*.cs)) \
               $(A)/Nif/GltfExporter.cs $(A)/Nif/NifMesh.cs $(A)/Nif/NifReader.cs \
-              $(CLI_SRC) $(X)/Cli.Zone.cs $(X)/Cli.Sky.cs \
+              $(CLI_SRC) $(X)/Cli.Zone.cs \
               $(wildcard $(CLIENT)/zones/trees/tree_clusters.mpk) \
               $(wildcard $(CLIENT)/zones/textures/LIGHTDEF.CSV $(CLIENT)/zones/textures/lightdef.csv)
+# A zone's sky file: the zone code and the sky command, plus zones.dat (which sky, override_time) and the skies.
+SKY_SRC    := $(ZONE_SRC) $(X)/Cli.Sky.cs $(wildcard $(CLIENT)/zones/zones.mpk $(CLIENT)/zones/sky/sky.mpk)
 TOOL_SRC   := $(shell find $(A) tools/AssetExtract -name '*.cs' -not -path '*/obj/*' -not -path '*/bin/*') \
               $(A)/DaocAssets.csproj tools/AssetExtract/AssetExtract.csproj
 
@@ -157,7 +159,7 @@ $(ZONEDIR)/zone$(1)/water.done: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(ZON
 	$(MPK) water $$(zone$(1)_DAT) $$(zone$(1)_POS) --index $(INDEX) --library $(LIB) --out $$(@D)
 	@touch $$@
 
-$(ZONEDIR)/zone$(1)/sky.csv: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(ZONE_SRC) | $(TOOL)
+$(ZONEDIR)/zone$(1)/sky.csv: $$(zone$(1)_DAT) $$(zone$(1)_CSV) $(INDEX) $(SKY_SRC) | $(TOOL)
 	@mkdir -p $$(@D)
 	$(MPK) sky $$(zone$(1)_DAT) --index $(INDEX) --library $(LIB) --out $$(@D)
 

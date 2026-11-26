@@ -205,8 +205,8 @@ public partial class WorldView
             if (float.TryParse(hm[0], out float hour))
             {
                 float minutes = hm.Length > 1 && float.TryParse(hm[1], out float m) ? m : 0;
-                (_gameTime, _gameTimeAt, _timeForced, _skyTimeAt) =
-                    (new DaocProtocol.Packets.GameTime((uint)((hour * 60 + minutes) * 60_000), 24), _seconds, true, -1);
+                (_gameTime, _gameTimeAt, _timeForced, _skyTimeAt, _skyTime) =
+                    (new DaocProtocol.Packets.GameTime((uint)((hour * 60 + minutes) * 60_000), 24), _seconds, true, -1, null);
             }
         }
         // --light AMBIENT SUN [noshadow]: the two light strengths ApplySkyTime uses (to fit retail shots), and sun shadows off.
