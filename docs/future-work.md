@@ -160,6 +160,24 @@ client loads from. The individual stages are the `mpk` subcommands below (`conve
       can only be confirmed visually (headless can't GPU-render). If it reads flipped, it's a one-axis
       UV change in `BuildTiledMesh`.
 
+## Modern look: the wish list
+
+The client draws the world as the classic client does first. Where Godot makes an improvement cheap, it sits behind a
+setting with Classic as the default (Settings → Graphics: Modern lighting, Modern particles). Bigger makeovers are
+parked here.
+
+- **Manuscript look** (prototype built, Settings → Look): the world painted as an illuminated manuscript.
+- **Ground textures, 1.127 or 1.130** (a switch; about half a day): the converter takes the zones from the
+  OpenDAoC client (1.127), whose ground layers are the classic set (Camelot Hills: 0.36 MB, 7 layers on a measured
+  patch). A current retail install has the later set (3.1 MB, 10 layers there). Read only the ground layers and their
+  masks from a retail install into a second set per zone (heights and objects stay 1.127, matching the server), and let a
+  setting pick the set on the next zone load. Check each zone exists with the same patch layout first; zones that
+  changed later (the New Frontiers RvR zones) keep 1.127. Separate from the classic detail map and 3D grass, which
+  make the ground less flat whichever set is used.
+- **Particles** (built behind Modern particles: soft edges, a flickering firelight at each fire, glow on the flames):
+  - Smoke and mist lit by the sun and lamps instead of drawn unlit; flipbook smoke textures in an asset pack.
+  - Sparks and embers that bounce off the ground (particle collision with the terrain).
+
 ## Tooling
 
 - **EoD Launcher** (`tools/Launcher/`) — built, not yet run on Windows. Finish validating once

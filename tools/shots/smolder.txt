@@ -1,0 +1,3 @@
+# Smouldering ground on the Isle of Glass (zone 51) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 51
+smolder   502336 508376 3150   0 -15   # a smouldering patch, from 15 m south

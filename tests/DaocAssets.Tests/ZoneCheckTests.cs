@@ -41,6 +41,15 @@ public sealed class ZoneCheckTests
     }
 
     [Fact]
+    public void AModelOfParticlesOnlyIsNotEmpty()
+    {
+        // Smoke over a fissure: no geometry, its particles beside it. Only a model without either is reported.
+        ZonePlacement[] p = [At(1000, glb: "smoke.glb"), At(1000, glb: "missing.glb")];
+        ZoneCheckReport r = ZoneCheck.Check(p, (_, _) => 1000, _ => null, 0, 0, 8192, 8192, glb => glb == "smoke.glb");
+        Assert.Equal("missing.glb", Assert.Single(r.Findings).Placement.Glb);
+    }
+
+    [Fact]
     public void APieceAtTheZoneOriginIsJudgedByItsVerticesNotItsBox()
     {
         // A 400 m cliff modelled in zone coordinates, placed at the zone's origin (0, 0): it lies over

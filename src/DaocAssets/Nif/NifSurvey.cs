@@ -89,10 +89,12 @@ public sealed partial class NifSurvey
                 "NiGeomMorpherController" or "NiMorphData" => NifCoverage.Partial,
                 "NiKeyframeController" or "NiKeyframeData" or "NiStringExtraData" => NifCoverage.Partial,
                 "NiPixelData" or "NiPalette" or "NiVertexColorProperty" => NifCoverage.Partial,
+                _ when IsParticleType(type) => NifCoverage.Partial,
                 _ => NifCoverage.Unhandled,
             };
         return type switch
         {
+            _ when IsParticleType(type) => NifCoverage.Partial,
             "NiKeyframeController" or "NiKeyframeData" or "NiStringExtraData" => NifCoverage.Partial,
             "NiVisController" => NifCoverage.Partial,
             "NiPixelData" or "NiPalette" or "NiVertexColorProperty" => NifCoverage.Partial,
@@ -103,6 +105,22 @@ public sealed partial class NifSurvey
             _ => NifCoverage.Unhandled,
         };
     }
+
+    // Particle systems (NifParticles): the shape, its controller and modifiers, and colour keys.
+    private static bool IsParticleType(string type) => type is "NiParticles" or "NiAutoNormalParticles" or "NiRotatingParticles"
+        or "NiParticleMeshes" or "NiParticleSystemController" or "NiParticleColorModifier" or "NiParticleGrowFade"
+        or "NiParticleRotation" or "NiGravity" or "NiParticleBomb" or "NiParticleMeshModifier" or "NiColorData";
+
+    private static string ParticleNote(string type) => type switch
+    {
+        "NiParticleSystemController" => "emission, lifetime, size, count and the modifier chain written for the client " +
+            "(<model>.particles.json); the saved particles and play-once timing not used",
+        "NiParticleBomb" => "read, not drawn yet",
+        "NiParticleMeshModifier" => "read, not drawn yet (particles draw as cards)",
+        "NiColorData" => "a particle colour modifier's keys; elsewhere (animated material colour) ignored",
+        "NiGravity" => "planar and spherical (spherical as one direction from the emitter); decay ignored",
+        _ => "read as a particle system for the client (NifParticles)",
+    };
 
     private const string PixelsNote =
         "24/32-bit, 8-bit paletted and DXT1/DXT5 pixels, top level only (the client builds mipmaps)";
@@ -132,10 +150,12 @@ public sealed partial class NifSurvey
                     "morph targets and their FM/HM codes exported on skinned shapes (Catacombs face sliders); keys (animated morphs) ignored",
                 "NiKeyframeController" or "NiKeyframeData" => DoorKeysNote,
                 "NiStringExtraData" => DoorExtraNote,
+                _ when IsParticleType(type) => ParticleNote(type),
                 _ => "",
             };
         return type switch
         {
+            _ when IsParticleType(type) => ParticleNote(type),
             "NiLODNode" => "nearest level only (smallest near extent; by node name if a node has no ranges)",
             "NiBillboardNode" => "walked as a plain node: keeps its stored orientation, doesn't face the camera",
             "NiTriShapeData" or "NiTriStripsData" => "vertex colours kept where a NiVertexColorProperty says ambient + diffuse; UV sets beyond the texture slots' dropped",

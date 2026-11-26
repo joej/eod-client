@@ -1,0 +1,8 @@
+# Fixed camera poses at fires in Camelot Hills (zone 0) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 0
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+# Particles (NifParticles): flames, smoke and embers. SHOTS_ARGS="--time 22:00" for the night; add --modern-particles
+# for soft particles.
+logfire   604288 506640 2400   0 -18   # a log fire from 10 m south
+logclose  604288 506440 2260   0 -12   # the same from 4 m: where the cards meet the logs and the ground
+forge     561408 510808 2700   0 -10   # the forge's fire and smoke

@@ -182,6 +182,9 @@ public sealed class NifModel
     public IReadOnlyList<NifDoor> Doors { get; init; } = [];
     public IReadOnlyList<NifMover> Movers { get; init; } = [];
 
+    /// <summary>Its particle systems (NifParticles): fire, smoke, mist, sparks. A model may be particles only.</summary>
+    public IReadOnlyList<NifParticleSystem> Particles { get; init; } = [];
+
     /// <summary>Every named node's world transform in the file's rest pose (NIF space, row vectors), by
     /// lower-case name (the first of a repeated name): an item's grip and sheath frames ("held", "belt",
     /// "back") for hanging it on a figure's bone.</summary>

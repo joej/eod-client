@@ -1,0 +1,5 @@
+# Particle effects in Dartmoor (zone 4) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 4
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+smoke     394368 734944 700   0 -12   # one of the 28 smoke areas, from 20 m south
+bonfire   362352 723704 600   0 -12   # a bonfire, from 15 m south

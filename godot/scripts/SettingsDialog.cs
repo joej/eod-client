@@ -137,6 +137,20 @@ public partial class SettingsDialog : AcceptDialog
         modern.Toggled += on => ClientSettings.ModernLighting = on;
         grid.AddChild(modern);
 
+        // Classic particles (retail's cards, cutting hard into the ground) or soft ones; applies at once.
+        grid.AddChild(new Label { Text = "Particles" });
+        var softParticles = new CheckBox
+        {
+            Text = "Modern particles", ButtonPressed = ClientSettings.ModernParticles, FocusMode = Control.FocusModeEnum.None,
+            TooltipText = "Off: fire, smoke and mist drawn as the retail client draws them. On: soft particles, fading where they meet the ground or a wall.",
+        };
+        softParticles.Toggled += on =>
+        {
+            ClientSettings.ModernParticles = on;
+            NifParticles.ApplySetting();
+        };
+        grid.AddChild(softParticles);
+
         // The Manuscript look (pigments, ink outlines, vellum over the world); applies at once.
         grid.AddChild(new Label { Text = "Look" });
         var manuscript = new CheckBox

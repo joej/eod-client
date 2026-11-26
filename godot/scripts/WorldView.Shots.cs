@@ -219,6 +219,12 @@ public partial class WorldView
                 _sun.ShadowEnabled = false;
             ApplySkyTime();
         }
+        // --no-panels hides the dev panels (status, layers, inspect), as F12 does: shots for the site.
+        if (System.Array.IndexOf(args, "--no-panels") >= 0)
+            _dev.PanelsVisible = false;
+        // --modern-particles draws particles as Settings → Modern particles does (soft), without saving the setting.
+        if (System.Array.IndexOf(args, "--modern-particles") >= 0)
+            NifParticles.ForceModern = true;
         // --torch lights the character's torch on entering (to check its look).
         if (System.Array.IndexOf(args, "--torch") >= 0)
             GetTree().CreateTimer(1).Timeout += () => SetTorch(true, announce: true);

@@ -111,7 +111,9 @@ inhabitants look like DAoC).
    (usually blended effects), texture apply modes REPLACE/HILIGHT2 (155 files), non-wrapping clamp
    modes (about 1,000 files).
 8. **Smaller**: embedded `NiPixelData` textures (16 files), `NiTextureEffect` environment or projected
-   maps (667 files), lights inside models, particle systems (effects; post-MVP).
+   maps (667 files), lights inside models. Particle systems (fire, smoke, mist, sparks: 1,417 files) are drawn since
+   2026-11-26: the converter writes each model's systems beside its .glb (`<model>.particles.json`) and the client runs
+   them as Godot GPU particles (`NifParticles`); the bomb and mesh-particle modifiers aren't drawn yet.
 
 **LOD by range (done 2026-11-03):** 4.x `NiLODNode` stores its real distance ranges, and the survey
 decodes them exactly (567 blocks). The reader now keeps the level with the smallest near extent (by

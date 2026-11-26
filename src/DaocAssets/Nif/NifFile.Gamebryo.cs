@@ -61,7 +61,8 @@ public static partial class NifFile
         var b = new Gb10Builder(blocks) { Movers = doors.MoverOf };
         foreach (int root in g.Roots.Length > 0 ? g.Roots : [0])
             b.Walk(root, -1, Matrix4x4.Identity, helper: false, alpha: -1, stencil: -1);
-        if (b.Meshes.Count == 0)
+        List<NifParticleSystem> particles = ParticlesGamebryo(g);
+        if (b.Meshes.Count == 0 && particles.Count == 0)
             throw new NifFormatException("10.1 NIF has no geometry.");
         // A skeleton only when something is skinned to it: a static 10.1 object exports as baked
         // meshes like a 4.x one (its nodes would otherwise become joints, and repeated helper names
@@ -74,7 +75,7 @@ public static partial class NifFile
         return new NifModel
         {
             Version = version, Meshes = b.Meshes, Joints = skinned ? b.Joints : [], NodeWorlds = nodeWorlds,
-            Doors = skinned ? [] : doors.Doors, Movers = skinned ? [] : doors.Movers,
+            Doors = skinned ? [] : doors.Doors, Movers = skinned ? [] : doors.Movers, Particles = particles,
         };
     }
 

@@ -135,16 +135,20 @@ public static class ZoneCheck
     /// Checks every placement. <paramref name="groundAt"/> gives the terrain height at a region-global
     /// (x, y), or is null for a zone without terrain (a capital city): the ground checks are skipped;
     /// <paramref name="bounds"/> gives a model's bounds (null = missing or empty);
+    /// <paramref name="particlesOnly"/> says a model without geometry draws particles (smoke, mist): nothing to check;
     /// the zone spans [originX, originX + width) x [originY, originY + height) in region units.
     /// </summary>
     public static ZoneCheckReport Check(IReadOnlyList<ZonePlacement> placements, Func<float, float, float>? groundAt,
-        Func<string, ModelBounds?> bounds, float originX, float originY, float width, float height)
+        Func<string, ModelBounds?> bounds, float originX, float originY, float width, float height,
+        Func<string, bool>? particlesOnly = null)
     {
         var findings = new List<ZoneFinding>();
         foreach (ZonePlacement p in placements)
         {
             if (bounds(p.Glb) is not { } b)
             {
+                if (particlesOnly?.Invoke(p.Glb) == true)
+                    continue;
                 findings.Add(new(CheckSeverity.Error, "missing or empty model", p, "no geometry to draw"));
                 continue;
             }

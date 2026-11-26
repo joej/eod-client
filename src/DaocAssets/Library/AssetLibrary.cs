@@ -262,8 +262,18 @@ public sealed class AssetLibrary
                     if (!string.IsNullOrEmpty(texture) && GatherTexture(texture!, reconvert, modelFolder) is string got && _scope is not null
                         && string.Equals(Path.GetDirectoryName(Path.GetFullPath(got)), scopeTextures, StringComparison.OrdinalIgnoreCase))
                         scopedTexture = true;
+            // Its particle systems' textures (fire, smoke), from the model's folder like its own.
+            foreach (NifParticleSystem p in model.Particles)
+                if (!string.IsNullOrEmpty(p.Texture))
+                    GatherTexture(p.Texture!, reconvert, modelFolder);
             string glbPath = Path.Combine(scopedTexture || _proxied ? scoped : models, glbName);
             Directory.CreateDirectory(Path.GetDirectoryName(glbPath)!);
+            // The particle systems beside the glb (NifParticleJson), or no such file.
+            string particlesPath = NifParticleJson.PathFor(glbPath);
+            if (model.Particles.Count > 0)
+                WriteAtomically(particlesPath, tmp => File.WriteAllText(tmp, NifParticleJson.ToJson(model.Particles)));
+            else if (File.Exists(particlesPath))
+                File.Delete(particlesPath);
             WriteAtomically(glbPath, tmp => GltfExporter.SaveGlb(model, tmp));
             return new ModelResult(glbPath, AssetOrigin.Converted);
         }

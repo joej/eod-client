@@ -353,16 +353,20 @@ internal static partial class Cli
         var textureStems = new HashSet<string>(new[] { Path.Combine(libDir, "textures"), Path.Combine(libDir, "overrides") }
             .Where(Directory.Exists).SelectMany(d => Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories))
             .Select(f => Path.GetFileNameWithoutExtension(f)), StringComparer.OrdinalIgnoreCase);
+        string ModelPath(string glb) =>
+            new[] { Path.Combine(libDir, "overrides", glb), Path.Combine(libDir, "models", glb), Path.Combine(libDir, glb) }
+                .FirstOrDefault(File.Exists) ?? "";
         DaocAssets.Zone.ModelBounds? Bounds(string glb)
         {
             if (cache.TryGetValue(glb, out var b)) return b;
-            string path = new[] { Path.Combine(libDir, "overrides", glb), Path.Combine(libDir, "models", glb), Path.Combine(libDir, glb) }
-                .FirstOrDefault(File.Exists) ?? "";
+            string path = ModelPath(glb);
             return cache[glb] = path.Length == 0 ? null : DaocAssets.Zone.ZoneCheck.GlbBounds(path, textureStems.Contains);
         }
+        // A model of particles only (smoke, mist; NifParticleJson beside its glb) has no geometry to check.
+        bool ParticlesOnly(string glb) => ModelPath(glb) is { Length: > 0 } path && File.Exists(DaocAssets.Nif.NifParticleJson.PathFor(path));
         var report = DaocAssets.Zone.ZoneCheck.Check(placements,
             terrain is null ? null : (x, y) => terrain.HeightAt(x - offX, y - offY), Bounds,
-            offX, offY, zoneSize.X * 8192, zoneSize.Y * 8192);
+            offX, offY, zoneSize.X * 8192, zoneSize.Y * 8192, ParticlesOnly);
         if (knownPath is not null)
             report = DaocAssets.Zone.ZoneCheck.ApplyKnown(report, DaocAssets.Zone.ZoneCheck.ReadKnown(DaocAssets.InstallFiles.ReadAllText(knownPath)));
         Console.WriteLine($"Zone check: {report.Summary()}");

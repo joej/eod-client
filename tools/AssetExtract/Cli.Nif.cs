@@ -23,6 +23,14 @@ internal static partial class Cli
             Console.WriteLine($"NIF {model.Version}: {model.Meshes.Count} mesh(es), {model.Joints.Count} joint(s)");
             foreach (NifMesh m in model.Meshes)
                 Console.WriteLine($"  {m.ShapeName,-28} {m}" + (m.SkinJoints is { } sj ? $" ({sj.Length} bones)" : ""));
+            static string I(FormattableString f) => FormattableString.Invariant(f);
+            foreach (NifParticleSystem p in model.Particles)
+                Console.WriteLine(
+                    I($"  particles {p.Name,-18} at ({p.Emitter.M41:F0},{p.Emitter.M42:F0},{p.Emitter.M43:F0}) {p.Texture ?? "-"} alpha 0x{p.AlphaFlags:X} ") +
+                    I($"size {p.Size:0.##} rate {p.EmitRate:0.##}/s life {p.Lifetime:0.##}+{p.LifetimeRandom:0.##} speed {p.Speed:0.##}+{p.SpeedRandom:0.##} ") +
+                    I($"decl {p.Declination:0.##}±{p.DeclinationVariation:0.##} max {p.MaxParticles} box ({p.StartRandom.X:0},{p.StartRandom.Y:0},{p.StartRandom.Z:0}) ") +
+                    I($"emit {p.EmitStart:0.##}-{p.EmitStop:0.##} flags 0x{p.ControllerFlags:X}/0x{p.EmitFlags:X} ") +
+                    $"[{string.Join(", ", p.Modifiers.Select(m => m.GetType().Name.Replace("NifParticle", "")))}]");
             for (int j = 0; j < model.Joints.Count; j++)
             {
                 NifJoint joint = model.Joints[j];

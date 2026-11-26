@@ -343,6 +343,7 @@ public partial class WorldView : Node3D
             AmbientLightColor = new Color(0.6f, 0.6f, 0.6f),
         };
         AddChild(new WorldEnvironment { Environment = _environment });
+        NifParticles.UseEnvironment(_environment);   // Modern particles' glow
         _sun = new DirectionalLight3D
         {
             RotationDegrees = new Vector3(-50, 30, 0),
@@ -1078,6 +1079,7 @@ public partial class WorldView : Node3D
         UpdateStatsPanel();
         UpdateSkyTime();
         UpdateLamps(delta);
+        FireLight.Update(GetTree());   // Modern particles' firelights: shown or hidden, flickering
         UpdateDoors();
         UpdateSound(delta);
         UpdateChat();

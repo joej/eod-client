@@ -130,6 +130,7 @@ public static partial class NifFile
         public int NextRef = -1;      // NiExtraData / NiTimeController -> the next in its chain
         public float StopTime;        // NiTimeController -> stop time (seconds)
         public string[] Strings = []; // NiStringExtraData -> its text
+        public object? Particle;      // particle controller, modifier or colour data, as read (NifParticleReader)
     }
 
     // NetImmerse 4.x. Blocks reference each other by index and carry transforms in a NiNode/NiTriShape
@@ -247,6 +248,35 @@ public static partial class NifFile
                     try { b.NextRef = c.I32(); }
                     catch (NifFormatException) { }
                     break;
+                // Particle systems (NifParticles): the shape is a NiGeometry like a NiTriShape, with its controller.
+                case "NiParticles":
+                case "NiAutoNormalParticles":
+                case "NiRotatingParticles":
+                    if (TryReadAvObject(ref c, out Xform px, out int[] pprops, out string pname, out ushort pflags, out _, out b.Controller))
+                        (b.Name, b.Flags, b.Local, b.Props) = (pname, pflags, px, pprops);
+                    break;
+                case "NiParticleSystemController":
+                case "NiGravity":
+                case "NiParticleColorModifier":
+                case "NiParticleGrowFade":
+                case "NiParticleRotation":
+                case "NiParticleBomb":
+                case "NiParticleMeshModifier":
+                case "NiColorData":
+                    try
+                    {
+                        b.Particle = NifParticleReader.Read(ref c, b.Type);
+                        if (b.Particle is NifParticleReader.Controller pc)
+                            b.NextRef = pc.Next;
+                    }
+                    catch (NifFormatException) { b.Particle = null; }
+                    break;
+                default:
+                    // Any other time controller: its Next Controller, so a shape's chain reaches the one behind it.
+                    if (b.Type.EndsWith("Controller", StringComparison.Ordinal))
+                        try { b.NextRef = c.I32(); }
+                        catch (NifFormatException) { }
+                    break;
                 case "NiStringExtraData":
                     try
                     {
@@ -315,10 +345,11 @@ public static partial class NifFile
             }
         }
 
-        if (meshes.Count == 0)
+        List<NifParticleSystem> particles = figure ? [] : Particles4x(blocks);
+        if (meshes.Count == 0 && particles.Count == 0)
             throw new NifFormatException("No NiTriShapeData geometry found in NIF.");
 
-        return new NifModel { Version = version, Meshes = meshes, NodeWorlds = NodeWorlds4x(blocks),
+        return new NifModel { Version = version, Meshes = meshes, NodeWorlds = NodeWorlds4x(blocks), Particles = particles,
             Joints = skeleton is not null && meshes.Any(m => m.SkinJoints is { Length: > 0 }) ? skeleton.Joints : [],
             Doors = doors.Doors, Movers = doors.Movers };
     }

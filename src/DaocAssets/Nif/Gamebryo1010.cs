@@ -91,6 +91,8 @@ internal sealed class Gb10Block
     public uint StencilDrawMode;
     // NiStringsExtraData / NiStringExtraData
     public string[] Strings = [];
+    // A particle controller, modifier or colour data, as read (NifParticleReader)
+    internal object? Particle;
     // NiMorphData: each morph's vectors (morph 0 is the base shape), and whether the others are relative
     public Vector3[][] MorphVectors = [];
     public bool RelativeMorphs;
@@ -254,8 +256,8 @@ internal static class Gamebryo1010
                 Bump(f, "NiScreenLODData: screen-size LOD (near level = child 0)");
                 break;
             }
-            // Particle systems (NiParticleSystemController era): read to their end so the rest of the
-            // file decodes; the converter draws no particles yet (roadmap M12).
+            // Particle systems (NiParticleSystemController era): the shape; its controller and modifiers below
+            // are kept as data (NifParticles).
             case "NiParticles":
             case "NiParticleMeshes":
             {
@@ -263,7 +265,7 @@ internal static class Gamebryo1010
                 Ref(ref c, nb);                         // Data
                 Ref(ref c, nb);                         // Skin Instance
                 if (StrictBool(ref c)) { c.SizedString(); c.I32(); }   // Material Data: shader
-                Bump(f, $"{type}: particle system (not drawn)");
+                Bump(f, $"{type}: particle system");
                 break;
             }
             case "NiParticlesData":
@@ -278,46 +280,16 @@ internal static class Gamebryo1010
                 break;
             }
             case "NiParticleSystemController":
-            {
-                TimeController(ref c, nb);
-                Skip(ref c, 6 * 4 + 12 + 16 + 4 * 3);   // speed, declination, planar angle (+ variations); normal; colour; size, emit start/stop
-                c.U8();                                 // Reset Particle System
-                Skip(ref c, 3 * 4);                     // birth rate, lifetime, lifetime variation
-                c.U8(); c.U8();                         // Use Birth Rate, Spawn On Death
-                c.Vec3();                               // Emitter Dimensions
-                Ref(ref c, nb);                         // Emitter
-                c.U16(); c.F32(); c.U16(); c.F32(); c.F32();   // spawn generations, %, multiplier, speed/dir chaos
-                int particles = c.U16();
-                c.U16();                                // Num Valid
-                Skip(ref c, particles * 40L);           // NiParticleInfo
-                Ref(ref c, nb); Ref(ref c, nb); Ref(ref c, nb);   // emitter modifier, particle modifier, collider
-                c.U8();                                 // Static Target Bound
-                break;
-            }
             case "NiParticleColorModifier":
-                ParticleModifier(ref c, nb);
-                Ref(ref c, nb);                         // Color Data
-                break;
             case "NiParticleGrowFade":
-                ParticleModifier(ref c, nb);
-                Skip(ref c, 8);                         // Grow, Fade
-                break;
             case "NiParticleRotation":
-                ParticleModifier(ref c, nb);
-                c.U8();                                 // Random Initial Axis
-                Skip(ref c, 12 + 4);                    // Initial Axis, Rotation Speed
-                break;
             case "NiGravity":
-                ParticleModifier(ref c, nb);
-                Skip(ref c, 4 + 4 + 4 + 12 + 12);       // decay, force, field type, position, direction
-                break;
             case "NiParticleBomb":
-                ParticleModifier(ref c, nb);
-                Skip(ref c, 4 * 4 + 4 + 4 + 12 + 12);   // decay, duration, delta V, start; decay type; symmetry; position; direction
-                break;
             case "NiParticleMeshModifier":
-                ParticleModifier(ref c, nb);
-                RefList(ref c, nb);                     // Particle Meshes
+                // Read as data for the client (NifParticles); the layout is the 4.x one.
+                b.Particle = NifParticleReader.Read(ref c, type);
+                if (b.Particle is NifParticleReader.Controller pc)
+                    b.NextController = pc.Next;
                 break;
             // Animation controllers and their key data: read past (no animation export for these yet).
             case "NiUVController":
@@ -360,7 +332,7 @@ internal static class Gamebryo1010
                 NifSurvey.KeyGroup(ref c, 12, f, null);
                 break;
             case "NiColorData":
-                NifSurvey.KeyGroup(ref c, 16, f, null);
+                b.Particle = NifParticleReader.Read(ref c, type);   // colour keys (a particle colour modifier's)
                 break;
             case "NiUVData":
                 for (int g = 0; g < 4; g++) NifSurvey.KeyGroup(ref c, 4, f, null);
@@ -724,13 +696,6 @@ internal static class Gamebryo1010
         AvObject(ref c, b, nb, f);
         b.Children = RefList(ref c, nb);
         if (RefList(ref c, nb).Length > 0) Bump(f, $"{b.Type}: has dynamic effects");
-    }
-
-    // NiParticleModifier (10.1): Next Modifier, Controller.
-    private static void ParticleModifier(ref NifCursor c, int nb)
-    {
-        Ref(ref c, nb);
-        Ref(ref c, nb);
     }
 
     // NiObjectNET (10.1): Name, Num Extra Data List + refs, Controller.

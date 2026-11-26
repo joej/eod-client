@@ -305,6 +305,16 @@ public static class ClientSettings
     }
 
     /// <summary>
+    /// Modern particles: soft particles, fire and smoke cards fading out where they meet the ground or a wall instead of
+    /// cutting a hard line through it (NifParticles). Off by default: retail's cards cut hard.
+    /// </summary>
+    public static bool ModernParticles
+    {
+        get => Load().GetValue("graphics", "modern_particles", false).AsBool();
+        set => Save("modern_particles", value);
+    }
+
+    /// <summary>
     /// The Manuscript look: the world repainted as an illuminated manuscript (pigments, ink outlines, vellum;
     /// WorldView.Manuscript). Off by default: the classic look.
     /// </summary>
