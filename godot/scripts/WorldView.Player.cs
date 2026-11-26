@@ -314,14 +314,19 @@ public partial class WorldView
             Vector3 normal = hit["normal"].AsVector3();
             GodotObject collider = hit["collider"].AsGodotObject();
             bool terrain = collider is CollisionObject3D co && (co.CollisionLayer & TerrainLayer) != 0;
-            if (terrain || (Mathf.Abs(normal.Y) >= MinFloorNormal && !CutOut(collider)))
+            if (terrain || (Mathf.Abs(normal.Y) >= MinFloorNormal && !Leaves(collider)))
                 return point.Y;
             exclude.Add(hit["rid"].AsRid());
         }
         return null;
     }
 
-    // A model surface drawn with an alpha cut-out (foliage): its collider's mesh uses alpha scissor.
+    // Leaves, which are neither floor nor ceiling (ours): outdoors, a model surface drawn with an alpha cut-out. Not in a
+    // dungeon, where there's no foliage and floors are cut-outs too (Inconnu Crypt's Inc_floor: the character fell
+    // through every floor of it once dungeons let it fall).
+    private bool Leaves(GodotObject collider) => !_inDungeon && CutOut(collider);
+
+    // A model surface drawn with an alpha cut-out: its collider's mesh uses alpha scissor.
     private static bool CutOut(GodotObject collider) =>
         collider is Node n && n.GetParent() is MeshInstance3D mi
         && Enumerable.Range(0, mi.GetSurfaceOverrideMaterialCount()).Any(i =>
@@ -349,7 +354,7 @@ public partial class WorldView
             if (hit.Count == 0)
                 return false;
             GodotObject collider = hit["collider"].AsGodotObject();
-            if (CutOut(collider) || !_inDungeon && collider is Node n && _entityRoot.IsAncestorOf(n))
+            if (Leaves(collider) || !_inDungeon && collider is Node n && _entityRoot.IsAncestorOf(n))
             {
                 exclude.Add(hit["rid"].AsRid());
                 continue;
@@ -549,10 +554,13 @@ public partial class WorldView
         return true;
     }
 
-    // The water surface straight above or below the feet, if any.
+    // The water surface straight above or below the feet, if any. Outdoors from high above: on a seabed deeper than the
+    // ray's start the surface was never found, and the character walked the bottom until the water got shallow (Oceanus).
+    // In a dungeon only just above, so a pool in a room overhead doesn't count.
     private float? WaterSurface(Vector3 at)
     {
-        var ray = PhysicsRayQueryParameters3D.Create(at + new Vector3(0, 6f, 0), at - new Vector3(0, 30f, 0));
+        float above = _inDungeon ? 6f : 400f;
+        var ray = PhysicsRayQueryParameters3D.Create(at + new Vector3(0, above, 0), at - new Vector3(0, 30f, 0));
         ray.CollisionMask = WaterLayer;
         ray.HitBackFaces = true;
         Godot.Collections.Dictionary hit = GetWorld3D().DirectSpaceState.IntersectRay(ray);

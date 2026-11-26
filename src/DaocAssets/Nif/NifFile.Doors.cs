@@ -29,15 +29,21 @@ public sealed record NifDoor(string Name, float Duration, float? Mid = null, boo
 /// <summary>
 /// A node inside a door that moves (it has keyframes), in NIF space: its rest world transform and its parent's (row
 /// vectors), its rest local transform, and its keys. The meshes under it are baked at rest; at time t they move by
-/// <see cref="Delta"/>.
+/// <see cref="Delta"/>. <paramref name="Carrier"/> is the nearest moving node above it in the same door, whose motion it
+/// rides on (a door's ring under the door leaf: its own keys stay put, and it moves with the leaf).
 /// </summary>
-public sealed record NifMover(string Door, string Node, Matrix4x4 RestWorld, Matrix4x4 ParentWorld, Matrix4x4 RestLocal, KfaTrack Keys)
+public sealed record NifMover(string Door, string Node, Matrix4x4 RestWorld, Matrix4x4 ParentWorld, Matrix4x4 RestLocal, KfaTrack Keys,
+    NifMover? Carrier = null)
 {
-    /// <summary>What a baked vertex is multiplied by at time t (row vectors): rest world⁻¹ × local(t) × parent world.</summary>
+    /// <summary>
+    /// What a baked vertex is multiplied by at time t (row vectors): rest world⁻¹ × local(t) × parent world, then the
+    /// carrier's delta (everything under the carrier moves with it).
+    /// </summary>
     public Matrix4x4 Delta(float t)
     {
         Matrix4x4.Invert(RestWorld, out Matrix4x4 inverse);
-        return inverse * Local(t) * ParentWorld;
+        Matrix4x4 own = inverse * Local(t) * ParentWorld;
+        return Carrier is null ? own : own * Carrier.Delta(t);
     }
 
     /// <summary>The node's local transform at time t: its keys, or its rest value for a channel without keys.</summary>
@@ -164,21 +170,23 @@ public static partial class NifFile
             doors.Add(new NifDoor(name.ToLowerInvariant(), frames / DoorFramesPerSecond, mid / DoorFramesPerSecond, four));
             if (four)
                 continue;
-            // The nodes with keys in its whole subtree (door-named ones included: they are its geometry).
-            var todo = new Stack<int>(n.Children(d));
+            // The nodes with keys in its whole subtree (door-named ones included: they are its geometry), each carried by
+            // the nearest one above it.
+            var todo = new Stack<(int Node, NifMover? Carrier)>(n.Children(d).Select(c => (c, (NifMover?)null)));
             var seen = new HashSet<int>();
             while (todo.Count > 0)
             {
-                int i = todo.Pop();
+                (int i, NifMover? carrier) = todo.Pop();
                 if (!world.ContainsKey(i) || !seen.Add(i))
                     continue;
                 if (n.Keys(i, n.Name(i)) is { } keys && (keys.Rotations.Length + keys.Translations.Length + keys.Scales.Length) > 0)
                 {
                     moverOf[i] = movers.Count;
-                    movers.Add(new NifMover(name.ToLowerInvariant(), n.Name(i), world[i].World, world[i].Parent, n.Local(i), keys));
+                    carrier = new NifMover(name.ToLowerInvariant(), n.Name(i), world[i].World, world[i].Parent, n.Local(i), keys, carrier);
+                    movers.Add(carrier);
                 }
                 foreach (int c in n.Children(i))
-                    todo.Push(c);
+                    todo.Push((c, carrier));
             }
         }
         return doors.Count == 0 ? DoorScan.None : new DoorScan(doors, movers, moverOf);

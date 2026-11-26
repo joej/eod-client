@@ -54,6 +54,25 @@ public sealed class DoorTests
     }
 
     [Fact]
+    public void APartUnderAMovingPartRidesOnIt()
+    {
+        // The Deep's kobold door: the ring ("door hardware") hangs under the leaf with keys that never change. It must
+        // swing with the leaf, not stay in the doorway.
+        Matrix4x4 parent = Matrix4x4.CreateTranslation(0, 50, 0);
+        Matrix4x4 leafLocal = Matrix4x4.CreateTranslation(100, 0, 0);
+        var turn = new KfaTrack("leaf", [(0f, Quaternion.Identity), (1f, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2))], [], []);
+        var leaf = new NifMover("door001", "leaf", leafLocal * parent, parent, leafLocal, turn);
+        Matrix4x4 ringLocal = Matrix4x4.CreateTranslation(20, 0, 0);
+        var still = new KfaTrack("ring", [(0f, Quaternion.Identity), (1f, Quaternion.Identity)], [], []);
+        var ring = new NifMover("door001", "ring", ringLocal * leafLocal * parent, leafLocal * parent, ringLocal, still, leaf);
+
+        // The ring, baked at (120, 50, 0), swings a quarter turn about the hinge (100, 50, 0) to (100, 70, 0), as the leaf does.
+        Vector3 moved = Vector3.Transform(new Vector3(120, 50, 0), ring.Delta(1));
+        Assert.True(Vector3.Distance(moved, new Vector3(100, 70, 0)) < 1e-3f, $"{moved}");
+        Assert.True(Near(ring.Delta(1), leaf.Delta(1)));
+    }
+
+    [Fact]
     public void AStaticModelsDoorBecomesNamedPartsAndAnAnimation()
     {
         var keys = new KfaTrack("leaf", [(0f, Quaternion.Identity), (1.5f, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, 1f))], [], []);

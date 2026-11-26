@@ -68,12 +68,15 @@ public static class ManuscriptLook
         return true;
     }
 
+    // The palette starts with the neutrals (the shader picks among them for colours with almost no hue), then four tones per pigment.
+    private const int Neutrals = 5;
+
     private static readonly Color LeadWhite = new(0.93f, 0.90f, 0.82f);
     private static readonly Color CarbonBlack = new(0.11f, 0.10f, 0.09f);
 
     /// <summary>
     /// Every tone the shader may paint with, in display (sRGB) colours: white, black, three grey washes (grisaille: stone
-    /// stays grey instead of turning ochre), then each pigment light, pure and dark.
+    /// stays grey instead of turning ochre), then each pigment light, pure, dark and deep (four tones: the shader's TONES).
     /// </summary>
     public static Color[] Palette()
     {
@@ -87,6 +90,7 @@ public static class ManuscriptLook
             all.Add(c.Lerp(LeadWhite, 0.45f));
             all.Add(c);
             all.Add(c.Lerp(CarbonBlack, 0.35f));
+            all.Add(c.Lerp(CarbonBlack, 0.62f));
         }
         return [.. all];
     }
@@ -107,6 +111,7 @@ public static class ManuscriptLook
         m.SetShaderParameter("pigment_lab", lab);
         m.SetShaderParameter("pigment_rgb", rgb);
         m.SetShaderParameter("pigment_count", palette.Length);
+        m.SetShaderParameter("neutral_count", Neutrals);
         return m;
     }
 

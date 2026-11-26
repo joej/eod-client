@@ -55,6 +55,9 @@ public partial class WorldView
         _chatLog = new RichTextLabel
         {
             BbcodeEnabled = false, ScrollFollowing = true, SelectionEnabled = false,
+            // The newest line at the bottom however few are left: as lines hide after 90 s, the rest stayed at the top
+            // with blank space under them, which read as the window scrolling up.
+            VerticalAlignment = VerticalAlignment.Bottom,
             MouseFilter = Control.MouseFilterEnum.Ignore,   // the window takes the wheel and the drag
             FocusMode = Control.FocusModeEnum.None,
             Position = new Vector2(4, 15) * s,

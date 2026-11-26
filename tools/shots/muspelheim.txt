@@ -1,0 +1,5 @@
+# Fixed camera poses in Muspelheim (zone 104) for tools/shots.sh: name X Y Z YAW PITCH
+# zone: 104
+# (region units; yaw degrees clockwise from north; pitch degrees, negative looks down).
+lavapool     862800 665320 2300  90 -18   # a LAVA body from the west: opaque, glowing, not water's alpha
+lavanear     848297 668925 3000 120 -12   # the owner's spot (2026-11-26): the night and the torch light

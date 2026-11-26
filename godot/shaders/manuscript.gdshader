@@ -26,12 +26,15 @@ uniform sampler2D screen_tex : hint_screen_texture, filter_linear, repeat_disabl
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest, repeat_disable;
 uniform sampler2D normal_tex : hint_normal_roughness_texture, filter_nearest, repeat_disable;
 
-const int PIGMENTS = 48;
+const int PIGMENTS = 64;
+const int TONES = 4;                    // per pigment: light, pure, dark, deep (ManuscriptLook.Palette)
 uniform vec3 pigment_lab[PIGMENTS];     // Oklab
 uniform vec3 pigment_rgb[PIGMENTS];     // linear RGB
 uniform int pigment_count = 0;
 uniform float pigment_strength : hint_range(0.0, 1.0) = 0.85;
-uniform float lightness_weight = 0.6;   // < 1: hue and chroma count more than lightness when matching
+uniform int neutral_count = 5;          // the palette's first entries: lead white, carbon black, the grey washes
+uniform float neutral_chroma = 0.025;   // Oklab chroma below which a colour is matched among those
+uniform float black_below = 0.14;       // Oklab lightness (after the lift) below which it's carbon black
 uniform float tone_lift = 0.9;         // < 1: darks are lifted before matching, so shade reads as darker paint, not black
 
 // Leaf: gold and silver laid on the surfaces the scene marks (ManuscriptLook.Leaf, in the roughness channel), shaded
@@ -94,22 +97,45 @@ vec3 to_oklab(vec3 c) {
 	            0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s);
 }
 
+// Two steps, as a painter picks a pot and then how much white or black to mix in: the pigment whose tones come nearest in
+// colour (hue and strength, not lightness), then its light, pure, dark or deep tone by lightness. Matching every tone at
+// once let dull dark greens (a forest in shade) land on umber and black, and a forest zone went nearly black. Colours with
+// almost no hue take the whites, greys and black; black is otherwise kept for the very darkest.
 vec3 pigment(vec3 linear) {
 	vec3 lab = to_oklab(linear);
 	lab.x = pow(max(lab.x, 0.0), tone_lift);
-	float best = 1e9;
+	int first = 0, last = neutral_count;
+	if (length(lab.yz) >= neutral_chroma) {
+		float best = 1e9;
+		for (int f = neutral_count; f + TONES <= PIGMENTS; f += TONES) {
+			if (f + TONES > pigment_count)
+				break;
+			for (int t = 0; t < TONES; t++) {
+				vec2 d = lab.yz - pigment_lab[f + t].yz;
+				float e = dot(d, d);
+				if (e < best) {
+					best = e;
+					first = f;
+				}
+			}
+		}
+		last = first + TONES;
+	}
+	float nearest = 1e9;
 	vec3 colour = linear;
 	for (int i = 0; i < PIGMENTS; i++) {
 		if (i >= pigment_count)
 			break;
-		vec3 d = lab - pigment_lab[i];
-		d.x *= lightness_weight;
-		float e = dot(d, d);
-		if (e < best) {
-			best = e;
+		if (i < first || i >= last)
+			continue;
+		float e = abs(lab.x - pigment_lab[i].x);
+		if (e < nearest) {
+			nearest = e;
 			colour = pigment_rgb[i];
 		}
 	}
+	if (lab.x < black_below)
+		colour = pigment_rgb[1];
 	return mix(linear, colour, pigment_strength);
 }
 

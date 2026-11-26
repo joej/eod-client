@@ -13,7 +13,9 @@ namespace EodClient;
 public partial class WorldView
 {
     private Vector3? _lastJumpCheck;      // where the character was at the last check (Godot metres)
-    private double _jumpQuietUntil;       // no second jump request until then (the server is moving us)
+    // No second jump request until then (real time, ms). Static: it must hold across the new view a region change builds,
+    // or arriving facing the way back (the server's zone point heading often does that) and stepping forward jumps straight back.
+    private static ulong _jumpQuietUntil;
     // The dev overlay's "Jump points" switch. Static: it stays as set when a region change builds a new view
     // (it reset there, which read as the doorway showing from one side only).
     private static bool _jumpsVisible;
@@ -65,7 +67,7 @@ public partial class WorldView
         Vector3? before = _lastJumpCheck;
         _lastJumpCheck = now;
         // A teleport (the server moved us) isn't a step through anything.
-        if (before is not Vector3 from || from.DistanceTo(now) > 20f || _seconds < _jumpQuietUntil)
+        if (before is not Vector3 from || from.DistanceTo(now) > 20f || Time.GetTicksMsec() < _jumpQuietUntil)
             return;
         (float ax, float ay, _) = ToRegion(from);
         (float bx, float by, float bz) = ToRegion(now);
@@ -81,7 +83,7 @@ public partial class WorldView
     private void UseJump(ZoneJump j)
     {
         // Retail: 0x90 at most once every 10 s, and no message of its own (W47 note).
-        _jumpQuietUntil = _seconds + 10;
+        _jumpQuietUntil = Time.GetTicksMsec() + 10_000;
         GD.Print($"[world] through jump point {j.Name} (zone point {j.ZonePoint})");
         if (_session is not null)
             _ = _session.UseJumpPointAsync(j.ZonePoint);

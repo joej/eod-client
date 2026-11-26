@@ -116,6 +116,10 @@ public static partial class NifFile
         public int GlowTextureRef = -1, GlowUvSet;     // NiTexturingProperty glow slot (added light: effects)
         public int VertexMode = -1;   // NiVertexColorProperty: 0 ignore, 1 emissive, 2 ambient + diffuse
         public string? TextureFile;   // for NiSourceTexture blocks
+        public int PixelDataRef = -1; // NiSourceTexture with its pixels in the file -> its NiPixelData
+        public string? Embedded;      // NiSourceTexture -> the content name of its decoded pixels (NifPixels)
+        public NifPixelData? Pixels;  // NiPixelData
+        public NifPalette? Palette;   // NiPalette
         public Vector4? MaterialColor; // NiMaterialProperty -> diffuse RGB + alpha (0..1)
         public Vector3? MaterialEmissive; // NiMaterialProperty -> emissive RGB, when not black
         public ushort AlphaFlags;     // NiAlphaProperty -> flags (bit 0 blend, bits 5-8 dest, bit 9 test)
@@ -206,7 +210,15 @@ public static partial class NifFile
                     ReadVertexColorProperty(ref c, b);
                     break;
                 case "NiSourceTexture":
-                    b.TextureFile = ReadSourceTextureFileName(ref c, bytes);
+                    (b.TextureFile, b.PixelDataRef) = ReadSourceTexture(ref c);
+                    break;
+                case "NiPixelData":
+                    try { b.Pixels = NifPixels.ReadPixelData(ref c, gamebryo10: false); }
+                    catch (NifFormatException) { }
+                    break;
+                case "NiPalette":
+                    try { b.Palette = NifPixels.ReadPalette(ref c); }
+                    catch (NifFormatException) { }
                     break;
                 case "NiMaterialProperty":
                     {
@@ -254,6 +266,12 @@ public static partial class NifFile
             }
         }
 
+        // Textures whose pixels are in the file: decoded, named by their content (NifPixels).
+        foreach (Block b in blocks)
+            if (b is { Type: "NiSourceTexture", TextureFile: null, PixelDataRef: >= 0 } && b.PixelDataRef < blocks.Length
+                && blocks[b.PixelDataRef].Pixels is { } pixels)
+                b.Embedded = NifPixels.Decode(pixels,
+                    pixels.PaletteRef >= 0 && pixels.PaletteRef < blocks.Length ? blocks[pixels.PaletteRef].Palette : null)?.Name;
         return blocks;
     }
 
@@ -605,6 +623,9 @@ public static partial class NifFile
                     if (m >= 0 && m < blocks.Length && blocks[m].Type == "NiMaterialProperty"
                         && System.IO.Path.GetExtension(blocks[m].Name).ToLowerInvariant() is ".tga" or ".dds" or ".bmp")
                         return blocks[m].Name;
+            // Else the pixels themselves (Darkness Falls' long tunnel, Tir na Nog's houses).
+            if (src >= 0 && src < blocks.Length && blocks[src].Embedded is { } embedded)
+                return embedded;
         }
         return null;
     }
@@ -660,6 +681,9 @@ public static partial class NifFile
 
         int vc = FindProperty(blocks, shape.Props, "NiVertexColorProperty", inheritedVertexColor);
         Vector4[]? colors = vc >= 0 && blocks[vc].VertexMode == 2 ? mesh.VertexColors : null;
+        bool baseSlot = shape.Props.Any(p => p >= 0 && p < blocks.Length && blocks[p].Type == "NiTexturingProperty"
+            && blocks[p].BaseTextureRef >= 0 && blocks[p].BaseTextureRef < blocks.Length
+            && blocks[blocks[p].BaseTextureRef].Type == "NiSourceTexture");
 
         int tp = FindProperty(blocks, shape.Props, "NiTexturingProperty", -1);
         (string? dark, Vector2[]? darkUv) = tp < 0 ? (null, null) : Slot(blocks, mesh, blocks[tp].DarkTextureRef, blocks[tp].DarkUvSet);
@@ -669,6 +693,7 @@ public static partial class NifFile
         return mesh with
         {
             Alpha = mode, AlphaCutoff = cutoff, DoubleSided = bothSides, VertexColors = colors,
+            TextureMissing = mesh.TextureFile is null && baseSlot,
             Additive = a >= 0 && Additive(blocks[a].AlphaFlags),
             DarkTextureFile = dark, DarkTexCoords = darkUv, DetailTextureFile = detail, DetailTexCoords = detailUv,
             GlowTextureFile = glow,
@@ -678,7 +703,7 @@ public static partial class NifFile
     // A texture slot's file name and the UV set it uses, if both exist.
     private static (string?, Vector2[]?) Slot(Block[] blocks, NifMesh mesh, int sourceRef, int uvSet)
     {
-        if (sourceRef < 0 || sourceRef >= blocks.Length || blocks[sourceRef].TextureFile is not { } file)
+        if (sourceRef < 0 || sourceRef >= blocks.Length || (blocks[sourceRef].TextureFile ?? blocks[sourceRef].Embedded) is not { } file)
             return (null, null);
         if (mesh.UvSets is not { } sets || uvSet < 0 || uvSet >= sets.Length)
             return (null, null);
@@ -1036,26 +1061,27 @@ public static partial class NifFile
         };
     }
 
-    // NiSourceTexture body (4.2.x), from here positioned just past the type string:
-    //   u32 unknown, 2x link ref (ignored), Use External (1-byte bool). If external, a sized-string
-    //   File Name follows. We read only the file name and let the caller resync past the rest.
-    private static string? ReadSourceTextureFileName(ref NifCursor c, ReadOnlySpan<byte> bytes)
+    // NiSourceTexture body (4.x, nif.xml), from here positioned just past the type string: NiObjectNET (Name, Extra Data
+    // ref, Controller ref), Use External (byte); then the File Name if external, else an unknown byte and the Pixel Data
+    // ref. Returns the file name (null when embedded or implausible) and the pixel data ref (-1 when external).
+    private static (string? File, int PixelData) ReadSourceTexture(ref NifCursor c)
     {
         try
         {
-            c.U32();               // unknown/flags
-            c.U32(); c.U32();      // link refs (no parent here)
+            c.SizedString();       // Name
+            c.I32(); c.I32();      // Extra Data, Controller
             if (!c.Bool())         // Use External
-                return null;
+            {
+                c.U8();            // Unknown Byte
+                return (null, c.I32());
+            }
             string name = c.SizedString();
             // Sanity: an external texture name is a short Latin-1 file name, not arbitrary bytes.
-            return name.Length is > 0 and < 256 && name.All(ch => ch is >= ' ' and < (char)127)
-                ? name
-                : null;
+            return (name.Length is > 0 and < 256 && name.All(ch => ch is >= ' ' and < (char)127) ? name : null, -1);
         }
         catch (NifFormatException)
         {
-            return null;
+            return (null, -1);
         }
     }
 

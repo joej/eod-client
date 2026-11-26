@@ -118,3 +118,47 @@ public sealed class ZoneCheckTests
         Assert.Throws<FormatException>(() => ZoneCheck.ReadKnown("cube.glb @ 4000 | floating | no y\n"));
     }
 }
+
+/// <summary>Surfaces that would draw white: no texture in the library for their material, and a white material.</summary>
+public sealed class ZoneCheckUntexturedTests
+{
+    private static DaocAssets.Nif.NifMesh Tri(string name, string? texture, System.Numerics.Vector4? colour = null) => new()
+    {
+        Name = name,
+        Vertices = [new(0, 0, 0), new(40, 0, 0), new(0, 40, 0)],
+        Triangles = [(0, 1, 2)],
+        TextureFile = texture,
+        BaseColor = colour,
+    };
+
+    [Fact]
+    public void AWhiteSurfaceWithNoTextureIsAnErrorButAColouredOrTexturedOneIsNot()
+    {
+        var model = new DaocAssets.Nif.NifModel
+        {
+            Version = new DaocAssets.Nif.NifVersion(4, 2, 1, 0),
+            Meshes =
+            [
+                Tri("wall", "stone.dds"),
+                Tri("mesh80", null, new(0.9f, 0.9f, 0.9f, 1)),       // Darkness Falls' tunnel before its pixels were read
+                Tri("tower", null, new(0.8f, 0.6f, 0.4f, 1)),        // a flat material colour (W3a): drawn as it is
+                Tri("mesh157", null, new(0.6f, 0.6f, 0.6f, 1)) with { TextureMissing = true },   // a slot the converter couldn't name
+            ],
+        };
+        string glb = Path.Combine(Path.GetTempPath(), $"untex-{Guid.NewGuid():N}.glb");
+        try
+        {
+            DaocAssets.Nif.GltfExporter.SaveGlb(model, glb);
+            var b = DaocAssets.Zone.ZoneCheck.GlbBounds(glb, name => name.Equals("stone", StringComparison.OrdinalIgnoreCase))!.Value;
+            Assert.NotNull(b.Untextured);
+            Assert.Equal(2, b.Untextured!.Length);
+            Assert.StartsWith("mesh157", b.Untextured[0]);   // grey, but marked by the converter
+            Assert.StartsWith("mesh80", b.Untextured[1]);
+            var report = DaocAssets.Zone.ZoneCheck.Check([new("t.glb", 100, 100, 0, 0, 1)], null, _ => b, 0, 0, 8192, 8192);
+            Assert.Contains(report.Findings, f => f.Kind == "untextured surface" && f.Severity == DaocAssets.Zone.CheckSeverity.Error);
+            // With every texture there, only the marked one.
+            Assert.StartsWith("mesh157", Assert.Single(DaocAssets.Zone.ZoneCheck.GlbBounds(glb, _ => true)!.Value.Untextured!));
+        }
+        finally { File.Delete(glb); }
+    }
+}

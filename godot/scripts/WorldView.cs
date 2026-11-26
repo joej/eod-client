@@ -1135,8 +1135,8 @@ public partial class WorldView : Node3D
             (_chase
                 ? $"move: {Keys(ControlAction.Forward)}/{Keys(ControlAction.Back)} walk, {Keys(ControlAction.TurnLeft)}/{Keys(ControlAction.TurnRight)} or right-drag turn, " +
                   $"{Keys(ControlAction.StrafeLeft)}/{Keys(ControlAction.StrafeRight)} strafe, {Keys(ControlAction.Jump)} jump, {Keys(ControlAction.Sprint)} sprint, " +
-                  $"{Keys(ControlAction.AutoRun)} auto-run, wheel zoom, left-drag pan   ·   {Keys(ControlAction.AttackMode)} attack   ·   {Keys(ControlAction.TargetEnemy)} enemy, {Keys(ControlAction.TargetFriend)} friend   ·   F9 free-fly, Num - shot"
-                : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   F9 chase, Num - screenshot")
+                  $"{Keys(ControlAction.AutoRun)} auto-run, wheel zoom, left-drag pan   ·   {Keys(ControlAction.AttackMode)} attack   ·   {Keys(ControlAction.TargetEnemy)} enemy, {Keys(ControlAction.TargetFriend)} friend   ·   F9 free-fly, Ctrl+F9 or Num - shot"
+                : "free-fly: WASD move, Q/E down/up, right-drag look, Shift sprint   ·   F9 chase, Ctrl+F9 or Num - screenshot")
             + $"\nF12 panels · Shift+F12 render mode · Alt+F12 view distance · Ctrl+F12 packet log · Shift+F9 travel · left-click inspect (Esc clears) · {Keys(ControlAction.Map)} map";
     }
 }

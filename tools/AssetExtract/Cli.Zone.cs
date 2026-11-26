@@ -349,12 +349,16 @@ internal static partial class Cli
                 ? null : DaocAssets.Zone.ZoneTerrain.Read(datMpk, zoneSize.X, zoneSize.Y);
         var placements = DaocAssets.Zone.ZoneCheck.ReadManifest(DaocAssets.InstallFiles.ReadAllText(Path.Combine(zoneDir, "zone.csv")));
         var cache = new Dictionary<string, DaocAssets.Zone.ModelBounds?>(StringComparer.OrdinalIgnoreCase);
+        // Every texture the library holds, by stem (the client binds a material's texture by its name, in any folder).
+        var textureStems = new HashSet<string>(new[] { Path.Combine(libDir, "textures"), Path.Combine(libDir, "overrides") }
+            .Where(Directory.Exists).SelectMany(d => Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories))
+            .Select(f => Path.GetFileNameWithoutExtension(f)), StringComparer.OrdinalIgnoreCase);
         DaocAssets.Zone.ModelBounds? Bounds(string glb)
         {
             if (cache.TryGetValue(glb, out var b)) return b;
             string path = new[] { Path.Combine(libDir, "overrides", glb), Path.Combine(libDir, "models", glb), Path.Combine(libDir, glb) }
                 .FirstOrDefault(File.Exists) ?? "";
-            return cache[glb] = path.Length == 0 ? null : DaocAssets.Zone.ZoneCheck.GlbBounds(path);
+            return cache[glb] = path.Length == 0 ? null : DaocAssets.Zone.ZoneCheck.GlbBounds(path, textureStems.Contains);
         }
         var report = DaocAssets.Zone.ZoneCheck.Check(placements,
             terrain is null ? null : (x, y) => terrain.HeightAt(x - offX, y - offY), Bounds,

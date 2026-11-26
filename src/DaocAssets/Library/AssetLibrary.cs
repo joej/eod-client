@@ -369,6 +369,15 @@ public sealed class AssetLibrary
                     return ep;
             }
 
+        // A texture decoded from a model's own pixels (NifPixels): written out, under its content name, as a DDS.
+        if (Nif.NifPixels.Find(stem) is { } embedded)
+        {
+            Directory.CreateDirectory(textures);
+            string own = Path.Combine(textures, embedded.Name.ToLowerInvariant());
+            WriteAtomically(own, tmp => File.WriteAllBytes(tmp, embedded.ToDds()));
+            return own;
+        }
+
         (byte[] Bytes, string FileName)? found = _index.Read(FindTexture(textureName, modelFolder));
         if (found is null)
             return null;

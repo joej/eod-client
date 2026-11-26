@@ -47,6 +47,10 @@ public sealed record NifMesh
     /// shape's own name or its nodes' is inferred).</summary>
     public bool KeepsMaterial { get; init; }
 
+    /// <summary>The shape has a base texture slot, but no texture could be named for it (an unreadable source, an
+    /// empty name): it would draw untextured where the client draws a texture. The zone check reports it.</summary>
+    public bool TextureMissing { get; init; }
+
     /// <summary>The "!"-named nodes above the shape, outermost first, joined by ';' (a keep piece's !visible_damaged,
     /// !sclimb_visible_tier3_hib, ...), or null. The client shows one such branch by the piece's state.</summary>
     public string? Branches { get; init; }

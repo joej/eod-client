@@ -5,7 +5,8 @@
 // of -angle about the vertical, the per-placement scale) with the bounds of its converted model, and
 // compared with the terrain under it. Counts of converted objects say nothing about where they land;
 // this does. Findings:
-//   error    missing model, model with no geometry, object entirely under the ground
+//   error    missing model, model with no geometry, object entirely under the ground, a drawn surface with no texture
+//            and a plain white material (a texture the converter couldn't find or read: Darkness Falls' tunnel, 2026-11-25)
 //   warning  object's origin sunk below the ground, object floating above it, outside its zone,
 //            implausible size
 // Thresholds are in region units (40 = 1 m) and are deliberately loose: a finding should be a real
@@ -45,7 +46,8 @@ public readonly record struct ZonePlacement(string Glb, float X, float Y, float 
 /// <summary>A model's bounds in its glb (metres, glTF axes: Y up), as the client draws it.</summary>
 /// <param name="Sample">Up to a few thousand of the model's vertices (metres, as drawn), for pieces too
 /// large to judge by their box: landscape pieces modelled in zone coordinates.</param>
-public readonly record struct ModelBounds(Vector3 Min, Vector3 Max, Vector3[]? Sample = null);
+/// <param name="Untextured">The model's drawn materials that bind no texture and are plain white (none: null).</param>
+public readonly record struct ModelBounds(Vector3 Min, Vector3 Max, Vector3[]? Sample = null, string[]? Untextured = null);
 
 public enum CheckSeverity { Warning, Error }
 
@@ -146,6 +148,9 @@ public static class ZoneCheck
                 findings.Add(new(CheckSeverity.Error, "missing or empty model", p, "no geometry to draw"));
                 continue;
             }
+            if (b.Untextured is { Length: > 0 } white)
+                findings.Add(new(CheckSeverity.Error, "untextured surface", p,
+                    $"drawn white, no texture: {string.Join(", ", white.Take(4))}{(white.Length > 4 ? $" (+{white.Length - 4})" : "")}"));
             if (p.X < originX || p.Y < originY || p.X >= originX + width || p.Y >= originY + height)
                 findings.Add(new(CheckSeverity.Warning, "outside its zone", p, "position is outside the zone's square"));
 
@@ -273,10 +278,21 @@ public static class ZoneCheck
         };
 
     /// <summary>A converted model's bounds as the client draws it: every triangle evaluated through
-    /// the glb's node transforms and skins (SharpGLTF), in metres. Null if the glb has no geometry.</summary>
-    public static ModelBounds? GlbBounds(string glbPath)
+    /// the glb's node transforms and skins (SharpGLTF), in metres. Null if the glb has no geometry.
+    /// With <paramref name="hasTexture"/> (does the library have a texture of this name?), also the drawn materials
+    /// that will draw without the texture the client draws: those the converter marked (a base slot it couldn't name,
+    /// "textureMissing"), and plain white ones that bind none (the client binds a texture by the material's name; a
+    /// material colour of its own, W3a, isn't white).</summary>
+    public static ModelBounds? GlbBounds(string glbPath, Func<string, bool>? hasTexture = null)
     {
         var model = SharpGLTF.Schema2.ModelRoot.Load(glbPath);
+        string[]? untextured = hasTexture is null ? null : model.LogicalMeshes
+            .SelectMany(m => m.Primitives).Select(p => p.Material).Where(m => m is not null).Distinct()
+            .Where(m => !m!.Name.StartsWith("eodcollide", StringComparison.OrdinalIgnoreCase)
+                && (MarkedMissing(m)
+                    || (m.FindChannel("BaseColor") is { } c && c.Texture is null
+                        && c.Color is { X: >= 0.85f, Y: >= 0.85f, Z: >= 0.85f } && !hasTexture(m.Name))))
+            .Select(m => m!.Name).Order().ToArray();
         Vector3 min = new(float.MaxValue), max = new(float.MinValue);
         var all = new List<Vector3>();
         foreach (var (a, b, c, _) in SharpGLTF.Schema2.Toolkit.EvaluateTriangles(model.DefaultScene))
@@ -291,6 +307,9 @@ public static class ZoneCheck
         // An even spread of at most 4,096 vertices (every vertex appears once per triangle using it).
         int stride = Math.Max(1, all.Count / 4096);
         Vector3[] sample = all.Where((_, i) => i % stride == 0).ToArray();
-        return new ModelBounds(min, max, sample);
+        return new ModelBounds(min, max, sample, untextured is { Length: > 0 } ? untextured : null);
     }
+
+    private static bool MarkedMissing(SharpGLTF.Schema2.Material? m) =>
+        m?.Extras is System.Text.Json.Nodes.JsonObject o && o.TryGetPropertyValue("textureMissing", out var v) && v?.GetValue<bool>() == true;
 }

@@ -141,7 +141,14 @@ public static class GltfExporter
                 continue;
             if (mesh.SkinJoints is { Length: > 0 } bones && mesh.Skin is not null)
             {
-                var joints = bones.Select(b => (nodes[b.Joint], b.InverseBind)).ToArray();
+                // The skin's own bones (the vertices' joint indices count these), then every other node of the skeleton
+                // with no weight, so the joints form one whole tree. With only the weighted bones, a skeleton whose bones
+                // hang under unweighted nodes (the boar's tusk bones under "Dummy head") reached Godot as several roots,
+                // and the boar was drawn turned a quarter against its own skeleton (it walked sideways).
+                var joints = bones.Select(b => (nodes[b.Joint], b.InverseBind))
+                    .Concat(nodes.Except(bones.Select(b => nodes[b.Joint])).Select(n =>
+                        (n, Matrix4x4.Invert(n.WorldMatrix, out Matrix4x4 inv) ? inv : Matrix4x4.Identity)))
+                    .ToArray();
                 scene.AddSkinnedMesh(BuildSkinnedMesh(mesh), joints).WithName(NodeName(mesh));
             }
             else
@@ -453,6 +460,8 @@ public static class GltfExporter
             extras["emissive"] = FormattableString.Invariant($"{e.X:0.###} {e.Y:0.###} {e.Z:0.###}");
         if (m.KeepsMaterial)
             extras["keepsMaterial"] = true;
+        if (m.TextureMissing)
+            extras["textureMissing"] = true;
         if (m.Branches is not null)
             extras["branches"] = m.Branches;
         if (m.KeepMaterial is not null)

@@ -64,6 +64,7 @@ public partial class WorldView
     private void StartClimb(string how)
     {
         _climbing = true;
+        _swimming = false;
         (_airborne, _jumping, _verticalSpeed, _landingSpeed, _groundHit) = (false, false, 0, 0, false);
         AppendChat("You start climbing.", Colors.White);
         GD.Print($"[world] climbing ({how}) at {ToRegion(_body.Position)}");
@@ -82,7 +83,9 @@ public partial class WorldView
     // Starts a climb when the step was stopped by a climb surface ahead, or a fast fall passes one.
     private void TryStartClimb()
     {
-        if (_climbing || _dead || _swimming)
+        // Swimming doesn't stop it: in retail only riding does (a ladder out of the water, Inconnu Crypt; climbing down into
+        // water stays climbing).
+        if (_climbing || _dead)
             return;
         bool walkedIn = _wallBlocked;
         bool caught = _airborne && -_verticalSpeed > ClimbCatchSpeed;

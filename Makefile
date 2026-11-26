@@ -15,7 +15,8 @@
 #                           and the figures (make figures: every model id, classic and Catacombs)
 #                           and the region loading screens (make loading), maps (make maps) and sounds (make sounds)
 #   make check-zones        ... and fail if any zone check has errors
-#   make clean-library      delete every converted model and texture (they are redone on demand)
+#   make clean-library      delete everything converted into the library (redone on demand); needed before
+#                           converting from another install
 #   make clean              delete everything this Makefile made
 #   make -j8 ...            run up to 8 conversions at once (tools/play.sh passes the core count)
 #
@@ -81,6 +82,17 @@ endif
 # redoes the index and the zone table, which hold its paths. Rewritten only when it changes.
 CLIENT_FILE := $(BUILD)/client
 $(shell mkdir -p $(BUILD); [ "$$(cat $(CLIENT_FILE) 2>/dev/null)" = "$(CLIENT)" ] || echo "$(CLIENT)" > $(CLIENT_FILE))
+# The library remembers the install it was made from. Another install's leftovers would otherwise stay: a model the
+# new install scopes differently (dnifs/ versus the top folder), or a texture it doesn't gather again, still looks
+# up to date and is picked over the new one. So a library made from another install must be cleaned first.
+LIB_CLIENT := $(shell cat $(LIB)/.client 2>/dev/null)
+ifneq ($(LIB_CLIENT),)
+ifneq ($(LIB_CLIENT),$(CLIENT))
+$(error the library in $(LIB) was made from $(LIB_CLIENT), not $(CLIENT): run make clean-library first)
+endif
+else
+$(shell mkdir -p $(LIB); echo "$(CLIENT)" > $(LIB)/.client)
+endif
 -include $(BUILD)/zones.mk
 # Only the zones asked for get their model lists read (and made, on first use).
 ifneq ($(filter zones check-zones,$(MAKECMDGOALS)),)
@@ -305,7 +317,8 @@ list:
 	  printf '%4d  %-30s %s\n' $$(expr $(z) + 0) "$(zone$(z)_NAME)" "$$s";)
 
 clean-library:
-	rm -rf $(LIB)/models $(LIB)/textures
+	rm -rf $(LIB)/models $(LIB)/textures $(LIB)/loading $(LIB)/maps $(LIB)/icons $(LIB)/sounds $(LIB)/keeps \
+	  $(LIB)/trees.txt $(LIB)/.client
 
 clean: clean-library
 	rm -rf $(BUILD) $(wildcard $(ZONEDIR)/zone[0-9][0-9][0-9]) $(ZONEDIR)/summary.md

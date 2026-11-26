@@ -17,9 +17,12 @@ which added the whole asset/client layer.
 GPL-3.0 throughout, with preserved upstream notices (their `THIRD_PARTY.md`): DOL/OpenDAoC server,
 BuildNav, and — relevant to us — **`nif.xml` is NifTools', GPL-3.0**, the same spec file our own
 CLAUDE.md already points at. Textures are upscaled with Real-ESRGAN (BSD-3, not shipped); Three.js is
-MIT; Godot is MIT. They ship **no game assets** — everything is converted from the user's own
-installed client at runtime — which is the same policy we adopted. So it is clean to study and to
-adapt with a file-header attribution. Caveat flagged for any future port: their `net/DaocClient.cs`
+MIT; Godot is MIT. Their repositories hold source only, so the code is clean to study and to adapt
+with a file-header attribution. *Updated 2026-11-25:* this page first said they ship no game assets.
+That held for the repository snapshot we read, but their released Godot client (v0.36c, v0.37c, from the
+`chris4aker/OfflineDAoC-LivingServer` fork's `source/new-client`) downloads about 30 GB of content
+converted from the original client's files (their `docs/NEW-CLIENT.md`). Our policy differs: we convert
+from the player's own install and never distribute converted content. Caveat flagged for any future port: their `net/DaocClient.cs`
 and the C# `NiLib` (in their BuildNav tool) may reuse code licensed elsewhere; check file headers
 before adapting those two specifically.
 

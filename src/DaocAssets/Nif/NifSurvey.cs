@@ -66,6 +66,7 @@ public sealed partial class NifSurvey
         "NiAlphaProperty", "NiStencilProperty", "NiVertexColorProperty", "NiZBufferProperty",
         "NiSpecularProperty", "NiWireframeProperty", "NiShadeProperty", "NiDitherProperty",
         "NiKeyframeController", "NiKeyframeData", "NiStringExtraData", "NiTextKeyExtraData",
+        "NiPixelData", "NiPalette",
     };
 
     /// <summary>
@@ -87,12 +88,14 @@ public sealed partial class NifSurvey
                     or "NiMaterialProperty" or "NiStencilProperty" => NifCoverage.Partial,
                 "NiGeomMorpherController" or "NiMorphData" => NifCoverage.Partial,
                 "NiKeyframeController" or "NiKeyframeData" or "NiStringExtraData" => NifCoverage.Partial,
+                "NiPixelData" or "NiPalette" or "NiVertexColorProperty" => NifCoverage.Partial,
                 _ => NifCoverage.Unhandled,
             };
         return type switch
         {
             "NiKeyframeController" or "NiKeyframeData" or "NiStringExtraData" => NifCoverage.Partial,
             "NiVisController" => NifCoverage.Partial,
+            "NiPixelData" or "NiPalette" or "NiVertexColorProperty" => NifCoverage.Partial,
             "NiNode" or "NiTriShape" or "NiTriStrips" or "NiAlphaProperty" => NifCoverage.Handled,
             "NiBillboardNode" or "NiSkinInstance" or "NiSkinData" => NifCoverage.Partial,
             "NiLODNode" or "NiTriShapeData" or "NiTriStripsData" or "NiTexturingProperty"
@@ -100,6 +103,9 @@ public sealed partial class NifSurvey
             _ => NifCoverage.Unhandled,
         };
     }
+
+    private const string PixelsNote =
+        "24/32-bit, 8-bit paletted and DXT1/DXT5 pixels, top level only (the client builds mipmaps)";
 
     /// <summary>What a <see cref="NifCoverage.Partial"/> type loses in conversion.</summary>
     public static string CoverageNote(string type, NifVersion version)
@@ -112,8 +118,10 @@ public sealed partial class NifSurvey
                 "NiSkinInstance" or "NiSkinData" =>
                     "skins exported (top 4 weights); a Catacombs part's bones are bound to its skeleton by name (CatacombsFigure)",
                 "NiTriShapeData" or "NiTriStripsData" =>
-                    "vertex colours dropped; one UV set (the base slot's); geometry-scanned if the file doesn't decode",
-                "NiSourceTexture" => "external file name only",
+                    "vertex colours kept where a NiVertexColorProperty says ambient + diffuse; the texture slots' UV sets; geometry-scanned if the file doesn't decode",
+                "NiSourceTexture" => "external file name, or its embedded pixels decoded (NifPixels)",
+                "NiPixelData" or "NiPalette" => PixelsNote,
+                "NiVertexColorProperty" => "vertex mode: ambient + diffuse uses the vertex colours, else they are ignored (Classic lighting); emissive mode and lighting mode dropped",
                 "NiBillboardNode" => "walked as a plain node: keeps its stored orientation, doesn't face the camera",
                 "NiLODNode" => "nearest level only (smallest near extent; child 0 for screen-size LOD)",
                 "NiRangeLODData" => "near extents only, to pick the nearest level",
@@ -130,13 +138,15 @@ public sealed partial class NifSurvey
         {
             "NiLODNode" => "nearest level only (smallest near extent; by node name if a node has no ranges)",
             "NiBillboardNode" => "walked as a plain node: keeps its stored orientation, doesn't face the camera",
-            "NiTriShapeData" or "NiTriStripsData" => "vertex colours and extra UV sets dropped",
+            "NiTriShapeData" or "NiTriStripsData" => "vertex colours kept where a NiVertexColorProperty says ambient + diffuse; UV sets beyond the texture slots' dropped",
             "NiTexturingProperty" => "base, dark, detail and glow (on UV set 0) textures; gloss/bump/decal slots, " +
                 "apply mode and clamp/filter dropped",
             "NiSkinInstance" or "NiSkinData" =>
                 "self-contained skins exported (top 4 weights) with every node as a joint; a figure's rigid parts " +
                 "are bound to their parent node (NifFile.ReadFigure)",
-            "NiSourceTexture" => "external file name only; embedded pixel data not decoded",
+            "NiSourceTexture" => "external file name, or its embedded pixels decoded (NifPixels)",
+            "NiPixelData" or "NiPalette" => PixelsNote,
+            "NiVertexColorProperty" => "vertex mode: ambient + diffuse uses the vertex colours, else they are ignored (Classic lighting); emissive mode and lighting mode dropped",
             "NiMaterialProperty" => "diffuse, alpha and emissive (emissive for dungeons only); ambient/specular/glossiness dropped",
             "NiStencilProperty" => "draw mode (sidedness) only",
             "NiKeyframeController" or "NiKeyframeData" => DoorKeysNote,
@@ -324,6 +334,16 @@ public sealed partial class NifSurvey
                 }
                 break;
             }
+            case "NiPixelData":
+            {
+                NifPixelData p = NifPixels.ReadPixelData(ref c, gamebryo10: false);
+                Bump(f, "NiPixelData: embedded texture pixels");
+                Bump(f, $"NiPixelData: format {p.Format}, {p.BitsPerPixel} bits");
+                break;
+            }
+            case "NiPalette":
+                NifPixels.ReadPalette(ref c);
+                break;
             case "NiSourceTexture":
             {
                 ObjectNet(ref c, type, f);

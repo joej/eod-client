@@ -75,8 +75,13 @@ internal sealed class Gb10Block
     public int VertexMode = -1;
     // NiTriShapeData / NiTriStripsData vertex colours, if any
     public Vector4[]? Colors;
-    // NiSourceTexture
+    // NiSourceTexture: the external file name, or the content name of its decoded pixels (NifPixels); and the
+    // NiPixelData it points at when the pixels are inside the file
     public string? TextureFile;
+    public int PixelDataRef = -1;
+    // NiPixelData / NiPalette
+    internal NifPixelData? Pixels;
+    internal NifPalette? Palette;
     // NiMaterialProperty
     public Vector4? MaterialColor;
     public Vector3? MaterialEmissive;
@@ -171,7 +176,21 @@ internal static class Gamebryo1010
             return file;
         }
         file.Roots = roots;
+        DecodeEmbedded(file.Blocks);
         return file;
+    }
+
+    // Each NiSourceTexture whose pixels are in the file gets the content name of its decoded texture (NifPixels), which
+    // the shapes then name like any external file.
+    private static void DecodeEmbedded(Gb10Block?[] blocks)
+    {
+        foreach (Gb10Block? b in blocks)
+            if (b is { Type: "NiSourceTexture", TextureFile: null, PixelDataRef: >= 0 } && b.PixelDataRef < blocks.Length
+                && blocks[b.PixelDataRef]?.Pixels is { } pixels)
+            {
+                NifPalette? palette = pixels.PaletteRef >= 0 && pixels.PaletteRef < blocks.Length ? blocks[pixels.PaletteRef]?.Palette : null;
+                b.TextureFile = NifPixels.Decode(pixels, palette)?.Name;
+            }
     }
 
     // The 10.1 footer: Num Roots u32, then that many refs to real blocks, ending the file.
@@ -386,23 +405,15 @@ internal static class Gamebryo1010
                 Skip(ref c, 4 + 12);                    // depth, colour
                 break;
             case "NiPalette":
-            {
-                c.U8();                                 // Has Alpha
-                uint entries = c.U32();
-                Skip(ref c, (entries == 16 ? 16 : 256) * 4L);
+                b.Palette = NifPixels.ReadPalette(ref c);
                 break;
-            }
             case "NiPixelData":
             {
-                c.U32();                                // Pixel Format
-                Skip(ref c, 4 * 4 + 4 + 8 + 4);         // masks, bits per pixel, old fast compare, tiling
-                Ref(ref c, nb);                         // Palette
-                uint mips = c.U32();
-                if (mips > 32) throw new NifFormatException($"Implausible mipmap count {mips}.");
-                c.U32();                                // Bytes Per Pixel
-                Skip(ref c, mips * 12L);
-                Skip(ref c, c.U32());                   // Pixel Data
+                b.Pixels = NifPixels.ReadPixelData(ref c, gamebryo10: true);
+                if (b.Pixels.PaletteRef < -1 || b.Pixels.PaletteRef >= nb)
+                    throw new NifFormatException($"Palette ref {b.Pixels.PaletteRef} out of range.");
                 Bump(f, "NiPixelData: embedded texture pixels");
+                Bump(f, $"NiPixelData: format {b.Pixels.Format}, {b.Pixels.BitsPerPixel} bits");
                 break;
             }
             case "NiTriShape":
@@ -565,8 +576,9 @@ internal static class Gamebryo1010
                 byte external = c.U8();
                 if (external > 1) throw new NifFormatException($"Use External {external}.");
                 string fileName = c.SizedString();      // File Name (both cases at 10.1)
-                Ref(ref c, nb);                         // Unknown Link / Pixel Data
+                int pixelData = Ref(ref c, nb);         // Unknown Link / Pixel Data
                 if (external == 1) b.TextureFile = Path.GetFileName(fileName.Replace('\\', '/'));
+                else b.PixelDataRef = pixelData;
                 Bump(f, external == 1 ? "NiSourceTexture: external file" : "NiSourceTexture: EMBEDDED pixel data");
                 c.U32(); c.U32();                       // Pixel Layout, Use Mipmaps
                 Bump(f, $"NiSourceTexture: alpha format {c.U32()}");

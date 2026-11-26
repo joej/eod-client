@@ -268,13 +268,14 @@ public static partial class NifFile
             uint uvSet = 0, darkUv = 0, detailUv = 0;
             Vector4? color = null;
             Vector3? emissive = null;
+            bool baseSlot = false;
             foreach (int p in shape.Props)
             {
                 Gb10Block prop = blocks[p];
                 if (prop.Type == "NiTexturingProperty")
                 {
                     if (prop.BaseSourceRef >= 0)
-                        (texture, uvSet) = (blocks[prop.BaseSourceRef].TextureFile, prop.BaseUvSet);
+                        (texture, uvSet, baseSlot) = (blocks[prop.BaseSourceRef].TextureFile, prop.BaseUvSet, true);
                     if (prop.DarkSourceRef >= 0)
                         (dark, darkUv) = (blocks[prop.DarkSourceRef].TextureFile, prop.DarkUvSet);
                     if (prop.DetailSourceRef >= 0)
@@ -326,6 +327,7 @@ public static partial class NifFile
                 TexCoords = uvs,
                 Triangles = data.Triangles,
                 TextureFile = texture,
+                TextureMissing = texture is null && baseSlot,
                 UvSets = data.UvSets,
                 VertexColors = colors,
                 DarkTextureFile = Set(darkUv) is null ? null : dark,

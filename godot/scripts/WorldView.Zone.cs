@@ -314,28 +314,32 @@ public partial class WorldView
             yield break;
         yield return true;
         var shader = GD.Load<Shader>("res://shaders/water.gdshader");
+        var lavaShader = GD.Load<Shader>("res://shaders/lava.gdshader");
         foreach (MeshInstance3D mi in FindMeshes(water))
         {
             // The node is named after the body (waterNN); the mesh instance may be it or its child.
             string name = rows.ContainsKey(mi.Name) ? mi.Name : mi.GetParent()?.Name ?? "";
             if (!rows.TryGetValue(name, out DaocAssets.Zone.WaterRow? row))
                 continue;
-            var mat = new ShaderMaterial { Shader = shader };
+            // Lava: opaque with its own orange glow, never water's alpha (retail's lava material).
+            bool lava = DaocAssets.Zone.WaterBody.Classify(row.Type) == DaocAssets.Zone.WaterKind.Lava;
+            var mat = new ShaderMaterial { Shader = lava ? lavaShader : shader };
             if (ModelTexturing.Load(row.Texture, libraryDir.PathJoin("overrides"), libraryDir.PathJoin("textures"), libraryDir) is { } tex)
                 mat.SetShaderParameter("albedo_tex", tex);
             // DAoC's flow is about -50..50; as texture repeats per second, /1000 reads as a slow drift.
             mat.SetShaderParameter("flow", row.Flow / 1000f);
             // A dungeon's water (dungeon.water planes): retail's 0.85 alpha above the surface, and no sun to glint on it.
-            if (parts.Fix is not null)
+            if (parts.Fix is not null && !lava)
             {
                 mat.SetShaderParameter("opacity", 0.85f);
                 mat.SetShaderParameter("specular", 0f);
             }
             mi.MaterialOverride = mat;
             parts.WaterBodies++;
-            // Its surface, for the swim check (WaterLayer only: nothing stands on it). Not lava: retail tells it apart
-            // from a lake (WaterBody.Kind), and nobody swims in it; what it does to a player is open (W17).
-            if (mi.Mesh is not null && DaocAssets.Zone.WaterBody.Classify(row.Type) != DaocAssets.Zone.WaterKind.Lava)
+            // Its surface, for the swim check (WaterLayer only: nothing stands on it). Lava too: retail puts LAVA bodies in
+            // the same water-height grid, so players swim, wade and dive in it as in water and report swimming in 0xA9;
+            // the burn is the server's (OpenDAoC: an IsLava zone and the swim state). The client has no lava damage.
+            if (mi.Mesh is not null)
             {
                 var body = new StaticBody3D { CollisionLayer = WaterLayer, CollisionMask = 0, Transform = RelativeTransform(mi, water) };
                 body.AddChild(new CollisionShape3D { Shape = mi.Mesh.CreateTrimeshShape() });
