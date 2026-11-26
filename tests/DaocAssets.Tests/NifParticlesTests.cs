@@ -98,4 +98,49 @@ public sealed class NifParticlesTests
         Assert.Equal(2, model.Particles.Count);
         Assert.All(model.Particles, p => Assert.True(p.EmitRate > 0 && p.Lifetime > 0 && p.Texture is not null));
     }
+
+    [Fact]
+    public void VisibilityKeysAreReadWithTheirController()
+    {
+        var w = new List<byte>();
+        void I(int v) => w.AddRange(BitConverter.GetBytes(v));
+        void F(float v) => w.AddRange(BitConverter.GetBytes(v));
+        I(-1); w.AddRange(BitConverter.GetBytes((ushort)12)); F(1); F(0); F(0); F(1); I(-1); I(4);   // clamped, data block 4
+        var c = new NifCursor([.. w]);
+        var vc = Assert.IsType<NifParticleReader.VisController>(NifParticleReader.Read(ref c, "NiVisController"));
+        Assert.Equal((4, (ushort)12, 1f), (vc.Data, vc.Flags, vc.StopTime));
+
+        var d = new List<byte>(BitConverter.GetBytes(2u));
+        foreach ((float t, byte v) in new[] { (0f, (byte)0), (0.1f, (byte)1) })
+        {
+            d.AddRange(BitConverter.GetBytes(t));
+            d.Add(v);
+        }
+        var dc = new NifCursor([.. d]);
+        var data = Assert.IsType<NifParticleReader.VisData>(NifParticleReader.Read(ref dc, "NiVisData"));
+        Assert.Equal(d.Count, dc.Pos);
+        Assert.Equal(new[] { (0f, false), (0.1f, true) }, data.Keys);
+    }
+
+    [LiveFact("live-nif/arrow_cold01_strike.nif")]
+    public void AnEffectsLaterBurstIsShownPartwayIn()
+    {
+        // The burst is a hidden shape a visibility controller shows from 0.1 s to 0.63 s, played once. It used to be
+        // dropped as hidden.
+        NifModel model = NifFile.Read(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "live-nif", "arrow_cold01_strike.nif")));
+        NifParticleSystem burst = Assert.Single(model.Particles, p => p.Texture == "gryboom01a.dds");
+        NifVisibility vis = Assert.IsType<NifVisibility>(burst.Visibility);
+        Assert.False(vis.Keys.First().Visible);
+        Assert.Equal(0.1f, vis.Keys.First(k => k.Visible).Time, 3);
+        Assert.Equal(2, (vis.Flags >> 1) & 3);   // clamp: once
+    }
+
+    [LiveFact("live-nif/redscint_hit.nif")]
+    public void MeshParticlesCarryTheirCard()
+    {
+        NifModel model = NifFile.Read(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "live-nif", "redscint_hit.nif")));
+        NifParticleMeshes meshes = model.Particles.SelectMany(p => p.Modifiers).OfType<NifParticleMeshes>().Single();
+        Assert.True(meshes.Width > 0 && meshes.Height > 0);
+        Assert.True(meshes.Width >= meshes.Height);
+    }
 }

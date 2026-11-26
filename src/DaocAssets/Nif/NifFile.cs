@@ -243,15 +243,22 @@ public static partial class NifFile
                     catch (NifFormatException) { b.DataRef = -1; }
                     break;
                 case "NiVisController":
-                    // A NiTimeController: only its Next Controller, so a chain reaches a keyframe controller behind it (a
-                    // keep gatehouse's vis1: NiVisController, then the NiKeyframeController that swings the leaf).
-                    try { b.NextRef = c.I32(); }
-                    catch (NifFormatException) { }
+                    // Its Next Controller, so a chain reaches a keyframe controller behind it (a keep gatehouse's vis1:
+                    // NiVisController, then the NiKeyframeController that swings the leaf); and its keys' data, for a
+                    // particle system it shows partway in (NifParticles).
+                    try
+                    {
+                        b.Particle = NifParticleReader.Read(ref c, b.Type);
+                        if (b.Particle is NifParticleReader.VisController vc)
+                            b.NextRef = vc.Next;
+                    }
+                    catch (NifFormatException) { b.Particle = null; }
                     break;
                 // Particle systems (NifParticles): the shape is a NiGeometry like a NiTriShape, with its controller.
                 case "NiParticles":
                 case "NiAutoNormalParticles":
                 case "NiRotatingParticles":
+                case "NiParticleMeshes":
                     if (TryReadAvObject(ref c, out Xform px, out int[] pprops, out string pname, out ushort pflags, out _, out b.Controller))
                         (b.Name, b.Flags, b.Local, b.Props) = (pname, pflags, px, pprops);
                     break;
@@ -263,6 +270,7 @@ public static partial class NifFile
                 case "NiParticleBomb":
                 case "NiParticleMeshModifier":
                 case "NiColorData":
+                case "NiVisData":
                     try
                     {
                         b.Particle = NifParticleReader.Read(ref c, b.Type);
@@ -345,7 +353,7 @@ public static partial class NifFile
             }
         }
 
-        List<NifParticleSystem> particles = figure ? [] : Particles4x(blocks);
+        List<NifParticleSystem> particles = figure ? [] : Particles4x(bytes, blocks);
         if (meshes.Count == 0 && particles.Count == 0)
             throw new NifFormatException("No NiTriShapeData geometry found in NIF.");
 

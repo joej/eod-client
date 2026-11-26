@@ -86,6 +86,9 @@ internal static partial class Cli
         if (command == "figures")
             return FiguresCmd(args);
 
+        if (command == "speffects")
+            return SpEffectsCmd(args);
+
         if (command == "cata")
             return CataCmd(args);
 
@@ -144,6 +147,7 @@ internal static partial class Cli
               mpk model    <name.nif> --index index.json --library LIBDIR [--dungeon dat<NNN>.mpk]   (a dungeon piece: its nifproxy/texproxy applied)
               mpk figure   <model-id> --gamedata gamedata.mpk --index index.json --library LIBDIR
               mpk figures  --gamedata gamedata.mpk --index index.json --library LIBDIR   (every model id: classic figures, and Catacombs versions)
+              mpk speffects --gamedata gamedata.mpk --index index.json --library LIBDIR   (the spell effects: models/speffects.csv and each effect model)
               mpk objects  --gamedata gamedata.mpk --index index.json --library LIBDIR   (the models of the server's objects: carts, banners, items on the ground)
               mpk strides  --gamedata gamedata.mpk --out FILE.csv   (each model id's run/walk/back/strafe strides, for the clips' playback speed)
               mpk keepmodels <client-dir> --index index.json --library LIBDIR   (every frontier keep piece model, and keeps/pieces.csv)

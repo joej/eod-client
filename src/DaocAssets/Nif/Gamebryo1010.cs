@@ -298,9 +298,14 @@ internal static class Gamebryo1010
                 Ref(ref c, nb);
                 break;
             case "NiAlphaController":
-            case "NiVisController":
                 TimeController(ref c, nb);
                 Ref(ref c, nb);                         // Data
+                break;
+            case "NiVisController":
+                // Kept: its keys show a particle system partway in (NifParticles).
+                b.Particle = NifParticleReader.Read(ref c, type);
+                if (b.Particle is NifParticleReader.VisController vc)
+                    b.NextController = vc.Next;
                 break;
             case "NiMaterialColorController":
             case "NiLightColorController":
@@ -339,9 +344,7 @@ internal static class Gamebryo1010
                 break;
             case "NiVisData":
             {
-                uint keys = c.U32();
-                if (keys > 100_000) throw new NifFormatException($"Implausible key count {keys}.");
-                Skip(ref c, keys * 5L);                 // time, byte
+                b.Particle = NifParticleReader.Read(ref c, type);   // time, shown
                 break;
             }
             // Dynamic effects: environment maps and lights (not drawn yet).

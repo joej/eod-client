@@ -194,6 +194,15 @@ check-zone$(1): zone$(1)
 endef
 $(foreach z,$(WANT),$(eval $(call ZONE_RULES,$(z),$(shell expr $(z) + 0))))
 
+# --- speffects: the spell effects (models/speffects.csv) and each effect model with its particles ---------------
+SPEFFECTS := $(LIB)/models/speffects.csv
+.PHONY: speffects
+speffects: $(SPEFFECTS)
+$(SPEFFECTS): $(INDEX) $(MODEL_SRC) $(wildcard $(A)/Effects/*.cs) $(CLI_SRC) $(X)/Cli.SpEffects.cs \
+              $(wildcard $(CLIENT)/gamedata.mpk) | $(TOOL)
+	@mkdir -p $(@D)
+	$(MPK) speffects --gamedata $(CLIENT)/gamedata.mpk --index $(INDEX) --library $(LIB)
+
 # --- figures: every model id as its classic figure (models/model<id>.glb, figures.csv: NPCs) and its ----
 # --- Catacombs version (models/cata<id>.glb, catacombs.csv: players) --------------------------------------
 FIGURES := $(LIB)/models/.figures.done
@@ -280,7 +289,7 @@ $(ICONS): $(wildcard $(CLIENT)/icons/*.bmp $(CLIENT)/icons/*.BMP $(CLIENT)/Icons
 dungeons: $(foreach z,$(DUNGEONS),zone$(z))
 
 .PHONY: zones check-zones
-zones: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(OBJECTS) $(STRIDES) $(KEEPS) $(LOADING) $(MAPS) $(ICONS) $(SOUNDS) $(TREES)
+zones: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),zone$(z)) $(ZONEDIR)/summary.md $(FIGURES) $(SPEFFECTS) $(OBJECTS) $(STRIDES) $(KEEPS) $(LOADING) $(MAPS) $(ICONS) $(SOUNDS) $(TREES)
 
 $(ZONEDIR)/summary.md: $(foreach z,$(ZONES) $(CITIES) $(DUNGEONS),$(ZONEDIR)/zone$(z)/zonecheck.md)
 	@{ echo "# Zone check, every converted zone (outdoor, cities and dungeons)"; echo; \

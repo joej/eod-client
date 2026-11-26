@@ -55,7 +55,13 @@ public sealed record NifParticleSystem
     /// <summary>The controller's emit flags (low byte: emit at the birth rate; high byte: spawn on death).</summary>
     public ushort EmitFlags { get; init; }
     public IReadOnlyList<NifParticleModifier> Modifiers { get; init; } = [];
+    /// <summary>When the system is shown: the visibility keys of the NiVisController on it or its nearest animated parent
+    /// (an effect's later bursts are hidden shapes shown partway in), or null: always.</summary>
+    public NifVisibility? Visibility { get; init; }
 }
+
+/// <summary>A NiVisController's keys (time in seconds, shown or not) and its controller's span and flags.</summary>
+public sealed record NifVisibility((float Time, bool Visible)[] Keys, ushort Flags, float StartTime, float StopTime);
 
 /// <summary>A particle modifier (the controller's chain).</summary>
 public abstract record NifParticleModifier;
@@ -76,8 +82,13 @@ public sealed record NifParticleSpin(bool RandomAxis, Vector3 Axis, float Speed)
 public sealed record NifParticleBomb(float Decay, float Duration, float DeltaV, float Start, uint DecayType, uint Symmetry,
     Vector3 Position, Vector3 Direction) : NifParticleModifier;
 
-/// <summary>NiParticleMeshModifier: each particle draws small meshes (cards) instead of a sprite; not drawn yet.</summary>
-public sealed record NifParticleMeshes(int Count) : NifParticleModifier;
+/// <summary>NiParticleMeshModifier: each particle draws a small mesh (a card) instead of a sprite: the first mesh's size
+/// (its two largest spans, units), texture and alpha flags.</summary>
+public sealed record NifParticleMeshes(int Count, float Width = 0, float Height = 0, string? Texture = null, ushort AlphaFlags = 0)
+    : NifParticleModifier;
+
+/// <summary>A particle mesh's look, as a reader resolves it: its two largest spans, texture and alpha flags.</summary>
+internal sealed record NifParticleMeshLook(float Width, float Height, string? Texture, ushort AlphaFlags);
 
 /// <summary>Reads particle blocks (both NIF versions) and puts each system together.</summary>
 internal static class NifParticleReader
@@ -92,8 +103,18 @@ internal static class NifParticleReader
 
     internal sealed record ColorData((float Time, Vector4 Color)[] Keys);
 
+    internal sealed record VisController(int Next, ushort Flags, float StartTime, float StopTime, int Data);
+
+    internal sealed record VisData((float Time, bool Visible)[] Keys);
+
+    // A mesh modifier's meshes, kept until the reader can resolve them.
+    internal sealed record MeshRefs(int[] Meshes) : NifParticleModifier;
+
     /// <summary>A particle shape found in the tree: where it is, what it draws with, and its first controller.</summary>
-    internal sealed record Shape(string Name, Matrix4x4 World, int Controller, bool Hidden, string? Texture, ushort AlphaFlags);
+    /// <summary>A particle shape found in the tree: where it is, its first controller, whether it or a parent is hidden,
+    /// the first visibility controller on it or a parent (-1 none), and what it draws with.</summary>
+    internal sealed record Shape(string Name, Matrix4x4 World, int Controller, bool Hidden, string? Texture, ushort AlphaFlags,
+        int VisController = -1);
 
     internal static bool IsParticleShape(string type) =>
         type is "NiParticles" or "NiAutoNormalParticles" or "NiRotatingParticles" or "NiParticleMeshes";
@@ -127,10 +148,13 @@ internal static class NifParticleReader
         {
             uint n = k.U32();
             if (n > 1000) throw new NifFormatException($"Implausible particle mesh count {n}.");
-            for (int i = 0; i < n; i++) k.I32();
-            return new NifParticleMeshes((int)n);
+            var meshes = new int[n];
+            for (int i = 0; i < n; i++) meshes[i] = k.I32();
+            return new MeshRefs(meshes);
         }),
         "NiColorData" => new ColorData(ReadColorKeys(ref c)),
+        "NiVisController" => ReadVisController(ref c),
+        "NiVisData" => ReadVisData(ref c),
         _ => null,
     };
 
@@ -181,6 +205,38 @@ internal static class NifParticleReader
             emitStart, emitStop, rate, life, lifeRandom, emitFlags, startRandom, emitter, particles, modifier);
     }
 
+    // NiVisController: NiTimeController, then its NiVisData.
+    private static VisController ReadVisController(ref NifCursor c)
+    {
+        int next = c.I32();
+        ushort flags = c.U16();
+        c.F32(); c.F32();
+        float start = c.F32(), stop = c.F32();
+        c.I32();
+        return new VisController(next, flags, start, stop, c.I32());
+    }
+
+    // NiVisData: count, then keys of time + a byte (no key type).
+    private static VisData ReadVisData(ref NifCursor c)
+    {
+        uint n = c.U32();
+        if (n > 100_000) throw new NifFormatException($"Implausible key count {n}.");
+        var keys = new (float, bool)[n];
+        for (int i = 0; i < n; i++)
+            keys[i] = (c.F32(), c.U8() != 0);
+        return new VisData(keys);
+    }
+
+    /// <summary>The first visibility controller on a controller chain starting at <paramref name="first"/>, or -1.</summary>
+    internal static int FindVisController(int first, Func<int, object?> raw, Func<int, int> nextController)
+    {
+        int seen = 0;
+        for (int i = first; i >= 0 && seen++ < 32; i = nextController(i))
+            if (raw(i) is VisController)
+                return i;
+        return -1;
+    }
+
     // KeyGroup<Color4>: count, key type (if any keys), keys of time + RGBA (+ tangents for quadratic, + TBC).
     private static (float, Vector4)[] ReadColorKeys(ref NifCursor c)
     {
@@ -209,12 +265,16 @@ internal static class NifParticleReader
     /// shape itself.
     /// </summary>
     internal static List<NifParticleSystem> Assemble(IEnumerable<Shape> shapes, Func<int, object?> raw,
-        Func<int, int> nextController, Func<int, Matrix4x4?> world)
+        Func<int, int> nextController, Func<int, Matrix4x4?> world, Func<int, NifParticleMeshLook?>? meshLook = null)
     {
         var systems = new List<NifParticleSystem>();
         foreach (Shape s in shapes)
         {
-            if (s.Hidden)
+            // A hidden shape shows only when a visibility controller brings it in (an effect's later burst).
+            NifVisibility? vis = null;
+            if (s.VisController >= 0 && raw(s.VisController) is VisController vc && raw(vc.Data) is VisData vd && vd.Keys.Length > 0)
+                vis = new NifVisibility(vd.Keys, vc.Flags, vc.StartTime, vc.StopTime);
+            if (s.Hidden && vis is null)
                 continue;
             Controller? ctl = null;
             int seen = 0;
@@ -231,7 +291,13 @@ internal static class NifParticleReader
             {
                 if (raw(m) is not Modifier mod)
                     break;
-                if (mod.Value is not null)
+                if (mod.Value is MeshRefs refs)
+                {
+                    NifParticleMeshLook? look = refs.Meshes.Select(i => meshLook?.Invoke(i)).FirstOrDefault(l => l is not null);
+                    mods.Add(look is null ? new NifParticleMeshes(refs.Meshes.Length)
+                        : new NifParticleMeshes(refs.Meshes.Length, look.Width, look.Height, look.Texture, look.AlphaFlags));
+                }
+                else if (mod.Value is not null)
                     mods.Add(mod.Value);
                 else if (raw(mod.ColorData) is ColorData cd && cd.Keys.Length > 0)
                     mods.Add(new NifParticleColors(cd.Keys));
@@ -247,7 +313,7 @@ internal static class NifParticleReader
                 EmitRate = ctl.EmitRate, Lifetime = ctl.Lifetime, LifetimeRandom = ctl.LifetimeRandom,
                 StartRandom = ctl.StartRandom, MaxParticles = ctl.Particles, EmitStart = ctl.EmitStart, EmitStop = ctl.EmitStop,
                 StartTime = ctl.StartTime, StopTime = ctl.StopTime, ControllerFlags = ctl.Flags, EmitFlags = ctl.EmitFlags,
-                Modifiers = mods,
+                Modifiers = mods, Visibility = vis,
             });
         }
         return systems;

@@ -562,8 +562,7 @@ public partial class WorldView
         {
             if (parts.Fix is { } fix)
                 ModelTexturing.ApplyDungeonFix(m, fix);
-            // Its fire, smoke and mist (NifParticles): part of the template, so every placed copy has them.
-            NifParticles.Attach(m, path, textureDirs);
+            NifParticles.AddFireLight(m);   // a fire among the zone's objects lights its surroundings (Modern particles)
             parts.TexturedModels += t > 0 ? 1 : 0;
             parts.TexturedSurfaces += t;
             model = m;

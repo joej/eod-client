@@ -81,10 +81,20 @@ public static class NifParticleJson
                         ["start"] = b.Start, ["decay_type"] = b.DecayType, ["symmetry"] = b.Symmetry,
                         ["position"] = V(Vector3.Transform(b.Position, a)), ["direction"] = V(Dir(b.Direction)),
                     },
-                    NifParticleMeshes pm => new() { ["type"] = "meshes", ["count"] = pm.Count },
+                    NifParticleMeshes pm => new()
+                    {
+                        ["type"] = "meshes", ["count"] = pm.Count, ["width"] = pm.Width * m, ["height"] = pm.Height * m,
+                        ["texture"] = pm.Texture, ["alpha_flags"] = pm.AlphaFlags,
+                    },
                     _ => new() { ["type"] = mod.GetType().Name },
                 });
             o["modifiers"] = mods;
+            if (s.Visibility is { } v)
+                o["visibility"] = new Dictionary<string, object>
+                {
+                    ["keys"] = v.Keys.Select(k => new object[] { k.Time, k.Visible }).ToArray(),
+                    ["flags"] = v.Flags, ["start"] = v.StartTime, ["stop"] = v.StopTime,
+                };
             list.Add(o);
         }
         return JsonSerializer.Serialize(new Dictionary<string, object> { ["systems"] = list });

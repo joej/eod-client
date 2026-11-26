@@ -18,7 +18,7 @@ public static class FireLight
     /// <summary>The light for a model's glowing systems: at their middle, raised to flame height (at least 0.6 m above
     /// them, or a light in the embers only grazes the ground), in their colour, reaching about five times as far as the
     /// fire itself spreads (4 to 12 m).</summary>
-    public static OmniLight3D For(System.Collections.Generic.IReadOnlyList<(Vector3 At, Color Colour, float Reach)> fire)
+    public static Godot.Collections.Dictionary Describe(System.Collections.Generic.IReadOnlyList<(Vector3 At, Color Colour, float Reach)> fire)
     {
         Vector3 at = Vector3.Zero;
         Color colour = Colors.Black;
@@ -29,6 +29,15 @@ public static class FireLight
             colour += c / fire.Count;
             reach = Mathf.Max(reach, r);
         }
+        return new Godot.Collections.Dictionary { ["at"] = at, ["colour"] = colour, ["reach"] = reach };
+    }
+
+    /// <summary>The light a <see cref="Describe"/>d fire gives.</summary>
+    public static OmniLight3D From(Godot.Collections.Dictionary fire)
+    {
+        Vector3 at = fire["at"].AsVector3();
+        Color colour = fire["colour"].AsColor();
+        float reach = (float)fire["reach"].AsDouble();
         float top = Mathf.Max(colour.R, Mathf.Max(colour.G, colour.B));
         var light = new OmniLight3D
         {

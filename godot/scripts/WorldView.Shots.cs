@@ -219,6 +219,15 @@ public partial class WorldView
                 _sun.ShadowEnabled = false;
             ApplySkyTime();
         }
+        // --spell ID: our character casts spell ID on itself (offline too): a 2.5 s cast from 2 s in, then it lands as a hit,
+        // to see the spell's effects (WorldView.SpellFx) in a shot or a clip.
+        int spellAt = System.Array.IndexOf(args, "--spell");
+        if (spellAt >= 0 && spellAt + 1 < args.Length && ushort.TryParse(args[spellAt + 1], out ushort spellId))
+        {
+            GetTree().CreateTimer(2).Timeout += () => OnSpellCast(new DaocProtocol.Packets.SpellCast(SelfId, spellId, 25));
+            GetTree().CreateTimer(4.5).Timeout += () =>
+                OnSpellLanded(new DaocProtocol.Packets.SpellEffect(SelfId, spellId, SelfId, 0, false, 1));
+        }
         // --no-panels hides the dev panels (status, layers, inspect), as F12 does: shots for the site.
         if (System.Array.IndexOf(args, "--no-panels") >= 0)
             _dev.PanelsVisible = false;

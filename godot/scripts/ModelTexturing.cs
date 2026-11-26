@@ -36,6 +36,9 @@ public static class ModelTexturing
         }
         TagLayers(state);
         textured = Apply(scene, textureDirs);
+        // Its particle systems (fire, smoke, glows), when the converter wrote any beside it: part of the loaded model, so
+        // every copy of it has them (zone objects, ground objects, keeps, monster effects, quest glyphs).
+        NifParticles.Attach(scene, path, textureDirs);
         return scene;
     }
 

@@ -226,6 +226,8 @@ public partial class WorldView
         {
             string path = lib.PathJoin("models").PathJoin(glb + ".glb");
             template = Godot.FileAccess.FileExists(path) ? ModelTexturing.LoadGlb(path, TexDirs("keeps")) : null;
+            if (template is not null)
+                NifParticles.AddFireLight(template);   // a keep's braziers light their surroundings (Modern particles)
             _keepTemplates[glb] = template;
         }
         if (template is null)

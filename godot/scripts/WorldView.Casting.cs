@@ -11,8 +11,8 @@
 // - 0x73 cancels the caster's cast animations.
 // - a slot the figure's set has no clip for plays the walk (column 0), as retail's clip lookup does.
 // Ours (retail's timing inside the cast isn't traced): Anim2 repeats until Anim3, and Anim3 starts 0.5 s before the end
-// (where retail plays the "cast" sound). Moving takes over from a cast clip, as from a swing. Not here yet: the spell
-// effects and sounds (M12). Retail has no cast bar (daoc-re RE/97): 0x72 drives effects, animations and sounds only, the
+// (where retail plays the "cast" sound). Moving takes over from a cast clip, as from a swing. The spell effects are
+// WorldView.SpellFx; their sounds aren't built yet (M12). Retail has no cast bar (daoc-re RE/97): 0x72 drives effects, animations and sounds only, the
 // same for our own casts as for others', and the client writes no chat line for 0x72, 0x1B or 0x73.
 
 using DaocAssets.Figures;
@@ -53,7 +53,9 @@ public partial class WorldView
         GD.Print($"[cast] #{c.CasterId} starts spell {c.SpellId}, {c.CastMilliseconds} ms");
         if (c.SpellId == 0)
             return;
-        PlayCast(c.CasterId, CastLook(c.SpellId), c.CastMilliseconds / 1000.0, anim3: true);
+        SpellCastLook? look = CastLook(c.SpellId);
+        CastEffects(c, animations: look is null || !(look.StillOnly && CasterMoving(c.CasterId)));
+        PlayCast(c.CasterId, look, c.CastMilliseconds / 1000.0, anim3: true);
     }
 
     private void OnSpellInterrupt(SpellInterrupt s)
@@ -61,16 +63,22 @@ public partial class WorldView
         GD.Print($"[cast] #{s.CasterId} interrupted");
         _castRuns[s.CasterId] = _castRuns.GetValueOrDefault(s.CasterId) + 1;
         StopCastClip(s.CasterId);
+        InterruptEffects(s.CasterId);
     }
 
     private void OnSpellLanded(SpellEffect fx)
     {
         GD.Print($"[cast] #{fx.CasterId} spell {fx.SpellId} on #{fx.TargetId}: result {fx.Result}" +
                  $"{(fx.Pulse ? ", pulse" : "")}, bolt {fx.BoltTenths * 100} ms");
+        LandEffects(fx);
         if (fx.Pulse || CastLook(fx.SpellId) is not { } look)
             return;
         if (look.CastOnLanding)
+        {
+            // Play Anims 1: the cast sequence again, effects and all, with the bolt time as its length.
+            CastEffects(new SpellCast(fx.CasterId, fx.SpellId, fx.BoltTenths), animations: true);
             PlayCast(fx.CasterId, look, fx.BoltTenths / 10.0, anim3: true);
+        }
         else if (look.Anim3OnLanding && look.Anim3 > 0)
             PlayCastClip(fx.CasterId, look.Anim3);
     }

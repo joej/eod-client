@@ -11,7 +11,7 @@ namespace DaocAssets.Nif;
 public static partial class NifFile
 {
     // 4.x: every block's world transform from the root, its parent, and the shapes found.
-    private static List<NifParticleSystem> Particles4x(Block[] blocks)
+    private static List<NifParticleSystem> Particles4x(ReadOnlySpan<byte> bytes, Block[] blocks)
     {
         if (!blocks.Any(b => NifParticleReader.IsParticleShape(b.Type)))
             return [];
@@ -56,17 +56,66 @@ public static partial class NifFile
             return false;
         }
 
+        object? Raw(int i) => i >= 0 && i < blocks.Length ? blocks[i].Particle : null;
+        int Next(int i) => i >= 0 && i < blocks.Length ? blocks[i].NextRef : -1;
+        int Vis(int i)
+        {
+            for (int n = i, guard = 0; n >= 0 && guard++ < 256; n = parent.GetValueOrDefault(n, -1))
+                if (NifParticleReader.FindVisController(blocks[n].Controller, Raw, Next) is >= 0 and int v)
+                    return v;
+            return -1;
+        }
+
         var shapes = new List<NifParticleReader.Shape>();
         for (int i = 0; i < blocks.Length; i++)
             if (NifParticleReader.IsParticleShape(blocks[i].Type) && world.TryGetValue(i, out Matrix4x4 w))
             {
                 (string? texture, ushort alpha) = Look(i);
-                shapes.Add(new NifParticleReader.Shape(blocks[i].Name, w, blocks[i].Controller, Hidden(i), texture, alpha));
+                shapes.Add(new NifParticleReader.Shape(blocks[i].Name, w, blocks[i].Controller, Hidden(i), texture, alpha, Vis(i)));
             }
-        return NifParticleReader.Assemble(shapes,
-            i => i >= 0 && i < blocks.Length ? blocks[i].Particle : null,
-            i => i >= 0 && i < blocks.Length ? blocks[i].NextRef : -1,
-            i => world.TryGetValue(i, out Matrix4x4 m) ? m : null);
+
+        // A mesh particle's card: the shape's geometry spans, its texture and blend.
+        var meshLooks = new Dictionary<int, NifParticleMeshLook?>();
+        byte[] data = bytes.ToArray();
+        NifParticleMeshLook? MeshLook(int i)
+        {
+            if (meshLooks.TryGetValue(i, out NifParticleMeshLook? known))
+                return known;
+            meshLooks[i] = null;   // a node seen once (no loops)
+            NifParticleMeshLook? look = null;
+            if (i >= 0 && i < blocks.Length && blocks[i].Type is "NiTriShape" or "NiTriStrips"
+                && ReadGeometryAt(data, blocks, blocks[i].DataRef) is { Vertices.Length: > 0 } g)
+            {
+                (string? texture, ushort alpha) = Look(i);
+                look = Spans(g.Vertices.Select(v => v * blocks[i].Local.Scale), texture, alpha);
+            }
+            else if (i >= 0 && i < blocks.Length)
+                // A node holding the card (a billboard node, as the particle meshes usually are): its first shape's, with the
+                // node's texture and blend when the shape has none.
+                foreach (int child in blocks[i].Children)
+                    if (MeshLook(child) is { } found)
+                    {
+                        (string? texture, ushort alpha) = Look(i);
+                        look = found with { Texture = found.Texture ?? texture, AlphaFlags = found.AlphaFlags != 0 ? found.AlphaFlags : alpha };
+                        break;
+                    }
+            return meshLooks[i] = look;
+        }
+        return NifParticleReader.Assemble(shapes, Raw, Next, i => world.TryGetValue(i, out Matrix4x4 m) ? m : null, MeshLook);
+    }
+
+    // A card's two largest spans.
+    private static NifParticleMeshLook Spans(IEnumerable<Vector3> vertices, string? texture, ushort alpha)
+    {
+        Vector3 lo = new(float.MaxValue), hi = new(float.MinValue);
+        foreach (Vector3 v in vertices)
+        {
+            lo = Vector3.Min(lo, v);
+            hi = Vector3.Max(hi, v);
+        }
+        float[] e = [hi.X - lo.X, hi.Y - lo.Y, hi.Z - lo.Z];
+        Array.Sort(e);
+        return new NifParticleMeshLook(e[2], e[1], texture, alpha);
     }
 
     // 10.1: the same from the decoded tree.
@@ -108,16 +157,43 @@ public static partial class NifFile
             return false;
         }
 
+        object? Raw(int i) => i >= 0 && i < blocks.Length ? blocks[i]?.Particle : null;
+        int Next(int i) => i >= 0 && i < blocks.Length && blocks[i] is { } b ? b.NextController : -1;
+        int Vis(int i)
+        {
+            for (int n = i, guard = 0; n >= 0 && guard++ < 256; n = parent.GetValueOrDefault(n, -1))
+                if (NifParticleReader.FindVisController(blocks[n].Controller, Raw, Next) is >= 0 and int v)
+                    return v;
+            return -1;
+        }
+
         var shapes = new List<NifParticleReader.Shape>();
         for (int i = 0; i < blocks.Length; i++)
             if (blocks[i] is { } b && NifParticleReader.IsParticleShape(b.Type) && world.TryGetValue(i, out Matrix4x4 w))
             {
                 (string? texture, ushort alpha) = Look(i);
-                shapes.Add(new NifParticleReader.Shape(b.Name, w, b.Controller, Hidden(i), texture, alpha));
+                shapes.Add(new NifParticleReader.Shape(b.Name, w, b.Controller, Hidden(i), texture, alpha, Vis(i)));
             }
-        return NifParticleReader.Assemble(shapes,
-            i => i >= 0 && i < blocks.Length ? blocks[i]?.Particle : null,
-            i => i >= 0 && i < blocks.Length && blocks[i] is { } b ? b.NextController : -1,
-            i => world.TryGetValue(i, out Matrix4x4 m) ? m : null);
+        var seenMesh = new HashSet<int>();
+        NifParticleMeshLook? MeshLook(int i)
+        {
+            if (i < 0 || i >= blocks.Length || blocks[i] is null || !seenMesh.Add(i))
+                return null;
+            if (blocks[i] is { Type: "NiTriShape" or "NiTriStrips" } shape)
+            {
+                if (shape.DataRef < 0 || shape.DataRef >= blocks.Length || blocks[shape.DataRef] is not { Vertices.Length: > 0 } g)
+                    return null;
+                (string? texture, ushort alpha) = Look(i);
+                return Spans(g.Vertices.Select(v => v * shape.Local.Scale), texture, alpha);
+            }
+            foreach (int child in blocks[i].Children)   // a node holding the card
+                if (MeshLook(child) is { } found)
+                {
+                    (string? texture, ushort alpha) = Look(i);
+                    return found with { Texture = found.Texture ?? texture, AlphaFlags = found.AlphaFlags != 0 ? found.AlphaFlags : alpha };
+                }
+            return null;
+        }
+        return NifParticleReader.Assemble(shapes, Raw, Next, i => world.TryGetValue(i, out Matrix4x4 m) ? m : null, MeshLook);
     }
 }

@@ -19,8 +19,8 @@
 //
 // Settings → Graphics → Modern particles (off, Classic, by default; retail has none of these):
 // - soft particles: each card fades out where it meets the ground or a wall instead of cutting a hard line through it;
-// - firelight: a warm flickering light among a model's glowing (additive) systems, lighting the logs, ground and tents
-//   around a fire (FireLight);
+// - firelight: a warm flickering light among a world model's glowing (additive) systems, lighting the logs, ground and
+//   tents around a fire (FireLight; zone objects and keeps only, AddFireLight);
 // - glow: the glowing cards drawn brighter than white, and the environment's glow blooming only what is brighter than
 //   white, so flames bloom and nothing else does.
 
@@ -33,6 +33,18 @@ public static class NifParticles
 {
     private const float CullDistance = 2048 * 0.025f;   // metres
     private const float SoftDistance = 0.4f;             // metres over which a Modern card fades into what it meets
+
+    private const string FireMeta = "firelight";
+
+    /// <summary>
+    /// Gives a world model (a zone's or a keep's object) its firelight, when its particles glow (Modern particles). Not
+    /// for figures, their gear or spell effects: a glowing aura or a magic weapon is no campfire.
+    /// </summary>
+    public static void AddFireLight(Node3D model)
+    {
+        if (model.HasMeta(FireMeta) && model.GetNodeOrNull("FireLight") is null)
+            model.AddChild(FireLight.From(model.GetMeta(FireMeta).AsGodotDictionary()));
+    }
 
     /// <summary>
     /// Adds the particle systems of the model loaded from <paramref name="glbPath"/>, if it has any, as children of
@@ -55,7 +67,7 @@ public static class NifParticles
                     added++;
                 }
             if (fire.Count > 0)
-                model.AddChild(FireLight.For(fire));
+                model.SetMeta(FireMeta, FireLight.Describe(fire));   // AddFireLight puts the light on a world fire
         }
         catch (Exception e) when (e is JsonException or KeyNotFoundException or InvalidOperationException)
         {
@@ -74,7 +86,22 @@ public static class NifParticles
     private static GpuParticles3D? Build(JsonElement s, string[] textureDirs,
         System.Collections.Generic.List<(Vector3 At, Color Colour, float Reach)> fire)
     {
-        string? textureName = s.TryGetProperty("texture", out JsonElement t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+        // Mesh particles (NiParticleMeshModifier) draw their mesh's card: its size, and its texture and blend when the
+        // shape has none of its own (Albion's fire bolts' flame cards drew as white squares without them).
+        JsonElement? mesh = null;
+        foreach (JsonElement m in s.GetProperty("modifiers").EnumerateArray())
+            if (m.GetProperty("type").GetString() == "meshes" && F(m, "width") > 0)
+                mesh = m;
+        string? Str(JsonElement e, string key) =>
+            e.TryGetProperty(key, out JsonElement v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        string? textureName = Str(s, "texture");
+        int alphaFlags = (int)F(s, "alpha_flags");
+        if (string.IsNullOrEmpty(textureName) && mesh is { } mt && !string.IsNullOrEmpty(Str(mt, "texture")))
+        {
+            textureName = Str(mt, "texture");
+            if (alphaFlags == 0)
+                alphaFlags = (int)F(mt, "alpha_flags");
+        }
         Texture2D? texture = string.IsNullOrEmpty(textureName) ? null
             : ModelTexturing.Load(System.IO.Path.GetFileNameWithoutExtension(textureName), textureDirs);
         if (texture is null)
@@ -86,7 +113,8 @@ public static class NifParticles
             new Basis(new Vector3(E(0), E(1), E(2)), new Vector3(E(3), E(4), E(5)), new Vector3(E(6), E(7), E(8))),
             new Vector3(E(9), E(10), E(11)));
 
-        float life = Mathf.Max(F(s, "lifetime", 1), 0.05f), lifeRandom = F(s, "lifetime_random");
+        // Some files store a negative lifetime spread (redscint_hit: -1.33): no spread.
+        float life = Mathf.Max(F(s, "lifetime", 1), 0.05f), lifeRandom = Mathf.Max(F(s, "lifetime_random"), 0);
         float rate = F(s, "rate"), speed = F(s, "speed"), speedRandom = F(s, "speed_random");
         int max = (int)F(s, "max");
         int byRate = Mathf.CeilToInt(rate * (life + lifeRandom));
@@ -98,7 +126,6 @@ public static class NifParticles
             Lifetime = life + lifeRandom,
             // The system's particle count is its pool: never more alive than that, however high the rate.
             Amount = Mathf.Clamp(max > 0 ? Mathf.Min(max, byRate) : byRate, 1, 512),
-            Preprocess = life + lifeRandom,   // already burning when it comes into view
             VisibilityRangeEnd = CullDistance,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         };
@@ -162,6 +189,23 @@ public static class NifParticles
                     pm.ScaleCurve = new CurveTexture { Curve = c };
                     break;
                 }
+                case "bomb":
+                {
+                    // A push away from the emitter for its duration (ours, approximate: as an outward acceleration over
+                    // the first part of each particle's life, decay ignored; the bomb's own point and timing aren't used).
+                    float duration = Mathf.Max(F(m, "duration"), 0.05f);
+                    pm.RadialAccelMin = pm.RadialAccelMax = F(m, "delta_v") / duration;
+                    float until = Mathf.Clamp(duration / (life + lifeRandom), 0.02f, 1);
+                    var c = new Curve();
+                    c.AddPoint(new Vector2(0, 1));
+                    if (until < 1)
+                    {
+                        c.AddPoint(new Vector2(until, 1));
+                        c.AddPoint(new Vector2(Mathf.Min(until + 0.01f, 1), 0));
+                    }
+                    pm.RadialAccelCurve = new CurveTexture { Curve = c };
+                    break;
+                }
                 case "spin":
                 {
                     // Radians per second; some DAoC models write degrees (333.3: about a turn a second, as 6.28 is).
@@ -180,10 +224,15 @@ public static class NifParticles
             + pm.Gravity.Length() * (life + lifeRandom) * (life + lifeRandom) * 0.5f, 1);
         p.VisibilityAabb = new Aabb(-Vector3.One * reach, Vector3.One * reach * 2);
 
-        var quad = new QuadMesh { Size = Vector2.One * size * 2 };   // the controller size is the particle radius
-        BlendKind kind = Blend((int)F(s, "alpha_flags"));
+        // The controller size is the particle radius; a mesh particle's card is its mesh scaled by that radius (units).
+        var quad = new QuadMesh
+        {
+            Size = mesh is { } mq ? new Vector2(F(mq, "width"), F(mq, "height")) * (size / 0.025f) : Vector2.One * size * 2,
+        };
+        BlendKind kind = Blend(alphaFlags);
         quad.Material = Material(kind, texture);
         p.DrawPass1 = quad;
+        Timeline(p, s, life + lifeRandom);
 
         // A glowing system (light added) of real size gives the model a firelight: its texture's colour times the ramp's.
         if (kind is BlendKind.Add or BlendKind.AddAll && rate > 0 && size * 2 >= 0.05f)
@@ -196,6 +245,106 @@ public static class NifParticles
                     box.Length() + size * 2 + speed * life));
         }
         return p;
+    }
+
+    // ----- timing -----
+
+    // The controller's emit window and its cycle (its start to stop time: loop, reverse, or clamp = play once), and the
+    // visibility keys of a system an effect shows partway in. A zone model loops forever, already burning when it comes
+    // into view; one whose window or keys change over its cycle is driven each frame (UpdateTimelines). An effect plays its
+    // systems once from the start (PlayOnce).
+    private sealed record Timing(float EmitStart, float EmitStop, float Start, float Stop, bool Once,
+        (float Time, bool Visible)[] Vis, float VisStart, float VisStop, bool VisOnce)
+    {
+        public float Cycle => Mathf.Max(Stop - Start, 0.001f);
+
+        public bool EmitsAt(float t) => EmitStop <= EmitStart || (t >= EmitStart && t < EmitStop);
+
+        public bool ShownAt(float t)
+        {
+            if (Vis.Length == 0)
+                return true;
+            float span = Mathf.Max(VisStop - VisStart, 0.001f);
+            float v = VisOnce ? Mathf.Min(t, VisStop) : VisStart + Mathf.PosMod(t - VisStart, span);
+            bool shown = Vis[0].Visible;
+            foreach ((float time, bool visible) in Vis)
+                if (time <= v + 1e-4f)
+                    shown = visible;
+            return shown;
+        }
+
+        // Whether the system changes over its cycle at all (else it just burns).
+        public bool Varies => Vis.Length > 0 && Vis.Any(k => !k.Visible)
+            || EmitStop > EmitStart && (EmitStart > Start + 0.05f || EmitStop < Stop - 0.05f);
+    }
+
+    public const string TimelineGroup = "particle_timeline";
+
+    private static bool Clamped(int flags) => ((flags >> 1) & 3) == 2;
+
+    private static void Timeline(GpuParticles3D p, JsonElement s, float life)
+    {
+        (float, bool)[] vis = [];
+        float vs = 0, ve = 0;
+        bool visOnce = false;
+        if (s.TryGetProperty("visibility", out JsonElement v))
+        {
+            vis = v.GetProperty("keys").EnumerateArray().Select(k => (k[0].GetSingle(), k[1].GetBoolean())).ToArray();
+            (vs, ve, visOnce) = (F(v, "start"), F(v, "stop"), Clamped((int)F(v, "flags")));
+        }
+        var timing = new Timing(F(s, "emit_start"), F(s, "emit_stop"), F(s, "start"), F(s, "stop"),
+            Clamped((int)F(s, "flags")), vis, vs, ve, visOnce);
+        TimingList.Add(timing);
+        p.SetMeta("timing", TimingList.Count - 1);
+        if (timing.Varies || timing.Once)
+            p.AddToGroup(TimelineGroup, persistent: true);
+        else
+            p.Preprocess = life;   // already burning when it comes into view
+    }
+
+    // Each system's timing; a node finds its own by its "timing" meta, which placed copies of a template keep.
+    private static readonly System.Collections.Generic.List<Timing> TimingList = new();
+
+    private static Timing? TimingOf(GpuParticles3D p) =>
+        p.HasMeta("timing") && (int)p.GetMeta("timing") is int i && i >= 0 && i < TimingList.Count ? TimingList[i] : null;
+
+    /// <summary>Starts every particle system under <paramref name="root"/> from its beginning (an effect, which the caller
+    /// removes after its Duration): each by its own cycle (a looping system keeps emitting meanwhile, a clamped one plays
+    /// its window once), shown by its visibility keys, from now, at <paramref name="rate"/> times its speed.</summary>
+    public static void PlayOnce(Node root, float rate = 1)
+    {
+        foreach (Node n in root.FindChildren("*", "GPUParticles3D", true, false))
+            if (n is GpuParticles3D p)
+            {
+                p.SetMeta("born", Time.GetTicksMsec() / 1000.0);
+                p.SetMeta("rate", rate);
+                p.Preprocess = 0;
+                p.Emitting = false;
+                if (!p.IsInGroup(TimelineGroup))
+                    p.AddToGroup(TimelineGroup);
+            }
+    }
+
+    /// <summary>Every timed system in the tree: emitting in its window, shown by its keys.</summary>
+    public static void UpdateTimelines(SceneTree tree)
+    {
+        double now = Time.GetTicksMsec() / 1000.0;
+        foreach (Node n in tree.GetNodesInGroup(TimelineGroup))
+        {
+            if (n is not GpuParticles3D p || TimingOf(p) is not Timing tm)
+                continue;
+            if (!p.HasMeta("born"))
+                p.SetMeta("born", now);
+            float age = (float)(now - p.GetMeta("born").AsDouble()) * (p.HasMeta("rate") ? (float)p.GetMeta("rate") : 1f);
+            bool once = tm.Once;
+            float t = once ? tm.Start + age : tm.Start + Mathf.PosMod(age, tm.Cycle);
+            bool emit = tm.EmitsAt(t) && (!once || t <= tm.Stop + 0.001f || tm.Stop <= tm.Start);
+            if (p.Emitting != emit)
+                p.Emitting = emit;
+            bool shown = tm.ShownAt(t);
+            if (p.Visible != shown)
+                p.Visible = shown;
+        }
     }
 
     // ----- drawing -----
