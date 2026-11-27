@@ -292,32 +292,28 @@ internal static class Gamebryo1010
                     b.NextController = pc.Next;
                 break;
             // Animation controllers and their key data: read past (no animation export for these yet).
+            // Fades, colour changes, scrolling and texture transforms, and their keys: kept (NifMaterialAnims).
             case "NiUVController":
-                TimeController(ref c, nb);
-                c.U16();                                // Texture Set
-                Ref(ref c, nb);
-                break;
             case "NiAlphaController":
+            case "NiMaterialColorController":
+            case "NiTextureTransformController":
+            case "NiFloatData":
+            case "NiPosData":
+            case "NiUVData":
+                b.Particle = NifMaterialAnimReader.Read(ref c, type, gamebryo10: true);
+                if (b.Particle is NifMaterialAnimReader.Controller mc)
+                    b.NextController = mc.Next;
+                break;
+            case "NiLightColorController":
                 TimeController(ref c, nb);
-                Ref(ref c, nb);                         // Data
+                c.U16();                                // Target Color
+                Ref(ref c, nb);
                 break;
             case "NiVisController":
                 // Kept: its keys show a particle system partway in (NifParticles).
                 b.Particle = NifParticleReader.Read(ref c, type);
                 if (b.Particle is NifParticleReader.VisController vc)
                     b.NextController = vc.Next;
-                break;
-            case "NiMaterialColorController":
-            case "NiLightColorController":
-                TimeController(ref c, nb);
-                c.U16();                                // Target Color
-                Ref(ref c, nb);
-                break;
-            case "NiTextureTransformController":
-                TimeController(ref c, nb);
-                StrictBool(ref c);                      // Shader Map
-                c.U32(); c.U32();                       // Texture Slot, Operation
-                Ref(ref c, nb);
                 break;
             case "NiFlipController":
                 TimeController(ref c, nb);
@@ -330,17 +326,8 @@ internal static class Gamebryo1010
                 c.U16(); c.I32(); c.F32(); c.F32(); c.U16();   // path flags, bank dir, max bank, smoothing, follow axis
                 Ref(ref c, nb); Ref(ref c, nb);         // Path Data, Percent Data
                 break;
-            case "NiFloatData":
-                NifSurvey.KeyGroup(ref c, 4, f, null);
-                break;
-            case "NiPosData":
-                NifSurvey.KeyGroup(ref c, 12, f, null);
-                break;
             case "NiColorData":
                 b.Particle = NifParticleReader.Read(ref c, type);   // colour keys (a particle colour modifier's)
-                break;
-            case "NiUVData":
-                for (int g = 0; g < 4; g++) NifSurvey.KeyGroup(ref c, 4, f, null);
                 break;
             case "NiVisData":
             {

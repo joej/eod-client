@@ -89,12 +89,12 @@ public sealed partial class NifSurvey
                 "NiGeomMorpherController" or "NiMorphData" => NifCoverage.Partial,
                 "NiKeyframeController" or "NiKeyframeData" or "NiStringExtraData" => NifCoverage.Partial,
                 "NiPixelData" or "NiPalette" or "NiVertexColorProperty" => NifCoverage.Partial,
-                _ when IsParticleType(type) => NifCoverage.Partial,
+                _ when IsParticleType(type) || IsMaterialAnimType(type) => NifCoverage.Partial,
                 _ => NifCoverage.Unhandled,
             };
         return type switch
         {
-            _ when IsParticleType(type) => NifCoverage.Partial,
+            _ when IsParticleType(type) || IsMaterialAnimType(type) => NifCoverage.Partial,
             "NiKeyframeController" or "NiKeyframeData" or "NiStringExtraData" => NifCoverage.Partial,
             "NiVisController" => NifCoverage.Partial,
             "NiPixelData" or "NiPalette" or "NiVertexColorProperty" => NifCoverage.Partial,
@@ -105,6 +105,19 @@ public sealed partial class NifSurvey
             _ => NifCoverage.Unhandled,
         };
     }
+
+    // Material animations (NifMaterialAnims): fades, colour changes, scrolling and texture transforms, and their keys.
+    private static bool IsMaterialAnimType(string type) => type is "NiAlphaController" or "NiMaterialColorController"
+        or "NiUVController" or "NiUVData" or "NiTextureTransformController" or "NiFloatData" or "NiPosData" or "NiVisData";
+
+    private static string MaterialAnimNote(string type) => type switch
+    {
+        "NiMaterialColorController" => "diffuse and self-illumination colour animated (<model>.anim.json); ambient and specular not drawn",
+        "NiTextureTransformController" => "offset and tiling animated; rotation not drawn",
+        "NiFloatData" or "NiPosData" => "keys of the fades, colour and texture controllers (and a particle system's); elsewhere ignored",
+        "NiVisData" => "keys of the visibility controllers: particle systems and meshes shown and hidden over time",
+        _ => "animated on the mesh it drives (<model>.anim.json)",
+    };
 
     // Particle systems (NifParticles): the shape, its controller and modifiers, and colour keys.
     private static bool IsParticleType(string type) => type is "NiParticles" or "NiAutoNormalParticles" or "NiRotatingParticles"
@@ -151,11 +164,13 @@ public sealed partial class NifSurvey
                 "NiKeyframeController" or "NiKeyframeData" => DoorKeysNote,
                 "NiStringExtraData" => DoorExtraNote,
                 _ when IsParticleType(type) => ParticleNote(type),
+                _ when IsMaterialAnimType(type) => MaterialAnimNote(type),
                 _ => "",
             };
         return type switch
         {
             _ when IsParticleType(type) => ParticleNote(type),
+            _ when IsMaterialAnimType(type) => MaterialAnimNote(type),
             "NiLODNode" => "nearest level only (smallest near extent; by node name if a node has no ranges)",
             "NiBillboardNode" => "walked as a plain node: keeps its stored orientation, doesn't face the camera",
             "NiTriShapeData" or "NiTriStripsData" => "vertex colours kept where a NiVertexColorProperty says ambient + diffuse; UV sets beyond the texture slots' dropped",
@@ -171,14 +186,15 @@ public sealed partial class NifSurvey
             "NiStencilProperty" => "draw mode (sidedness) only",
             "NiKeyframeController" or "NiKeyframeData" => DoorKeysNote,
             "NiStringExtraData" => DoorExtraNote,
-            "NiVisController" => "only its next-controller link, so a keyframe controller after it is found (a keep gate's " +
-                "leaves); the visibility keys are ignored",
+            "NiVisController" => "its keys show and hide particle systems and meshes over time; its next-controller link " +
+                "leads on to a keyframe controller after it (a keep gate's leaves)",
             _ => "",
         };
     }
 
     private const string DoorKeysNote =
-        "inside a door (a door node's parts that move) exported as the door's glTF animation; elsewhere ignored (clips: KfaClip)";
+        "exported as glTF animations: a door's parts (the door's animation), a world object's anim nodes (anims), every " +
+        "moving node (all, for effects); path controllers ignored (clips: KfaClip)";
     private const string DoorExtraNote = "a door's maxframes/midframe only";
 
     /// <summary>Surveys one NIF file. Throws <see cref="NifFormatException"/> if it isn't one.</summary>

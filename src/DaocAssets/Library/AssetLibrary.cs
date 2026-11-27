@@ -274,6 +274,12 @@ public sealed class AssetLibrary
                 WriteAtomically(particlesPath, tmp => File.WriteAllText(tmp, NifParticleJson.ToJson(model.Particles)));
             else if (File.Exists(particlesPath))
                 File.Delete(particlesPath);
+            // Its material animations beside it (NifMaterialAnimJson), or no such file.
+            string animPath = NifMaterialAnimJson.PathFor(glbPath);
+            if (model.MaterialAnims.Count > 0)
+                WriteAtomically(animPath, tmp => File.WriteAllText(tmp, NifMaterialAnimJson.ToJson(model)));
+            else if (File.Exists(animPath))
+                File.Delete(animPath);
             WriteAtomically(glbPath, tmp => GltfExporter.SaveGlb(model, tmp));
             return new ModelResult(glbPath, AssetOrigin.Converted);
         }

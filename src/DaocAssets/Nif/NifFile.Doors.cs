@@ -35,6 +35,14 @@ public sealed record NifDoor(string Name, float Duration, float? Mid = null, boo
 public sealed record NifMover(string Door, string Node, Matrix4x4 RestWorld, Matrix4x4 ParentWorld, Matrix4x4 RestLocal, KfaTrack Keys,
     NifMover? Carrier = null)
 {
+    /// <summary>Outside doors (<see cref="Door"/> empty): whether it is inside an "anim…" node, which a world object
+    /// plays (<see cref="NifAnimation.Anims"/>); every mover outside doors is in <see cref="NifAnimation.All"/>.</summary>
+    public bool InAnim { get; init; }
+
+    /// <summary>The last key's time (seconds).</summary>
+    public float Length => Math.Max(Math.Max(Keys.Rotations.LastOrDefault().Time, Keys.Translations.LastOrDefault().Time),
+        Keys.Scales.LastOrDefault().Time);
+
     /// <summary>
     /// What a baked vertex is multiplied by at time t (row vectors): rest world⁻¹ × local(t) × parent world, then the
     /// carrier's delta (everything under the carrier moves with it).
@@ -72,6 +80,16 @@ public sealed record NifMover(string Door, string Node, Matrix4x4 RestWorld, Mat
     }
 }
 
+/// <summary>
+/// A model's own animation outside doors, exported as a glTF animation of its name: <see cref="Anims"/>, the "anim…"
+/// nodes a world object plays continuously while the viewer is within <see cref="FarUnits"/>; <see cref="All"/>, every
+/// node with keyframes (an effect plays all of its controllers from its start). Both loop over <see cref="Duration"/>.
+/// </summary>
+public sealed record NifAnimation(string Name, float Duration, float FarUnits)
+{
+    public const string Anims = "anims", All = "all";
+}
+
 public static partial class NifFile
 {
     /// <summary>The frame rate door keyframes are counted in (maxframes/30 s), and the default frame count.</summary>
@@ -102,6 +120,29 @@ public static partial class NifFile
     internal sealed record DoorScan(IReadOnlyList<NifDoor> Doors, IReadOnlyList<NifMover> Movers, IReadOnlyDictionary<int, int> MoverOf)
     {
         public static readonly DoorScan None = new([], [], new Dictionary<int, int>());
+
+        /// <summary>The animations outside doors (anims, all), from the movers.</summary>
+        public IReadOnlyList<NifAnimation> Animations { get; init; } = [];
+    }
+
+    // The "anim…" node prefix and its far distance: a "-D<n>" suffix or extra data "faranim", n = 0 → 8000 units,
+    // 1 → 16000 (inferred: (n + 1) × 8000); default 8000.
+    private static readonly Regex NameFar = new("-D([0-9]+)", RegexOptions.CultureInvariant);
+
+    internal static bool IsAnimNode(string name) => name.StartsWith("anim", StringComparison.OrdinalIgnoreCase);
+
+    internal static float AnimFar(string name, IEnumerable<string> extra)
+    {
+        float? n = NameFar.Match(name) is { Success: true } m ? float.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) : null;
+        foreach (string text in extra)
+            foreach (string line in text.Split('\n', '\r', ';'))
+            {
+                string[] kv = line.Split('=', 2);
+                if (kv.Length == 2 && kv[0].Trim().Equals("faranim", StringComparison.OrdinalIgnoreCase)
+                    && float.TryParse(kv[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
+                    n ??= v;
+            }
+        return ((n ?? 0) + 1) * 8000;
     }
 
     /// <summary>What the door scan needs of a node, from either reader.</summary>
@@ -189,8 +230,49 @@ public static partial class NifFile
                     todo.Push((c, carrier));
             }
         }
-        return doors.Count == 0 ? DoorScan.None : new DoorScan(doors, movers, moverOf);
+        // Outside the doors: every node with keyframes is a mover, carried by the nearest one above it; inside an "anim…"
+        // node it belongs to the world object's animation too.
+        var doorNodes = new HashSet<int>(outer);
+        float far = float.MaxValue;
+        var walk = new Stack<(int Node, NifMover? Carrier, bool InAnim)>(n.Roots.Select(r => (r, (NifMover?)null, false)));
+        var walked = new HashSet<int>();
+        while (walk.Count > 0)
+        {
+            (int i, NifMover? carrier, bool inAnim) = walk.Pop();
+            if (!world.ContainsKey(i) || doorNodes.Contains(i) || !walked.Add(i))
+                continue;
+            string name = n.Name(i).Trim();
+            if (IsAnimNode(name))
+            {
+                inAnim = true;
+                far = Math.Min(far, AnimFar(name, n.ExtraStrings(i)));
+            }
+            if (n.Keys(i, n.Name(i)) is { } keys && (keys.Rotations.Length + keys.Translations.Length + keys.Scales.Length) > 0)
+            {
+                moverOf[i] = movers.Count;
+                carrier = new NifMover("", n.Name(i), world[i].World, world[i].Parent, n.Local(i), keys, carrier) { InAnim = inAnim };
+                movers.Add(carrier);
+            }
+            foreach (int c in n.Children(i))
+                walk.Push((c, carrier, inAnim));
+        }
+        var outside = movers.Where(m => m.Door.Length == 0).ToList();
+        var animations = new List<NifAnimation>();
+        if (outside.Count > 0)
+        {
+            float all = Math.Max(outside.Max(m => m.Length), 1f / DoorFramesPerSecond);
+            animations.Add(new NifAnimation(NifAnimation.All, all, far == float.MaxValue ? 8000 : far));
+            if (outside.Any(m => m.InAnim))
+                animations.Add(new NifAnimation(NifAnimation.Anims,
+                    Math.Max(outside.Where(m => m.InAnim).Max(m => m.Length), 1f / DoorFramesPerSecond), far == float.MaxValue ? 8000 : far));
+        }
+        return doors.Count == 0 && movers.Count == 0 ? DoorScan.None
+            : new DoorScan(doors, movers, moverOf) { Animations = animations };
     }
+
+    /// <summary>Whether any node could move: a door, or a keyframe controller anywhere.</summary>
+    private static bool MayMove(IEnumerable<string> names, IEnumerable<string> types) =>
+        names.Any(IsDoorNode) || types.Any(t => t == "NiKeyframeController");
 
     // maxframes and midframe: a "-F<n>" / "-M<n>" in the name, else extra data ("maxframes=45", one key per line in a
     // UserPropBuffer, or a string of its own), else 15 frames and no mid frame.

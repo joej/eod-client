@@ -39,7 +39,40 @@ public static class ModelTexturing
         // Its particle systems (fire, smoke, glows), when the converter wrote any beside it: part of the loaded model, so
         // every copy of it has them (zone objects, ground objects, keeps, monster effects, quest glyphs).
         NifParticles.Attach(scene, path, textureDirs);
+        MaterialAnims.Attach(scene, path);
+        PrepareOwnAnimations(scene);
         return scene;
+    }
+
+    /// <summary>
+    /// A model's own animations outside doors (NifAnimation): "anims", the "anim…" nodes of a world object (a windmill's
+    /// sails, a banner), loops from when the model enters the world (every placed copy, as retail plays them continuously);
+    /// "all", every moving node, loops too and is what an effect plays (<see cref="PlayOwnAnimation"/>). Retail pauses
+    /// "anim…" nodes beyond their far distance (8000 units by default); ours always runs (not visible from there).
+    /// </summary>
+    private static void PrepareOwnAnimations(Node3D scene)
+    {
+        if (scene.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() is not AnimationPlayer player)
+            return;
+        foreach (string name in new[] { DaocAssets.Nif.NifAnimation.Anims, DaocAssets.Nif.NifAnimation.All })
+            if (player.HasAnimation(name))
+                player.GetAnimation(name).LoopMode = Animation.LoopModeEnum.Linear;
+        if (player.HasAnimation(DaocAssets.Nif.NifAnimation.Anims))
+            player.Autoplay = DaocAssets.Nif.NifAnimation.Anims;
+    }
+
+    /// <summary>Plays a model's whole own animation ("all": an effect's, a monster effect's) and its material animations
+    /// from their start, at <paramref name="speed"/>; nothing when it has none.</summary>
+    public static void PlayOwnAnimation(Node model, float speed = 1)
+    {
+        if (model is Node3D m3)
+            MaterialAnims.Restart(m3, speed);   // its fades and scrolling from its start too
+        if (model.FindChildren("*", "AnimationPlayer", true, false).FirstOrDefault() is AnimationPlayer player
+            && player.HasAnimation(DaocAssets.Nif.NifAnimation.All))
+        {
+            player.SpeedScale = speed;
+            player.Play(DaocAssets.Nif.NifAnimation.All);
+        }
     }
 
     /// <summary>

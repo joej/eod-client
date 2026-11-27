@@ -113,7 +113,9 @@ inhabitants look like DAoC).
 8. **Smaller**: embedded `NiPixelData` textures (16 files), `NiTextureEffect` environment or projected
    maps (667 files), lights inside models. Particle systems (fire, smoke, mist, sparks: 1,417 files) are drawn since
    2026-11-26: the converter writes each model's systems beside its .glb (`<model>.particles.json`) and the client runs
-   them as Godot GPU particles (`NifParticles`); the bomb and mesh-particle modifiers aren't drawn yet.
+   them as Godot GPU particles (`NifParticles`), with their timing, bombs (approximate) and mesh particles. Models' own
+   animation plays since 2026-11-26 too: keyframed nodes as glTF animations (a world object's `anim…` nodes loop, an
+   effect plays all of them), and fades, colour changes, scrolling textures and blinking (`<model>.anim.json`).
 
 **LOD by range (done 2026-11-03):** 4.x `NiLODNode` stores its real distance ranges, and the survey
 decodes them exactly (567 blocks). The reader now keeps the level with the smallest near extent (by

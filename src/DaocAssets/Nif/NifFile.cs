@@ -177,7 +177,7 @@ public static partial class NifFile
                     break;
                 case "NiTriShape":
                 case "NiTriStrips":
-                    if (TryReadAvObject(ref c, out Xform sx, out int[] props, out string sname, out ushort sflags))
+                    if (TryReadAvObject(ref c, out Xform sx, out int[] props, out string sname, out ushort sflags, out _, out b.Controller))
                     {
                         b.Name = sname;
                         b.Flags = sflags;
@@ -225,7 +225,13 @@ public static partial class NifFile
                     {
                         // Its name: on shapes whose texture is embedded, the texture's file name.
                         var nc = c;
-                        try { b.Name = nc.SizedString(); } catch (NifFormatException) { }
+                        try
+                        {
+                            b.Name = nc.SizedString();
+                            nc.I32();                       // extra data
+                            b.Controller = nc.I32();        // its fade or colour controller (NifMaterialAnims)
+                        }
+                        catch (NifFormatException) { }
                         (b.MaterialColor, b.MaterialEmissive) = ReadMaterialPropertyColor(ref c);
                     }
                     break;
@@ -261,6 +267,20 @@ public static partial class NifFile
                 case "NiParticleMeshes":
                     if (TryReadAvObject(ref c, out Xform px, out int[] pprops, out string pname, out ushort pflags, out _, out b.Controller))
                         (b.Name, b.Flags, b.Local, b.Props) = (pname, pflags, px, pprops);
+                    break;
+                case "NiAlphaController":
+                case "NiMaterialColorController":
+                case "NiUVController":
+                case "NiFloatData":
+                case "NiPosData":
+                case "NiUVData":
+                    try
+                    {
+                        b.Particle = NifMaterialAnimReader.Read(ref c, b.Type, gamebryo10: false);
+                        if (b.Particle is NifMaterialAnimReader.Controller mc)
+                            b.NextRef = mc.Next;
+                    }
+                    catch (NifFormatException) { b.Particle = null; }
                     break;
                 case "NiParticleSystemController":
                 case "NiGravity":
@@ -327,7 +347,8 @@ public static partial class NifFile
         Skeleton4x? skeleton = figure || blocks.Any(x => x.Type is "NiTriShape" or "NiTriStrips" && SelfContained4x(blocks, x))
             ? new Skeleton4x { RigidToNodes = figure } : null;
         // Doors (NifFile.Doors): which nodes move, so the walk can tag the meshes under them. Not on a figure.
-        DoorScan doors = !figure && blocks.Any(x => IsDoorNode(x.Name)) ? ScanDoors(new DoorNodes4x(bytes.ToArray(), blocks)) : DoorScan.None;
+        DoorScan doors = !figure && MayMove(blocks.Select(x => x.Name), blocks.Select(x => x.Type))
+            ? ScanDoors(new DoorNodes4x(bytes.ToArray(), blocks)) : DoorScan.None;
         Walk4x(bytes, blocks, 0, Xform.Identity, seen, meshes, skeleton: skeleton, movers: doors.MoverOf);
         skeleton?.Bind(blocks, meshes);
 
@@ -354,12 +375,13 @@ public static partial class NifFile
         }
 
         List<NifParticleSystem> particles = figure ? [] : Particles4x(bytes, blocks);
+        List<NifMaterialAnim> materialAnims = figure ? [] : MaterialAnims4x(blocks, meshes);
         if (meshes.Count == 0 && particles.Count == 0)
             throw new NifFormatException("No NiTriShapeData geometry found in NIF.");
 
         return new NifModel { Version = version, Meshes = meshes, NodeWorlds = NodeWorlds4x(blocks), Particles = particles,
             Joints = skeleton is not null && meshes.Any(m => m.SkinJoints is { Length: > 0 }) ? skeleton.Joints : [],
-            Doors = doors.Doors, Movers = doors.Movers };
+            Doors = doors.Doors, Movers = doors.Movers, Animations = doors.Animations, MaterialAnims = materialAnims };
     }
 
     // Every named node's world transform, walking every child from the root (LOD levels and helpers

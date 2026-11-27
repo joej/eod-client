@@ -1082,6 +1082,7 @@ public partial class WorldView : Node3D
         FireLight.Update(GetTree());   // Modern particles' firelights: shown or hidden, flickering
         NifParticles.UpdateTimelines(GetTree());   // particle systems that start, stop or show over their cycle
         UpdateSpellFx();
+        MaterialAnims.Update(GetTree());   // fades, colour changes, scrolling textures, blinking parts
         UpdateDoors();
         UpdateSound(delta);
         UpdateChat();

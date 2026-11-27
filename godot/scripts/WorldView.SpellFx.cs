@@ -20,8 +20,8 @@
 //   figure more than 2048 units from our character in x or y (4096 for result 4).
 // Ours / not built: the effects' sounds (Sound Set), the focus channel (Focus CasterFX, Focus Effect), the last 0.1 s of a
 // bolt at 5x speed, weapon trails and item projectiles (NIF ids from 1500), MonEffects NIFs from spells, and the
-// EffectsFlag setting (all effects are shown). Effect models' own animation (moving parts, fades) isn't converted yet:
-// their meshes stand still; their particles play.
+// EffectsFlag setting (all effects are shown). An effect's moving parts, fades, colour changes and scrolling play from its
+// start at its rate (its "all" animation, MaterialAnims).
 
 using DaocAssets.Effects;
 using DaocProtocol.Packets;
@@ -226,6 +226,7 @@ public partial class WorldView
         };
         Place(fx, ownerNode, created: true);
         NifParticles.PlayOnce(node, row.Rate);
+        ModelTexturing.PlayOwnAnimation(node, row.Rate);
         _liveFx.Add(fx);
     }
 
@@ -248,6 +249,7 @@ public partial class WorldView
         };
         node.GlobalPosition = from;
         NifParticles.PlayOnce(node, row.Rate);
+        ModelTexturing.PlayOwnAnimation(node, row.Rate);
         _liveFx.Add(fx);
     }
 

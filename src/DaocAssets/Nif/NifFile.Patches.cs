@@ -159,7 +159,7 @@ public static partial class NifFile
         return new NifModel
         {
             Version = model.Version, Meshes = meshes, Joints = model.Joints, NodeWorlds = model.NodeWorlds,
-            Doors = model.Doors, Movers = model.Movers,
+            Doors = model.Doors, Movers = model.Movers, Animations = model.Animations, MaterialAnims = model.MaterialAnims,
         };
     }
 

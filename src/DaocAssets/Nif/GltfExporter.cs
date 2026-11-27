@@ -41,6 +41,16 @@ public static class GltfExporter
             return BuildSkinnedScene(model, clips);
         var scene = new SceneBuilder();
         NodeBuilder[] movers = DoorNodes(model);
+        var animated = new HashSet<string>(model.MaterialAnims.Select(a => a.Mesh), StringComparer.Ordinal);
+        // Names under a moving part must differ (the glTF writer refuses repeats in a node tree); a repeat gets "#2", "#3".
+        var underMovers = new HashSet<string>(StringComparer.Ordinal);
+        string Unique(string name)
+        {
+            string u = name;
+            for (int k = 2; !underMovers.Add(u); k++)
+                u = $"{name}#{k}";
+            return u;
+        }
         foreach (NifMesh mesh in model.Meshes)
         {
             NodeBuilder? mover = mesh.Mover >= 0 && mesh.Mover < movers.Length ? movers[mesh.Mover] : null;
@@ -52,6 +62,8 @@ public static class GltfExporter
                 if ((mesh.Collision || mesh.Climb != 0) && mesh.Triangles.Length > 0)
                 {
                     string name = VolumePrefix(mesh) + NodeName(mesh);
+                    if (mover is not null)
+                        name = Unique(name);
                     (mover is null ? scene.AddRigidMesh(BuildCollisionMesh(mesh), Matrix4x4.Identity)
                         : scene.AddRigidMesh(BuildCollisionMesh(mesh), mover.CreateNode(name)))
                         .WithName(name);
@@ -61,18 +73,26 @@ public static class GltfExporter
             // Name the node after the mesh, so the client can tell meshes apart (water surfaces are
             // matched to their water.csv row by it; the inspect readout shows it).
             // A door part's meshes each hang on a node of their own under the part's node, which keeps its name and motion.
+            // A mesh with material animations gets a name of its own, which its tracks name (NifMaterialAnimJson).
+            string node = animated.Contains(mesh.Name) ? AnimatedNodeName(mesh) : NodeName(mesh);
+            if (mover is not null)
+                node = Unique(node);
             (mover is null ? scene.AddRigidMesh(BuildMesh(mesh, nifSpace: false), Matrix4x4.Identity)
-                : scene.AddRigidMesh(BuildMesh(mesh, nifSpace: false), mover.CreateNode(NodeName(mesh))))
-                .WithName(NodeName(mesh));
+                : scene.AddRigidMesh(BuildMesh(mesh, nifSpace: false), mover.CreateNode(node)))
+                .WithName(node);
         }
         return scene;
     }
+
+    /// <summary>The glTF node name of a mesh with material animations: its usual name, "-anim", its block ("mesh12").</summary>
+    public static string AnimatedNodeName(NifMesh mesh) => NodeName(mesh) + "-anim-" + mesh.Name;
 
     /// <summary>The separator in a door part's node name: "door001__door" (the door, then the moving NIF node).</summary>
     public const string DoorPartSeparator = "__";
 
     // A static model's doors (NifFile.Doors): each moving part becomes a node, at rest where the meshes are baked
-    // (identity), named "<door>__<node>", and each door a glTF animation of its name ("door001") that moves its parts from
+    // (identity), named "<door>__<node>" ("all__<node>" outside doors), and each door a glTF animation of its name
+    // ("door001") that moves its parts from
     // rest (t = 0) to open (its duration), sampled at the doors' 30 frames per second. A part's motion is its NIF delta
     // (rest world⁻¹ × local(t) × parent world) carried into glTF space: N⁻¹ × delta × N.
     private static NodeBuilder[] DoorNodes(NifModel model)
@@ -85,16 +105,32 @@ public static class GltfExporter
         for (int i = 0; i < nodes.Length; i++)
         {
             NifMover m = model.Movers[i];
-            string name = m.Door + DoorPartSeparator + m.Node;
+            // A door's part, or (outside doors) a moving node of the model's own animations.
+            string group = m.Door.Length > 0 ? m.Door : NifAnimation.All;
+            string name = group + DoorPartSeparator + m.Node;
             for (int k = 2; !used.Add(name); k++)
-                name = $"{m.Door}{DoorPartSeparator}{m.Node}#{k}";
+                name = $"{group}{DoorPartSeparator}{m.Node}#{k}";
             var node = new NodeBuilder(name);
-            NifDoor? door = model.Doors.FirstOrDefault(d => d.Name == m.Door);
-            float duration = door?.Duration ?? NifFile.DefaultDoorFrames / NifFile.DoorFramesPerSecond;
+            if (m.Door.Length > 0)
+            {
+                NifDoor? door = model.Doors.FirstOrDefault(d => d.Name == m.Door);
+                Track(node, m, m.Door, door?.Duration ?? NifFile.DefaultDoorFrames / NifFile.DoorFramesPerSecond);
+            }
+            else
+                foreach (NifAnimation a in model.Animations)
+                    if (a.Name == NifAnimation.All || m.InAnim)
+                        Track(node, m, a.Name, a.Duration);
+            nodes[i] = node;
+        }
+        return nodes;
+
+        // One animation's track of a part: its motion from 0 to the duration, at 30 frames per second.
+        void Track(NodeBuilder node, NifMover m, string animation, float duration)
+        {
             int frames = Math.Max(1, (int)MathF.Round(duration * NifFile.DoorFramesPerSecond));
-            var translation = node.UseTranslation(m.Door);
-            var rotation = node.UseRotation(m.Door);
-            var scale = node.UseScale(m.Door);
+            var translation = node.UseTranslation(animation);
+            var rotation = node.UseRotation(animation);
+            var scale = node.UseScale(animation);
             for (int f = 0; f <= frames; f++)
             {
                 float t = duration * f / frames;
@@ -105,9 +141,7 @@ public static class GltfExporter
                 rotation.SetPoint(t, Quaternion.Normalize(rot));
                 scale.SetPoint(t, sc);
             }
-            nodes[i] = node;
         }
-        return nodes;
     }
 
     // A model with a skeleton (a 10.1 figure or creature). The skeleton stays in NIF space under one

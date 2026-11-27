@@ -182,6 +182,12 @@ public sealed class NifModel
     public IReadOnlyList<NifDoor> Doors { get; init; } = [];
     public IReadOnlyList<NifMover> Movers { get; init; } = [];
 
+    /// <summary>Its animations outside doors (NifAnimation: anims for a world object, all for an effect).</summary>
+    public IReadOnlyList<NifAnimation> Animations { get; init; } = [];
+
+    /// <summary>Its meshes' material animations (NifMaterialAnims): fades, colour changes, scrolling, blinking.</summary>
+    public IReadOnlyList<NifMaterialAnim> MaterialAnims { get; init; } = [];
+
     /// <summary>Its particle systems (NifParticles): fire, smoke, mist, sparks. A model may be particles only.</summary>
     public IReadOnlyList<NifParticleSystem> Particles { get; init; } = [];
 

@@ -56,7 +56,8 @@ public static partial class NifFile
     {
         Gb10Block[] blocks = g.Blocks!;
         // Doors (NifFile.Doors): which nodes move, so the walk can tag the meshes under them.
-        DoorScan doors = bytes is not null && blocks.Any(x => x is not null && IsDoorNode(x.Name))
+        DoorScan doors = bytes is not null && MayMove(blocks.Where(x => x is not null).Select(x => x.Name),
+                blocks.Where(x => x is not null).Select(x => x.Type))
             ? ScanDoors(new DoorNodesGb(bytes, g)) : DoorScan.None;
         var b = new Gb10Builder(blocks) { Movers = doors.MoverOf };
         foreach (int root in g.Roots.Length > 0 ? g.Roots : [0])
@@ -76,6 +77,7 @@ public static partial class NifFile
         {
             Version = version, Meshes = b.Meshes, Joints = skinned ? b.Joints : [], NodeWorlds = nodeWorlds,
             Doors = skinned ? [] : doors.Doors, Movers = skinned ? [] : doors.Movers, Particles = particles,
+            Animations = skinned ? [] : doors.Animations, MaterialAnims = skinned ? [] : MaterialAnimsGamebryo(g, b.Meshes),
         };
     }
 

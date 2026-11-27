@@ -780,6 +780,7 @@ public partial class WorldView
                 continue;
             var fx = (Node3D)template.Duplicate();
             fx.Name = "Effect_" + effect;
+            fx.Ready += () => ModelTexturing.PlayOwnAnimation(fx);   // its moving parts, looping
             if (figure.FindChildren("*", "Skeleton3D", true, false).OfType<Skeleton3D>()
                     .FirstOrDefault(s => s.FindBone(attach) >= 0) is { } skeleton)
             {

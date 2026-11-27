@@ -64,7 +64,7 @@ public sealed class AssetIndexPatchTests : IDisposable
         Assert.Equal(3, patches.Count);
         NifModel model = NifFile.Read(index.Read("KoboldRoom01.NIF", null)!, patches);
         Assert.Equal(["door001", "door002", "door003", "door004", "door005", "door006"], model.Doors.Select(d => d.Name).Order());
-        Assert.Equal(12, model.Movers.Count);
+        Assert.Equal(12, model.Movers.Count(m => m.Door.Length > 0));   // others move outside the doors (NifAnimation.All)
         Assert.All(model.Meshes.Where(m => m.Mover >= 0), m => Assert.InRange(m.Mover, 0, model.Movers.Count - 1));
     }
 }
