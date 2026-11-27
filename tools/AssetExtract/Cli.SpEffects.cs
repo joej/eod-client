@@ -6,6 +6,8 @@
 // rate (%), track angle, auto scale, spin axis, angle (degrees), focus effect, freq (ms), speed (units/s), timeout (ms),
 // target effect. A row whose NIF isn't drawn yet (weapon trails, flying items, MonEffects NIFs) or isn't in the install
 // keeps an empty model. The client takes the spells' own columns from spells.csv (in icons/, `mpk icons`).
+// The weapon trails' textures (stylemap.csv: a style's Imagenum -> a file in the install's stylemap/ folder) are copied to
+// models/trails/, with models/trails/stylemap.csv (id, file) beside them; the styles themselves are icons/styles.csv.
 
 using DaocAssets.Effects;
 using DaocAssets.Library;
@@ -60,8 +62,36 @@ internal static partial class Cli
         foreach (SpEffect e in effects.Values.OrderBy(e => e.Id))
             csv.Append(I($"{e.Id},{Stem(e.Nif) ?? ""},{e.Node.Replace(',', ' ')},{e.DurationMs},{e.Rate},{e.TrackAngle},{(e.AutoScale ? 1 : 0)},{e.SpinAxis},{e.Angle},{e.FocusEffect},{e.FocusFreqMs},{e.FocusSpeed},{e.FocusTimeoutMs},{e.TargetFx}\n"));
         File.WriteAllText(Path.Combine(models, "speffects.csv"), csv.ToString());
+        int trails = WriteTrailTextures(Table("stylemap.csv"), Path.GetDirectoryName(Path.GetFullPath(gamedata)) ?? ".", models);
         Console.WriteLine($"speffects: {effects.Count} effects, {converted} effect models converted; {absent} not in the install, " +
-            $"{notDrawn} effects of kinds not drawn yet (trails, items, MonEffects), {unsupported} unsupported, {failed} failed");
+            $"{notDrawn} effects of kinds not drawn yet (trails, items, MonEffects), {unsupported} unsupported, {failed} failed; " +
+            $"{trails} weapon-trail textures");
         return failed == 0 ? 0 : 1;
+    }
+
+    // stylemap.csv rows (ID, name, Filename, spare; two header lines) whose file is in the install's stylemap/ folder.
+    private static int WriteTrailTextures(string stylemap, string install, string models)
+    {
+        string dir = Path.Combine(models, "trails");
+        Directory.CreateDirectory(dir);
+        string? folder = Directory.Exists(install) ? Directory.EnumerateDirectories(install)
+            .FirstOrDefault(d => Path.GetFileName(d).Equals("stylemap", StringComparison.OrdinalIgnoreCase)) : null;
+        var csv = new System.Text.StringBuilder("id,file\n");
+        int copied = 0;
+        foreach (string line in stylemap.Split('\n').Skip(2))
+        {
+            string[] c = line.TrimEnd('\r').Split(',');
+            if (c.Length < 3 || !int.TryParse(c[0], out int id) || c[2].Trim().Length == 0 || folder is null)
+                continue;
+            string file = c[2].Trim();
+            string? source = Directory.EnumerateFiles(folder).FirstOrDefault(f => Path.GetFileName(f).Equals(file, StringComparison.OrdinalIgnoreCase));
+            if (source is null)
+                continue;
+            File.Copy(source, Path.Combine(dir, file.ToLowerInvariant()), overwrite: true);
+            csv.Append(FormattableString.Invariant($"{id},{file.ToLowerInvariant()}\n"));
+            copied++;
+        }
+        File.WriteAllText(Path.Combine(dir, "stylemap.csv"), csv.ToString());
+        return copied;
     }
 }

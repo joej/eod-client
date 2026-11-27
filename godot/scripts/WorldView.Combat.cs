@@ -12,8 +12,9 @@
 // - the defender's health % updates its target window; when we are hit with no target, the attacker becomes it
 //   (retail: inferred), and it is our last attacker (Shift+Tab).
 // The figures carry the clips as "c<slot>" (MonsterTables.CombatSlots); an empty slot falls back to slot 0, as retail's
-// does. Not here yet: styles (styles.csv Animation replaces the swing; the styled-hit trail), ranged (ready, aim, fire,
-// the arrow), hit sounds, the set's No Flinch flag.
+// does. A style (1-15999) whose styles.csv Animation is set swings that slot instead (an anytime style: its weapon's
+// generic row; StyleLooks), and a styled hit draws the weapon trail (WorldView.Trails). Not here yet: ranged (ready, aim,
+// fire, the arrow), the set's No Flinch flag.
 
 using DaocProtocol.Packets;
 using Godot;
@@ -45,7 +46,9 @@ public partial class WorldView
         string swing = "";
         if (c.Swings && !c.IsRanged && (c.AttackerId != SelfId || c.DefenderId == _target))
         {
-            int slot = c.Style switch
+            // A style with its own Animation swings that canims slot; otherwise the stance's swings, one of three.
+            int styleSwing = c.StyleId > 0 ? StyleOf(c).Animation : 0;
+            int slot = styleSwing > 0 ? styleSwing : c.Style switch
             {
                 CombatAnimation.LeftHand => 25,
                 CombatAnimation.BothHands => 28,
@@ -53,6 +56,7 @@ public partial class WorldView
             } + (int)(GD.Randi() % 3);
             swing = PlayCombatClip(c.AttackerId, slot);
         }
+        StartTrail(c);   // a styled hit's weapon trail (WorldView.Trails)
         GD.Print($"[combat] #{c.AttackerId} -> #{c.DefenderId}: result {c.Result}, weapon {c.WeaponModel}, style {c.Style}, " +
                 $"health {c.DefenderHealth}%, swing {(swing == "" ? "-" : swing)}");
 

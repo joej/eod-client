@@ -261,6 +261,14 @@ internal static partial class Cli
                 && !Near(Rotation(itemNode), identity) && Near(Rotation(held), Rotation(itemNode)))
                 System.Numerics.Matrix4x4.Invert(held, out grip);
             frames["held"] = Row(fromGltf * grip);
+            // A weapon's trail ends (daoc-re RE/82): the TRAILBASE and TRAILTIP nodes, in the model's own (glTF) space,
+            // between which a styled hit draws its ribbon. Without both there is no trail.
+            if (model.NodeWorlds.TryGetValue("trailbase", out var trailBase) && model.NodeWorlds.TryGetValue("trailtip", out var trailTip))
+            {
+                var b = System.Numerics.Vector3.Transform(trailBase.Translation, GltfExporter.NifToGltfMatrix);
+                var t = System.Numerics.Vector3.Transform(trailTip.Translation, GltfExporter.NifToGltfMatrix);
+                frames["trail"] = [b.X, b.Y, b.Z, t.X, t.Y, t.Z];
+            }
             nifs[stem] = frames;
         }
         string? Stem(string? nif) => nif is not null && stems.TryGetValue(Path.GetFileNameWithoutExtension(nif), out string? s) ? s : null;

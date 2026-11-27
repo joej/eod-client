@@ -81,8 +81,11 @@ in that order. The OpenDAoC install has only `CC_`.
 
 **0x1B SpellEffectAnimation:**
 - An effect with a bolt plays column 2 "cast" at the caster.
-- Unless byte 8 (no sound) is set: column 4 "hit" when byte 9 (success) is non-zero, column 5 "miss"
-  when it is 0.
+- So does a spell with Remove letters (it holds its last cast animation and "cast" sound until it lands).
+- Unless byte 8 (no sound) is set: column 4 "hit" for results 1, 2 and 3, column 5 "miss" for 0 and 4,
+  at the target at once (not after the bolt's flight).
+- 0x73 (interrupt) stops the caster's "shape" and "cast" sounds, playing or still to come.
+- Built in `WorldView.SpellSounds`.
 - Columns 3 (travel), 6 (resisted) and 7 (fizzle) are never played.
 
 **Other packets:**

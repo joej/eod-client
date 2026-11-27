@@ -18,7 +18,7 @@
 //   2: the node's own rotation, then turned about the Spin Axis (1 X, 2 Y, 3 Z) by Angle. Auto Scale: the figure's size.
 //   Playback at Rate % (particles); at most 20 effects on a figure; an effect on the root isn't added twice; none on a
 //   figure more than 2048 units from our character in x or y (4096 for result 4).
-// Ours / not built: the effects' sounds (Sound Set), the focus channel (Focus CasterFX, Focus Effect), the last 0.1 s of a
+// Their sounds: WorldView.SpellSounds. Ours / not built: the focus channel (Focus CasterFX, Focus Effect), the last 0.1 s of a
 // bolt at 5x speed, weapon trails and item projectiles (NIF ids from 1500), MonEffects NIFs from spells, and the
 // EffectsFlag setting (all effects are shown). An effect's moving parts, fades, colour changes and scrolling play from its
 // start at its rate (its "all" animation, MaterialAnims).

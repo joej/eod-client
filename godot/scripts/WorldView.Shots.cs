@@ -69,17 +69,20 @@ public partial class WorldView
             ReplayKeeps(ResolveArgPath(args[keepsArg + 1]));
         int set = System.Array.IndexOf(args, "--shots");
         int dir = System.Array.IndexOf(args, "--shots-out");
-        if (set >= 0 && set + 1 < args.Length && dir >= 0 && dir + 1 < args.Length)
+        bool shotSet = set >= 0 && set + 1 < args.Length && dir >= 0 && dir + 1 < args.Length;
+        // The window opens focused, so whatever the person types or clicks elsewhere would land here (a stray F10 opened
+        // Settings over a shot, Shift+F12 switched the render mode, a click turned a recorded clip purple): a shot run or a
+        // recording (Godot's movie maker, --write-movie) takes no keyboard or mouse.
+        if (shotSet || System.Array.IndexOf(OS.GetCmdlineArgs(), "--write-movie") >= 0)
         {
-            // The window opens focused, so whatever the person types elsewhere would land here (a stray F10 opened
-            // Settings over a shot, Shift+F12 switched the render mode): a shot run takes no keyboard or mouse.
             GetWindow().SetFlag(Window.Flags.NoFocus, true);
             GetViewport().GuiDisableInput = true;
             SetProcessInput(false);
             SetProcessUnhandledInput(false);
             SetProcessUnhandledKeyInput(false);
-            _ = RunShotSet(ResolveArgPath(args[set + 1]), ResolveArgPath(args[dir + 1]));
         }
+        if (shotSet)
+            _ = RunShotSet(ResolveArgPath(args[set + 1]), ResolveArgPath(args[dir + 1]));
         // --travel ZONE opens the travel window, types the zone number and goes (after 2 s and 5 s), to check
         // the window and the jump without a mouse.
         int travelArg = System.Array.IndexOf(args, "--travel");
@@ -227,6 +230,28 @@ public partial class WorldView
             GetTree().CreateTimer(2).Timeout += () => OnSpellCast(new DaocProtocol.Packets.SpellCast(SelfId, spellId, 25));
             GetTree().CreateTimer(4.5).Timeout += () =>
                 OnSpellLanded(new DaocProtocol.Packets.SpellEffect(SelfId, spellId, SelfId, 0, false, 1));
+        }
+        // --style ID MODEL: our character holds weapon MODEL (an objects.csv row) drawn in the right hand at 1 s, then from 2 s
+        // makes three styled hits with style ID, 2 s apart (offline too; no defender): the style's swing and its weapon trail
+        // (WorldView.Trails) in a shot or a clip.
+        int styleAt = System.Array.IndexOf(args, "--style");
+        if (styleAt >= 0 && styleAt + 2 < args.Length && ushort.TryParse(args[styleAt + 1], out ushort styleId)
+            && ushort.TryParse(args[styleAt + 2], out ushort weapon))
+        {
+            GetTree().CreateTimer(1).Timeout += () =>
+            {
+                PlayerWorn = [new WornItem(WornSlot.RightHand, weapon)];
+                PlayerActiveWeapons = 0xF0;   // the right hand in use, nothing in the left
+                OnAttackModeChanged(true);
+            };
+            for (int hit = 0; hit < 3; hit++)
+                GetTree().CreateTimer(2 + 2 * hit).Timeout += () =>
+                {
+                    var c = new CombatAnimation(SelfId, 0xFFFF, weapon, 0, styleId, 0, CombatAnimation.StyledHit, 100);
+                    OnCombatAnimated(c);
+                    if (SelfId == 0 && StyleOf(c).Animation is int swing and > 0)
+                        PlayCombatClip(SelfId, swing);   // offline our id is 0, which 0xBC reads as no attacker (no swing)
+                };
         }
         // --no-panels hides the dev panels (status, layers, inspect), as F12 does: shots for the site.
         if (System.Array.IndexOf(args, "--no-panels") >= 0)

@@ -104,8 +104,8 @@ public sealed class CatacombsFigureTests
             ["idle"] = "Cat_I_H.kfa", ["run_flinch"] = "Cat_RunFlinch.kfa", ["c0"] = "a_h_1s_med.kfa", ["c3"] = "flinch.kfa",
             ["c32"] = "parry_h.kfa", ["c41"] = "block_h.kfa",
         };
-        // A Catacombs figure (a player's race) carries every weapon's swings; a creature only the one-handed ones.
-        Assert.Equal(new Dictionary<string, string>(shared) { ["c8"] = "a_h_2h_med.kfa" }, tables.ResolveCatacombs(32)!.Clips);
+        // A Catacombs figure (a player's race) carries every weapon's swings and the styles'; a creature only the one-handed ones.
+        Assert.Equal(new Dictionary<string, string>(shared) { ["c8"] = "a_h_2h_med.kfa", ["c42"] = "style.kfa" }, tables.ResolveCatacombs(32)!.Clips);
         MonsterTables creature = MonsterTables.Parse("x,,NIF\nID,name,#\n40,Creature,582" + new string(',', 9),
                 "x,,NIF\nID,Textual Name,Name\n582,Creature,bri_m,233", "x\nID,name,Skin",
                 "x,,0\nID,name,Walk\n" + string.Join(',', anims), animnifs)

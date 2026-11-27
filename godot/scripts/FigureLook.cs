@@ -13,6 +13,9 @@ namespace EodClient;
 
 public static class FigureLook
 {
+    /// <summary>The meta on a right-hand weapon model with trail ends: its TRAILBASE and TRAILTIP, in the model's space.</summary>
+    public const string TrailMeta = "trail";
+
     // The worn slots' mesh names: "<slot><n>" (n from 1), "<slot><n>_<k>" for a part's extra shapes.
     private static readonly System.Text.RegularExpressions.Regex WornMesh =
         new(@"^(body|lbody|legs|boots|arms|gloves|cloak)(\d+)(_\d+)?$");
@@ -232,6 +235,10 @@ public static class FigureLook
             }
             model.Transform = new Transform3D(new Basis(new Vector3(F(0), F(1), F(2)), new Vector3(F(3), F(4), F(5)), new Vector3(F(6), F(7), F(8))),
                 new Vector3(F(9), F(10), F(11)));
+            // A weapon in the right hand with both trail ends: a styled hit draws its trail between them (WorldView.Trails).
+            if (bone == "Bip01 R Held" && frames.TryGetProperty("trail", out var tr) && tr.GetArrayLength() == 6)
+                model.SetMeta(TrailMeta, new Vector3[] { new(tr[0].GetSingle(), tr[1].GetSingle(), tr[2].GetSingle()),
+                    new(tr[3].GetSingle(), tr[4].GetSingle(), tr[5].GetSingle()) });
             var attach = new BoneAttachment3D { Name = $"Gear_{item.Slot}", BoneName = bone };
             skel.AddChild(attach);
             attach.AddChild(model);

@@ -121,8 +121,11 @@ public partial class CharacterScreen : Control
 
     // F11 toggles fullscreen from anywhere: the login and character screen, and the world, which
     // leaves this node in the tree.
+    // Not in a shot run or a recording, which take no input (WorldView.Shots): a stray key would change the saved setting.
     public override void _Input(InputEvent @event)
     {
+        if (System.Array.IndexOf(OS.GetCmdlineArgs(), "--write-movie") >= 0 || System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--shots") >= 0)
+            return;
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
         {
             // The login screen stays a small window; F11 switches the world's mode.

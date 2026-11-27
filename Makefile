@@ -199,7 +199,7 @@ SPEFFECTS := $(LIB)/models/speffects.csv
 .PHONY: speffects
 speffects: $(SPEFFECTS)
 $(SPEFFECTS): $(INDEX) $(MODEL_SRC) $(wildcard $(A)/Effects/*.cs) $(CLI_SRC) $(X)/Cli.SpEffects.cs \
-              $(wildcard $(CLIENT)/gamedata.mpk) | $(TOOL)
+              $(wildcard $(CLIENT)/gamedata.mpk) $(wildcard $(CLIENT)/stylemap/*) | $(TOOL)
 	@mkdir -p $(@D)
 	$(MPK) speffects --gamedata $(CLIENT)/gamedata.mpk --index $(INDEX) --library $(LIB)
 

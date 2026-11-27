@@ -76,12 +76,12 @@ public sealed class MonsterTables
     // canims.csv slots (column = slot + 2) that 0xBC plays, as clips named "c<slot>" (daoc-re RE/75): the swings by weapon
     // stance (one-handed 0-2, two-handed 8-10, polearm 11-13, staff 18-20, left hand 25-27, dual 28-30, thrust 57-59,
     // flexible 91-93, flail 94-96, whip 97-99, claws 105-107, scythe 114-116), Flinch (3), and the defender's parries,
-    // evades and blocks (31-41, flexible/flail/whip parries 100-103). Styles (42-140) aren't carried yet.
+    // evades and blocks (31-41, flexible/flail/whip parries 100-103), and the styles' own swings (styles.csv Animation:
+    // 42-140, which take in some of the above; not 104 and 113, the hand-to-hand and scythe combat idles).
     // A creature (classic figure) carries the one-handed swings and the reactions only: its weapon, if any, has no
     // other clips in its set, and the client falls back to slot 0 as retail does.
-    internal static readonly int[] CombatSlots = [0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 18, 19, 20, 25, 26, 27, 28, 29, 30,
-        31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 57, 58, 59, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103,
-        105, 106, 107, 114, 115, 116];
+    internal static readonly int[] CombatSlots = new[] { 0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 18, 19, 20, 25, 26, 27, 28, 29, 30,
+        31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41 }.Concat(Enumerable.Range(42, 140 - 42 + 1).Where(s => s is not (104 or 113))).ToArray();
     internal static readonly int[] CreatureCombatSlots = [0, 1, 2, 3, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41];
     private static readonly (string Clip, int Column)[] CombatSlotColumns = SlotColumns(CombatSlots);
     private static readonly (string Clip, int Column)[] CreatureCombatSlotColumns = SlotColumns(CreatureCombatSlots);
